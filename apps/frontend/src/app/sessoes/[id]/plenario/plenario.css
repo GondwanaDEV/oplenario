@@ -148,6 +148,9 @@
 .tribuna-tempo .rotulo { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .08em; color: var(--texto-2); }
 .tribuna-tempo .timer { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--marca); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .tribuna-tempo .timer.pausado { color: var(--aviso-texto); }
+/* mig 0081: último minuto em âmbar, esgotado em telha (o rótulo "Tempo esgotado" acompanha — a cor não é o único sinal) */
+.tribuna-tempo .timer.ultimo-minuto { color: var(--aviso-texto); }
+.tribuna-tempo .timer.esgotado { color: var(--acento-texto); }
 .tribuna-vazia { color: var(--texto-2); font-size: var(--t-13); }
 .inscritos { margin: 0.9rem 0 0; padding: 0.8rem 0 0; border-top: 1px dashed var(--linha); list-style: none; display: grid; gap: 0.55rem; }
 .inscritos li { display: flex; align-items: center; gap: 0.6rem; font-size: var(--t-13); color: var(--texto-2); }

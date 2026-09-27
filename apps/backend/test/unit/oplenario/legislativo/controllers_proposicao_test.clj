@@ -173,4 +173,5 @@
         r (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))]
     (is (= {:id "p"} (:proposicao r)))
     (is (= "## Art. 1o" (:texto r)))
-    (is (= [{:gatilho "despachar"}] (:tramitacao r)))))
+    (is (= [{:gatilho "despachar" :recebimento nil}] (:tramitacao r))
+        "fatia 2b: cada movimentacao sai anotada com o recibo de carga (nil = nao recebida)")))

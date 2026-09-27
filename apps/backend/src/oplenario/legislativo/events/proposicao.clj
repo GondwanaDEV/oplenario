@@ -93,7 +93,9 @@
    [:ementa :string]
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
-   [:autor-id {:optional true} [:maybe :string]]])
+   [:autor-id {:optional true} [:maybe :string]]
+   ;; A.8: presente so' quando a edicao trocou o TEXTO (o sinal para a IA redigir de novo o resumo cidadao)
+   [:hash-texto {:optional true} :string]])
 
 (defn editada
   "Constroi o envelope de `proposicao.editada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca
@@ -103,3 +105,26 @@
     (throw (ex-info "payload de proposicao.editada invalido (contrato do evento)"
                     {:erro :payload-invalido :explain (m/explain EditadaPayload payload)})))
   (eventos/evento editada-tipo ente-id payload))
+
+(def recebida-tipo
+  "Fatia 2b (mig 0083): alguem RECEBEU e assinou a movimentacao que trouxe a materia a um estado que o rito da
+  Casa marca como carga a receber."
+  "proposicao.recebida")
+
+(def RecebidaPayload
+  "O recibo assinado, sem a assinatura em si (ela mora na linha de `recebimento_tramitacao`). `movimentacao-id`
+  = a linha de `proposicao_transicao_historico` recebida (nao o id da transicao do TEMPLATE, que e' o
+  `transicao-id` de `proposicao.transicionou`). Instante como STRING ISO."
+  [:map {:closed true}
+   [:proposicao-id :uuid]
+   [:movimentacao-id :uuid]
+   [:estado :string]
+   [:recebido-por :uuid]
+   [:recebido-em :string]
+   [:assinatura-algoritmo :string]])
+
+(defn recebida [ente-id payload]
+  (when-not (m/validate RecebidaPayload payload)
+    (throw (ex-info "payload de proposicao.recebida invalido (contrato do evento)"
+                    {:erro :payload-invalido :explain (m/explain RecebidaPayload payload)})))
+  (eventos/evento recebida-tipo ente-id payload))

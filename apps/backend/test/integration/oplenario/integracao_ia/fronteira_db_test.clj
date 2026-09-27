@@ -1,0 +1,279 @@
+(ns oplenario.integracao-ia.fronteira-db-test
+  "INTEGRACAO (PG real): ADR-0008 — a gravacao vinculada vira evento no feed core -> IA pelo relay; a caixa de
+  entrada IA -> core aplica o ponteiro da transcricao uma vez so', na tx do tenant."
+  (:require [clojure.test :refer [deftest is use-fixtures]]
+            [com.stuartsierra.component :as component]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
+            [oplenario.config :as config]
+            [oplenario.integracao-ia.components.repositorio :as repo]
+            [oplenario.integracao-ia.controllers :as controllers]
+            [oplenario.integracao-ia.diplomat.consumers :as consumers]
+            [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.eventos :as eventos]
+            [oplenario.kernel.outbox :as outbox]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.migracao :as migracao]
+            [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.db.gravacao :as gravacao]
+            [oplenario.ia-republicar]
+            [oplenario.legislativo.db.proposicao]
+            [oplenario.sessoes.db.sessao :as sessao])
+  (:import (java.time Instant)))
+
+(def ^:dynamic *ds* nil)
+(def ^:dynamic *repo* nil)
+
+(use-fixtures :once
+  (fn [t]
+    (let [c (component/start (datasource/datasource (config/carregar)))]
+      (migracao/migrar! (:ds c))
+      (binding [*ds* (:ds c) *repo* (repo/map->RepoIntegracaoIAPg {:datasource c})]
+        (try (t) (finally (component/stop c)))))))
+
+(defn- vinculado! [ente sid seg restrito?]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (eventos/emitir! (outbox/bus) tx
+               (eventos/evento "gravacao.segmento-vinculado" ente
+                 {:segmento-id seg :sessao-id sid :acesso-restrito restrito?})))))
+
+(defn- drena! [] (outbox/drenar! *ds* (consumers/registrar {})))
+
+(defn- do-ente
+  "Os eventos do feed deste ente depois do cursor, andando o feed inteiro: toda proposicao de
+  qualquer teste tambem entra no feed (A.4), entao a primeira pagina nao basta."
+  ([ente] (do-ente ente 0))
+  ([ente depois]
+   (loop [cursor depois acc []]
+     (let [pag (repo/listar-eventos *repo* cursor 500)]
+       (if (empty? pag)
+         (filterv #(= ente (:ente-id %)) acc)
+         (recur (:seq (peek (vec pag))) (into acc pag)))))))
+
+(deftest gravacao-vinculada-chega-ao-feed-uma-vez-e-restrita-nunca
+  (let [ente (random-uuid) sid (random-uuid) seg (random-uuid) seg-r (random-uuid)]
+    (vinculado! ente sid seg false)
+    (vinculado! ente sid seg-r true)
+    (vinculado! ente sid seg false) ; o mesmo vinculo re-emitido (redrive): a chave barra a duplicata
+    (drena!)
+    (let [[e :as evs] (do-ente ente)]
+      (is (= 1 (count evs)) "uma vez so', e a restrita nao saiu")
+      (is (= "GravacaoVinculada" (:tipo e)))
+      (is (= (str seg) (get-in e [:payload :segmento-id])))
+      (is (pos? (:seq e))))))
+
+(deftest captada-com-sessao-e-depois-vinculada-da-um-evento-so
+  (let [ente (random-uuid) sid (random-uuid) seg (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx] (eventos/emitir! (outbox/bus) tx
+                 (eventos/evento "gravacao.segmento-captado" ente
+                   {:segmento-id seg :container-bruto-uri "gravacao/x" :fonte-ingestao "gravacao_local_pos_sessao"
+                    :acesso-restrito false :sessao-id sid}))))
+    (vinculado! ente sid seg false)
+    (drena!)
+    (is (= 1 (count (do-ente ente))))))
+
+(deftest feed-pagina-pelo-cursor
+  (let [ente (random-uuid) sid (random-uuid)]
+    (dotimes [_ 3] (vinculado! ente sid (random-uuid) false))
+    (drena!)
+    (let [todos (do-ente ente)
+          corte (:seq (first todos))
+          depois (do-ente ente corte)]
+      (is (= 3 (count todos)))
+      (is (= (rest (map :seq todos)) (map :seq depois)) "depois do cursor, so' os seguintes, em ordem")
+      (is (= 1 (count (repo/listar-eventos *repo* 0 1))) "o limite corta"))))
+
+;; ---------- caixa de entrada ----------
+
+(defn- sessao-com-segmento! [ente]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx]
+      (let [sid (:id (sessao/agendar! tx {:id (random-uuid) :ente-id ente :sessao-legislativa-id (random-uuid)
+                                          :tipo-sessao "ordinaria" :modalidade "presencial"}))
+            seg (random-uuid)]
+        (gravacao/registrar-segmento! tx {:id seg :ente-id ente :sessao-id sid :iniciou-em (Instant/parse "2026-09-26T18:00:00Z")
+                                          :motivo-inicio "inicio_sessao" :container-bruto-uri "gravacao/x"
+                                          :audio-hash "ab" :fonte-ingestao "gravacao_local_pos_sessao"})
+        [sid seg]))))
+
+(defn- concluida [ente sid seg chave]
+  {:tipo "TranscricaoConcluida" :versao 1 :chave chave :ente-id ente :correlation-id "c-1"
+   :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
+   :payload {:sessao-id sid :segmento-id seg :transcricao-id (random-uuid) :versao 1 :idioma "pt-BR"
+             :duracao-s 3600M :n-trechos 412 :cobertura-atribuida 0.83M :modelo-asr "whisper-large-v3-turbo"
+             :modelo-diarizacao "pyannote-3.0"}
+   :bruto {"segmento-id" (str seg)}})
+
+(def efeitos {:registrar-transcricao  repo-sessoes/registrar-transcricao-em-tx!
+              :registrar-rascunho-ata repo-sessoes/registrar-rascunho-ata-em-tx!})
+
+(defn- ponteiros [ente sid]
+  (tenancy/com-tenant* *ds* ente (fn [tx] (oplenario.sessoes.db.transcricao/listar-da-sessao tx ente sid))))
+
+(deftest transcricao-concluida-grava-o-ponteiro-uma-vez-so
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) ev (concluida ente sid seg (str "k-" (random-uuid)))]
+    (is (= {:aplicado true} (controllers/receber! *repo* efeitos ev)))
+    (is (= {:aplicado false} (controllers/receber! *repo* efeitos ev))
+        "reenvio da mesma chave: 200 sem efeito novo")
+    (let [[p :as ps] (ponteiros ente sid)]
+      (is (= 1 (count ps)))
+      (is (= ["concluida" 412 "whisper-large-v3-turbo"] [(:situacao p) (:n-trechos p) (:modelo-asr p)]))
+      (is (= 0.8300M (:cobertura-atribuida p))))))
+
+(deftest transcricao-falhou-grava-a-categoria
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente)]
+    (controllers/receber! *repo* efeitos
+      {:tipo "TranscricaoFalhou" :versao 1 :chave (str "f-" (random-uuid)) :ente-id ente
+       :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
+       :payload {:sessao-id sid :segmento-id seg :categoria "entrada" :detalhe "audio corrompido" :retentavel false}
+       :bruto {}})
+    (is (= [["falhou" "entrada" false]] (mapv (juxt :situacao :categoria-erro :retentavel) (ponteiros ente sid))))))
+
+(deftest segmento-de-outra-sessao-e-recusado-e-nada-fica-registrado
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) [_ seg-alheio] (sessao-com-segmento! ente)
+        chave (str "x-" (random-uuid))]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"nao pertence"
+          (controllers/receber! *repo* efeitos (concluida ente sid seg-alheio chave))))
+    (is (empty? (ponteiros ente sid)))
+    (is (= {:aplicado true}
+           (controllers/receber! *repo* efeitos
+             (concluida ente sid seg chave)))
+        "a chave nao ficou queimada: o registro da entrada foi desfeito junto (mesma tx)")))
+
+(deftest caixa-de-entrada-isola-por-tenant
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente)
+        intruso (random-uuid)]
+    (is (thrown? Exception
+          (controllers/receber! *repo* efeitos
+            (concluida intruso sid seg (str "i-" (random-uuid)))))
+        "evento com ente errado nao enxerga a sessao do outro tenant (RLS) — nao grava nada")
+    (is (empty? (ponteiros ente sid)))))
+
+(deftest ponteiro-so-e-achado-na-propria-sessao-e-concluido
+  (let [ente (random-uuid) [sid seg] (sessao-com-segmento! ente) [sid2 _] (sessao-com-segmento! ente)
+        ev (concluida ente sid seg (str "p-" (random-uuid)))
+        tid (get-in ev [:payload :transcricao-id])
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*}})]
+    (controllers/receber! *repo* efeitos ev)
+    (is (= tid (:transcricao-id (repo-sessoes/buscar-transcricao rs ente sid tid))))
+    (is (nil? (repo-sessoes/buscar-transcricao rs ente sid2 tid)) "outra sessao: nao acha")
+    (is (nil? (repo-sessoes/buscar-transcricao rs (random-uuid) sid tid)) "outro tenant: nao acha")
+    (is (= 1 (count (repo-sessoes/listar-transcricoes rs ente sid))))))
+
+;; ---------- A.6b: o rascunho da ata ----------
+
+(deftest pedido-de-rascunho-vira-ata-solicitada-no-feed-e-a-resposta-grava-o-ponteiro
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente)
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*} :bus (outbox/bus)})
+        agora (Instant/parse "2026-09-26T22:00:00Z")
+        {:keys [solicitacao-id]} (repo-sessoes/solicitar-rascunho-ata! rs ente
+                                   {:sessao-id sid :solicitacao-id (random-uuid) :solicitado-por (random-uuid)
+                                    :ocorrido-em agora :pode-pedir? (constantly true)})]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"ja' esta' redigindo"
+          (repo-sessoes/solicitar-rascunho-ata! rs ente
+            {:sessao-id sid :solicitacao-id (random-uuid) :solicitado-por (random-uuid) :ocorrido-em agora
+             :pode-pedir? (constantly false)}))
+        "a decisao de 'pedido em curso' roda DENTRO da tx")
+    (drena!)
+    (let [[e :as evs] (do-ente ente)]
+      (is (= 1 (count evs)) "o segundo pedido foi recusado: nada saiu dele")
+      (is (= ["AtaSolicitada" (str solicitacao-id) (str sid)]
+             [(:tipo e) (get-in e [:payload :solicitacao-id]) (get-in e [:payload :sessao-id])]))
+      (is (re-find #"/sessoes/.+/contexto$" (get-in e [:payload :contexto-uri]))))
+    (is (= "solicitado" (:situacao (:rascunho (repo-sessoes/ata-da-sessao rs ente sid)))))
+    (let [rid (random-uuid)
+          pronta {:tipo "AtaRascunhoPronta" :versao 1 :chave (str "AtaRascunhoPronta:v1:" solicitacao-id) :ente-id ente
+                  :ocorrido-em (Instant/parse "2026-09-26T22:03:00Z")
+                  :payload {:sessao-id sid :solicitacao-id solicitacao-id :rascunho-id rid :modelo-llm-id "fake:fake-1"
+                            :prompt-versao "ata-v1" :incerteza "revisar_com_atencao" :n-citacoes 3
+                            :n-citacoes-conferidas 3 :n-paragrafos-sem-fonte 1 :n-pontos-a-confirmar 1}
+                  :bruto {}}]
+      (is (= {:aplicado true} (controllers/receber! *repo* efeitos pronta)))
+      (is (= {:aplicado false} (controllers/receber! *repo* efeitos pronta)))
+      (let [r (:rascunho (repo-sessoes/ata-da-sessao rs ente sid))]
+        (is (= ["pronto" rid "ata-v1" 1 agora] [(:situacao r) (:rascunho-id r) (:prompt-versao r)
+                                                (:n-pontos-a-confirmar r) (:solicitado-em r)])))
+      (is (= rid (:rascunho-id (repo-sessoes/buscar-rascunho-pronto rs ente sid rid))))
+      (is (nil? (repo-sessoes/buscar-rascunho-pronto rs ente (first (sessao-com-segmento! ente)) rid))
+          "de outra sessao: nao acha"))))
+
+(deftest resposta-de-pedido-desconhecido-e-recusada
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente)]
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"nao pertence"
+          (controllers/receber! *repo* efeitos
+            {:tipo "AtaFalhou" :versao 1 :chave (str "af-" (random-uuid)) :ente-id ente
+             :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")
+             :payload {:sessao-id sid :solicitacao-id (random-uuid) :categoria "entrada" :detalhe "x" :retentavel false}
+             :bruto {}})))))
+
+;; ---------- A.6c: a revisao humana volta para a IA ----------
+
+(deftest ata-publicada-do-rascunho-vira-revisada-e-publicada-no-feed-e-a-da-casa-nao
+  (let [ente (random-uuid) [sid _] (sessao-com-segmento! ente) [sid2 _] (sessao-com-segmento! ente)
+        rs (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*} :bus (outbox/bus)})
+        rid (random-uuid) quem (random-uuid)
+        v1 (repo-sessoes/publicar-ata! rs ente {:sessao-id sid :texto "Ata final." :origem-redacao "gerada_automaticamente"
+                                                :rascunho-id rid :modelo-llm-id "fake:fake-1" :prompt-versao "ata-v1"
+                                                :conteudo-sha256 "sha256:aa" :publicada-por quem})]
+    (repo-sessoes/publicar-ata! rs ente {:sessao-id sid2 :texto "Ata da Casa." :origem-redacao "redigida_externamente"
+                                         :conteudo-sha256 "sha256:bb" :publicada-por quem})
+    (drena!)
+    (let [[e :as evs] (do-ente ente)]
+      (is (= 1 (count evs)) "a ata redigida pela Casa nao vai para a IA")
+      (is (= "AtaRevisadaEPublicada" (:tipo e)))
+      (is (= (str "AtaRevisadaEPublicada:v1:" (:id v1)) (:chave e)))
+      (is (= [(str rid) 1 (str quem) "sha256:aa"]
+             ((juxt :rascunho-id :versao-ata :publicada-por :conteudo-sha256) (:payload e))))
+      (is (re-find #"/sessoes/.+/atas/1$" (get-in e [:payload :conteudo-uri]))))
+    (is (= "Ata final." (:texto (repo-sessoes/ata-versao rs ente sid 1))))
+    (is (nil? (repo-sessoes/ata-versao rs ente sid 2)))))
+
+;; ---------- A.4: as proposicoes entram no indice da IA ----------
+
+(defn- proposicao! [ente sid-ignorado ementa]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx] (eventos/emitir! (outbox/bus) tx
+               (eventos/evento "proposicao.protocolada" ente
+                 {:proposicao-id sid-ignorado :tipo "projeto_lei" :ano 2026 :sequencial 7 :urn-lex "urn:x"
+                  :ementa ementa :autor-texto "Ver. Ana" :estado "protocolada"})))))
+
+(deftest proposicao-protocolada-e-editada-vao-para-o-feed-uma-vez-por-texto
+  (let [ente (random-uuid) pid (random-uuid)
+        editada! (fn [ementa] (tenancy/com-tenant* *ds* ente
+                                (fn [tx] (eventos/emitir! (outbox/bus) tx
+                                           (eventos/evento "proposicao.editada" ente
+                                             {:proposicao-id pid :ementa ementa})))))]
+    (proposicao! ente pid "Dispoe sobre a merenda escolar.")
+    (editada! "Dispoe sobre a merenda e o transporte escolar.")
+    (editada! "Dispoe sobre a merenda e o transporte escolar.") ; mesmo texto: a chave barra
+    (drena!)
+    (let [evs (do-ente ente)]
+      (is (= ["ProposicaoProtocolada" "ProposicaoAtualizada"] (mapv :tipo evs)))
+      (is (= {:proposicao-id (str pid) :ementa "Dispoe sobre a merenda escolar." :autor-texto "Ver. Ana"}
+             (:payload (first evs))) "so' o texto publico: sem numero, sem estado (o core completa na busca)"))))
+
+(deftest republicar-as-proposicoes-existentes-de-uma-casa-e-idempotente
+  (let [ente (random-uuid)
+        ids (tenancy/com-tenant* *ds* ente
+              (fn [tx] (vec (for [e ["Denomina a Rua das Flores." "Institui a semana da agua."]]
+                              (:id (oplenario.legislativo.db.proposicao/protocolar!
+                                    tx {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                        :uf "CE" :municipio-nome "Fortaleza" :ementa e}))))))]
+    (is (= 2 (oplenario.ia-republicar/republicar-proposicoes! *ds* ente)))
+    (is (= 2 (oplenario.ia-republicar/republicar-proposicoes! *ds* ente)) "rodar de novo le' de novo...")
+    (let [evs (do-ente ente)]
+      (is (= 2 (count evs)) "...mas nao duplica o feed")
+      (is (= (set (map str ids)) (set (map #(get-in % [:payload :proposicao-id]) evs))))
+      (is (every? #(= "ProposicaoAtualizada" (:tipo %)) evs)))))
+
+(deftest o-papel-da-aplicacao-escreve-e-le-o-feed
+  ;; os testes rodam como DONO das tabelas; o app (compose, producao) roda como `oplenario_app`. Sem o GRANT (mig
+  ;; 0089) o relay falhava no primeiro evento promovido e travava o outbox inteiro.
+  (let [ente (random-uuid) pid (random-uuid)]
+    (jdbc/with-transaction [tx *ds* {:rollback-only true}]
+      (jdbc/execute-one! tx ["SET LOCAL ROLE oplenario_app"])
+      (repo/promover-em-tx! tx {:tipo "proposicao.editada" :ente-id ente
+                                :payload {:proposicao-id pid :ementa "Denomina a Rua das Flores."}})
+      (is (= 1 (:n (jdbc/execute-one! tx ["SELECT count(*) AS n FROM integracao_ia.evento_saida WHERE ente_id = ?" ente]
+                                      {:builder-fn rs/as-unqualified-maps})))))))

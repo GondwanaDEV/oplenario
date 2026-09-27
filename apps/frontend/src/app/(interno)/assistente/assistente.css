@@ -1,0 +1,45 @@
+/* /assistente — o assistente da Casa (Faixa B / B.3). Linguagem do copiloto do design-system (editor-proposicao.html:
+   cabeca com filete cobalto, glifo de IA, nota de confianca obrigatoria; R-IA-1 como sinal de atencao, nunca falha do
+   trabalho). Padding so' vertical: o gutter lateral e' do .envelope. */
+.assistente { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1.1rem; max-width: 48rem; }
+.assistente-cabeca { background: var(--surface); border: 1px solid var(--linha); border-top: 3px solid var(--cobalto); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.1rem; }
+[data-tema="escuro"] .assistente-cabeca { border-top-color: var(--cobalto-texto); }
+.assistente-marca { display: flex; align-items: flex-start; gap: 0.7rem; }
+.assistente-glifo { width: 34px; height: 34px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); font-family: var(--mono); font-size: var(--t-12); font-weight: 700; }
+[data-tema="escuro"] .assistente-glifo { background: var(--cobalto-fundo); }
+.assistente-cabeca h1 { margin: 0; font-size: var(--t-21); }
+.assistente-sub { margin: 0.25rem 0 0; color: var(--texto-2); max-width: 60ch; }
+.assistente-confianca { font-size: var(--t-12); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.45; border-top: 1px solid var(--linha); padding-top: 0.7rem; }
+.assistente-sugestoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.assistente-sugestao { min-height: 40px; padding: 0 0.9rem; border: 1px solid var(--linha); border-radius: 999px; background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13); cursor: pointer; text-align: left; }
+.assistente-sugestao:hover { border-color: var(--texto-2); }
+.assistente-conversa { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+.assistente-turno { display: grid; gap: 0.6rem; }
+.assistente-pergunta { justify-self: end; max-width: 85%; margin: 0; padding: 0.6rem 0.9rem; border-radius: 12px 12px 4px 12px; background: var(--surface-2); color: var(--texto); overflow-wrap: anywhere; }
+.assistente-pensando { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+.assistente-resposta { min-width: 0; padding: 0.9rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.6rem; }
+.assistente-passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.assistente-passos li::before { content: "✓ "; color: var(--texto-2); }
+.assistente-passos .assistente-passo-falha::before { content: "– "; }
+.assistente-texto p { margin: 0 0 0.5rem; color: var(--texto); line-height: 1.6; overflow-wrap: anywhere; }
+.assistente-texto p:last-child { margin-bottom: 0; }
+.assistente-sem-fonte { border-left: 3px solid var(--aviso-texto); padding-left: 0.7rem; }
+.assistente-selo { display: block; font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); margin-bottom: 0.2rem; }
+.assistente-cita { font-family: var(--mono); font-size: var(--t-11); font-weight: 700; margin-left: 0.15rem; color: var(--texto-2); cursor: help; }
+/* `--erro-texto` nao existe em tokens.css: `--acento-texto` (mesma nota de busca.css). */
+.assistente-cita-falha { color: var(--acento-texto); }
+.assistente-fontes summary { cursor: pointer; color: var(--texto); font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.assistente-fontes ol { margin: 0.2rem 0 0; padding-left: 1.4rem; display: grid; gap: 0.35rem; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
+.assistente-fontes b { color: var(--texto); font-weight: 600; }
+.assistente-aviso, .assistente-indisponivel { margin: 0; padding: 0.6rem 0.8rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 8px; color: var(--texto); }
+.assistente-selo-ia { margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+.assistente-form { display: grid; gap: 0.4rem; }
+.assistente-rotulo { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); }
+.assistente-linha { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.assistente-linha input { flex: 1 1 16rem; min-width: 0; min-height: 44px; padding: 0 0.75rem; border: 1px solid var(--linha); border-radius: 8px; background: var(--surface-2); color: var(--texto); font: inherit; }
+
+/* B.6 (ADR-0012): a proposta de ato preparada na conversa — a pessoa decide na tela da proposta, nunca aqui. */
+.assistente-propostas { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.assistente-proposta { display: grid; gap: 0.35rem; justify-items: start; padding: 0.75rem 0.9rem; border: 1px solid var(--cobalto);
+  border-radius: var(--raio); background: color-mix(in srgb, var(--cobalto) 12%, transparent); color: var(--texto); }
+.assistente-proposta .assistente-selo { color: var(--cobalto-texto); margin: 0; }

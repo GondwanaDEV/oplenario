@@ -10,7 +10,9 @@
   protocolo) para manter o metodo 2-arg, do qual o interceptor de auth (Task 4) depende. CARRY: reconciliar
   este default com a config `:sessao :ociosa-min` quando o mint (Task 4) existir — hoje sao DUAS fontes
   do mesmo numero (o mint crava o `ocioso-ate` inicial; este campo crava o deslize) que precisam concordar."
-  (:require [oplenario.identidade.db.identidade :as id]
+  (:require [oplenario.identidade.db.concessao-agente :as concessao]
+            [oplenario.identidade.db.credencial-agente :as cred]
+            [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.sessao :as sess]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.kernel.tenancy :as tenancy]))
@@ -33,6 +35,11 @@
   (criar-sessao! [this sessao] "Sessao opaca de login (custodia BFF): gera+INSERT o hash, devolve o SEGREDO CRU.")
   (resolver-sessao-por-segredo [this segredo] "segredo -> {:identidade-id :ente-id} | nil; desliza ocioso_ate em acerto.")
   (apagar-sessao! [this segredo] "DELETE por hash (logout), idempotente.")
+  (emitir-credencial-agente! [this credencial]
+    "Credencial delegada do agente (ADR-0010): INSERT do hash, devolve o SEGREDO CRU (uma vez so').")
+  (resolver-credencial-agente [this segredo]
+    "segredo -> {:execucao-id :ente-id :identidade-id :agente :publico :classes} | nil (expirada/revogada/desconhecida).")
+  (revogar-credencial-agente! [this execucao-id] "Revoga a credencial da execucao; idempotente.")
   ;; TENANT (com-tenant*)
   (criar-vinculo! [this ente-id vinculo])
   (vinculos-de [this ente-id identidade-id])
@@ -46,6 +53,12 @@
     "Vinculo + papeis numa UNICA tx (§22.5 eixo D). Idempotente. E' o passo que ABRE A PORTA — por isso
     e' o ULTIMO do fluxo de provisionamento (spec §4.2 'acesso por ultimo'): antes dele, resolver-sessao
     nao acha vinculo ativo e ninguem entra.")
+  (concessao-agente [this ente-id agente]
+    "B.8 (ADR-0013): a concessao ATIVA do agente institucional na Casa ({:agente :classes :concedida-por :concedida-em})
+    ou nil.")
+  (conceder-agente! [this ente-id concessao]
+    "Liga o agente institucional ({:agente :classes :concedida-por}); idempotente (a ativa volta como esta').")
+  (revogar-agente! [this ente-id agente revogada-por] "Desliga o agente institucional; idempotente.")
   (snapshot-ator [this ente-id identidade-id]
     "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
     se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto."))
@@ -64,6 +77,9 @@
   (criar-sessao! [_ sessao] (sess/inserir! (:ds datasource) sessao))
   (resolver-sessao-por-segredo [_ segredo] (sess/resolver! (:ds datasource) segredo sessao-janela-ociosa-seg))
   (apagar-sessao! [_ segredo] (sess/apagar! (:ds datasource) segredo))
+  (emitir-credencial-agente! [_ c] (cred/inserir! (:ds datasource) c))
+  (resolver-credencial-agente [_ segredo] (cred/resolver (:ds datasource) segredo))
+  (revogar-credencial-agente! [_ execucao-id] (cred/revogar! (:ds datasource) execucao-id))
   ;; tenant
   (criar-vinculo! [this ente-id v] (transacao this ente-id #(vinc/criar! % v)))
   (vinculos-de [this ente-id ident] (transacao this ente-id #(vinc/vinculos-de % ente-id ident)))
@@ -89,6 +105,9 @@
             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id
                                        :identidade-id (:identidade-id v) :papel p}))
           {:vinculo-id vinculo-id}))))
+  (concessao-agente [this ente-id agente] (transacao this ente-id #(concessao/ativa % ente-id agente)))
+  (conceder-agente! [this ente-id c] (transacao this ente-id #(concessao/conceder! % (assoc c :ente-id ente-id))))
+  (revogar-agente! [this ente-id agente por] (transacao this ente-id #(concessao/revogar! % ente-id agente por)))
   (snapshot-ator [this ente-id identidade-id]
     (transacao this ente-id
       (fn [tx]

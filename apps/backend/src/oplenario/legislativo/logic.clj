@@ -5,7 +5,9 @@
   imutabilidade pos-publicacao moram no banco (kernel/sequencial + trigger). O mapa tipo->lexml e
   tipo->sigla sao DADO (vocabulario LexML uniforme do Brasil, nao regra por tribunal — Inv.4)."
   (:require [clojure.string :as str])
-  (:import (java.text Normalizer Normalizer$Form)))
+  (:import (java.nio.charset StandardCharsets)
+           (java.security MessageDigest)
+           (java.text Normalizer Normalizer$Form)))
 
 (set! *warn-on-reflection* true)
 
@@ -152,7 +154,13 @@
 
 ;; --- F3.9b EXPEDIENTE: geracao de documentos por modelo (feature 3.22). Espelham os CHECK da mig 0025. ---
 (def tipos-documento
-  #{"oficio" "certidao" "requerimento_administrativo" "convite" "mala_direta" "outro"})
+  "Espelha o CHECK de documento_modelo (mig 0025 + 0082). `requerimento_proposicao` (fatia 2a) e' o modelo que
+  o VEREADOR usa para redigir o requerimento (proposicao) — o Expediente nao gera documento dele."
+  #{"oficio" "certidao" "requerimento_administrativo" "convite" "mala_direta" "outro" "requerimento_proposicao"})
+
+(def tipo-modelo-requerimento
+  "O tipo de `documento_modelo` que alimenta o requerimento do vereador (fatia 2a, mig 0082)."
+  "requerimento_proposicao")
 (def estados-documento #{"rascunho" "emitido"})
 (def estados-documento-terminais
   "Emitido = artefato congelado (imutabilidade b; espelha o arg do trigger trg_documento_imut_estado)."
@@ -177,6 +185,44 @@
                      (throw (ex-info "renderizar-documento: placeholder sem valor em dados (campo nao-preenchido)"
                                      {:tipo :validacao/invalido :chave chave})))
                    (str v)))))
+
+(def ^:private re-placeholder #"\{\{\s*([-\p{Alnum}_.]+)\s*\}\}")
+
+(defn placeholders-do-template
+  "As chaves {{...}} de um template, na ordem da PRIMEIRA aparicao, sem repeticao (a MESMA gramatica de
+  `renderizar-documento`). nil/sem placeholder -> []. Pura."
+  [template]
+  (if (nil? template)
+    []
+    (into [] (distinct) (map second (re-seq re-placeholder template)))))
+
+(def campos-automaticos-do-requerimento
+  "Placeholders que o SISTEMA preenche no requerimento do vereador (fatia 2a) — nunca o formulario:
+  `vereador` = nome do autor resolvido do LOGIN; `data` = hoje, por extenso, do relogio do servidor."
+  #{"vereador" "data"})
+
+(defn campos-do-requerimento
+  "Os campos que o formulario do vereador pede: os placeholders do modelo MENOS os automaticos. Pura."
+  [template]
+  (into [] (remove campos-automaticos-do-requerimento) (placeholders-do-template template)))
+
+(def ^:private meses
+  ["janeiro" "fevereiro" "março" "abril" "maio" "junho" "julho" "agosto" "setembro" "outubro" "novembro"
+   "dezembro"])
+
+(defn data-por-extenso
+  "LocalDate -> '26 de setembro de 2026' (dia 1 = '1º', como nos atos oficiais). Pura."
+  [^java.time.LocalDate d]
+  (let [dia (.getDayOfMonth d)]
+    (str (if (= 1 dia) "1º" dia) " de " (nth meses (dec (.getMonthValue d))) " de " (.getYear d))))
+
+(defn dados-do-requerimento
+  "Junta os campos que o vereador preencheu com os automaticos. Os AUTOMATICOS VENCEM: um corpo que traga
+  'vereador' ou 'data' e' ignorado nesses campos — autoria e data de um ato assinado nao vem do cliente
+  (anti-forja, mesmo contrato de `resolver-vereador` na borda /meu). Pura."
+  [campos {:keys [nome-vereador hoje]}]
+  (merge (apply dissoc campos campos-automaticos-do-requerimento)
+         {"vereador" nome-vereador "data" (data-por-extenso hoje)}))
 
 (def limite-inline-bytes
   "Threshold inline/URI (§22.4 eixo B; calibravel por observabilidade). Acima disso o conteudo vai p/
@@ -340,3 +386,37 @@
                 ::ordem (reduce min Long/MAX_VALUE (map #(or (:ordem %) 0) ts))}))
        (sort-by (juxt ::ordem :gatilho))
        (mapv #(dissoc % ::ordem))))
+
+;; --- Faixa A / A.8: o resumo cidadao. ---
+
+(def teto-texto-resumo
+  "O resumo cidadao e' curto por natureza (a IA escreve ate' ~180 palavras); o teto so' barra colar o texto da lei."
+  4000)
+
+(defn sha256-hex
+  "Hash SHA-256 de uma string (UTF-8), prefixado 'sha256:'. Puro."
+  [^String s]
+  (let [h (.digest (MessageDigest/getInstance "SHA-256") (.getBytes s StandardCharsets/UTF_8))]
+    (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) h)))))
+
+(defn texto-base-sha256
+  "A identidade da VERSAO do texto que o resumo cidadao descreve: ementa + texto vigente. E' o que a IA confere para
+  nao redigir de novo a mesma versao, e o que diz a secretaria (e o portal) que um resumo ficou para tras."
+  [ementa texto]
+  (sha256-hex (str ementa "\n\n" (or texto ""))))
+
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia =========================
+
+(def ^:private marca-de-citacao
+  "A mesma marca que o satelite confere (`confianca/citacao.py`): [[id-da-fonte | trecho literal]]."
+  #"(?s)\[\[\s*[^|\]\s\"]+\s*(?:\|\s*.*?\s*)?\]\]")
+
+(defn texto-limpo
+  "O texto de um rascunho da IA sem as marcas de citacao (elas ficam na tela de revisao, nao no que a secretaria
+  aproveita) — o mesmo `texto_limpo` do satelite: espacos repetidos colapsados e sem espaco antes de pontuacao."
+  [texto]
+  (let [sem (str/replace (or texto "") marca-de-citacao "")
+        linhas (map #(str/trimr (str/replace % #"[ \t]{2,}" " ")) (str/split sem #"\n" -1))]
+    (str/trim (str/replace (str/join "\n" linhas) #" +([.,;:])" "$1"))))
+
+(def desfechos-nota-tecnica #{"aproveitada" "descartada"})

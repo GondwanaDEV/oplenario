@@ -1,0 +1,40 @@
+"""A única fábrica de portas — onde a config de deploy escolhe o fornecedor (Eixo 10)."""
+
+from __future__ import annotations
+
+from oplenario_ia.agente import fake as agente_fake
+from oplenario_ia.agente.laco import OPERACAO_PLANEJAR, OPERACAO_RESPONDER
+from oplenario_ia.ata import fake as ata_fake
+from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
+from oplenario_ia.conferencia import fake as conferencia_fake
+from oplenario_ia.conferencia.roteiro import OPERACAO as CONFERENCIA_REDIGIR
+from oplenario_ia.config import Config
+from oplenario_ia.inferencia.fake import PortaFake
+from oplenario_ia.inferencia.porta import PortaInferencia
+from oplenario_ia.requerimento import fake as requerimento_fake
+from oplenario_ia.requerimento.copiloto import OPERACAO_JUSTIFICAR, OPERACAO_PREENCHER
+from oplenario_ia.resumo import fake as resumo_fake
+from oplenario_ia.resumo.redacao import OPERACAO as RESUMO_REDIGIR
+
+
+def criar_porta(config: Config) -> PortaInferencia:
+    if config.vendor == "fake":
+        # o fake responde cada capacidade com o seu roteiro determinístico — a tela mostra o caminho inteiro sem
+        # fornecedor real (o padrão do deploy até o `[GAP]` jurídico fechar)
+        return PortaFake(
+            {
+                ATA_REDIGIR: ata_fake.redigir,
+                RESUMO_REDIGIR: resumo_fake.redigir,
+                OPERACAO_PLANEJAR: agente_fake.planejar,
+                OPERACAO_RESPONDER: agente_fake.responder,
+                OPERACAO_PREENCHER: requerimento_fake.preencher,
+                OPERACAO_JUSTIFICAR: requerimento_fake.justificar,
+                CONFERENCIA_REDIGIR: conferencia_fake.redigir,
+            }
+        )
+    if config.vendor == "anthropic":
+        # import tardio: o SDK do fornecedor só carrega quando o deploy o escolhe
+        from oplenario_ia.inferencia.anthropic_adapter import PortaAnthropic
+
+        return PortaAnthropic(config.modelo, timeout_s=config.timeout_s)
+    raise ValueError(f"vendor desconhecido: {config.vendor}")  # pragma: no cover — o Literal já barra

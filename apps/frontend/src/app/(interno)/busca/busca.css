@@ -1,0 +1,23 @@
+/* /busca — busca intra-camara (Faixa A / A.5). Arquetipo "consulta": cabeca + campo largo + lista de cartoes,
+   mesmo vocabulario de /gravacoes. Padding so' vertical: o gutter lateral e' do .envelope. */
+.busca { padding-top: 1.5rem; padding-bottom: 3rem; }
+.busca-cabeca h1 { margin: 0 0 0.35rem; }
+.busca-sub { margin: 0; color: var(--texto-2); max-width: 60ch; }
+.busca-form { margin-top: 1.4rem; display: grid; gap: 0.5rem; max-width: 46rem; }
+.busca-rotulo { font-size: var(--t-13); font-weight: 600; color: var(--texto-2); }
+.busca-linha { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.busca-linha input { flex: 1 1 16rem; min-width: 0; min-height: 44px; padding: 0 0.75rem; border: 1px solid var(--linha); border-radius: 8px; background: var(--surface-2); color: var(--texto); font: inherit; }
+.busca-filtros { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.busca-filtro { min-height: 36px; padding: 0 0.8rem; border: 1px solid var(--linha); border-radius: 999px; background: transparent; color: var(--texto-2); font: inherit; font-size: var(--t-13); cursor: pointer; }
+.busca-filtro[aria-pressed="true"] { border-color: var(--texto); color: var(--texto); font-weight: 600; }
+.busca-aviso { margin: 1.2rem 0 0; padding: 0.7rem 0.9rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 8px; color: var(--texto); max-width: 46rem; }
+.busca-resumo { margin: 1.2rem 0 0; font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
+.busca-lista { list-style: none; padding: 0; margin: 0.8rem 0 0; display: grid; gap: 0.8rem; max-width: 46rem; }
+.busca-item { min-width: 0; padding: 0.9rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); }
+.busca-tipo { margin: 0; font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
+.busca-titulo { display: inline-block; margin-top: 0.15rem; font-weight: 600; color: var(--texto); }
+.busca-detalhe { margin: 0.15rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.busca-trecho { margin: 0.5rem 0 0; color: var(--texto); overflow-wrap: anywhere; }
+.busca-trecho mark { background: transparent; color: inherit; font-weight: 700; text-decoration: underline; text-decoration-color: var(--aviso-texto); text-underline-offset: 3px; }
+/* `--erro-texto` nao existe em tokens.css: `--acento-texto` (mesma nota de gravacoes.css). */
+.busca-erro { margin: 1.2rem 0 0; color: var(--acento-texto); }

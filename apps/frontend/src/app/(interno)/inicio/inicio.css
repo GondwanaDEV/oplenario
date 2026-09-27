@@ -3,7 +3,8 @@
    classes globais do chassi (cada rota define as suas), então tudo que esta tela usa é escopado em
    `.inicio` e não depende de outra rota ter sido carregada antes. */
 
-.inicio { padding: clamp(1.2rem, 3vw, 2rem) 0 4rem; display: grid; gap: 1.6rem; align-content: start; }
+/* só topo/base: o recuo lateral é o do .envelope (chassi) — um `padding` inteiro aqui o zerava no celular */
+.inicio { padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem; display: grid; gap: 1.6rem; align-content: start; }
 
 /* --- o bloco da sessão (o herói: responde "o que está acontecendo agora?") --- */
 .inicio .card {

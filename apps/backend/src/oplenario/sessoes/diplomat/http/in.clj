@@ -7,7 +7,9 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.adapters.in.ata :as adapters-in-ata]
             [oplenario.sessoes.adapters.in.gravacao :as adapters-in-grav]
+            [oplenario.sessoes.adapters.in.leitura-ata :as adapters-in-leitura]
             [oplenario.sessoes.adapters.in.incidente :as adapters-in-incidente]
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
             [oplenario.sessoes.adapters.in.assiduidade :as adapters-in-assiduidade]
@@ -118,8 +120,8 @@
 (defn- resposta-conflito-sessao-fechada
   "Traduz `controllers/exigir-sessao-aberta!` (`:conflito/sessao-fechada`) -> 409 com a mensagem DO DOMINIO
   (T2 grupo A achado #4/#5, ledger de prontidao Fase 8: sessao ENCERRADA aceitava POST de item de pauta e
-  abertura de votacao — nenhum controller de conducao checava `estado`). UMA fn so', reusada pelas 11 rotas
-  de escrita de conducao (pauta/tribuna/decisao-mesa/incidente/vinculo-gravacao) — mesma disciplina de
+  abertura de votacao — nenhum controller de conducao checava `estado`). UMA fn so', reusada pelas 10 rotas
+  de escrita de conducao (pauta/tribuna/decisao-mesa/incidente; o vinculo de gravacao saiu na Faixa A / A.2) — mesma disciplina de
   `resposta-conflito-presenca`/`resposta-conflito-justificativa` acima."
   [e]
   (http/json-resposta 409 {:erro (ex-message e)}))
@@ -582,8 +584,9 @@
           (http/json-resposta 201 (adapters-out-grav/recibo-ingestao->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :corpo/grande (:tipo (ex-data e)))
-            (http/json-resposta 413 {:erro "upload grande demais"})
+          (case (:tipo (ex-data e))
+            :corpo/grande                 (http/json-resposta 413 {:erro "upload grande demais"})
+            :conflito/sessao-sem-gravacao (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- vincular-gravacao-handler
@@ -608,7 +611,7 @@
           (case (:tipo (ex-data e))
             :conflito/vinculo
             (http/json-resposta 409 {:erro "segmento ja vinculado ou lock-version desatualizado"})
-            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            :conflito/sessao-sem-gravacao (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- chamada-handler
@@ -762,6 +765,125 @@
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de conduzir a chamada"})
             (throw e)))))))
 
+(defn- gravacoes-pendentes-handler
+  "GET /gravacoes/pendentes (Faixa A / A.2): a fila de gravacoes recebidas sem sessao, com a sugestao de vinculo."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-grav/pendentes->wire
+                             (controllers/gravacoes-pendentes repo-sessoes (:ator req))))))
+
+(defn- transcricoes-handler
+  "GET /sessoes/:id/transcricoes (Faixa A / A.3): a situacao da transcricao de cada gravacao da sessao."
+  [repo-sessoes]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/transcricoes-da-sessao repo-sessoes ator id)]
+        (http/json-resposta 200 (adapters-out-grav/transcricoes->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- transcricao-handler
+  "GET /sessoes/:id/transcricoes/:tid (Faixa A / A.3): o texto, lido da IA. IA fora -> 503 com a mensagem R-IA-1:
+  a tela diz para seguir sem a IA, nunca 'erro interno'."
+  [repo-sessoes ler-transcricao]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          tid  (adapters-in/id-param->uuid (get-in req [:path-params :tid]))]
+      (try
+        (if-let [t (controllers/transcricao-da-sessao repo-sessoes ler-transcricao ator id tid)]
+          (http/json-resposta 200 (adapters-out-grav/transcricao-conteudo->wire t))
+          (http/json-resposta 404 {:erro "transcricao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro "A IA está indisponível agora. Siga pela tela — a gravação está guardada."})
+            (throw e)))))))
+
+(defn- ata-handler
+  "GET /sessoes/:id/ata (Faixa A / A.6): a ata vigente e o historico de versoes."
+  [repo-sessoes nome-na-casa]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/ata-da-sessao repo-sessoes nome-na-casa (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-grav/ata-da-sessao->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- publicar-ata-handler
+  "POST /sessoes/:id/ata (Faixa A / A.6a): publica ou retifica a ata. 201 com o recibo (versao + hash)."
+  [repo-sessoes]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m  (adapters-in-ata/publicar->dominio (:json-params req))]
+      (try
+        (if-let [r (controllers/publicar-ata! repo-sessoes (:ator req) id m)]
+          (http/json-resposta 201 (adapters-out-grav/recibo-ata->wire r))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            (:conflito/sessao-sem-ata :conflito/ata-versao :conflito/rascunho-desconhecido)
+            (http/json-resposta 409 {:erro (ex-message e)})
+            :validacao/retificacao-sem-motivo (http/json-resposta 422 {:erro (ex-message e)})
+            (throw e)))))))
+
+(def ^:private msg-ia-fora
+  "A IA está indisponível agora. Siga pela tela — redija a ata sem o rascunho, nada depende dela.")
+
+(defn- solicitar-rascunho-handler
+  "POST /sessoes/:id/ata/rascunhos (Faixa A / A.6b): pede o rascunho da ata a IA. 202 (a IA redige em segundo plano;
+  a tela acompanha pela situacao em GET /ata). 409 quando a sessao nao tem ata, e' secreta, nao tem transcricao ou ja'
+  ha' pedido em curso — sempre com a razao."
+  [repo-sessoes relogio]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [r (controllers/solicitar-rascunho-ata! repo-sessoes (:ator req) id (tempo/agora relogio))]
+          (http/json-resposta 202 (adapters-out-grav/solicitacao-rascunho->wire r))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (#{:conflito/sessao-sem-ata :conflito/sessao-sigilosa :conflito/sem-transcricao
+                 :conflito/rascunho-em-curso} (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
+
+(defn- rascunho-handler
+  "GET /sessoes/:id/ata/rascunhos/:rid (Faixa A / A.6b): o rascunho para revisao, lido da IA. IA fora -> 503 R-IA-1."
+  [repo-sessoes ler-rascunho-ata]
+  (fn [req]
+    (let [id  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          rid (adapters-in/id-param->uuid (get-in req [:path-params :rid]))]
+      (try
+        (if-let [r (controllers/rascunho-ata repo-sessoes ler-rascunho-ata (:ator req) id rid)]
+          (http/json-resposta 200 (adapters-out-grav/conteudo-rascunho-ata->wire r))
+          (http/json-resposta 404 {:erro "rascunho nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro msg-ia-fora})
+            (throw e)))))))
+
+(defn- leitura-ata-handler
+  "GET /sessoes/:id/leitura-ata (Faixa A / A.7): a ata anterior a ler e a leitura registrada."
+  [repo-sessoes nome-na-casa]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/leitura-da-ata repo-sessoes nome-na-casa (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-grav/leitura-ata->wire r))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- registrar-leitura-ata-handler
+  "POST /sessoes/:id/leitura-ata (Faixa A / A.7): registra como a ata anterior foi apresentada. 201; 409 com a razao."
+  [repo-sessoes]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m  (adapters-in-leitura/registrar->dominio (:json-params req))]
+      (try
+        (if (controllers/registrar-leitura-ata! repo-sessoes (:ator req) id m)
+          (http/json-resposta 201 {:modo (:modo m)})
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (#{:conflito/sessao-nao-aberta :conflito/ata-mudou :conflito/leitura-registrada} (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (ex-message e)})
+            (throw e)))))))
+
 (defn- listar-gravacoes-handler
   "GET /sessoes/:id/gravacao. adapters/in coage o :id; controller carrega+autoriza a sessao e lista os
   segmentos vinculados; adapters/out projeta (filtra internos). nil (sessao inexistente) -> 404."
@@ -885,6 +1007,24 @@
 
 ;; ---------- Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE (rota) ----------
 
+(defn- tempos-regimentais-handler
+  "GET /tempos-regimentais (tela \"Tempos da tribuna\", papel 'secretario'): a tabela de tempos da Casa do
+  ator. O controller repete a authz grossa por dentro (mesma dupla camada de `assiduidade-handler`)."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-tribuna/tempos-regimentais->wire
+                             (controllers/tempos-regimentais repo-sessoes (:ator req))))))
+
+(defn- definir-tempos-regimentais-handler
+  "PUT /tempos-regimentais: troca a tabela INTEIRA de tempos da Casa (idempotente — mesmo corpo, mesma tabela;
+  por isso PUT). adapters/in valida o corpo (item fechado; 400); o controller valida limites e unicidade (400
+  pelo interceptor global) e substitui + emite o evento de auditoria na mesma tx. 200 com a tabela como ficou."
+  [repo-sessoes]
+  (fn [req]
+    (let [itens (adapters-in-tribuna/definir-tempos->dominio (:json-params req))]
+      (http/json-resposta 200 (adapters-out-tribuna/tempos-regimentais->wire
+                               (controllers/definir-tempos-regimentais repo-sessoes (:ator req) itens))))))
+
 (defn- assiduidade-handler
   "GET /assiduidade?de=&ate=&tipos=&formato=json|csv&recorte=resumo|detalhe (Etapa 6 fatia 3, papel
   'secretario'). adapters/in coage os query params EM DUAS PARTES: `query->periodo` (`de`/`ate`/`tipos`,
@@ -935,7 +1075,8 @@
   controller) — EXCETO `/chamada`, `/assiduidade` e as quatro rotas da FOLHA, que exigem 'secretario' na
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
-           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa]}]
+           serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa
+           ler-transcricao ler-rascunho-ata]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -968,8 +1109,13 @@
     ["/sessoes"     :get  [auth (listar-handler repo-sessoes)] :route-name :sessoes/listar]
     ;; ingestao no TOPO (nao /sessoes/...): o segmento e' agnostico de sessao (Opcao A) e isto evita a colisao
     ;; de roteamento literal-vs-param com /sessoes/:id (o param sombrearia o POST -> 404).
-    ["/gravacoes" :post [auth (it/exige-papel "secretario") (ingestao-handler repo-sessoes objeto-store)]
+    ;; `captacao` (Faixa A / A.2): a credencial do PC do OBS — so' ENVIA arquivos (vincular segue da secretaria).
+    ["/gravacoes" :post [auth (it/exige-algum-papel #{"secretario" "captacao"})
+                         (ingestao-handler repo-sessoes objeto-store)]
      :route-name :sessoes/ingerir-gravacao]
+    ;; filho LITERAL de /gravacoes (sem /gravacoes/:id irmao): sem sombreamento.
+    ["/gravacoes/pendentes" :get [auth (it/exige-papel "secretario") (gravacoes-pendentes-handler repo-sessoes)]
+     :route-name :sessoes/gravacoes-pendentes]
     ;; Etapa 6 fatia 3 — a APURACAO DE ASSIDUIDADE. TAMBEM no TOPO, pela MESMA razao de `/gravacoes` acima —
     ;; e NAO por precaucao: `/sessoes/assiduidade` foi MEDIDO (repro isolada com `io.pedestal.test/response-
     ;; for` contra um service minimo com so' as duas rotas) e o `:id` de `/sessoes/:id` SOMBREIA o literal
@@ -981,6 +1127,13 @@
     ;; roteamento desta fatia (`assiduidade-rotas-http-in-test`) prova as duas coisas.
     ["/assiduidade" :get [auth (it/exige-papel "secretario") (assiduidade-handler repo-sessoes roster-da-casa-em-datas)]
      :route-name :sessoes/assiduidade]
+    ;; Tela "Tempos da tribuna" — no TOPO pela mesma razao de `/assiduidade` (o `:id` de `/sessoes/:id`
+    ;; sombrearia o literal). GET le a tabela da Casa; PUT a troca inteira (idempotente).
+    ["/tempos-regimentais" :get [auth (it/exige-papel "secretario") (tempos-regimentais-handler repo-sessoes)]
+     :route-name :sessoes/tempos-regimentais]
+    ["/tempos-regimentais" :put
+     [auth (it/exige-papel "secretario") it/corpo-json (definir-tempos-regimentais-handler repo-sessoes)]
+     :route-name :sessoes/definir-tempos-regimentais]
     ["/sessoes/:id" :get  [auth (buscar-handler repo-sessoes)] :route-name :sessoes/buscar]
     ["/sessoes/:id/transicao" :post
      [auth (it/exige-papel "secretario") it/corpo-json (transicionar-handler repo-sessoes)]
@@ -1094,6 +1247,36 @@
      [auth (it/exige-papel "secretario") (anunciar-item-handler repo-sessoes relogio)]
      :route-name :sessoes/anunciar-item-pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
+    ;; Faixa A / A.3 — a transcricao (ADR-0008). Leitura operacional da secretaria; o texto vem da IA pelo seam
+    ;; `ler-transcricao` (host). Sem o seam (testes de outras verticais), a leitura do texto responde 503 (R-IA-1).
+    ["/sessoes/:id/transcricoes" :get [auth (it/exige-papel "secretario") (transcricoes-handler repo-sessoes)]
+     :route-name :sessoes/transcricoes]
+    ["/sessoes/:id/transcricoes/:tid" :get
+     [auth (it/exige-papel "secretario")
+      (transcricao-handler repo-sessoes (or ler-transcricao
+                                            (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
+     :route-name :sessoes/transcricao]
+    ;; Faixa A / A.6 — a ATA da sessao (artefato legal do core; secretaria le e publica/retifica).
+    ["/sessoes/:id/ata" :get [auth (it/exige-papel "secretario") (ata-handler repo-sessoes nome-na-casa)]
+     :route-name :sessoes/ata]
+    ["/sessoes/:id/ata" :post [auth (it/exige-papel "secretario") it/corpo-json (publicar-ata-handler repo-sessoes)]
+     :route-name :sessoes/publicar-ata]
+    ;; Faixa A / A.7 — a LEITURA da ata anterior, ato da Mesa com a sessao aberta.
+    ["/sessoes/:id/leitura-ata" :get [auth (it/exige-papel "secretario") (leitura-ata-handler repo-sessoes nome-na-casa)]
+     :route-name :sessoes/leitura-ata]
+    ["/sessoes/:id/leitura-ata" :post
+     [auth (it/exige-papel "secretario") it/corpo-json (registrar-leitura-ata-handler repo-sessoes)]
+     :route-name :sessoes/registrar-leitura-ata]
+    ;; Faixa A / A.6b — o RASCUNHO da IA: pedir (202, a IA redige em segundo plano) e ler para revisar (o texto vem da
+    ;; IA pelo seam `ler-rascunho-ata`; sem o seam, 503 R-IA-1 — mesmo molde da transcricao).
+    ["/sessoes/:id/ata/rascunhos" :post
+     [auth (it/exige-papel "secretario") (solicitar-rascunho-handler repo-sessoes (or relogio (tempo/relogio-sistema)))]
+     :route-name :sessoes/solicitar-rascunho-ata]
+    ["/sessoes/:id/ata/rascunhos/:rid" :get
+     [auth (it/exige-papel "secretario")
+      (rascunho-handler repo-sessoes (or ler-rascunho-ata
+                                         (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
+     :route-name :sessoes/rascunho-ata]
     ["/sessoes/:id/gravacao/:seg-id/vincular" :post
      [auth (it/exige-papel "secretario") it/corpo-json (vincular-gravacao-handler repo-sessoes)]
      :route-name :sessoes/vincular-gravacao]

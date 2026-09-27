@@ -13,7 +13,7 @@
 
 (def ^:private cols
   [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :autor_id :estado
-   :projetado_em :atualizado_em])
+   :projetado_em :atualizado_em :resumo_texto :resumo_versao :resumo_gerado_com_ia :resumo_publicado_em])
 
 (def ^:private teto-listagem
   "Teto server-side (anti unbounded-read, mesmo racional de teto-listagem/comentario) — sem paginacao nesta
@@ -80,6 +80,21 @@
                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :ementa ementa})))
+
+(defn atualizar-resumo!
+  "Projeta o resumo cidadao publicado (`proposicao.resumo-publicado`, A.8b). So' avanca: uma versao MENOR que a ja'
+  projetada (reentrega fora de ordem) nao sobrescreve a mais nova. TOLERANTE como atualizar-metadados! (materia ausente
+  ou versao velha = 0 linhas -> nil, nunca lanca: o relay e' compartilhado)."
+  [tx {:keys [ente-id proposicao-id versao texto gerado-com-ia publicado-em]}]
+  {:pre [(some? ente-id) (some? proposicao-id) (some? versao) (some? texto)]}
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :transparencia.materia
+                         :set {:resumo_texto texto :resumo_versao versao :resumo_gerado_com_ia gerado-com-ia
+                               :resumo_publicado_em publicado-em :atualizado_em [:now]}
+                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                 [:or [:= :resumo_versao nil] [:< :resumo_versao versao]]]}))]
+    (when-not (zero? (:next.jdbc/update-count r 0))
+      {:proposicao-id proposicao-id :versao versao})))
 
 (defn buscar
   "Ficha PUBLICA de uma materia (RLS via ente-id). Devolve o mapa kebab-case ou nil."

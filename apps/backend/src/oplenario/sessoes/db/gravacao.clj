@@ -76,3 +76,30 @@
       (throw (ex-info "vincular-segmento!: ja vinculada, conflito de lock_version ou inexistente"
                       {:tipo :conflito/vinculo :id id :sessao-id sessao-id :lock-version lock-version})))
     {:id id :sessao-id sessao-id}))
+
+(defn listar-pendentes
+  "Segmentos da Casa AINDA SEM sessao (Faixa A / A.2: chegaram do utilitario de captacao e esperam a secretaria
+  vincular), mais recentes primeiro. `limite` corta a lista (a tela mostra a fila, nao o arquivo morto)."
+  [tx ente-id limite]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select colunas :from [:sessoes.gravacao_segmento]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id nil]]
+                  :order-by [[:iniciou_em :desc] [:id :asc]]
+                  :limit limite}))))
+
+(defn sessoes-candidatas-a-pendentes
+  "Sessoes da Casa cujo inicio (aberta_em, ou agendada_para) cai a ate 1 dia das gravacoes pendentes (sem
+  sessao) — as candidatas a sugestao de vinculo. So' os campos que a sugestao e a tela usam. Sem pendentes, o
+  BETWEEN com NULL nao casa nada: lista vazia."
+  [tx ente-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     [(str "SELECT s.id, s.tipo_sessao, s.numero_sequencial, s.estado, s.agendada_para, s.aberta_em, s.encerrada_em"
+           "  FROM sessoes.sessao s,"
+           "       (SELECT min(iniciou_em) AS de, max(iniciou_em) AS ate FROM sessoes.gravacao_segmento"
+           "         WHERE ente_id = ? AND sessao_id IS NULL) p"
+           " WHERE s.ente_id = ?"
+           "   AND COALESCE(s.aberta_em, s.agendada_para)"
+           "       BETWEEN p.de - interval '1 day' AND p.ate + interval '1 day'")
+      ente-id ente-id])))

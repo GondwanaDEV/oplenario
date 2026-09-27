@@ -36,6 +36,8 @@
    [:iniciou-em km/Instante]
    [:encerrou-em {:optional true} [:maybe km/Instante]]
    [:tempo-efetivamente-usado-segundos {:optional true} [:maybe :int]]
+   ;; mig 0081: o limite fotografado ao iniciar (regimental ou o que a Mesa informou); nil = sem limite.
+   [:tempo-concedido-segundos {:optional true} [:maybe :int]]
    [:lock-version :int]])
 
 (def FalaCronometroEvento

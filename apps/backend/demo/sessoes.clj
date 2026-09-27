@@ -63,6 +63,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.db.tribuna :as db-tribuna]
             [oplenario.sessoes.logic :as slogic])
   (:import (java.time Duration Instant LocalDate)))
 
@@ -246,6 +247,35 @@
      :texto-descricao "Leitura do expediente recebido da Prefeitura Municipal de Fortaleza."
      :created-by nil}))
 
+;; ---------- tempos regimentais da tribuna (mig 0081) ----------
+
+(def tempos-regimentais
+  "Os tempos de fala da Casa da demo, em segundos: [fase tipo-fala segundos] (fase nil = qualquer fase). Sao
+  VALORES DE DEMONSTRACAO na ordem de grandeza que a §22.6 anota para confirmar com o especialista em regimento
+  (5 min no expediente, 10 min na ordem do dia) — nao o Regimento de Fortaleza. Com eles, a fala que o operador
+  chamar na demo ganha contagem regressiva e campainha na TV."
+  [[nil                 "principal"          300]
+   ["grande_expediente" "principal"          600]
+   ["ordem_do_dia"      "principal"          600]
+   [nil                 "aparte"              60]
+   [nil                 "pela_ordem"         120]
+   [nil                 "questao_de_ordem"   180]
+   [nil                 "explicacao_pessoal" 300]
+   [nil                 "comunicado"         180]])
+
+(defn- semear-tempos-regimentais!
+  "Define os `tempos-regimentais` da Casa — idempotente (`definir-tempo-regimental!` substitui o par). Roda
+  DEPOIS das tres sessoes de proposito: a fala que a ABERTA semeia (Instant/now do seed) fica SEM limite — com
+  um, a TV da demo abriria mostrando horas de tempo excedido. Quem ganha limite e' a fala chamada ao vivo."
+  [ds ente-id]
+  (tenancy/com-tenant* ds ente-id
+    (fn [tx]
+      (doseq [[fase tipo seg] tempos-regimentais]
+        (db-tribuna/definir-tempo-regimental! tx
+          {:ente-id ente-id :fase fase :tipo-fala tipo :segundos seg
+           :referencia-normativa "valor de demonstracao — confirmar com o Regimento Interno da Casa"
+           :created-by nil})))))
+
 ;; ---------- a funcao publica ----------
 
 (defn semear!
@@ -265,15 +295,15 @@
         repo-l (:repo-legislativo sistema)
         repo-cad (:repo-cadastros sistema)
         ds (get-in sistema [:datasource :ds])]
-    (if (some? (repo-sessoes/buscar-sessao repo-s ente id-encerrada))
-      {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada}
-      (do
-        (garantir-sessao-legislativa! ds ente)
-        (let [materias (materias-em-pauta repo-l ente)]
-          (semear-encerrada! repo-s repo-l repo-cad ente (take 2 materias))
-          (semear-aberta! repo-s repo-l repo-cad ente materias (nth materias 2))
-          (semear-agendada! repo-s repo-l ente))
-        {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada}))))
+    (when-not (some? (repo-sessoes/buscar-sessao repo-s ente id-encerrada))
+      (garantir-sessao-legislativa! ds ente)
+      (let [materias (materias-em-pauta repo-l ente)]
+        (semear-encerrada! repo-s repo-l repo-cad ente (take 2 materias))
+        (semear-aberta! repo-s repo-l repo-cad ente materias (nth materias 2))
+        (semear-agendada! repo-s repo-l ente)))
+    ;; fora do gate: uma demo ja' semeada antes da mig 0081 tambem ganha os tempos ao re-rodar o seed
+    (semear-tempos-regimentais! ds ente)
+    {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada}))
 
 ;; ---------- leituras p/ o teste e p/ a Fase 1/2 do plano (sonda + caminhada) ----------
 

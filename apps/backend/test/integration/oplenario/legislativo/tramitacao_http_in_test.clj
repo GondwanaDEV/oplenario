@@ -19,6 +19,7 @@
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
@@ -50,7 +51,7 @@
                                    :repo-identidade (fake-repo-identidade papeis)
                                    :repo-legislativo repo-l
                                    :registro-fatos :registro-fake
-                                   :relogio (constantly ocorrido)})
+                                   :relogio (tempo/relogio-fixo ocorrido)})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -335,9 +336,9 @@
     (is (= "em_comissoes" (:estado-atual body)) "o rotulo atual")
     (is (= (str tid) (:template-id body)) "o rito sob o qual a materia corre")
     (is (= [{:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
-             :ocorrido-em (str ocorrido)}]
+             :ocorrido-em (str ocorrido) :recebimento nil}]
            (:historico body))
-        "historico em ordem CRONOLOGICA, com o instante REAL da transicao")
+        "historico em ordem CRONOLOGICA, com o instante REAL da transicao (fatia 2b: + o recibo de carga, nil aqui)")
     (is (false? (:historico-truncado body)))
     (is (= ["concluir" "arquivar"] (mapv :gatilho (:gatilhos-possiveis body)))
         "os gatilhos vem na ORDEM do rito (`ordem`), nao em alfabetica — e' a ordem ritual que o operador le'")

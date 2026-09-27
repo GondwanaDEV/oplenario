@@ -34,6 +34,13 @@ export interface MateriasOut {
   materiasTotal: number;
 }
 
+export interface ResumoPublicoOut {
+  texto: string;
+  versao: number;
+  geradoComIa: boolean;
+  publicadoEm: string;
+}
+
 export interface FichaOut {
   proposicaoId: string;
   tipo: string;
@@ -45,6 +52,7 @@ export interface FichaOut {
   autorTexto?: string | null;
   estado: string;
   norma?: NormaOut | null;
+  resumo?: ResumoPublicoOut | null;
 }
 
 export interface EncarregadoOut {

@@ -108,18 +108,53 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
 
       <section className="secao">
         <h2>O que este projeto faz</h2>
-        <div className="resumo-ia" data-ia="off">
-          <div className="resumo-off">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 8h.01M11 12h1v4h1" />
-            </svg>
-            <p>
-              <b>O resumo em linguagem simples está indisponível agora.</b> Ele é escrito com ajuda de
-              IA — volta a aparecer aqui assim que o serviço reconectar. O <b>texto oficial</b> da
-              proposição, com toda a tramitação, já está disponível acima.
-            </p>
-          </div>
+        {/* Faixa A / A.8b: o resumo PUBLICADO pela Casa (revisado por uma pessoa, §16.8). Sem resumo publicado, o
+            aviso diz isso — não "a IA caiu": o portal nunca fala com a IA, só mostra o que a Casa publicou. */}
+        <div className="resumo-ia" data-ia={vista.resumo ? "ativo" : "off"}>
+          {vista.resumo ? (
+            <>
+              <div className="resumo-cab">
+                <span className="selo-ia">
+                  <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+                    <path d="M6.5 1l1.3 3.2L11 5.5 7.8 6.8 6.5 10 5.2 6.8 2 5.5l3.2-1.3z" fill="currentColor" />
+                  </svg>
+                  Em poucas palavras
+                </span>
+              </div>
+              <div className="resumo-corpo">
+                <h4>O que esta proposição propõe</h4>
+                {vista.resumo.paragrafos.map((p, i) => (
+                  <p key={i}>{p}</p>
+                ))}
+                <p className="resumo-revisao">
+                  <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+                    <path d="M2.5 8l3 3 7-8" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {vista.resumo.geradoComIa ? (
+                    <>
+                      Resumo escrito com ajuda de IA e <b style={{ fontWeight: 600, color: "var(--texto)" }}>revisado pela equipe da Câmara</b>
+                    </>
+                  ) : (
+                    <>
+                      Resumo escrito pela <b style={{ fontWeight: 600, color: "var(--texto)" }}>equipe da Câmara</b>
+                    </>
+                  )}{" "}
+                  em {formatarData(vista.resumo.publicadoEm)}. O texto oficial, acima, é o que vale.
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="resumo-off">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8h.01M11 12h1v4h1" />
+              </svg>
+              <p>
+                <b>Esta matéria ainda não tem resumo em linguagem simples.</b> A Câmara publica o resumo depois de
+                revisá-lo. O <b>texto oficial</b> da proposição, com toda a tramitação, já está disponível acima.
+              </p>
+            </div>
+          )}
         </div>
       </section>
 

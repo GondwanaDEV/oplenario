@@ -263,6 +263,52 @@ describe("vistaTribunaTv", () => {
   });
 });
 
+describe("vistaTribunaTv — tempo-limite e campainha (mig 0081)", () => {
+  const orador = (tempoConcedidoSegundos?: number | null) => ({
+    falaId: "f1", oradorId: "ver-a", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-23T17:30:00Z", tempoConcedidoSegundos,
+  });
+  const em = (hms: string) => Date.parse(`2026-09-23T${hms}Z`);
+
+  it("sem limite: relógio mostra o decorrido, como antes", () => {
+    const t = vistaTribunaTv(estado({ oradorAtual: orador(null) }), em("17:36:24"))!;
+    expect(t).toMatchObject({ situacao: "sem-limite", relogio: "06:24", legenda: "no uso da palavra", esgotado: false, falaId: "f1" });
+  });
+
+  it("com limite: contagem regressiva do tempo restante", () => {
+    const t = vistaTribunaTv(estado({ oradorAtual: orador(300) }), em("17:31:00"))!;
+    expect(t).toMatchObject({ situacao: "correndo", relogio: "04:00", legenda: "restantes de 05:00", esgotado: false });
+  });
+
+  it("último minuto: aviso, ainda sem esgotar", () => {
+    const t = vistaTribunaTv(estado({ oradorAtual: orador(300) }), em("17:34:15"))!;
+    expect(t).toMatchObject({ situacao: "ultimo-minuto", relogio: "00:45", esgotado: false });
+  });
+
+  it("esgotado: mostra o tempo excedido e marca esgotado (o gatilho da campainha)", () => {
+    const t = vistaTribunaTv(estado({ oradorAtual: orador(300) }), em("17:35:37"))!;
+    expect(t).toMatchObject({ situacao: "esgotado", relogio: "+00:37", legenda: "tempo esgotado", esgotado: true });
+  });
+
+  it("o +1 min da Mesa estende o limite e tira do esgotado", () => {
+    const t = vistaTribunaTv(
+      estado({
+        oradorAtual: orador(300),
+        marcosCronometro: [{ tipo: "tempo_adicional_concedido", ocorridoEm: "2026-09-23T17:35:10Z", segundosAdicionais: 60 }],
+      }),
+      em("17:35:37"),
+    )!;
+    expect(t).toMatchObject({ situacao: "ultimo-minuto", relogio: "00:23", legenda: "restantes de 06:00", esgotado: false });
+  });
+
+  it("pausado com limite: a legenda diz pausado e o restante congela", () => {
+    const t = vistaTribunaTv(
+      estado({ oradorAtual: orador(300), marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-09-23T17:32:00Z" }] }),
+      em("17:50:00"),
+    )!;
+    expect(t).toMatchObject({ relogio: "03:00", legenda: "pausado", pausado: true, esgotado: false });
+  });
+});
+
 describe("vistaTribunaTv — partido (docs/23 Fatia 4a)", () => {
   it("o partido entra entre o tipo de fala e o cargo na Mesa", () => {
     const t = vistaTribunaTv(

@@ -20,7 +20,7 @@ import { useDocumentoDetalhe } from "@/lib/use-documento-detalhe";
 import { useGerarDocumento } from "@/lib/use-gerar-documento";
 import { useEditarDocumento } from "@/lib/use-editar-documento";
 import { useProtocolarDocumento } from "@/lib/use-protocolar-documento";
-import { textoCarimbo } from "@/lib/expediente-vista";
+import { modelosParaGerar, textoCarimbo } from "@/lib/expediente-vista";
 import { TopoInterno } from "../topo";
 import { AbasExpediente } from "./abas-expediente";
 import { SeletorModelo } from "./seletor-modelo";
@@ -120,7 +120,7 @@ function ConteudoPaginaExpediente() {
                 )}
                 {estadoModelos === "pronto" && modelos && (
                   <SeletorModelo
-                    modelos={modelos.itens}
+                    modelos={modelosParaGerar(modelos.itens)}
                     selecionadoId={modeloSelecionadoId}
                     aoSelecionar={setModeloSelecionadoId}
                     desabilitado={documento !== null}

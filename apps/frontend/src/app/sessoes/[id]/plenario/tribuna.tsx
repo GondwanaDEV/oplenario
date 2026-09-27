@@ -15,7 +15,7 @@
 // não resolvia nome nenhum. O avatar mostrava dois caracteres do UUID ("E9") e a fila de inscritos, o
 // prefixo dele ("64d38c04"). Num telão de sessão real isso aparece no lugar do nome do parlamentar.
 
-import { segundosDecorridos, formatarTempo } from "@/lib/cronometro";
+import { formatarTempo, relogioDaFala, segundosDecorridos, tempoDaFala } from "@/lib/cronometro";
 import { iniciais } from "@/lib/iniciais";
 import { identidadeDe, type EstadoPlenario } from "@/lib/plenario-reducer";
 import { nomeFase, nomeTipoFala } from "@/lib/rotulos-sessao";
@@ -39,6 +39,15 @@ export function Tribuna({ estado, agora }: { estado: EstadoPlenario; agora: numb
     estado.marcosCronometro[estado.marcosCronometro.length - 1].tipo === "pausada";
   // aritmética pura por tick — sem useMemo (a dep `agora` muda a cada segundo, a memo nunca acertaria)
   const decorrido = o ? segundosDecorridos(o.iniciouEm, estado.marcosCronometro, agora) : 0;
+  // mig 0081: com limite, contagem regressiva e "tempo esgotado" — a MESMA conta da TV e da Mesa
+  const tempo = tempoDaFala(o?.tempoConcedidoSegundos, estado.marcosCronometro, decorrido);
+  const rotuloTempo = pausado
+    ? "Pausado"
+    : tempo.situacao === "esgotado"
+      ? "Tempo esgotado"
+      : tempo.limite !== null
+        ? `Restantes de ${formatarTempo(tempo.limite)}`
+        : "No uso da palavra";
 
   const idOrador = o ? identidadeDe(estado, o.oradorId) : null;
   const nomeOrador = idOrador?.nomeParlamentar ?? null;
@@ -70,13 +79,13 @@ export function Tribuna({ estado, agora }: { estado: EstadoPlenario; agora: numb
               </div>
             </div>
             <div className="tribuna-tempo">
-              <span className="rotulo">{pausado ? "Pausado" : "No uso da palavra"}</span>
+              <span className="rotulo">{rotuloTempo}</span>
               <span
-                className={`timer ${pausado ? "pausado" : ""}`}
+                className={`timer ${tempo.situacao}${pausado ? " pausado" : ""}`}
                 role="timer"
                 aria-label="Tempo de tribuna"
               >
-                {formatarTempo(decorrido)}
+                {relogioDaFala(tempo, decorrido)}
               </span>
             </div>
           </>

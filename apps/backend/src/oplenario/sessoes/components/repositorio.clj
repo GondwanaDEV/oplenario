@@ -6,6 +6,9 @@
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.anuncio :as anuncio]
+            [oplenario.sessoes.db.ata :as ata]
+            [oplenario.sessoes.db.ata-rascunho :as ata-rascunho]
+            [oplenario.sessoes.db.leitura-ata :as leitura-ata]
             [oplenario.sessoes.db.chamada :as chamada]
             [oplenario.sessoes.db.folha :as db-folha]
             [oplenario.sessoes.db.gravacao :as gravacao]
@@ -13,6 +16,7 @@
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.sessao :as sessao]
+            [oplenario.sessoes.db.transcricao :as transcricao]
             [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.logic :as logic]
             [oplenario.sessoes.relacoes.presenca :as rel-presenca])
@@ -149,12 +153,40 @@
   (vincular-segmento! [this ente-id m] "Vincula um segmento a sessao (uma-vez, CAS). `forcar-acesso-restrito` (sigilo §22.6) eleva acesso_restrito; emite gravacao.segmento-vinculado (core->IA) com o sigilo definitivo, atomico.")
   (buscar-segmento [this ente-id id])
   (listar-segmentos-da-sessao [this ente-id sessao-id] "Segmentos da sessao em ordem cronologica (read-model).")
+  (contexto-para-ia [this ente-id sessao-id]
+    "Faixa A / A.3 (ADR-0008): {:sessao :segmentos :falas} numa tx do tenant — o que a IA le para transcrever e
+    atribuir falas pelo Caminho C. nil = sessao inexistente no tenant. O SIGILO (secreta/restrito) e' decidido
+    pelo chamador (host), que ve a sessao inteira.")
+  (listar-transcricoes [this ente-id sessao-id] "Ponteiros de transcricao da sessao (mais recentes primeiro).")
+  (publicar-ata! [this ente-id m]
+    "Faixa A / A.6: publica a proxima versao da ata (append-only, versao MAX+1) e emite `ata.publicada` na MESMA tx.")
+  (ata-versao [this ente-id sessao-id versao] "A.6c: a versao publicada (com texto), ou nil.")
+  (ata-da-sessao [this ente-id sessao-id]
+    "{:atual (com texto) :versoes (metadados) :rascunho (situacao do pedido de rascunho mais recente)} numa tx.")
+  (solicitar-rascunho-ata! [this ente-id m]
+    "Faixa A / A.6b: grava o pedido de rascunho e emite `ata.rascunho-solicitado` (core->IA) na MESMA tx. `pode-pedir?`
+    (fn [ultimo] -> bool) decide DENTRO da tx se ja' ha' pedido em curso — dois cliques nao viram dois pedidos.")
+  (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id] "O ponteiro 'pronto' desta sessao, ou nil.")
+  (leitura-da-ata [this ente-id sessao]
+    "Faixa A / A.7: {:anterior (sessao cuja ata esta' le) :ata (a vigente dela, com texto) :leitura (o ato, se ja'
+    registrado)} numa tx.")
+  (registrar-leitura-ata! [this ente-id m]
+    "Faixa A / A.7: grava a leitura. A versao informada TEM de ser a vigente da sessao anterior, conferido NA tx
+    (`:conflito/ata-mudou` se uma retificacao foi publicada entre abrir a tela e registrar).")
+  (buscar-transcricao [this ente-id sessao-id transcricao-id] "O ponteiro concluido desta sessao, ou nil.")
+  (listar-gravacoes-pendentes [this ente-id limite]
+    "Faixa A / A.2: {:segmentos [...sem sessao, mais recentes primeiro] :sessoes [...candidatas a vinculo, na
+    janela das gravacoes (1 dia)]}, numa tx. A sugestao (qual sessao) e' pura, no controller.")
   ;; §22.6 eixo F — tribuna: inscricao de oradores (intencao)
   (inscrever! [this ente-id m] "Inscreve um orador (intencao); numera a fila por (sessao, fase). Devolve {:id :ordem}.")
   (buscar-inscricao [this ente-id id])
   (listar-inscricoes [this ente-id sessao-id] "Fila de oradores da sessao (por fase + ordem).")
   (desistir! [this ente-id m] "Move a inscricao para 'desistencia' (terminal) via maquina + CAS.")
   ;; §22.6 eixo F — tribuna: fala executada + cronometro (execucao)
+  (listar-tempos-regimentais [this ente-id]
+    "A tabela de tempos regimentais da Casa: [{:fase :tipo-fala :segundos :referencia-normativa}].")
+  (substituir-tempos-regimentais! [this ente-id itens definido-por]
+    "Troca a tabela inteira + emite tempos.regimentais-definidos, na MESMA tx. Devolve a tabela como ficou.")
   (iniciar-fala! [this ente-id m] "Inicia a fala + loga 'iniciada', atomico. Devolve {:id}.")
   (registrar-evento-cronometro! [this ente-id m] "Evento manual do cronometro (pausada/retomada/aparte/tempo-adicional).")
   (encerrar-fala! [this ente-id m] "Encerra a fala, COMPUTA o tempo dos eventos + loga 'encerrada' (uma vez, CAS).")
@@ -488,6 +520,67 @@
           r))))
   (buscar-segmento [this ente-id id] (transacao this ente-id #(gravacao/buscar % ente-id id)))
   (listar-segmentos-da-sessao [this ente-id sessao-id] (transacao this ente-id #(gravacao/listar-segmentos-da-sessao % ente-id sessao-id)))
+  (contexto-para-ia [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          {:sessao    s
+           :segmentos (gravacao/listar-segmentos-da-sessao tx ente-id sessao-id)
+           :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)}))))
+  (listar-transcricoes [this ente-id sessao-id]
+    (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
+  (publicar-ata! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (ata/publicar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-ata-publicada! bus tx ente-id
+            (cond-> {:ata-id (:id r) :sessao-id (:sessao-id m) :versao (:versao r)
+                     :origem-redacao (:origem-redacao m) :publicada-por (:publicada-por m)
+                     :conteudo-sha256 (:conteudo-sha256 m)}
+              (:rascunho-id m) (assoc :rascunho-id (:rascunho-id m))))
+          r))))
+  (ata-versao [this ente-id sessao-id versao]
+    (transacao this ente-id #(ata/versao % ente-id sessao-id versao)))
+  (ata-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id (fn [tx] {:atual    (ata/atual tx ente-id sessao-id)
+                                      :versoes  (ata/listar-versoes tx ente-id sessao-id)
+                                      :rascunho (ata-rascunho/ultimo-da-sessao tx ente-id sessao-id)})))
+  (solicitar-rascunho-ata! [this ente-id {:keys [sessao-id solicitacao-id pode-pedir?] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (when-not (pode-pedir? (ata-rascunho/ultimo-da-sessao tx ente-id sessao-id))
+          (throw (ex-info "a IA ja' esta' redigindo o rascunho desta ata: aguarde"
+                          {:tipo :conflito/rascunho-em-curso :sessao-id sessao-id})))
+        (let [r (ata-rascunho/solicitar! tx (assoc m :ente-id ente-id))]
+          (producers/emitir-ata-rascunho-solicitado! bus tx ente-id
+            {:solicitacao-id solicitacao-id :sessao-id sessao-id})
+          r))))
+  (buscar-rascunho-pronto [this ente-id sessao-id rascunho-id]
+    (transacao this ente-id #(ata-rascunho/buscar-pronto % ente-id sessao-id rascunho-id)))
+  (leitura-da-ata [this ente-id s]
+    (transacao this ente-id
+      (fn [tx]
+        (let [anterior (leitura-ata/sessao-anterior tx ente-id s)]
+          {:anterior anterior
+           :ata      (when anterior (ata/atual tx ente-id (:id anterior)))
+           :leitura  (leitura-ata/da-sessao tx ente-id (:id s))}))))
+  (registrar-leitura-ata! [this ente-id {:keys [sessao ata-sessao-id ata-versao] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [anterior (leitura-ata/sessao-anterior tx ente-id sessao)
+              vigente  (when anterior (ata/atual tx ente-id (:id anterior)))]
+          (when-not (and vigente (= ata-sessao-id (:id anterior)) (= ata-versao (:versao vigente)))
+            (throw (ex-info "a ata a ler mudou (outra versao foi publicada, ou a sessao anterior mudou): recarregue"
+                            {:tipo :conflito/ata-mudou :sessao-id (:id sessao)})))
+          (leitura-ata/registrar! tx (-> (dissoc m :sessao)
+                                         (assoc :ente-id ente-id :sessao-id (:id sessao)
+                                                :ata-conteudo-sha256 (:conteudo-sha256 vigente))))))))
+  (buscar-transcricao [this ente-id sessao-id transcricao-id]
+    (transacao this ente-id #(transcricao/buscar-da-sessao % ente-id sessao-id transcricao-id)))
+  (listar-gravacoes-pendentes [this ente-id limite]
+    (transacao this ente-id
+      (fn [tx] {:segmentos (gravacao/listar-pendentes tx ente-id limite)
+                :sessoes   (gravacao/sessoes-candidatas-a-pendentes tx ente-id)})))
   (inscrever! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
@@ -505,6 +598,16 @@
               r   (tribuna/desistir! tx (assoc m :ente-id ente-id))]
           (producers/emitir-inscricao-desistida! bus tx ente-id {:inscricao-id (:id m) :sessao-id sid})
           r))))
+  (listar-tempos-regimentais [this ente-id]
+    (transacao this ente-id #(tribuna/listar-tempos-regimentais % ente-id)))
+  (substituir-tempos-regimentais! [this ente-id itens definido-por]
+    (transacao this ente-id
+      (fn [tx]
+        (let [tabela (tribuna/substituir-tempos-regimentais! tx ente-id itens definido-por)]
+          (producers/emitir-tempos-regimentais-definidos! bus tx ente-id
+            {:definido-por definido-por
+             :itens (mapv #(select-keys % [:fase :tipo-fala :segundos :referencia-normativa]) tabela)})
+          tabela))))
   (iniciar-fala! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
@@ -512,7 +615,9 @@
           (producers/emitir-fala-iniciada! bus tx ente-id
             (cond-> {:fala-id (:id m) :sessao-id (:sessao-id m) :orador-id (:orador-id m)
                      :tipo-fala (:tipo-fala m) :fase (:fase m) :iniciou-em (str (:iniciou-em m))}
-              (:inscricao-id m) (assoc :inscricao-id (:inscricao-id m))))
+              (:inscricao-id m) (assoc :inscricao-id (:inscricao-id m))
+              ;; o limite RESOLVIDO (informado ou regimental), nao o do corpo: e' o que a fala fotografou
+              (:tempo-concedido-segundos r) (assoc :tempo-concedido-segundos (:tempo-concedido-segundos r))))
           r))))
   (registrar-evento-cronometro! [this ente-id m]
     (transacao this ente-id
@@ -630,3 +735,16 @@
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
   []
   (->RepoSessoesPg nil nil))
+
+(defn registrar-rascunho-ata-em-tx!
+  "Faixa A / A.6b (ADR-0008): grava o fato que a IA devolveu sobre um pedido de rascunho de ata NA TX DO CHAMADOR (a
+  caixa de entrada da fronteira) — mesmo molde de `registrar-transcricao-em-tx!`."
+  [tx ente-id m]
+  (ata-rascunho/registrar! tx (assoc m :ente-id ente-id)))
+
+(defn registrar-transcricao-em-tx!
+  "Faixa A / A.3 (ADR-0008): grava o ponteiro da transcricao NA TX DO CHAMADOR (a caixa de entrada da fronteira
+  com a IA registra o evento e aplica o efeito na mesma tx do tenant — dedup e efeito sao atomicos). Mesmo
+  molde de `identidade-do-vereador-em-tx` (fn de topo sobre tx, injetada pelo host)."
+  [tx ente-id m]
+  (transcricao/registrar! tx (assoc m :ente-id ente-id)))

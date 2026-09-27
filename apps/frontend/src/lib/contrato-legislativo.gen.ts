@@ -42,11 +42,18 @@ export interface ProposicaoDetalheOut {
   texto?: string | null;
 }
 
+export interface RecebimentoOut {
+  recebidoPorNome: string | null;
+  recebidoEm: string;
+  assinaturaAlgoritmo: string;
+}
+
 export interface HistoricoTramitacaoItemOut {
   deEstado: string;
   paraEstado: string;
   gatilho: string;
   ocorridoEm: string;
+  recebimento: RecebimentoOut | null;
 }
 
 export interface ApensacaoOut {
@@ -74,6 +81,11 @@ export interface ParecerResumoOut {
   estado: string;
 }
 
+export interface CoautorOut {
+  nome: string;
+  assinadoEm: string;
+}
+
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
@@ -84,6 +96,7 @@ export interface FichaMateriaOut {
   emendasTruncado: boolean;
   pareceres: ParecerResumoOut[];
   pareceresTruncado: boolean;
+  coautores: CoautorOut[];
 }
 
 export interface ObjetoResumoOut {
@@ -249,6 +262,15 @@ export interface GatilhoPossivelOut {
   exigeAutorizacao: boolean;
 }
 
+export interface RecebimentoPendenteOut {
+  movimentacaoId: string;
+  deEstado: string | null;
+  estado: string;
+  estadoNome: string;
+  desde: string;
+  restrito: boolean;
+}
+
 export interface TramitacaoOut {
   proposicaoId: string;
   estadoAtual: string;
@@ -258,4 +280,267 @@ export interface TramitacaoOut {
   historicoTruncado: boolean;
   gatilhosPossiveis: GatilhoPossivelOut[];
   nota: string | null;
+  recebimentoPendente: RecebimentoPendenteOut | null;
+}
+
+export interface RecebimentoReciboOut {
+  id: string;
+  proposicaoId: string;
+  movimentacaoId: string;
+  estado: string;
+  recebidoEm: string;
+  assinaturaAlgoritmo: string;
+}
+
+export interface RecebimentoPendenteItemOut {
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: string;
+  estadoNome: string;
+  movimentacaoId: string;
+  deEstado: string | null;
+  desde: string;
+  restrito: boolean;
+}
+
+export interface RecebimentosPendentesOut {
+  itens: RecebimentoPendenteItemOut[];
+}
+
+export interface ModeloRequerimentoOut {
+  id: string;
+  nome: string;
+  campos: string[];
+}
+
+export interface ModelosRequerimentoOut {
+  itens: ModeloRequerimentoOut[];
+}
+
+export interface PreviaRequerimentoOut {
+  texto: string;
+}
+
+export interface RequerimentoProtocoladoOut {
+  proposicaoId: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  estado: string;
+  assinaturaAlgoritmo: string;
+}
+
+export interface ColegaOut {
+  id: string;
+  nome: string;
+  partido: string | null;
+}
+
+export interface ColegasOut {
+  itens: ColegaOut[];
+}
+
+export interface SubscricaoOut {
+  vereadorNome: string;
+  estado: "pendente" | "confirmada" | "recusada" | "nao_consta";
+  respondidaEm: string | null;
+}
+
+export interface PropostaRequerimentoOut {
+  id: string;
+  ementa: string;
+  tipoRequerimento: string;
+  texto: string;
+  autorNome: string;
+  estado: "aguardando_subscricoes" | "protocolada";
+  proposicaoId: string | null;
+  criadaEm: string;
+  souAutor: boolean;
+  minhaSubscricao: string | null;
+  subscricoes: SubscricaoOut[];
+}
+
+export interface PropostaResumoOut {
+  id: string;
+  ementa: string;
+  tipoRequerimento: string;
+  criadaEm: string;
+  confirmadas: number;
+  pendentes: number;
+  recusadas: number;
+}
+
+export interface PropostasOut {
+  itens: PropostaResumoOut[];
+}
+
+export interface ConviteSubscricaoOut {
+  propostaId: string;
+  ementa: string;
+  tipoRequerimento: string;
+  autorNome: string;
+  convidadaEm: string;
+}
+
+export interface ConvitesSubscricaoOut {
+  itens: ConviteSubscricaoOut[];
+}
+
+export interface RespostaSubscricaoOut {
+  propostaId: string;
+  estado: "confirmada" | "recusada";
+  assinaturaAlgoritmo: string | null;
+}
+
+export interface RequerimentoColetivoProtocoladoOut {
+  proposicaoId: string;
+  ano: number;
+  sequencial: number;
+  urnLex: string;
+  estado: string;
+  assinaturaAlgoritmo: string;
+  coautores: string[];
+}
+
+export interface PreenchimentoCopilotoOut {
+  modeloId: string;
+  ementa: string;
+  campos: Record<string, string>;
+}
+
+export interface CitacaoCopilotoOut {
+  fonteId: string;
+  rotulo: string | null;
+  trecho: string | null;
+  status: string;
+}
+
+export interface JustificativaCopilotoOut {
+  campo: string;
+  citacoes: CitacaoCopilotoOut[];
+  paragrafosSemFonte: number[];
+  incerteza: string;
+  modelo: string;
+}
+
+export interface CopilotoRequerimentoOut {
+  preenchimento: PreenchimentoCopilotoOut | null;
+  justificativa: JustificativaCopilotoOut | null;
+  indisponivel: string | null;
+}
+
+export interface RascunhoResumoPonteiroOut {
+  situacao: "pronto" | "falhou";
+  rascunhoId: string | null;
+  desatualizado: boolean;
+  modeloLlmId: string | null;
+  promptVersao: string | null;
+  incerteza: "normal" | "revisar_com_atencao" | null;
+  nCitacoes: number | null;
+  nCitacoesConferidas: number | null;
+  nParagrafosSemFonte: number | null;
+  categoriaErro: string | null;
+  retentavel: boolean | null;
+  ocorridoEm: string;
+}
+
+export interface ResumoVersaoOut {
+  versao: number;
+  conteudoSha256: string;
+  desatualizado: boolean;
+  origemRedacao: "gerada_automaticamente" | "redigida_pela_casa";
+  rascunhoId: string | null;
+  modeloLlmId: string | null;
+  promptVersao: string | null;
+  publicadoPor: string;
+  publicadoEm: string;
+}
+
+export interface ResumoAtualOut {
+  versao: ResumoVersaoOut;
+  texto: string;
+}
+
+export interface ResumoProposicaoOut {
+  proposicaoId: string;
+  rascunho: RascunhoResumoPonteiroOut | null;
+  atual: ResumoAtualOut | null;
+  versoes: ResumoVersaoOut[];
+}
+
+export interface CitacaoResumoOut {
+  fonteId: string;
+  trecho?: string | null;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo?: string | null;
+}
+
+export interface IncertezaResumoOut {
+  nivel: "normal" | "revisar_com_atencao";
+  motivos: string[];
+}
+
+export interface RascunhoResumoOut {
+  rascunhoId: string;
+  texto: string;
+  textoLimpo: string;
+  incerteza: IncertezaResumoOut;
+  citacoes: CitacaoResumoOut[];
+  paragrafosSemFonte: number[];
+  modeloLlmId: string;
+  promptVersao: string;
+  desatualizado: boolean;
+}
+
+export interface ResumoReciboOut {
+  versao: number;
+  conteudoSha256: string;
+}
+
+export interface CitacaoNotaOut {
+  fonteId: string;
+  trecho: string | null;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo: string | null;
+}
+
+export interface NotaTecnicaResumoOut {
+  id: string;
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: "pendente" | "aproveitada" | "descartada";
+  incerteza: "normal" | "revisar_com_atencao";
+  criadaEm: string;
+  decididaEm: string | null;
+}
+
+export interface NotasTecnicasOut {
+  itens: NotaTecnicaResumoOut[];
+}
+
+export interface NotaTecnicaOut {
+  id: string;
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: "pendente" | "aproveitada" | "descartada";
+  agente: string;
+  texto: string;
+  textoLimpo: string;
+  citacoes: CitacaoNotaOut[];
+  paragrafosSemFonte: number[];
+  incerteza: "normal" | "revisar_com_atencao";
+  motivosIncerteza: string[];
+  modeloLlmId: string;
+  textoFinal: string | null;
+  criadaEm: string;
+  decididaEm: string | null;
 }

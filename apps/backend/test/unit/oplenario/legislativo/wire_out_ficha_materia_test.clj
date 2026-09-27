@@ -12,7 +12,13 @@
 (deftest historico-item-minimo-valido
   (is (m/validate wire/HistoricoTramitacaoItemOut
                   {:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
-                   :ocorrido-em "2026-01-01T00:00:00Z"})))
+                   :ocorrido-em "2026-01-01T00:00:00Z" :recebimento nil}))
+  (is (m/validate wire/HistoricoTramitacaoItemOut
+                  {:de-estado "protocolada" :para-estado "em_comissoes" :gatilho "despachar"
+                   :ocorrido-em "2026-01-01T00:00:00Z"
+                   :recebimento {:recebido-por-nome nil :recebido-em "2026-01-01T00:00:00Z"
+                                 :assinatura-algoritmo "STUB-ICP-v0"}})
+      "fatia 2b: o recibo de carga, com nome nil quando a pessoa nao tem vinculo na Casa"))
 
 (deftest historico-item-com-contexto-invalido
   (is (not (m/validate wire/HistoricoTramitacaoItemOut
@@ -60,7 +66,8 @@
    :tramitacao [] :tramitacao-truncado false
    :apensadas [] :apensadas-truncado false
    :emendas [] :emendas-truncado false
-   :pareceres [] :pareceres-truncado false})
+   :pareceres [] :pareceres-truncado false
+   :coautores []})
 
 (deftest ficha-materia-out-minima-valida
   (is (m/validate wire/FichaMateriaOut ficha-minima)))

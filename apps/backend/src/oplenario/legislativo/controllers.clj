@@ -4,7 +4,8 @@
   da votacao ao vivo (F4 Slice 3) DIRIGE a votacao: a authz e' HERDADA do recurso SESSAO (lido via
   `consultar-sessao` INJETADA pelo host — legislativo NAO importa sessoes, §22.10), e as escritas usam o Repo do
   PROPRIO modulo (que casa ato + emissao do evento de tempo real na MESMA tx, Slice 1)."
-  (:require [oplenario.kernel.autorizacao :as authz]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.logic :as logic]
             [oplenario.motor.api :as motor]))
@@ -355,6 +356,25 @@
     (repo/transicionar! repo-legislativo (:ente-id ator) registro
                         (assoc m :template-id (:template-id linha) :ator ator))))
 
+(defn receber-movimentacao
+  "Fatia 2b — quem RECEBE a carga assina o recebimento da movimentacao pendente (pedido do stakeholder: 'toda
+  movimentacao do documento assinada por quem recebe'). `m` = {:proposicao-id :transicao-id :agora} ja'
+  coagido pelo adapters/in; o ator vem do token e e' ELE quem assina (`recebido-por`), nunca o corpo.
+
+  nil = materia inexistente no tenant (-> 404), mesmo pre-check de `tramitar-proposicao`. O resto propaga:
+  `:conflito/sem-recebimento-pendente` / `:conflito/movimentacao-divergente` (-> 409) e a negacao da regra
+  de quem recebe (-> 403) — a traducao e' da borda. `assinador` = o AssinadorICP (hoje o STUB-ICP-v0, a mesma
+  divida conhecida do parecer e do requerimento)."
+  [repo-legislativo registro assinador ator m]
+  (when (repo/buscar-proposicao repo-legislativo (:ente-id ator) (:proposicao-id m))
+    (repo/receber-movimentacao! repo-legislativo (:ente-id ator) registro
+                                (assoc m :ator ator :assinador assinador))))
+
+(defn recebimentos-pendentes
+  "Fatia 2b — a fila de cargas da Casa ainda nao recebidas (mais antigas primeiro, teto 200 no db/)."
+  [repo-legislativo ente-id]
+  (repo/recebimentos-pendentes repo-legislativo ente-id))
+
 (defn- nota-de-lista-vazia
   "Lista de gatilhos vazia tem QUATRO causas, e elas pedem acoes DIFERENTES do operador. Devolver so'
   'nenhum ato disponivel' seria verdadeiro e inutil — a nota diz de qual das quatro se trata.
@@ -379,6 +399,24 @@
          "de processo: a materia esta' presa num beco. A saida depende de corrigir a configuracao do "
          "rito, nao de tentar de novo.")))
 
+(defn- anotar-recebimentos
+  "Fatia 2b — cada linha do historico ganha `:recebimento` ({:recebido-por-nome :recebido-em
+  :assinatura-algoritmo}, ou nil quando a movimentacao nao foi recebida — ou nao exigia recebimento).
+  `recebimentos` = transicao-id -> recibo (db/recebimento/recebimentos-da-proposicao). O NOME vem do seam
+  `nome-na-casa` do host (§22.5.3 — o legislativo guarda o id de identidade e nunca soube o nome; mesma porta
+  da folha de sessao): so' sai nome de quem tem vinculo NESTA Casa, senao nil e a tela diz 'recebida'. Um
+  nome por PESSOA, nao por linha: a mesma servidora recebe dezenas de cargas."
+  [nome-na-casa ente-id historico recebimentos]
+  (let [nomes (into {} (map (fn [id] [id (nome-na-casa ente-id id)]))
+                    (distinct (keep :recebido-por (vals recebimentos))))]
+    (mapv (fn [linha]
+            (assoc linha :recebimento
+                   (when-let [r (get recebimentos (:id linha))]
+                     {:recebido-por-nome (get nomes (:recebido-por r))
+                      :recebido-em (:recebido-em r)
+                      :assinatura-algoritmo (:assinatura-algoritmo r)})))
+          historico)))
+
 (defn buscar-tramitacao
   "Fatia 3 — a LEITURA da tramitacao: o HISTORICO da materia + os GATILHOS que a Casa declara a partir do
   estado ATUAL. nil = materia inexistente no tenant (a borda traduz -> 404), mesmo contrato de
@@ -394,13 +432,16 @@
   o comeco do processo — uma mentira por omissao num artefato de auditoria. O item excedente nunca vai p/ a
   resposta: ele so' existe p/ a borda poder DIZER que ha' mais. `take-last` porque `historico-da-proposicao`
   ja' devolve os N mais recentes em ordem cronologica — o que sobra p/ descartar e' o mais ANTIGO."
-  [repo-legislativo ente-id proposicao-id limite]
-  (let [{:keys [proposicao historico candidatas estado-no-template]}
+  ([repo-legislativo ente-id proposicao-id limite]
+   (buscar-tramitacao repo-legislativo (constantly nil) ente-id proposicao-id limite))
+  ([repo-legislativo nome-na-casa ente-id proposicao-id limite]
+  (let [{:keys [proposicao historico candidatas estado-no-template recebimentos recebimento-pendente]}
         (repo/tramitacao-da-proposicao repo-legislativo ente-id proposicao-id (inc limite))]
     (when proposicao
       (let [truncado? (> (count historico) limite)
             gatilhos  (logic/gatilhos-possiveis candidatas)
-            estado    (:estado proposicao)]
+            estado    (:estado proposicao)
+            historico (if truncado? (vec (take-last limite historico)) (vec historico))]
         {:proposicao-id proposicao-id
          :estado-atual estado
          :template-id (:template-id proposicao)
@@ -408,12 +449,15 @@
          ;; NAO declara o estado (ou nao ha' rito). "Desconhecido" e "nao-terminal" sao diagnosticos
          ;; diferentes, e achatar os dois em `false` apagaria justamente o caso que pede intervencao.
          :estado-terminal (:terminal estado-no-template)
-         :historico (if truncado? (vec (take-last limite historico)) (vec historico))
+         :historico (anotar-recebimentos nome-na-casa ente-id historico recebimentos)
          :historico-truncado truncado?
+         ;; fatia 2b: a carga que a materia espera AGORA. Enquanto houver, a engine recusa qualquer ato
+         ;; (`:recebimento-pendente`) — a tela oferece RECEBER antes de oferecer tramitar.
+         :recebimento-pendente recebimento-pendente
          :gatilhos-possiveis gatilhos
          :nota (when (empty? gatilhos)
                  (nota-de-lista-vazia estado {:template-id (:template-id proposicao)
-                                              :estado-no-template estado-no-template}))}))))
+                                              :estado-no-template estado-no-template}))})))))
 
 (defn- nomear-comissoes
   "Decora cada mapa de `ms` (que tem `:comissao-id`) com `:comissao-nome`, resolvendo os N ids numa
@@ -438,12 +482,16 @@
   do model, nunca o diplomat/http/in (que so' compoe adapters/out ja' prontos).
 
   Cada parecer sai com `:comissao-nome` (defeito #11 do ledger de prontidao — a aba mostrava o UUID)."
-  [repo-legislativo resolver-comissoes ente-id id]
-  (let [{:keys [proposicao texto] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
-    (when proposicao
-      (-> ficha
-          (assoc :texto (:texto-inline texto))
-          (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %))))))
+  ([repo-legislativo resolver-comissoes ente-id id]
+   (buscar-ficha-materia repo-legislativo resolver-comissoes (constantly nil) ente-id id))
+  ([repo-legislativo resolver-comissoes nome-na-casa ente-id id]
+   (let [{:keys [proposicao texto recebimentos] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
+     (when proposicao
+       (-> (dissoc ficha :recebimentos)
+           (assoc :texto (:texto-inline texto))
+           ;; fatia 2b: o historico da ficha mostra quem recebeu cada movimentacao (mesma anotacao da rota irma)
+           (update :tramitacao #(anotar-recebimentos nome-na-casa ente-id % (or recebimentos {})))
+           (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %)))))))
 
 ;; ========================= Onda B Slice 5: editor/emissao do parecer =========================
 
@@ -580,6 +628,11 @@
   cobrir algum placeholder do template — nunca 500 por um formulario incompleto."
   [repo-legislativo ente-id m]
   (when-let [modelo (repo/buscar-modelo repo-legislativo ente-id (:modelo-id m))]
+    ;; fatia 2a: o modelo de requerimento do VEREADOR vira proposicao pela borda /meu, nunca documento
+    ;; administrativo (a tabela `documento` nem aceita o tipo — sem este guard, o CHECK viraria 500).
+    (when (= logic/tipo-modelo-requerimento (:tipo-documento modelo))
+      (throw (ex-info "gerar-documento: modelo de requerimento de vereador nao gera documento do Expediente"
+                      {:tipo :validacao/invalido :campos [:modelo-id]})))
     (repo/gerar-documento! repo-legislativo ente-id
                            (merge m {:ente-id ente-id
                                      :tipo-documento (:tipo-documento modelo)
@@ -749,3 +802,259 @@
   (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
     (when (repo/parecer-elegivel-para-ciencia? repo-legislativo (:ente-id ator) vereador-id (:evento-ref m))
       (repo/acusar-ciencia! repo-legislativo (:ente-id ator) (assoc m :vereador-id vereador-id)))))
+
+;; ========================= Fatia 2a: o requerimento do VEREADOR (borda /meu) =========================
+
+(defn- modelo-de-requerimento
+  "O modelo `id` SE for um modelo de requerimento de vereador ATIVO desta Casa; senao nil (-> 404 na borda:
+  modelo inexistente, inativo ou de outro tipo nao se distinguem — o vereador so' ve os que a lista oferece)."
+  [repo-legislativo ente-id id]
+  (let [m (repo/buscar-modelo repo-legislativo ente-id id)]
+    (when (and m (:ativo m) (= logic/tipo-modelo-requerimento (:tipo-documento m))) m)))
+
+(defn modelos-de-requerimento
+  "GET /meu/modelos-requerimento — os modelos ATIVOS de requerimento da Casa, cada um com os CAMPOS que o
+  formulario pede (os placeholders MENOS os automaticos: `logic/campos-do-requerimento`). Sem gate de posse:
+  e' config da Casa, igual para todo vereador; o gate e' o papel 'vereador' da rota."
+  [repo-legislativo ator]
+  (->> (repo/listar-modelos-ativos repo-legislativo (:ente-id ator))
+       (filter #(= logic/tipo-modelo-requerimento (:tipo-documento %)))
+       (sort-by :nome)
+       (mapv (fn [m] {:id (:id m) :nome (:nome m) :campos (logic/campos-do-requerimento (:corpo-template m))}))))
+
+(defn- texto-do-requerimento
+  [modelo campos autor hoje]
+  (logic/renderizar-documento (:corpo-template modelo)
+                              (logic/dados-do-requerimento campos {:nome-vereador (:nome autor) :hoje hoje})))
+
+(defn previa-requerimento
+  "POST /meu/requerimentos/previa — o texto FORMATADO que sera' assinado, sem gravar nada: o mesmo merge do
+  protocolo (autor e data do servidor), para o vereador revisar antes de assinar. nil (ator sem cadastro de
+  vereador, ou modelo fora da lista) -> 404. Campo faltando -> 400 (fail-closed do renderizador)."
+  [repo-legislativo resolver-autor ator {:keys [modelo-id campos hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      {:texto (texto-do-requerimento modelo campos autor hoje)})))
+
+(defn meu-protocolar-requerimento
+  "POST /meu/requerimentos — o vereador ASSINA e protocola o proprio requerimento (fatia 2a). Anti-forja: o
+  AUTOR e' o vereador do LOGIN (`resolver-autor`, host wiring), nunca o corpo; `autor-tipo` 'vereador',
+  `autor-id`/`autor-texto` = o cadastro dele. O texto e' o merge do modelo da Casa (o MESMO da previa); o
+  `tipo-requerimento` (exigido pelo CHECK da mig 0013) e' o NOME do modelo. `assinador` (porta AssinadorICP,
+  construida pelo diplomat — mesmo padrao de emitir-parecer) assina os bytes do texto no Repo, na MESMA tx
+  do protocolo. nil (sem cadastro de vereador / modelo fora da lista) -> 404."
+  [repo-legislativo resolver-municipio resolver-autor assinador ator {:keys [id modelo-id campos ementa hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      (let [{:keys [uf municipio-nome]} (resolver-municipio (:ente-id ator))
+            r (repo/protocolar! repo-legislativo (:ente-id ator)
+                                {:id id :tipo "requerimento" :ano (.getYear ^java.time.LocalDate hoje)
+                                 :ementa ementa :tipo-requerimento (:nome modelo)
+                                 :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:nome autor)
+                                 :texto (texto-do-requerimento modelo campos autor hoje)
+                                 :created-by (:identidade-id ator)
+                                 :assinador assinador :assinado-por (:identidade-id ator)
+                                 :uf uf :municipio-nome municipio-nome})]
+        (assoc r :ano (.getYear ^java.time.LocalDate hoje))))))
+
+;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
+;; Desenho: autoria-apoiamento.html. O autor redige e convida coautores; cada um confirma com a propria
+;; assinatura (sobre o texto congelado) ou recusa; o autor protocola quando quiser, e quem nao confirmou NAO
+;; CONSTA. Quem e' quem vem SEMPRE do login (resolver-autor/resolver-vereador do host), nunca do corpo.
+
+(defn- invalido! [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))
+
+(defn colegas-para-subscricao
+  "GET /meu/colegas — quem o vereador pode convidar: os vereadores com mandato VIGENTE nesta Casa (seam
+  `colegas-da-casa` do host), menos ele mesmo. nil = o login nao e' vereador cadastrado aqui (-> 404)."
+  [resolver-autor colegas-da-casa ator]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (vec (remove #(= (:id autor) (:id %)) (colegas-da-casa (:ente-id ator))))))
+
+(defn criar-proposta-requerimento
+  "POST /meu/requerimentos/propostas — o requerimento COLETIVO: mesmo formulario do individual (modelo, campos,
+  ementa) + os COAUTORES (vereador-ids). Grava a proposta com o texto CONGELADO (o mesmo merge do protocolo: autor
+  e data do servidor) e um convite por coautor. Nada e' assinado nem numerado aqui.
+
+  Coautor que nao compoe a Casa (mandato vigente), repetido, ou o proprio autor -> 400: o convite e' para um
+  colega de plenario, e um id solto no corpo nao vira convite. nil (sem cadastro de vereador / modelo fora da
+  lista) -> 404."
+  [repo-legislativo resolver-autor colegas-da-casa ator {:keys [id modelo-id campos ementa coautores hoje]}]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [modelo (modelo-de-requerimento repo-legislativo (:ente-id ator) modelo-id)]
+      (let [pedidos (distinct coautores)
+            _ (when (not= (count pedidos) (count coautores))
+                (invalido! "coautor repetido" {:campos [:coautores]}))
+            _ (when (some #(= (:id autor) %) pedidos)
+                (invalido! "o autor nao se convida como coautor" {:campos [:coautores]}))
+            por-id (into {} (map (juxt :id identity)) (colegas-da-casa (:ente-id ator)))
+            fora (remove por-id pedidos)
+            _ (when (seq fora)
+                (invalido! "coautor que nao compoe a Casa (mandato vigente)" {:campos [:coautores]}))
+            texto (texto-do-requerimento modelo campos autor hoje)]
+        (repo/criar-proposta-requerimento! repo-legislativo (:ente-id ator)
+          {:id id :autor-vereador-id (:id autor) :autor-identidade-id (:identidade-id ator)
+           :autor-nome (:nome autor) :modelo-id modelo-id :tipo-requerimento (:nome modelo)
+           :ementa ementa :texto texto
+           :coautores (mapv (fn [vid] {:id vid :nome (:nome (por-id vid))}) pedidos)})
+        (assoc (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id (:id autor))
+               :sou-autor true)))))
+
+(defn buscar-proposta-requerimento
+  "GET /meu/requerimentos/propostas/:id — a proposta para quem PARTICIPA (autor ou convidado); nil p/ os demais
+  (-> 404, nao vaza). Marca `:sou-autor` e a `:minha-subscricao` (o estado do convite do leitor, se for coautor)."
+  [repo-legislativo resolver-vereador ator id]
+  (when-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when-let [p (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id vid)]
+      (assoc p :sou-autor (= vid (:autor-vereador-id p))
+               :minha-subscricao (:estado (first (filter #(= vid (:vereador-id %)) (:subscricoes p))))))))
+
+(defn responder-subscricao
+  "POST /meu/requerimentos/propostas/:id/resposta — o coautor CONFIRMA (assina) ou RECUSA. nil = sem convite
+  para este login (-> 404). Conflitos (ja' respondeu / ja' protocolada) propagam -> 409 na borda."
+  [repo-legislativo resolver-vereador assinador ator id acao]
+  (when-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/responder-subscricao! repo-legislativo (:ente-id ator)
+                                {:proposta-id id :vereador-id vid :identidade-id (:identidade-id ator)
+                                 :acao acao :assinador assinador})))
+
+(defn protocolar-proposta-requerimento
+  "POST /meu/requerimentos/propostas/:id/protocolo — o AUTOR assina e protocola o texto congelado (o mesmo que
+  os coautores assinaram). Entram os coautores que CONFIRMARAM; os pendentes ficam registrados como 'nao
+  consta'. nil = proposta inexistente ou de outro autor (-> 404). Ja' protocolada -> 409."
+  [repo-legislativo resolver-municipio resolver-autor assinador ator id hoje]
+  (when-let [autor (resolver-autor (:ente-id ator) (:identidade-id ator))]
+    (when-let [prop (repo/buscar-proposta-requerimento repo-legislativo (:ente-id ator) id (:id autor))]
+      (when (= (:id autor) (:autor-vereador-id prop))
+        (let [{:keys [uf municipio-nome]} (resolver-municipio (:ente-id ator))
+              ano (.getYear ^java.time.LocalDate hoje)]
+          (when-let [r (repo/protocolar-proposta-requerimento! repo-legislativo (:ente-id ator) id (:id autor)
+                         {:id (random-uuid) :tipo "requerimento" :ano ano
+                          :ementa (:ementa prop) :tipo-requerimento (:tipo-requerimento prop)
+                          :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:autor-nome prop)
+                          :texto (:texto prop) :created-by (:identidade-id ator)
+                          :assinador assinador :assinado-por (:identidade-id ator)
+                          :uf uf :municipio-nome municipio-nome})]
+            (assoc r :ano ano)))))))
+
+(defn convites-de-subscricao
+  "GET /meu/subscricoes — os pedidos de subscricao esperando a resposta deste vereador. Sem cadastro -> []."
+  [repo-legislativo resolver-vereador ator]
+  (if-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/convites-de-subscricao repo-legislativo (:ente-id ator) vid)
+    []))
+
+(defn propostas-abertas
+  "GET /meu/requerimentos/propostas — as propostas do autor ainda esperando subscricoes. Sem cadastro -> []."
+  [repo-legislativo resolver-vereador ator]
+  (if-let [vid (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (repo/propostas-abertas-do-autor repo-legislativo (:ente-id ator) vid)
+    []))
+
+;; ========================= Faixa A / A.8: o resumo cidadao =========================
+
+(defn resumo-da-proposicao
+  "O resumo cidadao da materia: o ultimo rascunho da IA, a versao publicada e o historico, com a versao ATUAL do texto
+  (para dizer o que ficou para tras). nil = proposicao inexistente no tenant."
+  [repo-legislativo ente-id proposicao-id]
+  (repo/resumo-da-proposicao repo-legislativo ente-id proposicao-id))
+
+(defn rascunho-resumo
+  "O CONTEUDO do rascunho, lido da IA pelo seam `ler-rascunho-resumo` (fn [ente-id rascunho-id] -> mapa | nil). So'
+  pede a IA um id que o core registrou como rascunho pronto DESTA proposicao — nunca repassa id arbitrario. nil =
+  proposicao, ponteiro ou rascunho inexistente. IA fora -> `:ia/indisponivel` (a borda traduz em 503, R-IA-1)."
+  [repo-legislativo ler-rascunho-resumo ente-id proposicao-id rascunho-id]
+  (when-let [{:keys [texto-base-sha256]} (repo/resumo-da-proposicao repo-legislativo ente-id proposicao-id)]
+    (when-let [p (repo/buscar-rascunho-resumo-pronto repo-legislativo ente-id proposicao-id rascunho-id)]
+      (when-let [r (ler-rascunho-resumo ente-id rascunho-id)]
+        (assoc r :ponteiro p :texto-base-sha256 texto-base-sha256)))))
+
+(defn publicar-resumo!
+  "Publica a proxima versao do resumo cidadao (ele vai para o portal). Quem publica vem do `ator`. Com `rascunho-id`,
+  tem de ser um rascunho PRONTO desta proposicao (`:conflito/rascunho-desconhecido`); modelo, versao do prompt e a
+  versao do texto resumida vem do ponteiro, nunca do cliente. nil = proposicao inexistente."
+  [repo-legislativo ator proposicao-id {:keys [texto rascunho-id]}]
+  (repo/publicar-resumo! repo-legislativo (:ente-id ator)
+    (cond-> {:proposicao-id proposicao-id :texto texto :publicado-por (:identidade-id ator)}
+      rascunho-id (assoc :rascunho-id rascunho-id))))
+
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia =========================
+;; O agente institucional da Casa (ADR-0013) le a proposicao protocolada e os dispositivos da LOM/RI e grava um
+;; RASCUNHO de nota tecnica pela ferramenta `rascunho` do catalogo. A secretaria decide: aproveita (com ou sem edicao)
+;; ou descarta. Nunca uma decisao da IA — nada anda na tramitacao por causa da nota.
+
+(def teto-fila 200)
+
+(defn registrar-nota-tecnica!
+  "O rascunho do agente (o `ator` de agente institucional: agente e execucao vem do `:via`, nunca da entrada). nil =
+  proposicao inexistente nesta Casa."
+  [repo-legislativo ator {:keys [proposicao-id texto citacoes paragrafos-sem-fonte incerteza motivos-incerteza modelo]}]
+  (let [via (:via ator)]
+    (repo/registrar-nota-tecnica! repo-legislativo (:ente-id ator)
+                                  {:proposicao-id proposicao-id :agente (:agente via) :execucao-id (:execucao-id via)
+                                   :texto texto :citacoes (or citacoes []) :paragrafos-sem-fonte (or paragrafos-sem-fonte [])
+                                   :incerteza incerteza :motivos-incerteza (or motivos-incerteza []) :modelo-llm-id modelo})))
+
+(defn notas-tecnicas [repo-legislativo ente-id estado]
+  (repo/notas-tecnicas repo-legislativo ente-id estado teto-fila))
+
+(defn nota-tecnica [repo-legislativo ente-id id]
+  (repo/nota-tecnica repo-legislativo ente-id id))
+
+(defn decidir-nota-tecnica!
+  "A secretaria decide uma nota pendente. 'aproveitada' guarda o texto que ela aproveitou (o editado, ou o do agente
+  sem as marcas de citacao); 'descartada' nao guarda texto. Ja' decidida -> `:conflito/nota-decidida`. nil =
+  inexistente nesta Casa."
+  [repo-legislativo ator id {:keys [desfecho texto]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [n (repo/nota-tecnica repo-legislativo ente-id id)]
+      (when-not (= "pendente" (:estado n))
+        (throw (ex-info "nota ja' decidida" {:tipo :conflito/nota-decidida})))
+      (or (repo/decidir-nota-tecnica! repo-legislativo ente-id id
+                                      {:estado desfecho :decidida-por (:identidade-id ator)
+                                       :texto-final (when (= "aproveitada" desfecho)
+                                                      (if (str/blank? texto) (logic/texto-limpo (:texto n)) texto))})
+          (throw (ex-info "nota ja' decidida" {:tipo :conflito/nota-decidida}))))))
+
+;; ========================= Faixa B / B.7: o copiloto do requerimento =========================
+;; O vereador descreve em palavras; a IA (seam `copiloto` do host, sobre o satelite) escolhe o modelo, preenche e
+;; redige a justificativa citando a norma. E' RASCUNHO que volta ao formulario: nada e' gravado aqui, e o vereador
+;; revisa e assina pelo fluxo de sempre (previa -> protocolo). O core CONFERE o que a IA devolveu contra os modelos
+;; da Casa: modelo fora da lista ou campo que o modelo nao pede nao chegam a tela.
+
+(def ^:private teto-campo 2000)
+
+(defn- conferir-preenchimento
+  "O preenchimento da IA, se couber num modelo da Casa: o modelo da lista, so' os campos dele, textos com teto."
+  [modelos {:keys [modelo-id ementa campos]}]
+  (when-let [m (some #(when (= (str (:id %)) (str modelo-id)) %) modelos)]
+    (let [ementa (some-> ementa str str/trim)
+          pedidos (set (:campos m))
+          campos (into {} (keep (fn [[k v]]
+                                  (let [k (name k)]
+                                    (when (and (pedidos k) (string? v) (not (str/blank? v)))
+                                      [k (subs v 0 (min teto-campo (count v)))]))))
+                       campos)]
+      (when-not (str/blank? ementa)
+        {:modelo-id (:id m) :ementa (subs ementa 0 (min teto-campo (count ementa))) :campos campos}))))
+
+(defn copiloto-requerimento
+  "POST /meu/requerimentos/copiloto — o rascunho da IA para o formulario do vereador. nil = o login nao e' vereador
+  cadastrado nesta Casa (-> 404). Sem modelo de requerimento na Casa, nem chama a IA. IA fora lanca
+  `:ia/indisponivel` (a borda responde 503, R-IA-1: 'preencha o formulario')."
+  [repo-legislativo resolver-autor copiloto ator {:keys [descricao]}]
+  (when (resolver-autor (:ente-id ator) (:identidade-id ator))
+    (let [modelos (modelos-de-requerimento repo-legislativo ator)]
+      (if (empty? modelos)
+        {:preenchimento nil :justificativa nil :indisponivel nil}
+        (let [r (copiloto (:ente-id ator) {:descricao descricao :correlation_id (str (random-uuid))
+                                           :modelos (mapv #(-> (select-keys % [:id :nome :campos])
+                                                               (update :id str)) modelos)})
+              p (some->> (:preenchimento r) (conferir-preenchimento modelos))
+              j (:justificativa r)
+              j (when (and p j (contains? (:campos p) (:campo j)))
+                  {:campo (:campo j)
+                   :citacoes (mapv #(select-keys % [:fonte-id :rotulo :trecho :status]) (:citacoes j))
+                   :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte j))
+                   :incerteza (str (:incerteza j)) :modelo (str (:modelo j))})]
+          {:preenchimento p :justificativa j :indisponivel (get-in r [:indisponivel :mensagem])})))))

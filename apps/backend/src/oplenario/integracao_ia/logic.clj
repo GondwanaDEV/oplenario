@@ -1,0 +1,206 @@
+(ns oplenario.integracao-ia.logic
+  "PURO (ADR-0008): as regras da fronteira core <-> IA — quais eventos de dominio viram eventos de INTEGRACAO
+  (promocao explicita, §22.3.3), o sigilo fail-closed, os contratos versionados que a IA pode devolver e a
+  comparacao do segredo de servico. Sem I/O."
+  (:require [clojure.string :as str])
+  (:import (java.nio.charset StandardCharsets)
+           (java.security MessageDigest)))
+
+(set! *warn-on-reflection* true)
+
+(def prefixo "/integracao/ia/v1")
+
+(defn uri-conteudo-gravacao [ente-id segmento-id]
+  (str prefixo "/entes/" ente-id "/gravacoes/" segmento-id "/conteudo"))
+
+(defn uri-contexto-sessao [ente-id sessao-id]
+  (str prefixo "/entes/" ente-id "/sessoes/" sessao-id "/contexto"))
+
+;; ---------- promocao: dominio -> integracao (a lista E' o contrato; promover e' decisao revisada) ----------
+
+(defn- promover-gravacao-vinculada
+  "`gravacao.segmento-vinculado` -> `GravacaoVinculada` v1. Gravacao RESTRITA (sessao secreta) NAO sai: nil."
+  [ente-id {:keys [segmento-id sessao-id acesso-restrito]}]
+  (when-not acesso-restrito
+    {:ente-id ente-id
+     :tipo    "GravacaoVinculada"
+     :versao  1
+     :chave   (str "GravacaoVinculada:v1:" segmento-id)
+     :payload {:segmento-id  (str segmento-id)
+               :sessao-id    (str sessao-id)
+               :conteudo-uri (uri-conteudo-gravacao ente-id segmento-id)
+               :contexto-uri (uri-contexto-sessao ente-id sessao-id)}}))
+
+(defn- promover-gravacao-captada
+  "`gravacao.segmento-captado` COM sessao (link-at-ingest: o utilitario de captacao enviou com `--sessao`) e' uma
+  gravacao vinculada desde o nascimento — o core nunca emite `segmento-vinculado` para ela. Mesma chave da
+  promocao do vinculo: se as duas acontecerem, o feed tem um evento so'. Sem sessao: nil (espera o vinculo)."
+  [ente-id payload]
+  (when (:sessao-id payload)
+    (promover-gravacao-vinculada ente-id payload)))
+
+(defn- promover-ata-solicitada
+  "`ata.rascunho-solicitado` -> `AtaSolicitada` v1 (Faixa A / A.6b). Sessao secreta nunca chega aqui (o controller de
+  sessoes recusa o pedido) e, se chegasse, o contexto responderia 403 — o sigilo tem duas travas."
+  [ente-id {:keys [solicitacao-id sessao-id]}]
+  {:ente-id ente-id
+   :tipo    "AtaSolicitada"
+   :versao  1
+   :chave   (str "AtaSolicitada:v1:" solicitacao-id)
+   :payload {:solicitacao-id (str solicitacao-id)
+             :sessao-id      (str sessao-id)
+             :contexto-uri   (uri-contexto-sessao ente-id sessao-id)}})
+
+(defn uri-ata-publicada [ente-id sessao-id versao]
+  (str prefixo "/entes/" ente-id "/sessoes/" sessao-id "/atas/" versao))
+
+(defn- promover-ata-publicada
+  "`ata.publicada` -> `AtaRevisadaEPublicada` v1 (A.6c), SO' a que partiu de um rascunho da IA: e' o retorno da
+  revisao humana (§22.3.3) que a IA mede (aprovado/editado, proporcao alterada). Ata redigida pela Casa: nil."
+  [ente-id {:keys [ata-id sessao-id versao rascunho-id publicada-por conteudo-sha256]}]
+  (when rascunho-id
+    {:ente-id ente-id
+     :tipo    "AtaRevisadaEPublicada"
+     :versao  1
+     :chave   (str "AtaRevisadaEPublicada:v1:" ata-id)
+     :payload {:sessao-id       (str sessao-id)
+               :rascunho-id     (str rascunho-id)
+               :versao-ata      versao
+               :publicada-por   (str publicada-por)
+               :conteudo-sha256 conteudo-sha256
+               :conteudo-uri    (uri-ata-publicada ente-id sessao-id versao)}}))
+
+(defn- sha1-hex ^String [^String s]
+  (let [d (.digest (MessageDigest/getInstance "SHA-1") (.getBytes s StandardCharsets/UTF_8))]
+    (apply str (map #(format "%02x" (bit-and % 0xff)) d))))
+
+(defn- promover-proposicao
+  "`proposicao.protocolada`/`.editada` -> `ProposicaoProtocolada`/`ProposicaoAtualizada` v1 (A.4, §22.3.3): o snapshot
+  PUBLICO (proposicao e' ato publico) que a IA indexa para a busca — a ementa e a autoria. Numero, tipo e estado o core
+  completa na hora de mostrar (§22.3.4). A chave da atualizacao leva o hash do texto: editar de novo com o mesmo texto
+  nao vira evento novo; texto novo, sim — ementa e autoria sempre, e o `hash-texto` quando a edicao trocou o TEXTO
+  (A.8: e' o que faz a IA redigir de novo o resumo cidadao)."
+  [tipo-ia ente-id {:keys [proposicao-id ementa autor-texto hash-texto]}]
+  {:ente-id ente-id
+   :tipo    tipo-ia
+   :versao  1
+   :chave   (str tipo-ia ":v1:" proposicao-id
+                 (when (= tipo-ia "ProposicaoAtualizada")
+                   (str ":" (sha1-hex (str ementa "|" autor-texto (when hash-texto (str "|" hash-texto)))))))
+   :payload (cond-> {:proposicao-id (str proposicao-id) :ementa ementa}
+              autor-texto (assoc :autor-texto autor-texto))})
+
+(defn- promover-norma-vigente
+  "`norma.versao-vigente` -> `NormaVigente` v1 (B.4b, ADR-0011): a versao conferida de uma norma de referencia da Casa
+  vai ao indice da IA. So' identidade: a IA le os dispositivos pela fronteira, e so' os da versao que vale. Norma e'
+  publica (LOM, Regimento, lei): nao ha' sigilo a filtrar."
+  [ente-id {:keys [norma-id versao-id especie]}]
+  {:ente-id ente-id
+   :tipo    "NormaVigente"
+   :versao  1
+   :chave   (str "NormaVigente:v1:" versao-id)
+   :payload {:norma-id (str norma-id) :versao-id (str versao-id) :especie especie}})
+
+(def promocoes
+  "tipo de dominio -> (fn [ente-id payload] -> evento de integracao | nil). FONTE UNICA do que atravessa."
+  {"gravacao.segmento-vinculado" promover-gravacao-vinculada
+   "gravacao.segmento-captado"   promover-gravacao-captada
+   "ata.rascunho-solicitado"     promover-ata-solicitada
+   "ata.publicada"               promover-ata-publicada
+   "proposicao.protocolada"      (partial promover-proposicao "ProposicaoProtocolada")
+   "proposicao.editada"          (partial promover-proposicao "ProposicaoAtualizada")
+   "norma.versao-vigente"        promover-norma-vigente})
+
+(defn promover
+  "O evento de integracao para um evento de dominio, ou nil (tipo nao promovido, ou conteudo restrito)."
+  [tipo ente-id payload]
+  (when-let [f (get promocoes tipo)]
+    (f ente-id payload)))
+
+;; ---------- B.9 (ADR-0014): o orcamento da Casa vai a IA ----------
+
+(defn evento-orcamento
+  "A definicao do orcamento de IA da Casa -> `OrcamentoIADefinido` v1. Nao nasce de evento de dominio: o orcamento ja'
+  e' configuracao da propria fronteira com a IA (valores do plano), gravado junto com o evento, na mesma tx. Valores
+  como texto decimal (o satelite le Decimal, sem arredondar por float)."
+  [{:keys [id ente-id mensal teto-duro moeda definido-em]}]
+  {:ente-id ente-id
+   :tipo    "OrcamentoIADefinido"
+   :versao  1
+   :chave   (str "OrcamentoIADefinido:v1:" id)
+   :payload {:mensal      (.toPlainString (bigdec mensal))
+             :teto-duro   (.toPlainString (bigdec teto-duro))
+             :moeda       moeda
+             :definido-em (str (if (instance? java.util.Date definido-em)
+                                 (.toInstant ^java.util.Date definido-em)
+                                 definido-em))}})
+
+;; ---------- o que a IA pode devolver (tipo, versao) ----------
+
+(def categorias-falha
+  "As categorias do §22.3.5 que sao FALHA (1-4); 5 e 6 viajam como metadado, nunca como evento de falha."
+  #{"infraestrutura" "sobrecarga" "entrada" "modelo"})
+
+(def eventos-aceitos
+  "(tipo, versao) que a caixa de entrada conhece. Desconhecido -> 422 (a IA esta' a frente do core: nao aplica)."
+  #{["TranscricaoConcluida" 1] ["TranscricaoFalhou" 1] ["AtaRascunhoPronta" 1] ["AtaFalhou" 1]
+    ["ResumoCidadaoPronto" 1] ["ResumoFalhou" 1]})
+
+(def eventos-de-ata #{"AtaRascunhoPronta" "AtaFalhou"})
+(def eventos-de-resumo #{"ResumoCidadaoPronto" "ResumoFalhou"})
+
+;; ---------- sigilo e contexto ----------
+
+(defn contexto-restrito?
+  "Sessao secreta nunca vai para a IA (o sigilo e' da sessao inteira, nao so' da gravacao)."
+  [{:keys [sessao]}]
+  (= "secreta" (:tipo-sessao sessao)))
+
+(defn segmentos-liberados [segmentos] (vec (remove :acesso-restrito segmentos)))
+
+;; ---------- o segredo de servico ----------
+
+(defn segredo-confere?
+  "Compara em tempo constante (MessageDigest/isEqual). Segredo nao configurado nunca confere (fail-closed)."
+  [esperado recebido]
+  (boolean
+   (and (not (str/blank? esperado)) (string? recebido)
+        (MessageDigest/isEqual (.getBytes ^String esperado StandardCharsets/UTF_8)
+                               (.getBytes ^String recebido StandardCharsets/UTF_8)))))
+
+(def teto-do-feed 200)
+
+(defn limite-do-feed [n]
+  (-> (or n 100) (max 1) (min teto-do-feed)))
+
+;; ---------- efeito no core de cada evento aceito ----------
+
+(defn ponteiro-da-transcricao
+  "Evento `TranscricaoConcluida`/`TranscricaoFalhou` (dominio) -> o ponteiro que `sessoes` grava. O texto nunca
+  vem: so' situacao, metricas, modelos e, na falha, a categoria do §22.3.5."
+  [{:keys [tipo payload ocorrido-em]}]
+  (case tipo
+    "TranscricaoConcluida" (assoc payload :situacao "concluida" :ocorrido-em ocorrido-em)
+    "TranscricaoFalhou"    {:situacao "falhou" :sessao-id (:sessao-id payload) :segmento-id (:segmento-id payload)
+                            :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
+                            :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
+
+(defn fato-do-rascunho
+  "Evento `AtaRascunhoPronta`/`AtaFalhou` (dominio) -> o fato que `sessoes` grava no ponteiro do rascunho. O texto
+  nunca vem: so' o id na IA, a proveniencia e os sinais da Camada de Confianca."
+  [{:keys [tipo payload ocorrido-em]}]
+  (case tipo
+    "AtaRascunhoPronta" (assoc payload :situacao "pronto" :ocorrido-em ocorrido-em)
+    "AtaFalhou"         {:situacao "falhou" :sessao-id (:sessao-id payload) :solicitacao-id (:solicitacao-id payload)
+                         :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
+                         :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
+
+(defn fato-do-resumo
+  "Evento `ResumoCidadaoPronto`/`ResumoFalhou` (dominio) -> o fato que `legislativo` grava no ponteiro do rascunho do
+  resumo cidadao (A.8). O texto nunca vem: so' o id na IA, a versao do texto resumida, a proveniencia e os sinais."
+  [{:keys [tipo payload ocorrido-em]}]
+  (case tipo
+    "ResumoCidadaoPronto" (assoc payload :situacao "pronto" :ocorrido-em ocorrido-em)
+    "ResumoFalhou"        {:situacao "falhou" :proposicao-id (:proposicao-id payload)
+                           :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
+                           :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))

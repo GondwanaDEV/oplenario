@@ -98,3 +98,12 @@
   [:map {:closed true}
    [:gatilho [:string {:min 1 :max 100}]]
    [:contexto {:optional true} [:maybe [:map-of {:max contexto-max-chaves} ChaveContexto ValorContexto]]]])
+
+(def ReceberMovimentacao
+  "Corpo de POST /legislativo/proposicoes/:id/recebimento (fatia 2b) — o recebimento ASSINADO da carga.
+
+  So' `movimentacao-id`: a movimentacao que a pessoa VIU na tela e esta' recebendo. O servidor confere que
+  ela ainda e' a pendente (senao 409 — nao se assina o que nao foi visto). Quem recebe vem do token, nunca
+  do corpo; o estado e a hora, da linha e do banco. `:closed` pelo mesmo motivo de TramitarProposicao."
+  [:map {:closed true}
+   [:movimentacao-id [:string {:min 36 :max 36}]]])

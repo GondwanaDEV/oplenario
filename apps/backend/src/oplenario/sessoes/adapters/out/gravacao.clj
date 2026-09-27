@@ -53,3 +53,118 @@
   (validado wire/SegmentosOut
             {:sessao-id (->str sessao-id) :segmentos (mapv segmento->wire segmentos)}
             "read-model de gravacao viola o contrato SegmentosOut (bug de servidor)"))
+
+(defn- sugestao->wire [s]
+  (when s
+    {:sessao-id         (->str (:id s))
+     :tipo-sessao       (:tipo-sessao s)
+     :numero-sequencial (:numero-sequencial s)
+     :estado            (:estado s)
+     :inicio            (->str (or (:aberta-em s) (:agendada-para s)))}))
+
+(defn pendentes->wire
+  "[segmento+:sugestao ...] -> GravacoesPendentesOut (validado). Faixa A / A.2."
+  [segmentos]
+  (validado wire/GravacoesPendentesOut
+            {:segmentos (mapv (fn [s] {:id              (->str (:id s))
+                                       :iniciou-em      (->str (:iniciou-em s))
+                                       :encerrou-em     (->str (:encerrou-em s))
+                                       :fonte-ingestao  (:fonte-ingestao s)
+                                       :acesso-restrito (boolean (:acesso-restrito s))
+                                       :audio-hash      (:audio-hash s)
+                                       :lock-version    (:lock-version s)
+                                       :sugestao        (sugestao->wire (:sugestao s))})
+                              segmentos)}
+            "gravacoes pendentes violam o contrato GravacoesPendentesOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.3: transcricao ----------
+
+(defn- ->double [x] (some-> x double))
+
+(defn- ponteiro->wire [p]
+  {:id (->str (:id p)) :segmento-id (->str (:segmento-id p)) :situacao (:situacao p)
+   :transcricao-id (->str (:transcricao-id p)) :versao (:versao p) :idioma (:idioma p)
+   :duracao-s (->double (:duracao-s p)) :n-trechos (:n-trechos p)
+   :cobertura-atribuida (->double (:cobertura-atribuida p)) :modelo-asr (:modelo-asr p)
+   :modelo-diarizacao (:modelo-diarizacao p) :categoria-erro (:categoria-erro p) :detalhe-erro (:detalhe-erro p)
+   :retentavel (:retentavel p) :ocorrido-em (->str (:ocorrido-em p))})
+
+(defn transcricoes->wire [{:keys [sessao-id itens]}]
+  (validado wire/TranscricoesOut {:sessao-id (->str sessao-id) :itens (mapv ponteiro->wire itens)}
+            "transcricoes violam o contrato TranscricoesOut (bug de servidor)"))
+
+(defn transcricao-conteudo->wire
+  "O que a IA devolveu + o ponteiro do core -> TranscricaoConteudoOut. So' os campos de exibicao passam (o grupo de
+  voz da diarizacao e' interno da IA)."
+  [t]
+  (validado wire/TranscricaoConteudoOut
+            {:ponteiro (ponteiro->wire (:ponteiro t))
+             :trechos  (mapv (fn [x] {:inicio (->double (:inicio x)) :fim (->double (:fim x)) :texto (str (:texto x))
+                                      :orador-id (:orador-id x) :orador-nome (:orador-nome x)})
+                             (:trechos t))}
+            "transcricao viola o contrato TranscricaoConteudoOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.6: a ata ----------
+
+(defn- versao-ata->wire [v]
+  {:id (->str (:id v)) :versao (:versao v) :origem-redacao (:origem-redacao v)
+   :conteudo-sha256 (:conteudo-sha256 v) :motivo-retificacao (:motivo-retificacao v)
+   :rascunho-id (->str (:rascunho-id v)) :modelo-llm-id (:modelo-llm-id v) :prompt-versao (:prompt-versao v)
+   :proporcao-alterada (->double (:proporcao-alterada v)) :publicada-por-nome (:publicada-por-nome v)
+   :publicada-em (->str (:publicada-em v))})
+
+(defn- rascunho-ata->wire [r]
+  {:solicitacao-id (->str (:solicitacao-id r)) :situacao (:situacao r) :solicitado-em (->str (:solicitado-em r))
+   :rascunho-id (->str (:rascunho-id r)) :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
+   :incerteza (:incerteza r) :n-citacoes (:n-citacoes r) :n-citacoes-conferidas (:n-citacoes-conferidas r)
+   :n-paragrafos-sem-fonte (:n-paragrafos-sem-fonte r) :n-pontos-a-confirmar (:n-pontos-a-confirmar r)
+   :categoria-erro (:categoria-erro r) :detalhe-erro (:detalhe-erro r) :retentavel (:retentavel r)
+   :ocorrido-em (->str (:ocorrido-em r))})
+
+(defn ata-da-sessao->wire [{:keys [sessao-id pode-ter-ata atual versoes rascunho]}]
+  (validado wire/AtaSessaoOut
+            {:sessao-id (->str sessao-id) :pode-ter-ata (boolean pode-ter-ata)
+             :atual (when atual {:versao (versao-ata->wire atual) :texto (:texto atual)})
+             :versoes (mapv versao-ata->wire versoes)
+             :rascunho (some-> rascunho rascunho-ata->wire)}
+            "ata viola o contrato AtaSessaoOut (bug de servidor)"))
+
+(defn conteudo-rascunho-ata->wire
+  "O mapa que a IA devolveu (chaves kebab ja' keyword) + o ponteiro do core -> AtaRascunhoConteudoOut. So' as chaves
+  do contrato atravessam (o satelite pode mandar mais; o core nao repassa o que nao conhece)."
+  [{:keys [ponteiro] :as r}]
+  (validado wire/AtaRascunhoConteudoOut
+            {:rascunho-id (->str (:rascunho-id ponteiro)) :texto (:texto r) :texto-limpo (:texto-limpo r)
+             :incerteza {:nivel (get-in r [:incerteza :nivel]) :motivos (vec (get-in r [:incerteza :motivos]))}
+             :citacoes (mapv (fn [c] {:fonte-id (:fonte-id c) :trecho (:trecho c) :inicio (:inicio c) :fim (:fim c)
+                                      :status (:status c) :rotulo (:rotulo c)})
+                             (:citacoes r))
+             :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte r))
+             :pontos-a-confirmar (vec (:pontos-a-confirmar r))
+             :modelo-llm-id (:modelo-llm-id ponteiro) :prompt-versao (:prompt-versao ponteiro)}
+            "rascunho da IA viola o contrato AtaRascunhoConteudoOut"))
+
+(defn solicitacao-rascunho->wire [r]
+  (validado wire/SolicitacaoRascunhoOut {:solicitacao-id (->str (:solicitacao-id r))}
+            "solicitacao de rascunho viola o contrato (bug de servidor)"))
+
+(defn recibo-ata->wire [r]
+  (validado wire/AtaReciboOut {:id (->str (:id r)) :versao (:versao r) :conteudo-sha256 (:conteudo-sha256 r)}
+            "recibo da ata viola o contrato AtaReciboOut (bug de servidor)"))
+
+;; ---------- Faixa A / A.7: a leitura da ata anterior ----------
+
+(defn leitura-ata->wire [{:keys [sessao-id pode-registrar anterior ata leitura]}]
+  (validado wire/LeituraAtaOut
+            {:sessao-id (->str sessao-id) :pode-registrar (boolean pode-registrar)
+             :anterior (when anterior {:id (->str (:id anterior)) :tipo-sessao (:tipo-sessao anterior)
+                                       :numero-sequencial (:numero-sequencial anterior)
+                                       :aberta-em (->str (:aberta-em anterior))
+                                       :encerrada-em (->str (:encerrada-em anterior))})
+             :ata (when ata {:versao (:versao ata) :texto (:texto ata) :conteudo-sha256 (:conteudo-sha256 ata)
+                             :origem-redacao (:origem-redacao ata) :publicada-em (->str (:publicada-em ata))
+                             :publicada-por-nome (:publicada-por-nome ata)})
+             :leitura (when leitura {:modo (:modo leitura) :ata-sessao-id (->str (:ata-sessao-id leitura))
+                                     :ata-versao (:ata-versao leitura) :registrada-em (->str (:registrada-em leitura))
+                                     :registrada-por-nome (:registrada-por-nome leitura)})}
+            "leitura da ata viola o contrato LeituraAtaOut (bug de servidor)"))

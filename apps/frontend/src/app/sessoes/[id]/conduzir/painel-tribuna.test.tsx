@@ -65,7 +65,7 @@ describe("PainelTribuna — fila", () => {
     montar({
       tribuna: {
         sessaoId: "s1",
-        oradorAtual: { falaId: "f", oradorId: "v1", tipoFala: "principal", fase: "expediente", iniciouEm: "x", inscricaoId: "i1", lockVersion: 0 },
+        oradorAtual: { falaId: "f", oradorId: "v1", tipoFala: "principal", fase: "expediente", iniciouEm: "x", inscricaoId: "i1", tempoConcedidoSegundos: null, lockVersion: 0 },
         marcosCronometro: [],
         inscritos: [inscrito({})],
       },
@@ -163,5 +163,41 @@ describe("PainelTribuna — cronômetro", () => {
     montar({ tribuna: { sessaoId: "s1", oradorAtual: orador({ lockVersion: 7 }), marcosCronometro: [], inscritos: [] } });
     fireEvent.click(screen.getByRole("button", { name: /Encerrar fala/ }));
     await waitFor(() => expect(encerrarFala).toHaveBeenCalledWith("f1", 7));
+  });
+});
+
+describe("PainelTribuna — tempo da fala e esgotado (mig 0081)", () => {
+  const haSegundos = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+
+  it("sem escolher tempo, 'Chamar à tribuna' deixa o servidor usar o regimental (não manda tempo)", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: null, marcosCronometro: [], inscritos: [inscrito({ vereadorId: "v2", inscricaoId: "iZ" })] } });
+    fireEvent.click(screen.getByRole("button", { name: /Chamar à tribuna/ }));
+    await waitFor(() => expect(iniciarFala).toHaveBeenCalled());
+    expect(iniciarFala.mock.calls[0][2]).not.toHaveProperty("tempoConcedidoSegundos");
+  });
+
+  it("escolher o tempo da fala manda os segundos ao chamar o orador", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: null, marcosCronometro: [], inscritos: [inscrito({ vereadorId: "v2", fase: "ordem_do_dia", inscricaoId: "iZ" })] } });
+    fireEvent.change(screen.getByLabelText("Tempo da fala"), { target: { value: "300" } });
+    fireEvent.click(screen.getByRole("button", { name: /Chamar à tribuna/ }));
+    await waitFor(() =>
+      expect(iniciarFala).toHaveBeenCalledWith("v2", "ordem_do_dia", { inscricaoId: "iZ", tempoConcedidoSegundos: 300 }),
+    );
+  });
+
+  it("com limite e tempo sobrando: contagem regressiva 'restantes de'", () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador({ iniciouEm: haSegundos(60), tempoConcedidoSegundos: 300 }), marcosCronometro: [], inscritos: [] } });
+    const grupo = screen.getByRole("group", { name: /Cronômetro da fala/ });
+    expect(grupo.textContent).toContain("restantes de 05:00");
+    expect(screen.queryByText(/Tempo esgotado/)).toBeNull();
+  });
+
+  it("esgotado: avisa a Mesa e oferece +1 min e encerrar", async () => {
+    montar({ tribuna: { sessaoId: "s1", oradorAtual: orador({ iniciouEm: haSegundos(400), tempoConcedidoSegundos: 300 }), marcosCronometro: [], inscritos: [] } });
+    expect(screen.getByText(/Tempo esgotado/)).toBeTruthy();
+    expect(screen.getByRole("group", { name: /Cronômetro da fala/ }).textContent).toMatch(/\+01:[34]\d/);
+    fireEvent.click(screen.getByRole("button", { name: "+1 min" }));
+    await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "tempo_adicional_concedido", 60));
+    expect(screen.getByRole("button", { name: "Encerrar fala" })).toBeTruthy();
   });
 });

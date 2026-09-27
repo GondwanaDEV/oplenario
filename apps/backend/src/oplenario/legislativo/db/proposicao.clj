@@ -53,7 +53,7 @@
   [tx ente-id template-id chave]
   (comum/linha->kebab
     (jdbc/execute-one! tx
-      (sql/format {:select [:chave :nome :terminal :ordem]
+      (sql/format {:select [:chave :nome :terminal :ordem :exige_recebimento :recebedor]
                    :from [:legislativo.template_estado]
                    :where [:and [:= :ente_id ente-id] [:= :template_id template-id] [:= :chave chave]]}))))
 
@@ -190,6 +190,15 @@
    (jdbc/execute-one! tx
      (sql/format {:select colunas :from [:legislativo.proposicoes]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
+
+(defn buscar-por-numero
+  "A proposicao pela identificacao que uma pessoa usa ('PL 12/2026'): especie + ano + sequencial (unico por Casa,
+  eixo H). nil se nao existe no tenant."
+  [tx ente-id tipo ano sequencial]
+  (linha->proposicao
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:legislativo.proposicoes]
+                  :where [:and [:= :ente_id ente-id] [:= :tipo tipo] [:= :ano ano] [:= :sequencial sequencial]]}))))
 
 (defn resumos-por-ids
   "Modo TV (docs/22): o resumo MINIMO (tipo/ano/sequencial/ementa) de um LOTE de proposicoes numa query so' —

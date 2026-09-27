@@ -35,7 +35,9 @@
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
-            [oplenario.legislativo.components.repositorio :as repo-leg])
+            [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.legislativo.controllers :as controllers]
+            [oplenario.rotas :as rotas])
   (:import (java.time LocalDate)))
 
 ;; ---------- constantes ----------
@@ -54,7 +56,9 @@
 
 (def ^:private estados-rito
   [{:chave "protocolada"      :nome "Protocolada"            :ordem 1 :terminal false}
-   {:chave "em_comissoes"     :nome "Em Comissões"           :ordem 2 :terminal false}
+   ;; fatia 2b: a carga que chega as comissoes precisa ser RECEBIDA (e assinada) antes de andar. Sem regra de
+   ;; quem recebe (`recebedor` nil): vale o gate da rota (quem opera o expediente).
+   {:chave "em_comissoes"     :nome "Em Comissões"           :ordem 2 :terminal false :exige-recebimento true}
    {:chave "aguardando_pauta" :nome "Aguardando Pauta"       :ordem 3 :terminal false}
    {:chave "em_pauta"         :nome "Em Pauta"               :ordem 4 :terminal false}
    {:chave "aprovada"         :nome "Aprovada"               :ordem 5 :terminal true}
@@ -160,14 +164,14 @@
               "Os convênios de que trata esta Lei observarão critérios objetivos de habilitação das entidades, definidos em regulamento, serão precedidos de chamamento público, nos termos da legislação aplicável, e exigirão prestação de contas anual ao órgão municipal repassador."
               "As despesas decorrentes da execução desta Lei correrão por conta de dotações orçamentárias próprias, suplementadas se necessário."
               "Esta Lei entra em vigor na data de sua publicação."])}
-   {:ref :em-comissoes-3 :tipo "projeto_lei_complementar"
+   {:ref :em-comissoes-3 :em-carga true :tipo "projeto_lei_complementar"
     :ementa "Altera o Código de Posturas do Município quanto ao horário de funcionamento do comércio."
     :caminho ["despachar"]
     :texto (artigos->texto "Lei Complementar"
              ["O dispositivo do Código de Posturas do Município que trata do horário de funcionamento do comércio passa a vigorar de modo a permitir o funcionamento dos estabelecimentos comerciais de segunda-feira a sábado, das 6h às 22h, e aos domingos e feriados, das 8h às 18h."
               "Os estabelecimentos que exerçam atividade de interesse turístico ou de lazer poderão requerer horário especial de funcionamento, mediante autorização do órgão municipal competente."
               "Esta Lei Complementar entra em vigor na data de sua publicação."])}
-   {:ref :em-comissoes-4 :tipo "mocao"
+   {:ref :em-comissoes-4 :em-carga true :tipo "mocao"
     :ementa "Manifesta congratulações à comunidade escolar pela conquista na Olimpíada Municipal de Matemática."
     :categoria-mocao "congratulacoes" :caminho ["despachar"]
     :texto (texto-mocao "Congratulações"
@@ -409,22 +413,32 @@
   a mao. DECISAO DO CONTROLADOR (nao ampliar): so' as 24 proposicoes entram no Livro por esta fatia;
   oficios/documentos administrativos ficam fora de escopo.
 
+  Fatia 2b: a cada chegada a um estado que exige recebimento, a secretaria (`recebedor`, identidade real
+  da Casa — o historico mostra o nome dela) RECEBE e assina, pelo mesmo `receber-movimentacao!` da rota.
+  `:em-carga true` deixa a ULTIMA chegada sem receber: a fila de recebimentos pendentes da demo nao nasce vazia.
+
   Devolve o `id` da proposicao. Falha alto se algum gatilho do caminho NAO transicionar (guard bloqueado
   ou rito mal-formado — bug deste ns, nao dado esperado)."
-  [repo registro ente template-id vereadores idx
-   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao texto]}]
+  [repo registro ente template-id vereadores recebedor idx
+   {:keys [tipo ementa caminho objeto-indicacao tipo-requerimento categoria-mocao texto em-carga]}]
   (let [autor (nth vereadores (mod idx (count vereadores)))
         {pid :id} (repo-leg/protocolar! repo ente
                     {:id (random-uuid) :ente-id ente :tipo tipo :ano 2026 :uf "CE" :municipio-nome "Fortaleza"
                      :ementa ementa :autor-tipo "vereador" :autor-id (:id autor) :autor-texto (:nome-parlamentar autor)
                      :objeto-indicacao objeto-indicacao :tipo-requerimento tipo-requerimento
                      :categoria-mocao categoria-mocao :texto texto})]
-    (doseq [gatilho caminho]
+    (doseq [[i gatilho] (map-indexed vector caminho)]
       (let [r (repo-leg/transicionar! repo ente registro
                 {:proposicao-id pid :template-id template-id :gatilho gatilho})]
         (when-not (:transicionou? r)
           (throw (ex-info "acervo/semear!: gatilho do caminho nao transicionou (guard bloqueado ou rito mal-formado)"
-                          {:proposicao-id pid :gatilho gatilho :de (:de r)})))))
+                          {:proposicao-id pid :gatilho gatilho :de (:de r)})))
+        (when-let [carga (:recebimento-pendente (repo-leg/tramitacao-da-proposicao repo ente pid 1))]
+          (when-not (and em-carga (= i (dec (count caminho))))
+            (repo-leg/receber-movimentacao! repo ente registro
+              {:proposicao-id pid :transicao-id (:transicao-id carga) :agora hoje
+               :ator {:ente-id ente :identidade-id recebedor :papeis #{"secretario"}}
+               :assinador (assinador-icp/assinador-stub)})))))
     (repo-leg/protocolar-geral! repo ente
       {:id (random-uuid) :ano 2026 :objeto-tipo "proposicao" :objeto-id pid :sentido "interno"
        :assunto ementa :interessado-texto (:nome-parlamentar autor)})
@@ -559,6 +573,82 @@
 
 ;; ---------- a funcao publica ----------
 
+;; ---------- modelos de requerimento do vereador (fatia 2a, mig 0082) ----------
+
+(def modelos-de-requerimento
+  "Os modelos com que o vereador da demo redige o requerimento pelo proprio login. `{{vereador}}` e
+  `{{data}}` o sistema preenche (autor do login, data do servidor); os demais viram campos do formulario.
+  Textos de DEMONSTRACAO no formato usual de requerimento de Camara — a Casa real edita os seus na aba
+  'Modelos' do Expediente."
+  [{:chave "req-informacao" :nome "Requerimento de informação"
+    :corpo-template (str "REQUERIMENTO DE INFORMAÇÃO\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O(A) Vereador(a) que este subscreve, {{vereador}}, no uso das atribuições que lhe confere o "
+                         "Regimento Interno, requer que seja encaminhado a {{destinatario}} pedido de informações "
+                         "sobre {{assunto}}.\n\n"
+                         "JUSTIFICATIVA\n\n{{justificativa}}\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}
+   {:chave "req-voto-pesar" :nome "Requerimento de voto de pesar"
+    :corpo-template (str "REQUERIMENTO DE VOTO DE PESAR\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O(A) Vereador(a) que este subscreve, {{vereador}}, requer, ouvido o Plenário, que seja "
+                         "consignado em ata voto de profundo pesar pelo falecimento de {{falecido}}, "
+                         "dando-se ciência desta homenagem à família, no endereço {{endereco_familia}}.\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}
+   {:chave "req-generico" :nome "Requerimento (texto livre)"
+    :corpo-template (str "REQUERIMENTO\n\n"
+                         "Senhor Presidente,\n\n"
+                         "O(A) Vereador(a) que este subscreve, {{vereador}}, requer, na forma regimental, {{pedido}}.\n\n"
+                         "JUSTIFICATIVA\n\n{{justificativa}}\n\n"
+                         "Plenário da Câmara Municipal de Fortaleza, {{data}}.\n\n"
+                         "{{vereador}}\nVereador(a)")}])
+
+(defn- semear-modelos-de-requerimento!
+  "Cria os `modelos-de-requerimento` que faltam (idempotente por `chave`: nunca sobrescreve um modelo que a
+  Casa ja' editou)."
+  [repo ente]
+  (doseq [{:keys [chave nome corpo-template]} modelos-de-requerimento]
+    (when-not (repo-leg/modelo-por-chave repo ente chave)
+      (repo-leg/criar-modelo! repo ente {:id (random-uuid) :chave chave :nome nome
+                                         :tipo-documento "requerimento_proposicao"
+                                         :corpo-template corpo-template :created-by nil}))))
+
+(def ^:private id-proposta-coletiva
+  "Id FIXO da proposta de requerimento coletivo da demo — o gate de idempotencia (mesmo padrao dos ids fixos de
+  `sessoes`): rodar a semente de novo rele em vez de convidar duas vezes."
+  #uuid "10000000-0000-0000-0000-000000000520")
+
+(defn semear-proposta-coletiva!
+  "Fatia 2c: um requerimento COLETIVO esperando subscricoes, para a demo mostrar os dois lados — o PRESIDENTE
+  (que tambem e' vereador, com login) e' o autor e convida o vereador da jornada J3 e mais um colega. O login do
+  vereador ve o pedido na home e pode assinar; o do presidente acompanha e protocola. Passa pelo MESMO controller
+  da rota (texto do modelo da Casa, colegas com mandato vigente), nao por insert direto. Idempotente pelo id
+  fixo. Devolve o id da proposta, ou nil quando falta cadastro (Casa nao semeada)."
+  [sistema ente identidade-presidente identidade-vereador]
+  (let [repo (:repo-legislativo sistema)
+        repo-cad (:repo-cadastros sistema)
+        resolver-autor (fn [e i] (rotas/resolver-autor-vereador repo-cad e i))
+        colegas (fn [e] (rotas/colegas-da-casa repo-cad e hoje))
+        pres (resolver-autor ente identidade-presidente)
+        ver (resolver-autor ente identidade-vereador)
+        modelo (repo-leg/modelo-por-chave repo ente "req-informacao")]
+    (when (and pres ver modelo)
+      (if (repo-leg/buscar-proposta-requerimento repo ente id-proposta-coletiva (:id pres))
+        id-proposta-coletiva
+        (let [outro (first (remove #(#{(:id pres) (:id ver)} (:id %)) (colegas ente)))]
+          (controllers/criar-proposta-requerimento
+            repo resolver-autor colegas {:ente-id ente :identidade-id identidade-presidente}
+            {:id id-proposta-coletiva :modelo-id (:id modelo)
+             :ementa "Requer informações à Secretaria de Infraestrutura sobre o cronograma de recuperação da Av. Bezerra de Menezes."
+             :campos {"destinatario" "Secretaria Municipal de Infraestrutura (SEINF)"
+                      "assunto" "o cronograma, o orçamento e o prazo de conclusão da recuperação do pavimento da Av. Bezerra de Menezes"
+                      "justificativa" "Os moradores e comerciantes relatam buracos e alagamentos recorrentes no trecho, sem previsão pública de conclusão. A informação é necessária para o acompanhamento da obra por esta Casa."}
+             :coautores (cond-> [(:id ver)] outro (conj (:id outro)))
+             :hoje (java.time.LocalDate/now)})
+          id-proposta-coletiva)))))
+
 (defn semear!
   "Semeia (ou rele, se ja' semeada) o ACERVO LEGISLATIVO da Casa `ente`. `sistema` e' um sistema
   Component BOOTADO (mesmo contrato de `casa/semear!`) — usa `(:repo-legislativo sistema)` +
@@ -576,13 +666,20 @@
   `rito-chave` v1 neste ente. Se ja' existe, RELE (devolve so' `:template-id`, sem duplicar as 24
   proposicoes) em vez de tentar recriar — chamar de novo NAO cria um segundo acervo.
 
+  `identidade-secretaria` (fatia 2b) = quem RECEBE as cargas do acervo (`:secretaria` de
+  `casa/semear!`). A aridade-3 (testes antigos) recebe em nome do vereador — o recibo so' precisa de uma
+  identidade real da Casa.
+
   Devolve `{:template-id}`."
-  [sistema ente identidade-vereador]
+  ([sistema ente identidade-vereador] (semear! sistema ente identidade-vereador identidade-vereador))
+  ([sistema ente identidade-vereador identidade-secretaria]
   (let [repo (:repo-legislativo sistema)
         registro (:registro-fatos sistema)
         repo-cad (:repo-cadastros sistema)
         ds (get-in sistema [:datasource :ds])
         existente (tenancy/com-tenant* ds ente (fn [tx] (template-do-rito tx ente)))]
+    ;; fora do gate do acervo: uma demo semeada antes da fatia 2a tambem ganha os modelos ao re-rodar o seed
+    (semear-modelos-de-requerimento! repo ente)
     (if existente
       {:template-id existente}
       (let [vereadores (tenancy/com-tenant* ds ente (fn [tx] (vereador/listar tx ente hoje)))
@@ -595,11 +692,12 @@
             template-id (criar-rito! repo ente)
             por-ref (into {}
                       (map-indexed
-                        (fn [i m] [(:ref m) (protocolar-e-tramitar! repo registro ente template-id vereadores i m)])
+                        (fn [i m] [(:ref m) (protocolar-e-tramitar! repo registro ente template-id vereadores
+                                                                     identidade-secretaria i m)])
                         materias))
             materias-por-ref (into {} (map (juxt :ref identity) materias))
             template-parecer-id (criar-template-parecer! repo ente)]
         (semear-pareceres! repo registro ente template-parecer-id vereadores relator-vereador-id comissoes-reais por-ref)
         (semear-pos-aprovacao! repo ente por-ref)
         (semear-normas! repo ente por-ref materias-por-ref)
-        {:template-id template-id}))))
+        {:template-id template-id})))))

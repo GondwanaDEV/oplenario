@@ -9,6 +9,7 @@
             [oplenario.legislativo.events.notificacao :as ev-notificacao]
             [oplenario.legislativo.events.parecer :as ev-parecer]
             [oplenario.legislativo.events.proposicao :as ev]
+            [oplenario.legislativo.events.resumo :as ev-resumo]
             [oplenario.legislativo.events.votacao :as ev-votacao]))
 
 (defn emitir-protocolada!
@@ -21,6 +22,11 @@
   "Emite `proposicao.transicionou` no `bus` DENTRO da `tx` corrente. `payload` casa events/TransicionouPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev/transicionou ente-id payload)))
+
+(defn emitir-recebida!
+  "Emite `proposicao.recebida` (fatia 2b) no `bus` DENTRO da `tx` do recibo."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev/recebida ente-id payload)))
 
 (defn emitir-editada!
   "Emite `proposicao.editada` no `bus` DENTRO da `tx` corrente (Task 1-N1). `payload` casa
@@ -72,3 +78,8 @@
   "Emite `votacao.encerrada` no `bus` DENTRO da `tx` corrente. `payload` casa events.votacao/EncerradaPayload."
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-votacao/encerrada ente-id payload)))
+
+(defn emitir-resumo-publicado!
+  "Emite `proposicao.resumo-publicado` (Faixa A / A.8b) no `bus` DENTRO da tx que grava a versao do resumo."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-resumo/publicado ente-id payload)))

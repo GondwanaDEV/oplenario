@@ -7,7 +7,10 @@ name: oplenario
 
 services:
   postgres:
-    image: postgres:16
+    # Postgres 16 + a extensao `vector` (pgvector): o indice de busca do satelite de IA (schema `ia`, Track IA A.4;
+    # §22.9 Eixo 10 — embeddings self-host + pgvector). Mesma major e a MESMA glibc do `postgres:16` (trixie): trocar
+    # para a variante bookworm criaria divergencia de collation em volumes ja' existentes.
+    image: pgvector/pgvector:pg16-trixie
     # T1.1: sem politica de restart a plataforma NAO voltava sozinha — parar o Docker e religar deixava
     # os seis servicos de infra `Exited` e so' o `app` de pe', em crash-loop contra um banco ausente.
     restart: unless-stopped

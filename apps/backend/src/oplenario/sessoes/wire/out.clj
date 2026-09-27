@@ -303,6 +303,202 @@
    [:sessao-id :string]
    [:segmentos [:sequential SegmentoOut]]])
 
+(def SugestaoSessaoOut
+  "A sessao SUGERIDA para vincular uma gravacao pendente (pelo horario; quem decide e' a secretaria)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:tipo-sessao (km/enum-de logic/tipos-sessao)]
+   [:numero-sequencial :int]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:inicio :string]])
+
+(def GravacaoPendenteOut
+  "Gravacao recebida SEM sessao (Faixa A / A.2, GET /gravacoes/pendentes). Expoe `lock-version` (o token de CAS
+  que o vinculo exige — mesma excecao consciente do recibo de ingestao) e `audio-hash` (a secretaria confere o
+  arquivo). NAO expoe a chave do store."
+  [:map {:closed true}
+   [:id :string]
+   [:iniciou-em :string]
+   [:encerrou-em {:optional true} [:maybe :string]]
+   [:fonte-ingestao (km/enum-de logic/fontes-ingestao-gravacao)]
+   [:acesso-restrito :boolean]
+   [:audio-hash {:optional true} [:maybe :string]]
+   [:lock-version :int]
+   [:sugestao {:optional true} [:maybe SugestaoSessaoOut]]])
+
+(def GravacoesPendentesOut
+  [:map {:closed true}
+   [:segmentos [:sequential GravacaoPendenteOut]]])
+
+(def TranscricaoPonteiroOut
+  "Faixa A / A.3: a situacao de UMA transcricao de um segmento da sessao (o texto vive na IA). Metricas e modelos
+  usados aparecem (proveniencia, §22.3.5); na falha, a categoria do §22.3.5 e o detalhe."
+  [:map {:closed true}
+   [:id :string]
+   [:segmento-id :string]
+   [:situacao [:enum "concluida" "falhou"]]
+   [:transcricao-id {:optional true} [:maybe :string]]
+   [:versao {:optional true} [:maybe :int]]
+   [:idioma {:optional true} [:maybe :string]]
+   [:duracao-s {:optional true} [:maybe :double]]
+   [:n-trechos {:optional true} [:maybe :int]]
+   [:cobertura-atribuida {:optional true} [:maybe :double]]
+   [:modelo-asr {:optional true} [:maybe :string]]
+   [:modelo-diarizacao {:optional true} [:maybe :string]]
+   [:categoria-erro {:optional true} [:maybe :string]]
+   [:detalhe-erro {:optional true} [:maybe :string]]
+   [:retentavel {:optional true} [:maybe :boolean]]
+   [:ocorrido-em :string]])
+
+(def TranscricoesOut
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:itens [:sequential TranscricaoPonteiroOut]]])
+
+(def TrechoTranscricaoOut
+  "Uma frase da transcricao. `orador-nome` nil = o Caminho C nao soube quem falou (melhor 'nao sei' do que a fala na
+  boca da pessoa errada). Tempos em segundos desde o inicio da gravacao."
+  [:map {:closed true}
+   [:inicio :double]
+   [:fim :double]
+   [:texto :string]
+   [:orador-id {:optional true} [:maybe :string]]
+   [:orador-nome {:optional true} [:maybe :string]]])
+
+(def TranscricaoConteudoOut
+  [:map {:closed true}
+   [:ponteiro TranscricaoPonteiroOut]
+   [:trechos [:sequential TrechoTranscricaoOut]]])
+
+(def AtaVersaoOut
+  "Faixa A / A.6: os metadados de uma versao publicada da ata (sem o texto). `publicada-por-nome` nil = o nome nao
+  resolveu nesta Casa (a tela diz 'publicada', nunca mostra o id)."
+  [:map {:closed true}
+   [:id :string]
+   [:versao :int]
+   [:origem-redacao (km/enum-de logic/origens-redacao-ata)]
+   [:conteudo-sha256 :string]
+   [:motivo-retificacao {:optional true} [:maybe :string]]
+   [:rascunho-id {:optional true} [:maybe :string]]
+   [:modelo-llm-id {:optional true} [:maybe :string]]
+   [:prompt-versao {:optional true} [:maybe :string]]
+   [:proporcao-alterada {:optional true} [:maybe :double]]
+   [:publicada-por-nome {:optional true} [:maybe :string]]
+   [:publicada-em :string]])
+
+(def AtaAtualOut
+  [:map {:closed true}
+   [:versao AtaVersaoOut]
+   [:texto :string]])
+
+(def AtaRascunhoOut
+  "Faixa A / A.6b: a situacao do pedido de rascunho mais recente (o texto vive na IA). `solicitado` = a IA esta'
+  redigindo; `pronto` = ha' rascunho para revisar (com os sinais da Camada de Confianca); `falhou` = a categoria do
+  §22.3.5 e o detalhe."
+  [:map {:closed true}
+   [:solicitacao-id :string]
+   [:situacao [:enum "solicitado" "pronto" "falhou"]]
+   [:solicitado-em :string]
+   [:rascunho-id {:optional true} [:maybe :string]]
+   [:modelo-llm-id {:optional true} [:maybe :string]]
+   [:prompt-versao {:optional true} [:maybe :string]]
+   [:incerteza {:optional true} [:maybe [:enum "normal" "revisar_com_atencao"]]]
+   [:n-citacoes {:optional true} [:maybe :int]]
+   [:n-citacoes-conferidas {:optional true} [:maybe :int]]
+   [:n-paragrafos-sem-fonte {:optional true} [:maybe :int]]
+   [:n-pontos-a-confirmar {:optional true} [:maybe :int]]
+   [:categoria-erro {:optional true} [:maybe :string]]
+   [:detalhe-erro {:optional true} [:maybe :string]]
+   [:retentavel {:optional true} [:maybe :boolean]]
+   [:ocorrido-em :string]])
+
+(def AtaSessaoOut
+  "A ata da sessao: a vigente (com texto), o historico de versoes e o pedido de rascunho a IA mais recente.
+  `pode-ter-ata` = a sessao gera ata e ja' acabou."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:pode-ter-ata :boolean]
+   [:atual {:optional true} [:maybe AtaAtualOut]]
+   [:versoes [:sequential AtaVersaoOut]]
+   [:rascunho {:optional true} [:maybe AtaRascunhoOut]]])
+
+(def CitacaoRascunhoOut
+  "Uma citacao do rascunho, com o resultado da conferencia objetiva (§22.11.8): `conferida` | `sem_trecho` |
+  `trecho_nao_encontrado` | `fonte_nao_lida`. `inicio`/`fim` = posicao da marca no `texto`."
+  [:map {:closed true}
+   [:fonte-id :string]
+   [:trecho {:optional true} [:maybe :string]]
+   [:inicio :int]
+   [:fim :int]
+   [:status [:enum "conferida" "sem_trecho" "trecho_nao_encontrado" "fonte_nao_lida"]]
+   [:rotulo {:optional true} [:maybe :string]]])
+
+(def IncertezaRascunhoOut
+  "A indicacao de incerteza do rascunho (§16.8): `revisar_com_atencao` com os motivos deterministicos do satelite."
+  [:map {:closed true}
+   [:nivel [:enum "normal" "revisar_com_atencao"]]
+   [:motivos [:sequential :string]]])
+
+(def AtaRascunhoConteudoOut
+  "Faixa A / A.6b: o rascunho para a tela de revisao — lido da IA sob demanda. `texto` traz as marcas de citacao
+  (`[[fonte | trecho]]`); `texto-limpo` e' o que vai para o editor (sem marcas, com os pontos a confirmar)."
+  [:map {:closed true}
+   [:rascunho-id :string]
+   [:texto :string]
+   [:texto-limpo :string]
+   [:incerteza IncertezaRascunhoOut]
+   [:citacoes [:sequential CitacaoRascunhoOut]]
+   [:paragrafos-sem-fonte [:sequential :int]]
+   [:pontos-a-confirmar [:sequential :string]]
+   [:modelo-llm-id :string]
+   [:prompt-versao :string]])
+
+(def SolicitacaoRascunhoOut
+  [:map {:closed true}
+   [:solicitacao-id :string]])
+
+(def AtaReciboOut
+  [:map {:closed true}
+   [:id :string]
+   [:versao :int]
+   [:conteudo-sha256 :string]])
+
+(def SessaoAnteriorOut
+  [:map {:closed true}
+   [:id :string]
+   [:tipo-sessao :string]
+   [:numero-sequencial :int]
+   [:aberta-em {:optional true} [:maybe :string]]
+   [:encerrada-em {:optional true} [:maybe :string]]])
+
+(def AtaParaLerOut
+  "A versao VIGENTE da ata da sessao anterior — a unica que se le (revisada e publicada)."
+  [:map {:closed true}
+   [:versao :int]
+   [:texto :string]
+   [:conteudo-sha256 :string]
+   [:origem-redacao :string]
+   [:publicada-em :string]
+   [:publicada-por-nome {:optional true} [:maybe :string]]])
+
+(def LeituraAtaRegistradaOut
+  [:map {:closed true}
+   [:modo (km/enum-de logic/modos-leitura-ata)]
+   [:ata-sessao-id :string]
+   [:ata-versao :int]
+   [:registrada-em :string]
+   [:registrada-por-nome {:optional true} [:maybe :string]]])
+
+(def LeituraAtaOut
+  "Faixa A / A.7: o painel da leitura da ata anterior. `anterior` nil = nao ha' sessao anterior com ata; `ata` nil =
+  a sessao anterior existe mas a ata dela ainda nao foi publicada."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:pode-registrar :boolean]
+   [:anterior {:optional true} [:maybe SessaoAnteriorOut]]
+   [:ata {:optional true} [:maybe AtaParaLerOut]]
+   [:leitura {:optional true} [:maybe LeituraAtaRegistradaOut]]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos
@@ -530,6 +726,9 @@
    [:fase (km/enum-de logic/fases-pauta)]
    [:iniciou-em :string]
    [:inscricao-id [:maybe :string]]
+   ;; mig 0081: o tempo-limite da fala (segundos), o MESMO que `fala.iniciada` carrega. nil = sem limite.
+   ;; Chave sempre presente (como `inscricao-id`): a TV distingue "sem limite" de "campo que nao veio".
+   [:tempo-concedido-segundos [:maybe :int]]
    [:lock-version :int]])
 
 (def MarcoCronometroOut
@@ -705,3 +904,20 @@
    [:por-vereador [:sequential AssiduidadePorVereadorOut]]
    [:detalhe [:sequential AssiduidadeDetalheLinhaOut]]
    [:totais AssiduidadeTotaisOut]])
+
+;; ---------- Tempos regimentais da Casa (tela "Tempos da tribuna", GET/PUT /tempos-regimentais) ----------
+
+(def TempoRegimentalOut
+  "Uma linha da tabela de tempos da Casa. `fase` nil = vale em qualquer fase (a linha generica); a linha de
+  fase explicita vence a generica ao iniciar a fala (`logic/escolher-tempo-regimental`)."
+  [:map {:closed true}
+   [:fase [:maybe :string]]
+   [:tipo-fala :string]
+   [:segundos :int]
+   [:referencia-normativa [:maybe :string]]])
+
+(def TemposRegimentaisOut
+  "A tabela inteira de tempos da Casa (resposta de GET e de PUT /tempos-regimentais). Vazia = a Casa nao
+  configurou: as falas correm sem limite (o cronometro so' conta)."
+  [:map {:closed true}
+   [:itens [:sequential TempoRegimentalOut]]])

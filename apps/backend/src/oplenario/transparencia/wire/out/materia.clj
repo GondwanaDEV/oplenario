@@ -28,8 +28,18 @@
    [:materias [:sequential MateriaOut]]
    [:materias-total :int]])
 
+(def ResumoPublicoOut
+  "Faixa A / A.8b: o resumo em linguagem simples PUBLICADO pela Casa. `gerado-com-ia` = partiu do rascunho da IA (o
+  portal mostra o selo 'escrito com ajuda de IA e revisado pela equipe da Camara', §16.8)."
+  [:map {:closed true}
+   [:texto :string]
+   [:versao :int]
+   [:gerado-com-ia :boolean]
+   [:publicado-em :string]])
+
 (def FichaOut
-  "MateriaOut + a norma publicada, se houver (:norma ausente/nil = a materia ainda nao virou lei)."
+  "MateriaOut + a norma publicada, se houver (:norma ausente/nil = a materia ainda nao virou lei) + o resumo cidadao
+  publicado, se houver (:resumo ausente/nil = a Casa ainda nao publicou)."
   [:map {:closed true}
    [:proposicao-id :string]
    [:tipo :string]
@@ -40,5 +50,6 @@
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
-   [:norma {:optional true} [:maybe wire-norma/NormaOut]]])
+   [:norma {:optional true} [:maybe wire-norma/NormaOut]]
+   [:resumo {:optional true} [:maybe ResumoPublicoOut]]])
 

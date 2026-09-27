@@ -32,7 +32,7 @@ describe("derivarFila", () => {
     ];
     const orador: OradorAtualOut = {
       falaId: "f1", oradorId: "v1", tipoFala: "principal", fase: "expediente",
-      iniciouEm: "2026-05-21T14:00:00Z", inscricaoId: "iA", lockVersion: 0,
+      iniciouEm: "2026-05-21T14:00:00Z", inscricaoId: "iA", tempoConcedidoSegundos: null, lockVersion: 0,
     };
     const fila = derivarFila(inscritos, membros, orador);
     expect(fila.map((l) => l.inscricaoId)).toEqual(["iA", "iB"]);
@@ -61,7 +61,7 @@ describe("rotuloOradorAtual / nomeDoMembro / FASES", () => {
     expect(rotuloOradorAtual(null, membros)).toBeNull();
     const orador: OradorAtualOut = {
       falaId: "f", oradorId: "v2", tipoFala: "principal", fase: "expediente",
-      iniciouEm: "x", inscricaoId: null, lockVersion: 0,
+      iniciouEm: "x", inscricaoId: null, tempoConcedidoSegundos: null, lockVersion: 0,
     };
     expect(rotuloOradorAtual(orador, membros)).toBe("Beto Lima");
   });

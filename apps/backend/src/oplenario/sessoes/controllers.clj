@@ -85,14 +85,15 @@
 ;; declarativo compartilhado) e' o vocabulario certo — nao um segundo conjunto para a mesma ideia.
 
 (defn- exigir-sessao-aberta!
-  "Fail-closed nas ESCRITAS DE CONDUCAO (pauta/tribuna/decisao-mesa/incidente/vinculo-de-gravacao): recusa
+  "Fail-closed nas ESCRITAS DE CONDUCAO (pauta/tribuna/decisao-mesa/incidente): recusa
   quando a sessao ja fechou (`logic/estados-sessao-fechada` — encerrada/nao_realizada/arquivada). Uma sessao
   fechada e' um capitulo congelado da ata; nenhuma dessas verticais tem escrita legitima nela. UMA fn so',
-  chamada apos `authz/check!` em cada controller de escrita das 5 familias — repetir o `if` em cada uma seria
-  reabrir o mesmo defeito por 11 portas em vez de uma (mesma disciplina de `exigir-assento-para-presenca!`
+  chamada apos `authz/check!` em cada controller de escrita das 4 familias — repetir o `if` em cada uma seria
+  reabrir o mesmo defeito por 10 portas em vez de uma (mesma disciplina de `exigir-assento-para-presenca!`
   acima). NAO decide sobre 'agendada'/'suspensa' (fora do escopo provado; `[GAP]` de regimento p/ o Daouda) —
   so' o conjunto que JA' e' lei em `estados-sessao-fechada`. Lanca `:conflito/sessao-fechada` (o diplomat mapeia
-  409, mesmo padrao de `:conflito/pauta|fala|inscricao|vinculo` neste modulo)."
+  409, mesmo padrao de `:conflito/pauta|fala|inscricao|vinculo` neste modulo). O vinculo de GRAVACAO saiu deste gate na
+  Faixa A / A.2: e' registro da sessao, nao conducao (ver `exigir-sessao-com-gravacao!`)."
   [sessao]
   (when (contains? logic/estados-sessao-fechada (:estado sessao))
     (throw (ex-info "sessao ja fechada (encerrada/nao_realizada/arquivada); escrita bloqueada"
@@ -506,6 +507,15 @@
   [repo-sessoes ator m]
   (repo/agendar-sessao! repo-sessoes (:ente-id ator) m))
 
+(defn- exigir-sessao-com-gravacao!
+  "A sessao-alvo de um vinculo/ingestao de gravacao existiu? `logic/estados-sem-gravacao` ('nao_realizada') ->
+  `:conflito/sessao-sem-gravacao` (o diplomat mapeia 409). Encerrada/arquivada passam: a gravacao local sobe
+  depois da sessao (§22.3.4, fonte primaria da V1)."
+  [sessao]
+  (when (contains? logic/estados-sem-gravacao (:estado sessao))
+    (throw (ex-info "sessao nao realizada nao recebe gravacao"
+                    {:tipo :conflito/sessao-sem-gravacao :sessao-id (:id sessao) :estado (:estado sessao)}))))
+
 (defn ingerir-segmento
   "Ingesta um segmento de gravacao (§22.6 eixo D / §22.3.4): TRANSMITE o `body-stream` (container bruto) ao
   objeto_store computando o sha256 NO FLUXO (DigestInputStream — sem bufferizar heap), registra o segmento +
@@ -524,7 +534,9 @@
       nil                          ; sessao-id informado mas inexistente no tenant -> 404 (diplomat traduz nil)
       (do
         ;; camada FINA: se vinculado, a sessao tem de ser da mesma Casa (-> 403 fail-closed) ANTES de gravar
-        (when sessao (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?))
+        (when sessao
+          (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+          (exigir-sessao-com-gravacao! sessao))
         (let [seg-id    (random-uuid)
               chave     (str "gravacao/" ente-id "/" seg-id)
               ;; sigilo §22.6 (review sec CRÍTICO): sessao SECRETA -> acesso-restrito SEMPRE true, NUNCA confia
@@ -548,15 +560,28 @@
   sessao SECRETA forca acesso-restrito=true no vinculo (o flag do cliente na ingestao Opcao A pode ter vindo
   false — mesmo guard de `ingerir-segmento`). O Repo vincula UMA-VEZ (CAS WHERE sessao_id IS NULL + lock_version);
   conflito/ja-vinculado/lock-stale -> lanca `:conflito/vinculo` (o diplomat mapeia 409). updated-by = o ator.
+  Aceita sessao encerrada/arquivada (gravacao pos-sessao); 'nao_realizada' -> `:conflito/sessao-sem-gravacao`.
   Devolve o recibo {:id :sessao-id} ou nil (sessao inexistente)."
   [repo-sessoes ator {:keys [sessao-id segmento-id lock-version]}]
   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
-    (exigir-sessao-aberta! sessao)
+    ;; NAO `exigir-sessao-aberta!`: o vinculo e' o registro da sessao, nao conducao — a gravacao local sobe
+    ;; DEPOIS da sessao (Faixa A / A.2). So' a sessao que nao aconteceu recusa.
+    (exigir-sessao-com-gravacao! sessao)
     (repo/vincular-segmento! repo-sessoes (:ente-id ator)
       {:id segmento-id :sessao-id sessao-id :lock-version lock-version
        :updated-by (:identidade-id ator)
        :forcar-acesso-restrito (= "secreta" (:tipo-sessao sessao))})))
+
+(def ^:private limite-pendentes 100)
+
+(defn gravacoes-pendentes
+  "Faixa A / A.2: as gravacoes da Casa que chegaram SEM sessao (utilitario de captacao), cada uma com a sessao
+  SUGERIDA pelo horario (`logic/sugerir-sessao-da-gravacao`, pura) — ou nil. A rota exige 'secretario' e o
+  tenant vem do `ator` (RLS). Devolve [segmento+:sugestao ...]."
+  [repo-sessoes ator]
+  (let [{:keys [segmentos sessoes]} (repo/listar-gravacoes-pendentes repo-sessoes (:ente-id ator) limite-pendentes)]
+    (mapv #(assoc % :sugestao (logic/sugerir-sessao-da-gravacao (:iniciou-em %) sessoes)) segmentos)))
 
 (defn listar-gravacoes
   "Read-model dos segmentos de gravacao da sessao `id` p/ o painel. A authz mora no recurso sessao: carrega a
@@ -566,6 +591,129 @@
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     {:sessao-id id :segmentos (vec (repo/listar-segmentos-da-sessao repo-sessoes (:ente-id ator) id))}))
+
+(defn transcricoes-da-sessao
+  "Faixa A / A.3: os ponteiros de transcricao da sessao (situacao por segmento). Authz no recurso sessao."
+  [repo-sessoes ator id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    {:sessao-id id :itens (vec (repo/listar-transcricoes repo-sessoes (:ente-id ator) id))}))
+
+(defn transcricao-da-sessao
+  "Faixa A / A.3: o TEXTO de uma transcricao, lido da IA (onde ele vive, §22.3.4) pelo seam `ler-transcricao`.
+  So' pede a IA um id que o core registrou para ESTA sessao (o ponteiro) — nunca repassa id arbitrario. nil =
+  sessao ou transcricao inexistente. IA fora do ar -> `:ia/indisponivel` (a borda traduz em 503, R-IA-1)."
+  [repo-sessoes ler-transcricao ator sessao-id transcricao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (when-let [p (repo/buscar-transcricao repo-sessoes (:ente-id ator) sessao-id transcricao-id)]
+      (when-let [t (ler-transcricao (:ente-id ator) transcricao-id)]
+        (assoc t :ponteiro p)))))
+
+(declare nomes-de-quem-congelou sha256-hex)
+
+(defn ata-da-sessao
+  "Faixa A / A.6: a ata vigente (com o nome de quem publicou, pelo seam `nome-na-casa`) e o historico de versoes.
+  Authz no recurso sessao. nil = sessao inexistente."
+  [repo-sessoes nome-na-casa ator sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (let [{:keys [atual versoes rascunho]} (repo/ata-da-sessao repo-sessoes (:ente-id ator) sessao-id)
+          nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator) (map #(assoc % :gerada-por (:publicada-por %)) versoes))
+          nome (fn [v] (assoc v :publicada-por-nome (get nomes (:publicada-por v))))]
+      {:sessao-id sessao-id
+       :pode-ter-ata (logic/pode-ter-ata? s)
+       :atual (some-> atual nome)
+       :versoes (mapv nome versoes)
+       :rascunho rascunho})))
+
+(defn- exigir-sessao-com-ata! [s sessao-id]
+  (when-not (logic/pode-ter-ata? s)
+    (throw (ex-info "esta sessao nao tem ata: ela ainda nao acabou, ou o tipo de sessao nao gera ata regimental"
+                    {:tipo :conflito/sessao-sem-ata :sessao-id sessao-id :estado (:estado s)}))))
+
+(defn publicar-ata!
+  "Faixa A / A.6: publica (ou retifica) a ata da sessao. Regras: a sessao gera ata e ja' acabou
+  (`logic/pode-ter-ata?`, senao `:conflito/sessao-sem-ata`); retificacao (ja' existe versao) exige o motivo
+  (`:validacao/retificacao-sem-motivo`, decidido no db sobre a versao da mesma tx). Origem `gerada_automaticamente`
+  (A.6b) exige o `rascunho-id` de um rascunho PRONTO desta sessao — modelo e versao do prompt vem do ponteiro, nunca
+  do cliente (proveniencia, §22.3.5). O texto e' congelado por SHA-256; quem publica vem do `ator`. nil = sessao
+  inexistente."
+  [repo-sessoes ator sessao-id {:keys [texto origem-redacao motivo-retificacao rascunho-id]}]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (exigir-sessao-com-ata! s sessao-id)
+    (let [rascunho (when (= "gerada_automaticamente" origem-redacao)
+                     (or (repo/buscar-rascunho-pronto repo-sessoes (:ente-id ator) sessao-id rascunho-id)
+                         (throw (ex-info "o rascunho informado nao e' um rascunho pronto desta sessao"
+                                         {:tipo :conflito/rascunho-desconhecido :sessao-id sessao-id}))))]
+      (repo/publicar-ata! repo-sessoes (:ente-id ator)
+        (cond-> {:sessao-id sessao-id :texto texto :origem-redacao origem-redacao
+                 :motivo-retificacao motivo-retificacao
+                 :conteudo-sha256 (sha256-hex (.getBytes ^String texto "UTF-8"))
+                 :publicada-por (:identidade-id ator)}
+          rascunho (assoc :rascunho-id rascunho-id :modelo-llm-id (:modelo-llm-id rascunho)
+                          :prompt-versao (:prompt-versao rascunho)))))))
+
+(defn solicitar-rascunho-ata!
+  "Faixa A / A.6b: a secretaria pede o rascunho da ata a IA. Regras, na ordem: a sessao tem ata
+  (`:conflito/sessao-sem-ata`); nao e' secreta (`:conflito/sessao-sigilosa` — nunca vai para a IA); ja' ha' ao menos
+  uma transcricao concluida (`:conflito/sem-transcricao`); nao ha' pedido em curso (`:conflito/rascunho-em-curso`,
+  decidido na tx). Devolve {:solicitacao-id}; nil = sessao inexistente."
+  [repo-sessoes ator sessao-id agora]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (exigir-sessao-com-ata! s sessao-id)
+    (when-not (logic/sessao-vai-para-ia? s)
+      (throw (ex-info "sessao secreta nao vai para a IA: redija a ata pela tela"
+                      {:tipo :conflito/sessao-sigilosa :sessao-id sessao-id})))
+    (when-not (some #(= "concluida" (:situacao %)) (repo/listar-transcricoes repo-sessoes (:ente-id ator) sessao-id))
+      (throw (ex-info "ainda nao ha' transcricao concluida desta sessao para a IA redigir a ata"
+                      {:tipo :conflito/sem-transcricao :sessao-id sessao-id})))
+    (repo/solicitar-rascunho-ata! repo-sessoes (:ente-id ator)
+      {:sessao-id sessao-id :solicitacao-id (random-uuid) :solicitado-por (:identidade-id ator) :ocorrido-em agora
+       :pode-pedir? #(logic/pode-pedir-rascunho? % agora)})))
+
+(defn rascunho-ata
+  "Faixa A / A.6b: o CONTEUDO do rascunho, lido da IA pelo seam `ler-rascunho-ata` (fn [ente-id rascunho-id] ->
+  mapa | nil; lanca `:ia/indisponivel`). Authz na sessao; o rascunho TEM de ser um ponteiro pronto desta sessao —
+  senao nil sem perguntar a IA. nil = sessao ou rascunho inexistente."
+  [repo-sessoes ler-rascunho-ata ator sessao-id rascunho-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (when-let [p (repo/buscar-rascunho-pronto repo-sessoes (:ente-id ator) sessao-id rascunho-id)]
+      (when-let [r (ler-rascunho-ata (:ente-id ator) rascunho-id)]
+        (assoc r :ponteiro p)))))
+
+(defn leitura-da-ata
+  "Faixa A / A.7: a ata que esta sessao le (a vigente da sessao anterior, com o nome de quem publicou) e a leitura ja'
+  registrada. Authz na sessao. nil = sessao inexistente."
+  [repo-sessoes nome-na-casa ator sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (let [{:keys [anterior ata leitura]} (repo/leitura-da-ata repo-sessoes (:ente-id ator) s)
+          nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator)
+                                        (keep (fn [[k x]] (when x {:gerada-por (get x k)}))
+                                              [[:publicada-por ata] [:registrada-por leitura]]))]
+      {:sessao-id sessao-id
+       :pode-registrar (and (logic/pode-registrar-leitura? s) (nil? leitura))
+       :anterior anterior
+       :ata (some-> ata (assoc :publicada-por-nome (get nomes (:publicada-por ata))))
+       :leitura (some-> leitura (assoc :registrada-por-nome (get nomes (:registrada-por leitura))))})))
+
+(defn registrar-leitura-ata!
+  "Faixa A / A.7: a Mesa registra como a ata anterior foi apresentada (voz sintetizada, presencial ou dispensada).
+  So' com a sessao ABERTA (`:conflito/sessao-nao-aberta`); a versao TEM de ser a vigente (conferido na tx); uma
+  leitura por sessao (`:conflito/leitura-registrada`). Quem registra vem do ator. nil = sessao inexistente."
+  [repo-sessoes ator sessao-id {:keys [modo ata-sessao-id ata-versao]}]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/conduzir s logic/pode-ver-sessao?)
+    (when-not (logic/pode-registrar-leitura? s)
+      (throw (ex-info "a leitura da ata e' registrada com a sessao aberta"
+                      {:tipo :conflito/sessao-nao-aberta :sessao-id sessao-id :estado (:estado s)})))
+    (repo/registrar-leitura-ata! repo-sessoes (:ente-id ator)
+      {:sessao s :ata-sessao-id ata-sessao-id :ata-versao ata-versao :modo modo
+       :registrada-por (:identidade-id ator)})))
 
 (defn resumo-presenca
   "Read-model da presenca agregada (F7/FE Onda A1), tenant-wide — sem recurso unico p/ camada fina (mesmo
@@ -877,9 +1025,9 @@
   fala) vira `fala-id`; o resto passa direto. `lock-version` QUEBRA deliberadamente essa uniao-exata-com-o-
   SSE (ledger de prontidao Fase 8 achado #2): `POST .../falas/:fala-id/encerrar` o exige no corpo, e esta
   leitura e' a UNICA fonte do token de CAS de uma fala alheia."
-  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id lock-version]}]
+  [{:keys [id orador-id tipo-fala fase iniciou-em inscricao-id lock-version tempo-concedido-segundos]}]
   {:fala-id id :orador-id orador-id :tipo-fala tipo-fala :fase fase :iniciou-em iniciou-em
-   :inscricao-id inscricao-id :lock-version lock-version})
+   :inscricao-id inscricao-id :tempo-concedido-segundos tempo-concedido-segundos :lock-version lock-version})
 
 (defn- marco-da-tribuna
   "Um evento de cronometro de dominio -> um marco do payload. So' os campos de `events.tribuna/
@@ -1308,3 +1456,22 @@
     (logic/apurar-assiduidade sessoes rosters-por-data presencas-por-sessao justificativas-por-sessao
                               {:sessoes-sem-data-de-referencia sessoes-sem-data-de-referencia
                                :com-detalhe? com-detalhe?}))))
+
+;; ---------- Tempos regimentais da Casa (tela "Tempos da tribuna") ----------
+
+(defn tempos-regimentais
+  "A tabela de tempos regimentais da Casa do `ator`. Papel GROSSO ('secretario'), como `apurar-assiduidade`:
+  e' configuracao tenant-wide, sem um recurso unico carregado para uma politica fina avaliar contra."
+  [repo-sessoes ator]
+  (authz/exige-papel! ator "secretario")
+  (repo/listar-tempos-regimentais repo-sessoes (:ente-id ator)))
+
+(defn definir-tempos-regimentais
+  "Troca a tabela INTEIRA de tempos da Casa do `ator` por `itens` (vazia = sem limite). Valida ANTES de abrir a
+  tx (rejeicao nao empresta conexao do pool; o `db/` repete a checagem como rede). O autor e' o ator — mudar
+  configuracao e' ato auditavel (evento tempos.regimentais-definidos, §22.5 disc.7). Devolve a tabela como
+  ficou. Falas ja' iniciadas nao mudam: o limite foi fotografado nelas (mig 0081)."
+  [repo-sessoes ator itens]
+  (authz/exige-papel! ator "secretario")
+  (logic/validar-tempos-regimentais! itens)
+  (repo/substituir-tempos-regimentais! repo-sessoes (:ente-id ator) itens (:identidade-id ator)))

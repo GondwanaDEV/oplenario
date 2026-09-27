@@ -1,0 +1,163 @@
+(ns oplenario.integracao-ia.diplomat.http.in
+  "Borda HTTP de SERVICO da fronteira core <-> IA (ADR-0008). Nao usa o login de pessoas: toda rota exige o
+  segredo compartilhado core<->satelite (`Authorization: Bearer <segredo>`), comparado em tempo constante; sem
+  segredo configurado as rotas respondem 503 (desligadas, fail-closed). O tenant de cada leitura vem EXPLICITO no
+  caminho (`/entes/:ente-id/...`) e o core abre a tx dele (RLS)."
+  (:require [clojure.string :as str]
+            [io.pedestal.interceptor.chain :as chain]
+            [oplenario.http :as http]
+            [oplenario.integracao-ia.adapters.in.evento :as adapters-in]
+            [oplenario.integracao-ia.adapters.out.feed :as adapters-out]
+            [oplenario.integracao-ia.controllers :as controllers]
+            [oplenario.integracao-ia.logic :as logic]
+            [oplenario.interceptors :as it]))
+
+(set! *warn-on-reflection* true)
+
+(defn- recusa [ctx status erro]
+  (chain/terminate (assoc ctx :response (http/json-resposta status {:erro erro}))))
+
+(defn exige-servico-ia
+  "Interceptor de autenticacao de SERVICO. Segredo em branco = integracao desligada (503)."
+  [segredo]
+  {:name  ::exige-servico-ia
+   :enter (fn [ctx]
+            (let [h   (get-in ctx [:request :headers "authorization"])
+                  tok (when (and h (str/starts-with? h "Bearer ")) (subs h 7))]
+              (cond
+                (str/blank? segredo)                 (recusa ctx 503 "integracao com a IA desligada")
+                (logic/segredo-confere? segredo tok) ctx
+                :else                                (recusa ctx 401 "credencial de servico invalida"))))})
+
+(defn- feed-handler [repo-ia]
+  (fn [req]
+    (let [c (adapters-in/cursor (:query-params req))]
+      (http/json-resposta 200 (adapters-out/eventos->wire (:depois c) (controllers/feed repo-ia c))))))
+
+(defn- contexto-handler [contexto-da-sessao]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          sid  (adapters-in/id-de-caminho (get-in req [:path-params :sessao-id]) "sessao-id")
+          r    (controllers/contexto contexto-da-sessao ente sid)]
+      (cond
+        (nil? r)         (http/json-resposta 404 {:erro "sessao nao encontrada"})
+        (= :restrita r)  (http/json-resposta 403 {:erro "sessao sigilosa nao vai para a IA"})
+        :else            (http/json-resposta 200 (adapters-out/contexto->wire ente (first r) (second r)))))))
+
+(defn- conteudo-handler [abrir-gravacao]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          seg  (adapters-in/id-de-caminho (get-in req [:path-params :segmento-id]) "segmento-id")
+          r    (controllers/conteudo abrir-gravacao ente seg)]
+      (cond
+        (nil? r)        (http/json-resposta 404 {:erro "gravacao nao encontrada"})
+        (= :restrita r) (http/json-resposta 403 {:erro "gravacao restrita nao vai para a IA"})
+        :else           {:status  200
+                         :headers (cond-> {"Content-Type" "application/octet-stream"}
+                                    (:audio-hash r) (assoc "X-Conteudo-Sha256" (:audio-hash r)))
+                         :body    (:stream r)}))))
+
+(defn- ata-handler
+  "A.6c: o texto de uma ata publicada, para a IA medir a revisao humana. Sessao secreta: 403 (a IA nunca redigiu ata
+  de sessao secreta; a trava e' a mesma do contexto)."
+  [ata-para-ia]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          sid  (adapters-in/id-de-caminho (get-in req [:path-params :sessao-id]) "sessao-id")
+          v    (adapters-in/versao-de-caminho (get-in req [:path-params :versao]))
+          r    (ata-para-ia ente sid v)]
+      (cond
+        (nil? r)        (http/json-resposta 404 {:erro "ata nao encontrada"})
+        (= :restrita r) (http/json-resposta 403 {:erro "sessao sigilosa nao vai para a IA"})
+        :else           (http/json-resposta 200 (adapters-out/ata->wire r))))))
+
+(defn- texto-handler
+  "A.8: o texto PUBLICO de uma proposicao, para a IA redigir o resumo cidadao."
+  [texto-da-proposicao]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          pid  (adapters-in/id-de-caminho (get-in req [:path-params :proposicao-id]) "proposicao-id")]
+      (if-let [t (controllers/texto-para-ia texto-da-proposicao ente pid)]
+        (http/json-resposta 200 (adapters-out/texto-proposicao->wire t))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- norma-handler
+  "B.4b: os dispositivos da versao vigente de uma norma da Casa, para o indice da IA."
+  [dispositivos-vigentes]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          vid  (adapters-in/id-de-caminho (get-in req [:path-params :versao-id]) "versao-id")]
+      (if-let [v (controllers/dispositivos-da-norma dispositivos-vigentes ente vid)]
+        (http/json-resposta 200 (adapters-out/dispositivos-da-norma->wire v))
+        (http/json-resposta 404 {:erro "versao vigente nao encontrada"})))))
+
+(defn- credencial-institucional-handler
+  "B.8 (ADR-0013): o satelite pede a credencial de UMA execucao do agente institucional `agente` na Casa — sem pessoa,
+  so' `leitura`/`rascunho`, so' com a concessao ativa do `admin_ente`. Nao concedido (ou agente desconhecido): 404, e o
+  satelite nao roda nada. A credencial crua sai uma vez, aqui."
+  [emitir]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          agente (str (get-in req [:path-params :agente]))]
+      (if-let [{:keys [execucao-id credencial expira-em]} (emitir ente agente)]
+        (http/json-resposta 201 {:execucao-id (str execucao-id) :credencial credencial :expira-em (str expira-em)})
+        (http/json-resposta 404 {:erro "agente institucional nao concedido nesta Casa"})))))
+
+(defn- revogar-credencial-handler
+  "B.8: o satelite terminou a execucao — a credencial dela deixa de abrir qualquer coisa (idempotente)."
+  [revogar]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          eid (adapters-in/id-de-caminho (get-in req [:path-params :execucao-id]) "execucao-id")]
+      (revogar ente eid)
+      {:status 204 :headers {} :body ""})))
+
+(defn- receber-handler [repo-ia efeitos]
+  (fn [req]
+    (try
+      (let [ev (adapters-in/evento->dominio (:json-params req))
+            r  (controllers/receber! repo-ia efeitos ev)]
+        (http/json-resposta (if (:aplicado r) 201 200) (adapters-out/recibo->wire (:chave ev) r)))
+      (catch clojure.lang.ExceptionInfo e
+        (case (:tipo (ex-data e))
+          :validacao/evento-desconhecido
+          (http/json-resposta 422 {:erro (ex-message e) :evento (:evento (ex-data e)) :versao (:versao (ex-data e))})
+          (:validacao/transcricao-fora-da-sessao :validacao/rascunho-fora-da-sessao :validacao/resumo-sem-proposicao)
+          (http/json-resposta 422 {:erro (ex-message e)})
+          (throw e))))))
+
+(defn rotas
+  "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
+  [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata
+           ata-para-ia registrar-resumo texto-da-proposicao dispositivos-vigentes
+           emitir-credencial-institucional revogar-credencial-institucional]}]
+  (let [servico (exige-servico-ia segredo)]
+    #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
+       :route-name :integracao-ia/feed]
+      [(str logic/prefixo "/eventos") :post
+       [servico it/corpo-json (receber-handler repo-integracao-ia {:registrar-transcricao registrar-transcricao
+                                                                  :registrar-rascunho-ata registrar-rascunho-ata
+                                                                  :registrar-resumo registrar-resumo})]
+       :route-name :integracao-ia/receber]
+      [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/contexto") :get
+       [servico (contexto-handler contexto-da-sessao)]
+       :route-name :integracao-ia/contexto]
+      [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/atas/:versao") :get
+       [servico (ata-handler (or ata-para-ia (fn [_ _ _] nil)))]
+       :route-name :integracao-ia/ata]
+      [(str logic/prefixo "/entes/:ente-id/proposicoes/:proposicao-id/texto") :get
+       [servico (texto-handler (or texto-da-proposicao (fn [_ _] nil)))]
+       :route-name :integracao-ia/texto-proposicao]
+      [(str logic/prefixo "/entes/:ente-id/normas/versoes/:versao-id/dispositivos") :get
+       [servico (norma-handler (or dispositivos-vigentes (fn [_ _] nil)))]
+       :route-name :integracao-ia/norma-dispositivos]
+      ;; B.8 (ADR-0013): a credencial de uma execucao do agente institucional (e o fim dela)
+      [(str logic/prefixo "/entes/:ente-id/agentes/:agente/execucoes") :post
+       [servico (credencial-institucional-handler (or emitir-credencial-institucional (fn [_ _] nil)))]
+       :route-name :integracao-ia/credencial-institucional]
+      [(str logic/prefixo "/entes/:ente-id/agentes/:agente/execucoes/:execucao-id") :delete
+       [servico (revogar-credencial-handler (or revogar-credencial-institucional (fn [_ _] nil)))]
+       :route-name :integracao-ia/revogar-credencial-institucional]
+      [(str logic/prefixo "/entes/:ente-id/gravacoes/:segmento-id/conteudo") :get
+       [servico (conteudo-handler abrir-gravacao)]
+       :route-name :integracao-ia/conteudo]}))

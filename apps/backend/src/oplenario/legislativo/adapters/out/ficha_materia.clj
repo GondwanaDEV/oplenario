@@ -21,9 +21,18 @@
                     {:campos (keys (me/humanize (m/explain schema out)))})))
   out)
 
+(defn- recebimento->wire
+  "Fatia 2b — o recibo de carga anotado pelo controller (ou nil). Mesma projecao de
+  `adapters.out.proposicao/recebimento->wire` (adapters/ nao chama adapters/, ADR-0001 §3 — os dois mudam juntos)."
+  [r]
+  (when r
+    {:recebido-por-nome (:recebido-por-nome r) :recebido-em (->str (:recebido-em r))
+     :assinatura-algoritmo (:assinatura-algoritmo r)}))
+
 (defn- tramitacao-item->wire [linha]
   {:de-estado (:de-estado linha) :para-estado (:para-estado linha) :gatilho (:gatilho linha)
-   :ocorrido-em (->str (:ocorrido-em linha))})
+   :ocorrido-em (->str (:ocorrido-em linha))
+   :recebimento (recebimento->wire (:recebimento linha))})
 
 (defn- apensacao->wire [linha]
   {:apensada-id (->str (:apensada-id linha)) :apensada-em (->str (:apensada-em linha))
@@ -57,7 +66,7 @@
   CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
   pra' pegar exatamente esse produtor incompleto)."
   [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
-                          emendas emendas-truncado pareceres pareceres-truncado]}]
+                          emendas emendas-truncado pareceres pareceres-truncado coautores]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
@@ -67,5 +76,8 @@
              :emendas (mapv emenda-resumo->wire emendas)
              :emendas-truncado emendas-truncado
              :pareceres (mapv parecer-resumo->wire pareceres)
-             :pareceres-truncado pareceres-truncado}
+             :pareceres-truncado pareceres-truncado
+             ;; fatia 2c: so' materia de requerimento coletivo tem coautores; as demais saem com []
+             :coautores (mapv (fn [c] {:nome (:vereador-nome c) :assinado-em (->str (:assinado-em c))})
+                              coautores)}
             "ficha da materia"))

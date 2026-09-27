@@ -41,6 +41,8 @@ export interface OradorAtual {
   tipoFala: string;
   fase: string;
   iniciouEm: string; // âncora do cronômetro client-side
+  /** Tempo-limite fotografado na fala (s; mig 0081). `null`/ausente = sem limite — só conta o decorrido. */
+  tempoConcedidoSegundos?: number | null;
 }
 
 export interface Inscrito {
@@ -384,7 +386,15 @@ function lerOradorAtualTribuna(o: unknown): OradorAtual | null | undefined {
   ) {
     return undefined;
   }
-  return { falaId: x.falaId, oradorId: x.oradorId, tipoFala: x.tipoFala, fase: x.fase, iniciouEm: x.iniciouEm };
+  return {
+    falaId: x.falaId,
+    oradorId: x.oradorId,
+    tipoFala: x.tipoFala,
+    fase: x.fase,
+    iniciouEm: x.iniciouEm,
+    // campo torto não descarta o orador: só perde o limite (a TV volta a contar, nunca inventa "esgotado")
+    tempoConcedidoSegundos: finito(x.tempoConcedidoSegundos) ? x.tempoConcedidoSegundos : null,
+  };
 }
 
 /** Lê `marcosCronometro`. `undefined` (forma inesperada) preserva os marcos já vividos pelo SSE; uma
@@ -623,6 +633,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           tipoFala: evento.dados["tipo-fala"],
           fase: evento.dados.fase,
           iniciouEm: evento.dados["iniciou-em"],
+          tempoConcedidoSegundos: finito(evento.dados["tempo-concedido-segundos"]) ? evento.dados["tempo-concedido-segundos"] : null,
         },
         marcosCronometro: [],
       };

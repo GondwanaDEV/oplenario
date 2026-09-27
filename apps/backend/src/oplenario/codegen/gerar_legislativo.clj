@@ -15,6 +15,9 @@
             [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
             [oplenario.legislativo.wire.out.protocolo-geral :as protocolo-geral]
+            [oplenario.legislativo.wire.out.requerimento :as requerimento]
+            [oplenario.legislativo.wire.out.nota-tecnica :as nota-tecnica]
+            [oplenario.legislativo.wire.out.resumo :as resumo]
             [oplenario.legislativo.wire.out.tramitacao-executiva :as tramitacao-executiva]))
 
 (def manifesto
@@ -23,10 +26,13 @@
    ["ProposicaoDetalheOut" proposicao/ProposicaoDetalheOut]
    ;; Onda B Slice 3 (ficha-materia) — entram DEPOIS de ProposicaoDetalheOut (referencia nomeada casa por
    ;; igualdade estrutural, mesma disciplina do manifesto de paineis/mesa).
+   ;; fatia 2b: o recibo de carga de cada movimentacao — ANTES do item de historico que o referencia.
+   ["RecebimentoOut" proposicao/RecebimentoOut]
    ["HistoricoTramitacaoItemOut" ficha/HistoricoTramitacaoItemOut]
    ["ApensacaoOut" ficha/ApensacaoOut]
    ["EmendaResumoOut" ficha/EmendaResumoOut]
    ["ParecerResumoOut" ficha/ParecerResumoOut]
+   ["CoautorOut" ficha/CoautorOut]
    ["FichaMateriaOut" ficha/FichaMateriaOut]
    ;; Onda B Slice 5 (editor de parecer) — schema PROPRIO (nao reusa ParecerResumoOut, que e' o resumo
    ;; dentro da ficha da materia).
@@ -57,7 +63,47 @@
    ;; ficha-materia/pos-aprovacao). O `:historico` de TramitacaoOut reusa HistoricoTramitacaoItemOut (ficha,
    ;; ja' acima) por igualdade estrutural. Substitui o tipo-espelho a mao de use-tramitacao.ts.
    ["GatilhoPossivelOut" proposicao/GatilhoPossivelOut]
-   ["TramitacaoOut" proposicao/TramitacaoOut]])
+   ["RecebimentoPendenteOut" proposicao/RecebimentoPendenteOut]
+   ["TramitacaoOut" proposicao/TramitacaoOut]
+   ;; Fatia 2b (recebimento assinado da tramitacao) — o recibo do POST e a fila de pendentes.
+   ["RecebimentoReciboOut" proposicao/RecebimentoReciboOut]
+   ["RecebimentoPendenteItemOut" proposicao/RecebimentoPendenteItemOut]
+   ["RecebimentosPendentesOut" proposicao/RecebimentosPendentesOut]
+   ;; Fatia 2a (o requerimento do vereador, borda /meu) — ModeloRequerimentoOut ANTES da lista que o referencia.
+   ["ModeloRequerimentoOut" requerimento/ModeloRequerimentoOut]
+   ["ModelosRequerimentoOut" requerimento/ModelosRequerimentoOut]
+   ["PreviaRequerimentoOut" requerimento/PreviaRequerimentoOut]
+   ["RequerimentoProtocoladoOut" requerimento/RequerimentoProtocoladoOut]
+   ;; Fatia 2c (requerimento coletivo) — referencias antes dos compostos.
+   ["ColegaOut" requerimento/ColegaOut]
+   ["ColegasOut" requerimento/ColegasOut]
+   ["SubscricaoOut" requerimento/SubscricaoOut]
+   ["PropostaRequerimentoOut" requerimento/PropostaRequerimentoOut]
+   ["PropostaResumoOut" requerimento/PropostaResumoOut]
+   ["PropostasOut" requerimento/PropostasOut]
+   ["ConviteSubscricaoOut" requerimento/ConviteSubscricaoOut]
+   ["ConvitesSubscricaoOut" requerimento/ConvitesSubscricaoOut]
+   ["RespostaSubscricaoOut" requerimento/RespostaSubscricaoOut]
+   ["RequerimentoColetivoProtocoladoOut" requerimento/RequerimentoColetivoProtocoladoOut]
+   ;; Faixa B / B.7 (copiloto do requerimento) — referencias antes do composto.
+   ["PreenchimentoCopilotoOut" requerimento/PreenchimentoCopilotoOut]
+   ["CitacaoCopilotoOut" requerimento/CitacaoCopilotoOut]
+   ["JustificativaCopilotoOut" requerimento/JustificativaCopilotoOut]
+   ["CopilotoRequerimentoOut" requerimento/CopilotoRequerimentoOut]
+   ;; Faixa A / A.8 (resumo cidadao) — referencias antes dos compostos.
+   ["RascunhoResumoPonteiroOut" resumo/RascunhoResumoPonteiroOut]
+   ["ResumoVersaoOut" resumo/ResumoVersaoOut]
+   ["ResumoAtualOut" resumo/ResumoAtualOut]
+   ["ResumoProposicaoOut" resumo/ResumoProposicaoOut]
+   ["CitacaoResumoOut" resumo/CitacaoResumoOut]
+   ["IncertezaResumoOut" resumo/IncertezaResumoOut]
+   ["RascunhoResumoOut" resumo/RascunhoResumoOut]
+   ["ResumoReciboOut" resumo/ResumoReciboOut]
+   ;; Faixa B / B.8 (nota tecnica de conferencia) — referencias antes dos compostos.
+   ["CitacaoNotaOut" nota-tecnica/CitacaoNotaOut]
+   ["NotaTecnicaResumoOut" nota-tecnica/NotaTecnicaResumoOut]
+   ["NotasTecnicasOut" nota-tecnica/NotasTecnicasOut]
+   ["NotaTecnicaOut" nota-tecnica/NotaTecnicaOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

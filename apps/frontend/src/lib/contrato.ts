@@ -71,6 +71,8 @@ export interface FalaIniciada {
   fase: string;
   "iniciou-em": string; // ISO-8601 — âncora do cronômetro client-side
   "inscricao-id"?: string | null;
+  /** Tempo-limite fotografado na fala (segundos; mig 0081). Ausente/null = sem limite: a TV só conta. */
+  "tempo-concedido-segundos"?: number | null;
 }
 
 export interface FalaEncerrada {

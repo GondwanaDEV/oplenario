@@ -10,8 +10,8 @@
   (let [out (gerar-paineis/gerar-tudo)]
     (is (str/starts-with? out "// GERADO") "banner de 'nao editar a mao'")
     (is (every? #(str/includes? out (str "export interface " % " {"))
-                ["NotificacaoOut" "MinhasNotificacoesOut" "MarcarLidaOut"])
-        "as 3 interfaces do manifesto presentes")
+                ["NotificacaoOut" "MinhasNotificacoesOut" "MarcarLidaOut" "PainelIAOut" "CapacidadeIAOut"])
+        "as interfaces do manifesto presentes (a inbox e o painel da IA, B.9)")
     (is (not (re-find #": unknown;" out)) "nenhum campo caiu no fallback bare 'unknown'")))
 
 (deftest minhas-notificacoes-referencia-notificacao-por-nome

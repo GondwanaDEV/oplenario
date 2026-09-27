@@ -11,3 +11,15 @@
 (deftest materias-total-ausente-lanca-nao-vira-zero-silencioso
   (is (thrown? clojure.lang.ExceptionInfo (adapters/materias->wire {:materias []}))
       "sem :materias-total no mapa de dominio, o adapter tem de lancar (bug de servidor) — nao coagir a 0"))
+
+(def ^:private linha
+  {:proposicao-id #uuid "a0000000-0000-0000-0000-000000000001" :tipo "projeto_lei" :ano 2026 :sequencial 7
+   :urn-lex "urn:x" :ementa "Hortas." :estado "protocolada"})
+
+(deftest ficha-leva-o-resumo-publicado-quando-ha
+  (is (nil? (:resumo (adapters/ficha->wire linha nil))) "sem resumo publicado: a ficha nao inventa")
+  (is (= {:texto "Cria hortas." :versao 2 :gerado-com-ia true :publicado-em "2026-09-27T02:00:00Z"}
+         (:resumo (adapters/ficha->wire (assoc linha :resumo-texto "Cria hortas." :resumo-versao 2
+                                               :resumo-gerado-com-ia true
+                                               :resumo-publicado-em (java.time.Instant/parse "2026-09-27T02:00:00Z"))
+                                        nil)))))

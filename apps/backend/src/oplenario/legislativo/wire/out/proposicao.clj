@@ -77,6 +77,16 @@
 
 ;; ---------- Fatia 3: a LEITURA da tramitacao (GET .../:id/tramitacao) ----------
 
+(def RecebimentoOut
+  "Fatia 2b — o recibo de carga de UMA movimentacao do historico: quem recebeu, quando, com que assinatura.
+  `recebido-por-nome` nil = a pessoa nao tem (mais) vinculo nesta Casa, ou o nome nao resolveu — a tela diz
+  'recebida' sem inventar nome (seam `nome-na-casa`, mesmo da folha de sessao). O id de identidade nao sai:
+  e' o defeito #11 do ledger (UUID na tela). `assinatura-algoritmo` hoje e' `STUB-ICP-v0` (divida conhecida)."
+  [:map {:closed true}
+   [:recebido-por-nome [:maybe :string]]
+   [:recebido-em :string]
+   [:assinatura-algoritmo :string]])
+
 (def TramitacaoHistoricoItemOut
   "Uma linha do historico de tramitacao. Mesmos 4 campos de `wire.out.ficha-materia/HistoricoTramitacaoItemOut`,
   e a duplicacao e' DELIBERADA: `ficha-materia` ja' requer ESTE namespace, entao reusar em sentido contrario
@@ -91,7 +101,23 @@
    [:de-estado :string]
    [:para-estado :string]
    [:gatilho :string]
-   [:ocorrido-em :string]])
+   [:ocorrido-em :string]
+   ;; fatia 2b: nil = a movimentacao nao foi recebida (ou o estado de chegada nao exigia recebimento)
+   [:recebimento [:maybe RecebimentoOut]]])
+
+(def RecebimentoPendenteOut
+  "Fatia 2b — a CARGA que a materia espera agora: chegou a um estado que o rito marca como 'exige
+  recebimento' e ninguem recebeu. Enquanto existir, nenhum ato de tramitacao passa (409
+  `recebimento-pendente`). `movimentacao-id` e' o que volta no corpo do POST .../recebimento.
+  `restrito` = o rito declara QUEM pode receber (regra na DSL da Casa) — a tela avisa que pode ser recusado
+  (403), como `exige-autorizacao` dos gatilhos."
+  [:map {:closed true}
+   [:movimentacao-id :string]
+   [:de-estado [:maybe :string]]
+   [:estado :string]
+   [:estado-nome :string]
+   [:desde :string]
+   [:restrito :boolean]])
 
 (def GatilhoPossivelOut
   "Um ato que o rito DECLARA a partir do estado atual.
@@ -149,4 +175,39 @@
    [:historico [:vector TramitacaoHistoricoItemOut]]
    [:historico-truncado :boolean]
    [:gatilhos-possiveis [:vector GatilhoPossivelOut]]
-   [:nota [:maybe :string]]])
+   [:nota [:maybe :string]]
+   [:recebimento-pendente [:maybe RecebimentoPendenteOut]]])
+
+;; ---------- Fatia 2b: o RECEBIMENTO assinado (POST .../:id/recebimento, GET /recebimentos-pendentes) ----------
+
+(def RecebimentoReciboOut
+  "POST /legislativo/proposicoes/:id/recebimento — o recibo ASSINADO da carga (201: o recibo e' um registro
+  novo e imutavel). Sem o id de quem recebeu: e' quem esta' logado, a tela ja' sabe."
+  [:map {:closed true}
+   [:id :string]
+   [:proposicao-id :string]
+   [:movimentacao-id :string]
+   [:estado :string]
+   [:recebido-em :string]
+   [:assinatura-algoritmo :string]])
+
+(def RecebimentoPendenteItemOut
+  "Uma materia na fila de cargas nao recebidas da Casa."
+  [:map {:closed true}
+   [:proposicao-id :string]
+   [:tipo :string]
+   [:sequencial :int]
+   [:ano :int]
+   [:ementa :string]
+   [:estado :string]
+   [:estado-nome :string]
+   [:movimentacao-id :string]
+   [:de-estado [:maybe :string]]
+   [:desde :string]
+   [:restrito :boolean]])
+
+(def RecebimentosPendentesOut
+  "GET /legislativo/recebimentos-pendentes — a fila, mais antigas primeiro (quem espera ha' mais tempo).
+  Teto de 200 no db/; acima disso a Casa tem outro problema, e a lista mostra as 200 mais antigas."
+  [:map {:closed true}
+   [:itens [:vector RecebimentoPendenteItemOut]]])

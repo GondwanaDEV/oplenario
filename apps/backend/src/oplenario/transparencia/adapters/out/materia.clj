@@ -50,7 +50,14 @@
   [{:keys [materias materias-total]}]
   (validar! wire/MateriasOut {:materias (->wires materias) :materias-total materias-total} "MateriasOut"))
 
+(defn- resumo-embutido [m]
+  (when (:resumo-texto m)
+    {:texto (:resumo-texto m) :versao (:resumo-versao m) :gerado-com-ia (boolean (:resumo-gerado-com-ia m))
+     :publicado-em (->str (:resumo-publicado-em m))}))
+
 (defn ficha->wire
-  "Materia + norma (dominio, opcional) -> FichaOut."
+  "Materia + norma (dominio, opcional) -> FichaOut. O resumo cidadao vem da propria linha projetada (A.8b)."
   [m norma]
-  (validar! wire/FichaOut (assoc (campos-comuns m) :norma (norma-embutida norma)) "FichaOut"))
+  (validar! wire/FichaOut
+            (assoc (campos-comuns m) :norma (norma-embutida norma) :resumo (resumo-embutido m))
+            "FichaOut"))

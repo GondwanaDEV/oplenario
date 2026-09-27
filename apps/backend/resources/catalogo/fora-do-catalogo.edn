@@ -1,0 +1,78 @@
+;; ADR-0009 — rotas que, POR DECISAO, nao sao acao do catalogo de acoes, cada uma com o motivo. Categorias:
+;;   :so-tela  — so' serve a tela (forma de tela, sem acao de dominio que um agente chamaria)
+;;   :servico  — borda de servico entre sistemas (fronteira com a IA, captacao), nao acao de pessoa
+;;   :pessoal  — ato PESSOAL e intransferivel (docs/25 Eixo 4.3, ADR-0012): voto, presenca e conducao da sessao ao
+;;               vivo. O agente nem propoe; o lint cobra que esta lista nao encolha e que nenhuma entrada aponte para ela.
+;; Uma rota nova entra aqui so' com motivo revisado em PR; o padrao e' virar entrada do catalogo.
+{:integracao-ia/mcp {:categoria :servico
+                     :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
+ :agente/perguntar {:categoria :so-tela
+                    :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
+ :integracao-ia/norma-dispositivos {:categoria :servico
+                                    :motivo "fronteira de servico com o satelite: a IA le os dispositivos vigentes para o indice (B.4b)"}
+ :normas/importar-versao {:categoria :so-tela
+                          :motivo "curadoria humana: importar o texto de uma norma para conferir (Eixo 7.3); o agente nao importa norma"}
+ :normas/conferir {:categoria :so-tela
+                   :motivo "conferir e publicar norma e' ato de pessoa (Eixo 7.3); o agente nunca confere"}
+ :normas/listar {:categoria :so-tela
+                 :motivo "lista de curadoria (vigente e em conferencia); o agente le norma pela B.5 (buscar/ler dispositivo)"}
+ :normas/versao {:categoria :so-tela
+                 :motivo "tela de conferencia de uma versao; o agente le so' o vigente, pela B.5 (ler dispositivo)"}
+ :legislativo/copiloto-requerimento {:categoria :so-tela
+                                      :motivo "a tela pede a IA um rascunho para o formulario (B.7); o agente tem protocolar_requerimento"}
+ ;; ---------- B.8 / ADR-0013: o agente institucional e a nota tecnica ----------
+ :integracao-ia/credencial-institucional {:categoria :servico
+                                          :motivo "fronteira de servico: o satelite pede a credencial de uma execucao do agente institucional (B.8)"}
+ :integracao-ia/revogar-credencial-institucional {:categoria :servico
+                                                  :motivo "fronteira de servico: o satelite encerra a credencial da execucao do agente institucional"}
+ :identidade/agentes-institucionais {:categoria :so-tela
+                                     :motivo "o painel do admin da Casa com os agentes institucionais; agente nao administra agente"}
+ :identidade/ligar-agente-institucional {:categoria :so-tela
+                                         :motivo "conceder o agente institucional e' do admin_ente, na tela (docs/25 3.3); o agente nunca se concede"}
+ :identidade/desligar-agente-institucional {:categoria :so-tela
+                                            :motivo "revogar a concessao do agente institucional e' do admin_ente, na tela"}
+ :legislativo/notas-tecnicas {:categoria :so-tela
+                              :motivo "a fila de revisao da secretaria; o agente institucional escreve pela ferramenta registrar_nota_tecnica"}
+ :legislativo/nota-tecnica {:categoria :so-tela
+                            :motivo "a tela onde a secretaria le o rascunho da IA antes de decidir"}
+ :legislativo/decidir-nota-tecnica {:categoria :so-tela
+                                    :motivo "aproveitar ou descartar a nota e' decisao da pessoa (revisao humana, §16.8); a IA nunca decide"}
+ ;; ---------- B.9 / ADR-0014: o painel da IA da Casa ----------
+ :paineis/ia {:categoria :so-tela
+              :motivo "o painel do admin da Casa (consumo x orcamento da IA, desfechos); o agente nao le o proprio custo"}
+ ;; ---------- B.6 / ADR-0012: a confirmacao de proposta de ato e' so' da tela ----------
+ :propostas/listar {:categoria :so-tela
+                    :motivo "as propostas de ato que esperam a pessoa (Eixo 4.2 B); o agente cria proposta pela ferramenta do ato"}
+ :propostas/ver {:categoria :so-tela
+                 :motivo "a tela onde a pessoa le o que vai confirmar; o agente nunca confirma o que propos"}
+ :propostas/confirmar {:categoria :so-tela
+                       :motivo "confirmar um ato proposto pelo agente e' da pessoa, na plataforma (Eixo 4.2 B), nunca do agente"}
+ :propostas/recusar {:categoria :so-tela
+                     :motivo "recusar a proposta e' decisao da pessoa, na tela; o agente nao desfaz nem decide por ela"}
+ ;; ---------- Eixo 4.3: atos que o agente NEM PROPOE ----------
+ :legislativo/registrar-voto {:categoria :pessoal
+                              :motivo "o voto e' pessoal e intransferivel: so' o vereador, pela tela (Eixo 4.3)"}
+ :legislativo/abrir-votacao {:categoria :pessoal
+                             :motivo "conducao da sessao ao vivo: abrir a votacao e' da Mesa, pela tela (Eixo 4.3)"}
+ :legislativo/encerrar-votacao {:categoria :pessoal
+                                :motivo "conducao da sessao ao vivo: encerrar a votacao e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/confirmar-minha-presenca {:categoria :pessoal
+                                    :motivo "presenca e' pessoal: so' o proprio vereador confirma, pela tela (Eixo 4.3)"}
+ :sessoes/registrar-presenca {:categoria :pessoal
+                              :motivo "registro de presenca e' ato da chamada na sessao, pela tela (Eixo 4.3)"}
+ :sessoes/registrar-presenca-lote {:categoria :pessoal
+                                   :motivo "registro de presenca em lote e' ato da chamada na sessao, pela tela (Eixo 4.3)"}
+ :sessoes/conduzir-chamada {:categoria :pessoal
+                            :motivo "conducao da sessao ao vivo: a chamada e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/transicionar {:categoria :pessoal
+                        :motivo "conducao da sessao ao vivo: abrir, suspender e encerrar a sessao e' da Mesa (Eixo 4.3)"}
+ :sessoes/iniciar-fala {:categoria :pessoal
+                        :motivo "conducao da sessao ao vivo: conceder a palavra e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/encerrar-fala {:categoria :pessoal
+                         :motivo "conducao da sessao ao vivo: encerrar a fala e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/registrar-evento-cronometro {:categoria :pessoal
+                                       :motivo "conducao da sessao ao vivo: conceder e parar tempo e' da Mesa (Eixo 4.3)"}
+ :sessoes/anunciar-item-pauta {:categoria :pessoal
+                               :motivo "conducao da sessao ao vivo: anunciar o item em discussao e' da Mesa (Eixo 4.3)"}
+ :sessoes/registrar-decisao-mesa {:categoria :pessoal
+                                  :motivo "conducao da sessao ao vivo: a decisao da Mesa e' da Mesa, pela tela (Eixo 4.3)"}}

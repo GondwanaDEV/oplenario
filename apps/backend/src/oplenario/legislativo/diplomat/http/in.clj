@@ -21,6 +21,9 @@
             [oplenario.legislativo.adapters.in.documento-modelo :as adapters-in-documento-modelo]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
+            [oplenario.legislativo.adapters.in.requerimento :as adapters-in-requerimento]
+            [oplenario.legislativo.adapters.in.nota-tecnica :as adapters-in-nota]
+            [oplenario.legislativo.adapters.in.resumo :as adapters-in-resumo]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
@@ -33,6 +36,9 @@
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
+            [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
+            [oplenario.legislativo.adapters.out.nota-tecnica :as adapters-out-nota]
+            [oplenario.legislativo.adapters.out.resumo :as adapters-out-resumo]
             [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
@@ -289,6 +295,11 @@
                 "este rito, ou o rito ter sido trocado sob os pes dela. Nenhum ato e' possivel ate' "
                 "alguem reconciliar rito e estado na configuracao.")}
 
+    :recebimento-pendente
+    {:motivo "recebimento-pendente"
+     :erro (str "a materia chegou a '" estado "' e ainda nao foi RECEBIDA: o rito desta Casa exige que quem "
+                "recebe a carga assine o recebimento antes de qualquer outro ato. Receba primeiro e tente de novo.")}
+
     {:erro (str "o rito desta Casa nao permite o ato '" gatilho "' com a materia em '" estado "'")}))
 
 (defn- tramitar-handler
@@ -369,6 +380,52 @@
               :conflito/transicao (http/json-resposta 409 {:erro (ex-message e) :gatilho (:gatilho m)})
               (throw e))))))))
 
+(defn- receber-handler
+  "POST /legislativo/proposicoes/:id/recebimento — fatia 2b: quem recebe a carga ASSINA o recebimento da
+  movimentacao pendente. Corpo `{movimentacao-id}` (a que a pessoa viu na tela). Gate grosso 'secretario'
+  (quem opera o expediente); a regra FINA de quem recebe e' do rito da Casa (`template_estado.recebedor`, a
+  mesma DSL de autorizacao — Disciplina 5), avaliada dentro da tx.
+
+  201 + recibo (o recebimento e' registro novo, imutavel). 404 materia inexistente. 409 com `motivo`:
+  `sem-recebimento-pendente` (nada a receber, ou ja' recebida — o duplo clique cai aqui, nao duplica) e
+  `movimentacao-divergente` (a materia andou depois que a tela carregou — recarregar e conferir). 403 regra
+  de quem recebe negada. O assinador e' o STUB (mesmo padrao do parecer e do requerimento)."
+  [repo-leg registro relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          pid (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-proposicao/receber->dominio pid (tempo/hoje relogio zona-civil) (:json-params req))]
+      (try
+        (if-let [r (controllers/receber-movimentacao repo-leg registro (assinador-icp/assinador-stub) ator m)]
+          (http/json-resposta 201 (adapters-out-proposicao/recibo-recebimento->wire r))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (cond
+            (authz/negado? e)
+            (http/json-resposta 403 {:erro "voce nao esta' entre quem o rito desta Casa autoriza a receber esta carga"})
+
+            (guard-inavaliavel? e)
+            (http/json-resposta 500 {:erro (str "a regra de quem recebe, no rito desta Casa, nao pode ser avaliada — "
+                                                "o recebimento NAO foi registrado; procure quem administra os "
+                                                "templates de tramitacao")})
+            :else
+            (case (:tipo (ex-data e))
+              :conflito/sem-recebimento-pendente
+              (http/json-resposta 409 {:motivo "sem-recebimento-pendente"
+                                       :erro "esta materia nao tem recebimento pendente — ja' foi recebida, ou nao exige recebimento"})
+              :conflito/movimentacao-divergente
+              (http/json-resposta 409 {:motivo "movimentacao-divergente"
+                                       :erro (str "a materia se movimentou depois que esta tela carregou — atualize "
+                                                  "e confira o que esta' recebendo antes de assinar")})
+              (throw e))))))))
+
+(defn- recebimentos-pendentes-handler
+  "GET /legislativo/recebimentos-pendentes — fatia 2b: a fila de cargas nao recebidas da Casa."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-proposicao/recebimentos-pendentes->wire
+                              (controllers/recebimentos-pendentes repo-leg (:ente-id (:ator req)))))))
+
 (defn- tramitacao-leitura-handler
   "GET /legislativo/proposicoes/:id/tramitacao(?limite=) — o HISTORICO da materia + os GATILHOS que a Casa
   declara a partir do estado ATUAL. Mesmo path e mesmo gate grosso ('secretario') do POST irmao; a lista de
@@ -395,12 +452,12 @@
   404 p/ materia inexistente no tenant (nunca vaza a diferenca entre 'nao existe' e 'e' de outra Casa').
   Materia SEM rito nao e' 404 nem 409: e' 200 com historico vazio, nenhum gatilho e a `nota` dizendo por
   que — o recurso existe, e a resposta correta sobre ele e' 'nao ha' o que tramitar, e eis o motivo'."
-  [repo-leg]
+  [repo-leg nome-na-casa]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           {:keys [limite]} (adapters-in-proposicao/tramitacao-query->dominio (:query-params req))]
-      (if-let [m (controllers/buscar-tramitacao repo-leg ente-id id limite)]
+      (if-let [m (controllers/buscar-tramitacao repo-leg nome-na-casa ente-id id limite)]
         (http/json-resposta 200 (adapters-out-proposicao/tramitacao->wire m))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
@@ -410,11 +467,11 @@
   DOIS adapters/out (proposicao p/ o cabecalho + ficha-materia p/ o envelope) — adapters/ nunca chama outro
   adapters/ (ADR-0001 §3). `:texto` ja' chega EXTRAIDO do controller (string/nil — review MENOR
   fe-9-ficha-materia: o diplomat nunca decide nome de campo do model, so' compoe)."
-  [repo-leg resolver-comissoes]
+  [repo-leg resolver-comissoes nome-na-casa]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes ente-id id)]
+      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes nome-na-casa ente-id id)]
         (http/json-resposta 200 (adapters-out-ficha/ficha->wire
                                    (adapters-out-proposicao/detalhe->wire proposicao texto)
                                    ficha))
@@ -522,6 +579,145 @@
                 (resposta-guard-inavaliavel (:gatilho m))
                 (throw e)))))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
+;; ========================= Fatia 2a: o requerimento do VEREADOR =========================
+
+(defn- meus-modelos-requerimento-handler
+  "GET /meu/modelos-requerimento — os modelos de requerimento ATIVOS da Casa com os campos que o formulario pede."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/modelos->wire
+                               (controllers/modelos-de-requerimento repo-leg (:ator req))))))
+
+(defn- previa-requerimento-handler
+  "POST /meu/requerimentos/previa — o texto formatado (autor e data do servidor), sem gravar. 404 quando o
+  ator nao e' vereador cadastrado nesta Casa ou o modelo nao esta' na lista; 400 com campo faltando."
+  [repo-leg resolver-autor relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/previa->dominio (:json-params req))]
+      (if-let [r (controllers/previa-requerimento repo-leg resolver-autor (:ator req)
+                                                  (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 200 (adapters-out-requerimento/previa->wire r))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
+(defn- protocolar-requerimento-handler
+  "POST /meu/requerimentos — o vereador assina e protocola o proprio requerimento (201). O assinador STUB e'
+  construido aqui (mesmo padrao de emitir-parecer-handler); a assinatura acontece no Repo, na tx do
+  protocolo. `hoje` do relogio do servidor (ano da numeracao + data do texto), nunca do cliente."
+  [repo-leg resolver-municipio resolver-autor relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/protocolar->dominio (:json-params req))]
+      (if-let [r (controllers/meu-protocolar-requerimento repo-leg resolver-municipio resolver-autor
+                                                          (assinador-icp/assinador-stub) (:ator req)
+                                                          (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 201 (adapters-out-requerimento/protocolado->wire r))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
+;; ========================= Faixa B / B.7: o copiloto do requerimento =========================
+
+(def ^:private mensagem-copiloto-fora
+  "O assistente está indisponível agora. Preencha o formulário — nada do requerimento depende dele.")
+
+(defn- copiloto-requerimento-handler
+  "POST /meu/requerimentos/copiloto — o vereador descreve em palavras; volta o rascunho da IA para o formulario
+  (modelo, ementa, campos e a justificativa citada), ja' conferido contra os modelos da Casa. Nada e' gravado. 404 sem
+  cadastro de vereador; 503 com a IA fora (R-IA-1); sem o seam (integracao desligada), 503 tambem."
+  [repo-leg resolver-autor copiloto]
+  (fn [req]
+    (let [m (adapters-in-requerimento/copiloto->dominio (:json-params req))]
+      (try
+        (if-let [r (and copiloto (controllers/copiloto-requerimento repo-leg resolver-autor copiloto (:ator req) m))]
+          (http/json-resposta 200 (adapters-out-requerimento/copiloto->wire r))
+          (if copiloto
+            (http/json-resposta 404 {:erro "vereador nao cadastrado nesta Casa"})
+            (http/json-resposta 503 {:erro mensagem-copiloto-fora})))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro mensagem-copiloto-fora})
+            (throw e)))))))
+
+;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
+
+(defn- conflito-subscricao
+  "Os dois conflitos da subscricao -> 409 com `motivo` proprio (a tela decide o que dizer sem casar prosa)."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/proposta-protocolada
+    (http/json-resposta 409 {:motivo "proposta-protocolada"
+                             :erro "este requerimento ja' foi protocolado — a lista de coautores fechou"})
+    :conflito/subscricao-respondida
+    (http/json-resposta 409 {:motivo "subscricao-respondida" :erro "voce ja' respondeu a este convite"})
+    (throw e)))
+
+(defn- meus-colegas-handler
+  "GET /meu/colegas — quem o vereador pode convidar a subscrever (mandato vigente nesta Casa, menos ele)."
+  [resolver-autor colegas-da-casa]
+  (fn [req]
+    (if-let [cs (controllers/colegas-para-subscricao resolver-autor colegas-da-casa (:ator req))]
+      (http/json-resposta 200 (adapters-out-requerimento/colegas->wire cs))
+      (http/json-resposta 404 {:erro "seu login nao tem cadastro de vereador nesta Casa"}))))
+
+(defn- criar-proposta-handler
+  "POST /meu/requerimentos/propostas — o requerimento coletivo: grava o texto e convida os coautores (201).
+  Nada e' assinado nem numerado aqui; o autor protocola depois, na propria proposta."
+  [repo-leg resolver-autor colegas-da-casa relogio]
+  (fn [req]
+    (let [m (adapters-in-requerimento/proposta->dominio (:json-params req))]
+      (if-let [p (controllers/criar-proposta-requerimento repo-leg resolver-autor colegas-da-casa (:ator req)
+                                                          (assoc m :hoje (tempo/hoje relogio zona-civil)))]
+        (http/json-resposta 201 (adapters-out-requerimento/proposta->wire p))
+        (http/json-resposta 404 {:erro "modelo de requerimento nao encontrado"})))))
+
+(defn- minhas-propostas-handler
+  "GET /meu/requerimentos/propostas — as propostas do autor ainda esperando subscricoes."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/propostas->wire
+                              (controllers/propostas-abertas repo-leg resolver-vereador (:ator req))))))
+
+(defn- proposta-handler
+  "GET /meu/requerimentos/propostas/:id — so' para o autor e os convidados; os demais recebem 404."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [p (controllers/buscar-proposta-requerimento repo-leg resolver-vereador (:ator req) id)]
+        (http/json-resposta 200 (adapters-out-requerimento/proposta->wire p))
+        (http/json-resposta 404 {:erro "proposta de requerimento nao encontrada"})))))
+
+(defn- responder-subscricao-handler
+  "POST /meu/requerimentos/propostas/:id/resposta — o coautor confirma (assina o texto congelado, STUB-ICP-v0)
+  ou recusa. 200; 404 sem convite; 409 ja' respondeu / ja' protocolada."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          acao (adapters-in-requerimento/resposta->dominio (:json-params req))]
+      (try
+        (if-let [r (controllers/responder-subscricao repo-leg resolver-vereador (assinador-icp/assinador-stub)
+                                                     (:ator req) id acao)]
+          (http/json-resposta 200 (adapters-out-requerimento/resposta->wire r))
+          (http/json-resposta 404 {:erro "voce nao tem convite para subscrever este requerimento"}))
+        (catch clojure.lang.ExceptionInfo e (conflito-subscricao e))))))
+
+(defn- protocolar-proposta-handler
+  "POST /meu/requerimentos/propostas/:id/protocolo — o AUTOR assina e protocola (201). Entram so' os coautores
+  que confirmaram. 404 proposta de outro/inexistente; 409 ja' protocolada."
+  [repo-leg resolver-municipio resolver-autor relogio]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [r (controllers/protocolar-proposta-requerimento repo-leg resolver-municipio resolver-autor
+                                                                 (assinador-icp/assinador-stub) (:ator req) id
+                                                                 (tempo/hoje relogio zona-civil))]
+          (http/json-resposta 201 (adapters-out-requerimento/coletivo-protocolado->wire r))
+          (http/json-resposta 404 {:erro "proposta de requerimento nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e (conflito-subscricao e))))))
+
+(defn- meus-convites-handler
+  "GET /meu/subscricoes — os pedidos de subscricao esperando a resposta deste vereador."
+  [repo-leg resolver-vereador]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-requerimento/convites->wire
+                              (controllers/convites-de-subscricao repo-leg resolver-vereador (:ator req))))))
 
 ;; ========================= Onda B Slice 6: expediente (documentos + protocolo geral) =========================
 
@@ -761,6 +957,91 @@
         (http/json-resposta 201 (adapters-out-meu-painel/acusar-ciencia->wire recibo))
         (http/json-resposta 404 {:erro "vereador sem cadastro vinculado neste ente"})))))
 
+;; ========================= Faixa A / A.8: o resumo cidadao (secretaria) =========================
+
+(def ^:private msg-ia-fora
+  "A IA está indisponível agora. Siga pela tela — o resumo pode ser escrito à mão.")
+
+(defn- resumo-handler
+  "GET /legislativo/proposicoes/:id/resumo — o rascunho da IA, a versao publicada e o historico."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/resumo-da-proposicao repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-resumo/resumo->wire r))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- rascunho-resumo-handler
+  "GET /legislativo/proposicoes/:id/resumo/rascunhos/:rid — o conteudo do rascunho, lido da IA. IA fora -> 503 com a
+  mensagem R-IA-1."
+  [repo-leg ler-rascunho-resumo]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          rid (adapters-in/id-param->uuid (get-in req [:path-params :rid]))]
+      (try
+        (if-let [r (controllers/rascunho-resumo repo-leg ler-rascunho-resumo ente-id id rid)]
+          (http/json-resposta 200 (adapters-out-resumo/conteudo-rascunho->wire r))
+          (http/json-resposta 404 {:erro "rascunho nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro msg-ia-fora})
+            (throw e)))))))
+
+(defn- publicar-resumo-handler
+  "POST /legislativo/proposicoes/:id/resumo {texto, rascunho-id?} — publica a proxima versao (vai para o portal)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-resumo/publicar->dominio (:json-params req))]
+      (try
+        (if-let [v (controllers/publicar-resumo! repo-leg ator id m)]
+          (http/json-resposta 201 (adapters-out-resumo/recibo->wire v))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/rascunho-desconhecido
+            (http/json-resposta 409 {:erro "o rascunho informado nao e' um rascunho pronto desta proposicao"})
+            :conflito/resumo-versao
+            (http/json-resposta 409 {:erro "outra versao do resumo foi publicada ao mesmo tempo: recarregue"})
+            (throw e)))))))
+
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia (secretaria) =========================
+
+(defn- notas-tecnicas-handler
+  "GET /legislativo/notas-tecnicas?estado=pendente|aproveitada|descartada|todas — a fila da secretaria."
+  [repo-leg]
+  (fn [req]
+    (let [estado (adapters-in-nota/estado-da-fila (:query-params req))]
+      (http/json-resposta 200 (adapters-out-nota/notas->wire
+                               (controllers/notas-tecnicas repo-leg (:ente-id (:ator req)) estado))))))
+
+(defn- nota-tecnica-handler
+  "GET /legislativo/notas-tecnicas/:id — o rascunho inteiro, para a revisao."
+  [repo-leg]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [n (controllers/nota-tecnica repo-leg (:ente-id (:ator req)) id)]
+        (http/json-resposta 200 (adapters-out-nota/nota->wire n))
+        (http/json-resposta 404 {:erro "nota tecnica nao encontrada"})))))
+
+(defn- decidir-nota-tecnica-handler
+  "POST /legislativo/notas-tecnicas/:id/decisao {desfecho, texto?} — a secretaria aproveita ou descarta."
+  [repo-leg]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          d (adapters-in-nota/decisao->dominio (:json-params req))]
+      (try
+        (if-let [n (controllers/decidir-nota-tecnica! repo-leg (:ator req) id d)]
+          (http/json-resposta 200 (adapters-out-nota/nota->wire n))
+          (http/json-resposta 404 {:erro "nota tecnica nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/nota-decidida (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "Esta nota já foi decidida."})
+            (throw e)))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer + borda /meu do vereador (table
   syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do
@@ -786,11 +1067,16 @@
   Daouda 12/09/2026) nao exige papel nenhum na borda — a politica e' TODA da camada fina (ver a docstring
   de `votacao-aberta-handler`), por isso recebe `pode-ver-votacao-aberta?` INJETADA pelo host (mesma
   inversao de dependencia de `sessao-fechada?`; a formula e' mesma Casa E (transmissao publica OU
-  'secretario' OU 'vereador') — ver rotas.clj)."
+  'secretario' OU 'vereador') — ver rotas.clj). `nome-na-casa` (fatia 2b, injetada pelo host — mesma porta
+  da folha de sessao: identidade -> nome SO' de quem tem vinculo nesta Casa) nomeia quem RECEBEU cada
+  movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio]}]
-  (let [papel (it/exige-papel "secretario")
+           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento]}]
+  (let [nome-na-casa (or nome-na-casa (constantly nil))
+        ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
+        colegas-da-casa (or colegas-da-casa (constantly []))
+        papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
         ;; le' proposicoes/tramitacao/ficha (achado docs/20: gate grosso so'-'secretario' dava 403 ao
@@ -827,17 +1113,44 @@
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel-leitura (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
-      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes)]
+      ;; Faixa A / A.8 — o resumo cidadao (secretaria revisa e publica; o publicado vai para o portal). Sem o seam da
+      ;; IA (testes de outras verticais), a leitura do rascunho responde 503 (R-IA-1).
+      ["/legislativo/proposicoes/:id/resumo" :get [auth papel (resumo-handler repo-legislativo)]
+       :route-name :legislativo/resumo]
+      ["/legislativo/proposicoes/:id/resumo" :post
+       [auth papel it/corpo-json (publicar-resumo-handler repo-legislativo)]
+       :route-name :legislativo/publicar-resumo]
+      ["/legislativo/proposicoes/:id/resumo/rascunhos/:rid" :get
+       [auth papel (rascunho-resumo-handler repo-legislativo
+                                            (or ler-rascunho-resumo
+                                                (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
+       :route-name :legislativo/rascunho-resumo]
+      ;; Faixa B / B.8 — a fila das notas tecnicas do agente institucional (a secretaria aproveita ou descarta)
+      ["/legislativo/notas-tecnicas" :get [auth papel (notas-tecnicas-handler repo-legislativo)]
+       :route-name :legislativo/notas-tecnicas]
+      ["/legislativo/notas-tecnicas/:id" :get [auth papel (nota-tecnica-handler repo-legislativo)]
+       :route-name :legislativo/nota-tecnica]
+      ["/legislativo/notas-tecnicas/:id/decisao" :post
+       [auth papel it/corpo-json (decidir-nota-tecnica-handler repo-legislativo)]
+       :route-name :legislativo/decidir-nota-tecnica]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
        :route-name :legislativo/editar-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :get
-       [auth papel-leitura (tramitacao-leitura-handler repo-legislativo)]
+       [auth papel-leitura (tramitacao-leitura-handler repo-legislativo nome-na-casa)]
        :route-name :legislativo/tramitacao-proposicao]
       ["/legislativo/proposicoes/:id/tramitacao" :post
        [auth papel it/corpo-json (tramitar-handler repo-legislativo registro relogio)]
        :route-name :legislativo/tramitar-proposicao]
+      ;; fatia 2b: o recebimento ASSINADO da carga + a fila de cargas nao recebidas da Casa
+      ["/legislativo/proposicoes/:id/recebimento" :post
+       [auth papel it/corpo-json (receber-handler repo-legislativo registro relogio)]
+       :route-name :legislativo/receber-movimentacao]
+      ["/legislativo/recebimentos-pendentes" :get
+       [auth papel (recebimentos-pendentes-handler repo-legislativo)]
+       :route-name :legislativo/recebimentos-pendentes]
       ["/legislativo/pareceres/:id" :get [auth papel (parecer-editor-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/parecer-editor]
       ["/legislativo/pareceres/:id" :patch
@@ -889,7 +1202,42 @@
        :route-name :legislativo/meu-parecer-editor]
       ["/meu/pareceres/:id/emissao" :post
        [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador resolver-comissoes)]
-       :route-name :legislativo/meu-emitir-parecer]}))
+       :route-name :legislativo/meu-emitir-parecer]
+      ;; fatia 2a: o vereador redige, assina e protocola o proprio requerimento. `resolver-autor` (host,
+      ;; cross-modulo p/ cadastros) resolve identidade -> {:id :nome} do vereador NESTA Casa.
+      ["/meu/modelos-requerimento" :get [auth papel-vereador (meus-modelos-requerimento-handler repo-legislativo)]
+       :route-name :legislativo/meus-modelos-requerimento]
+      ["/meu/requerimentos/previa" :post
+       [auth papel-vereador it/corpo-json (previa-requerimento-handler repo-legislativo resolver-autor relogio)]
+       :route-name :legislativo/previa-requerimento]
+      ;; Faixa B / B.7: o copiloto — o rascunho da IA para o formulario (seam do host sobre o satelite)
+      ["/meu/requerimentos/copiloto" :post
+       [auth papel-vereador it/corpo-json (copiloto-requerimento-handler repo-legislativo resolver-autor copiloto-requerimento)]
+       :route-name :legislativo/copiloto-requerimento]
+      ;; fatia 2c — requerimento COLETIVO (subscricao antes do protocolo)
+      ["/meu/colegas" :get [auth papel-vereador (meus-colegas-handler resolver-autor colegas-da-casa)]
+       :route-name :legislativo/meus-colegas]
+      ["/meu/subscricoes" :get [auth papel-vereador (meus-convites-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/meus-convites-subscricao]
+      ["/meu/requerimentos/propostas" :get
+       [auth papel-vereador (minhas-propostas-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/minhas-propostas-requerimento]
+      ["/meu/requerimentos/propostas" :post
+       [auth papel-vereador it/corpo-json (criar-proposta-handler repo-legislativo resolver-autor colegas-da-casa relogio)]
+       :route-name :legislativo/criar-proposta-requerimento]
+      ["/meu/requerimentos/propostas/:id" :get
+       [auth papel-vereador (proposta-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/proposta-requerimento]
+      ["/meu/requerimentos/propostas/:id/resposta" :post
+       [auth papel-vereador it/corpo-json (responder-subscricao-handler repo-legislativo resolver-vereador)]
+       :route-name :legislativo/responder-subscricao]
+      ["/meu/requerimentos/propostas/:id/protocolo" :post
+       [auth papel-vereador (protocolar-proposta-handler repo-legislativo resolver-municipio resolver-autor relogio)]
+       :route-name :legislativo/protocolar-proposta-requerimento]
+      ["/meu/requerimentos" :post
+       [auth papel-vereador it/corpo-json
+        (protocolar-requerimento-handler repo-legislativo resolver-municipio resolver-autor relogio)]
+       :route-name :legislativo/protocolar-requerimento]}))
 
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 

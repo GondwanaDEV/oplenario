@@ -602,6 +602,95 @@
 ;; da tx. Calcular no controller a partir de uma leitura ANTERIOR deixa a janela em que a Mesa encerra a
 ;; sessao no meio do request e a chamada avalia 'agora' uma sessao que ja fechou.
 
+;; ---------- Faixa A / A.6: a ATA ----------
+
+(def origens-redacao-ata
+  "O discriminador da ata publicada (§22.6): redigida pela Casa, ou partida de um rascunho da IA revisado por uma pessoa."
+  #{"redigida_externamente" "gerada_automaticamente"})
+
+(def estados-com-ata
+  "A ata e' o registro da sessao que ACONTECEU e ACABOU: encerrada, ou arquivada (acervo historico)."
+  #{"encerrada" "arquivada"})
+
+(def teto-texto-ata 200000)
+
+(defn pode-ter-ata?
+  "PURO: a sessao gera ata regimental (capability — solene e especial, por exemplo, nao geram) e ja' acabou."
+  [sessao]
+  (boolean (and (:gera-ata-regimental sessao) (contains? estados-com-ata (:estado sessao)))))
+
+;; ---------- Faixa A / A.7: a LEITURA da ata anterior ----------
+
+(def modos-leitura-ata
+  "Como a ata anterior foi apresentada ao plenario (pedido de Baturite): lida em voz sintetizada, lida pelo secretario,
+  ou dispensada (ata distribuida antes). Qual deles a Casa usa e' decisao dela, sessao a sessao."
+  #{"voz_sintetizada" "presencial" "dispensada"})
+
+(defn pode-registrar-leitura?
+  "PURO: a leitura e' ato de uma sessao EM ANDAMENTO (aberta) — antes de abrir nao se le, depois de encerrar e' tarde."
+  [sessao]
+  (= "aberta" (:estado sessao)))
+
+;; ---------- Faixa A / A.6b: o RASCUNHO da ata pela IA ----------
+
+(def minutos-de-rascunho-em-curso
+  "Janela em que um pedido ainda sem resposta da IA conta como EM CURSO (outro pedido e' recusado). Passada a janela,
+  a secretaria pode pedir de novo — a IA pode ter perdido o pedido; a resposta tardia do primeiro continua valendo."
+  30)
+
+(defn sessao-vai-para-ia?
+  "Sessao secreta nunca vai para a IA (o sigilo e' da sessao inteira) — o mesmo corte da fronteira (ADR-0008)."
+  [sessao]
+  (not= "secreta" (:tipo-sessao sessao)))
+
+(defn pode-pedir-rascunho?
+  "PURO: sem pedido, pedido ja' respondido (pronto/falhou) ou pedido em aberto ha' mais que a janela."
+  [ultimo ^java.time.Instant agora]
+  (or (nil? ultimo)
+      (not= "solicitado" (:situacao ultimo))
+      (.isBefore ^java.time.Instant (:solicitado-em ultimo)
+                 (.minusSeconds agora (* 60 minutos-de-rascunho-em-curso)))))
+
+(def estados-sem-gravacao
+  "Estados de sessao que NAO recebem gravacao (Faixa A / A.2). So' 'nao_realizada': a sessao que nao aconteceu nao
+  tem registro de audio. 'encerrada' e 'arquivada' RECEBEM — a fonte primaria da V1 e' a gravacao local enviada
+  DEPOIS da sessao (§22.3.4), e a importacao de audio historico vincula a sessoes arquivadas. O vinculo da
+  gravacao nao e' escrita de conducao (o gate `estados-sessao-fechada` continua valendo para estas)."
+  #{"nao_realizada"})
+
+(def ^:private ^java.time.Duration folga-sugestao-gravacao
+  "Folga em torno da janela da sessao para casar uma gravacao (o OBS costuma comecar antes da abertura e parar
+  depois do encerramento)."
+  (java.time.Duration/ofHours 2))
+
+(def ^:private ^java.time.Duration duracao-presumida-sessao
+  "Janela presumida quando a sessao nao tem encerrada-em (ainda aberta, ou so' agendada)."
+  (java.time.Duration/ofHours 6))
+
+(defn sugerir-sessao-da-gravacao
+  "PURO (Faixa A / A.2): a sessao mais provavel de uma gravacao recebida sem vinculo, pelo HORARIO. Janela de uma
+  sessao = [inicio - 2h, fim + 2h], com inicio = aberta-em (ou agendada-para) e fim = encerrada-em (ou inicio +
+  6h). Entre as sessoes cuja janela contem o `iniciou-em` da gravacao, vence a de inicio mais proximo. Sessoes em
+  `estados-sem-gravacao` nunca sao sugeridas. So' SUGERE: quem vincula e' a secretaria. nil = nenhuma casa."
+  [iniciou-em sessoes]
+  (let [inst (fn [x] (cond (instance? java.time.Instant x) x
+                           (instance? java.time.OffsetDateTime x) (.toInstant ^java.time.OffsetDateTime x)
+                           (instance? java.util.Date x) (.toInstant ^java.util.Date x)
+                           (string? x) (java.time.Instant/parse x)
+                           :else nil))
+        t (inst iniciou-em)
+        candidatas
+        (for [s sessoes
+              :when (not (contains? estados-sem-gravacao (:estado s)))
+              :let [ini (inst (or (:aberta-em s) (:agendada-para s)))]
+              :when (and t ini)
+              :let [fim (or (inst (:encerrada-em s)) (.plus ^java.time.Instant ini duracao-presumida-sessao))
+                    de  (.minus ^java.time.Instant ini folga-sugestao-gravacao)
+                    ate (.plus ^java.time.Instant fim folga-sugestao-gravacao)]
+              :when (and (not (.isBefore ^java.time.Instant t de)) (not (.isAfter ^java.time.Instant t ate)))]
+          [(Math/abs (.toMillis (java.time.Duration/between ini t))) (str (:id s)) s])]
+    (some-> (sort-by (juxt first second) candidatas) first peek)))
+
 (def estados-sessao-fechada
   "Estados em que a sessao JA fechou — a chamada tem de congelar no instante em que ela fechou (um evento
   inferido/registrado DEPOIS nao pode mudar uma chamada que ja foi para a ata). O CHECK
@@ -985,6 +1074,47 @@
   #{"pausada" "retomada" "aparte_concedido" "tempo_adicional_concedido"})
 
 (defn aparte? [tipo-fala] (= "aparte" tipo-fala))
+
+(defn escolher-tempo-regimental
+  "Das linhas candidatas de `tempo_regimental` para um (fase, tipo) — [{:fase :segundos}], a da fase e/ou a
+  generica (fase nil) — devolve os segundos que valem: a linha com fase EXPLICITA vence a generica; sem
+  nenhuma, nil (sem limite). Pura (mig 0081)."
+  [linhas]
+  (or (some #(when (some? (:fase %)) (:segundos %)) linhas)
+      (some #(when (nil? (:fase %)) (:segundos %)) linhas)))
+
+(def tempo-regimental-maximo-segundos
+  "Teto de um tempo regimental (1 hora). Nao e' regra do regimento — e' defesa contra digitacao errada na tela
+  da secretaria (3000 minutos no lugar de 30). Um regimento que de' mais que isso a uma fala e' caso a
+  reabrir, nao a aceitar em silencio."
+  3600)
+
+(def referencia-normativa-maximo-caracteres 200)
+
+(defn validar-tempos-regimentais!
+  "A TABELA INTEIRA de tempos da Casa, como a secretaria a salva (tela \"Tempos da tribuna\"): vocabulario
+  fechado (tipo-fala, fase ou nil), segundos inteiros em 1..`tempo-regimental-maximo-segundos`, referencia
+  normativa curta, e NO MAXIMO uma linha por (fase, tipo) — duas diriam valores diferentes para a mesma fala.
+  Tabela vazia e' valida (a Casa volta a nao ter limite). Falha = ex-info `:validacao/invalido` (400 na borda,
+  nunca o CHECK/indice unico do banco -> 500). Pura."
+  [itens]
+  (let [invalido! (fn [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))]
+    (doseq [{:keys [fase tipo-fala segundos referencia-normativa]} itens]
+      (when-not (contains? tipos-fala tipo-fala)
+        (invalido! "tipo de fala invalido" {:campo :tipo-fala}))
+      (when-not (or (nil? fase) (contains? fases-pauta fase))
+        (invalido! "fase invalida" {:campo :fase}))
+      (when-not (and (int? segundos) (<= 1 segundos tempo-regimental-maximo-segundos))
+        (invalido! (str "segundos deve ser inteiro entre 1 e " tempo-regimental-maximo-segundos)
+                   {:campo :segundos}))
+      (when (and referencia-normativa (> (count referencia-normativa) referencia-normativa-maximo-caracteres))
+        (invalido! (str "referencia-normativa com mais de " referencia-normativa-maximo-caracteres " caracteres")
+                   {:campo :referencia-normativa})))
+    (when-let [repetido (some (fn [[par n]] (when (> n 1) par))
+                              (frequencies (map (juxt :fase :tipo-fala) itens)))]
+      (invalido! "o mesmo tipo de fala aparece duas vezes para a mesma fase"
+                 {:campo :itens :fase (first repetido) :tipo-fala (second repetido)}))
+    nil))
 
 (defn validar-tipo-fala [tipo]
   (when-not (contains? tipos-fala tipo)

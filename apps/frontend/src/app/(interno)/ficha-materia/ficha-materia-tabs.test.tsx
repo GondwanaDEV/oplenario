@@ -18,7 +18,7 @@ const ficha: FichaMateriaOut = {
     texto: "Art. 1º Fica instituído o Programa.",
   },
   tramitacao: [
-    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z" },
+    { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "distribuir", ocorridoEm: "2026-04-08T09:00:00Z", recebimento: null },
   ],
   tramitacaoTruncado: false,
   apensadas: [],
@@ -31,6 +31,7 @@ const ficha: FichaMateriaOut = {
     { id: "p1", comissaoId: "9119889e-1111-4222-8333-444444444444", relatorId: "r1", votoRelator: "favoravel", estado: "aprovado" },
   ],
   pareceresTruncado: false,
+  coautores: [],
 };
 
 describe("FichaMateriaTabs", () => {

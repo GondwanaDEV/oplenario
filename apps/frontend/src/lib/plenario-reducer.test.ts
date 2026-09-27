@@ -86,6 +86,12 @@ describe("tribuna — fala iniciada/cronômetro/encerrada", () => {
     expect(e.marcosCronometro).toEqual([]);
   });
 
+  it("fala.iniciada carrega o tempo-limite da fala (mig 0081); ausente = sem limite", () => {
+    const comLimite = reduzir(sessao(), [{ ...iniciar, dados: { ...iniciar.dados, "tempo-concedido-segundos": 300 } } as EventoPlenario]);
+    expect(comLimite.oradorAtual?.tempoConcedidoSegundos).toBe(300);
+    expect(reduzir(sessao(), [iniciar]).oradorAtual?.tempoConcedidoSegundos).toBeNull();
+  });
+
   it("fala.cronometro acumula marcos da fala em curso", () => {
     const e = reduzir(sessao(), [
       iniciar,
@@ -692,7 +698,7 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
 
   const snap = (over: Partial<TribunaOut> = {}): TribunaOut => ({
     sessaoId: "s1",
-    oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null, lockVersion: 0 },
+    oradorAtual: { falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", inscricaoId: null, tempoConcedidoSegundos: null, lockVersion: 0 },
     marcosCronometro: [{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }],
     // já na ordem que o SERVIDOR manda (fase ASC, ordem ASC) — o cliente NÃO reordena (fix round 1, I1;
     // ver T7 abaixo para o caso que reprova se o sort voltar)
@@ -703,9 +709,18 @@ describe("tribuna — o read-model reconstrói quem está com a palavra", () => 
     ...over,
   });
 
+  it("hidratação traz o tempo-limite do snapshot; campo torto/ausente = sem limite (mig 0081)", () => {
+    const base = snap();
+    const comLimite = hidratarTribuna(aberta(), { ...base, oradorAtual: { ...base.oradorAtual!, tempoConcedidoSegundos: 600 } }, seq0);
+    expect(comLimite.oradorAtual?.tempoConcedidoSegundos).toBe(600);
+    const torto = hidratarTribuna(aberta(), { ...base, oradorAtual: { ...base.oradorAtual!, tempoConcedidoSegundos: "600" as unknown as number } }, seq0);
+    expect(torto.oradorAtual?.falaId).toBe("f2");
+    expect(torto.oradorAtual?.tempoConcedidoSegundos).toBeNull();
+  });
+
   it("T1 — o CASO DA FATIA: abrir a tela com a fala já em curso resolve o orador SEM nenhum evento SSE", () => {
     const e = hidratarTribuna(aberta(), snap(), seq0);
-    expect(e.oradorAtual).toEqual({ falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z" });
+    expect(e.oradorAtual).toEqual({ falaId: "f2", oradorId: "vSnapshot", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-09-07T21:55:00Z", tempoConcedidoSegundos: null });
     expect(e.marcosCronometro).toEqual([{ tipo: "pausada", ocorridoEm: "2026-09-07T21:56:00Z", segundosAdicionais: null }]);
     // e a fila chega na MESMA ordem em que o servidor mandou
     expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1", "i2"]);

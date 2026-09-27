@@ -78,10 +78,41 @@ describe("SecaoFicha", () => {
     expect(screen.getByText(fichaFake["urn-lex"]).textContent).toBe(fichaFake["urn-lex"]);
   });
 
-  it("resumo-IA no estado off honesto (sem backend de IA)", async () => {
+  it("sem resumo publicado: o aviso honesto diz que a Casa ainda não publicou (não que a IA caiu)", async () => {
     mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
-    await waitFor(() => expect(screen.getByText(/resumo em linguagem simples está indisponível/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/ainda não tem resumo em linguagem simples/i)).toBeTruthy());
+    expect(document.querySelector(".resumo-ia")?.getAttribute("data-ia")).toBe("off");
+    expect(screen.queryByText("Em poucas palavras")).toBeNull();
+  });
+
+  it("A.8b: resumo publicado -> selo, parágrafos e a revisão humana (IA ou Casa)", async () => {
+    const comResumo = {
+      ...fichaFake,
+      resumo: {
+        texto: "Cria hortas nos terrenos públicos sem uso.\n\nQuem planta divide a colheita.",
+        versao: 2,
+        "gerado-com-ia": true,
+        "publicado-em": "2026-09-27T12:00:00Z",
+      },
+    };
+    mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : comResumo) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    expect(await screen.findByText("Em poucas palavras")).toBeTruthy();
+    expect(document.querySelector(".resumo-ia")?.getAttribute("data-ia")).toBe("ativo");
+    expect(screen.getByText("Cria hortas nos terrenos públicos sem uso.")).toBeTruthy();
+    expect(screen.getByText("Quem planta divide a colheita.")).toBeTruthy();
+    expect(document.querySelector(".resumo-revisao")?.textContent).toMatch(
+      /^Resumo escrito com ajuda de IA e revisado pela equipe da Câmara em \d{2}\/\d{2}\/2026\. O texto oficial, acima, é o que vale\.$/,
+    );
+    cleanup();
+    mockFetch((url) => ({
+      ok: true,
+      json: async () => (url.endsWith("/comentarios") ? [] : { ...comResumo, resumo: { ...comResumo.resumo, "gerado-com-ia": false } }),
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await screen.findByText("Em poucas palavras");
+    expect(document.querySelector(".resumo-revisao")?.textContent).toMatch(/^Resumo escrito pela equipe da Câmara em /);
   });
 
   it("sem norma -> não mostra bloco 'virou lei'", async () => {

@@ -192,6 +192,179 @@ export interface VinculoGravacaoOut {
   sessaoId: string;
 }
 
+export interface SugestaoSessaoOut {
+  sessaoId: string;
+  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  numeroSequencial: number;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  inicio: string;
+}
+
+export interface GravacaoPendenteOut {
+  id: string;
+  iniciouEm: string;
+  encerrouEm?: string | null;
+  fonteIngestao: "gravacao_local_pos_sessao" | "importacao_legado" | "rtmp_duplicado_ao_vivo" | "youtube_api_fallback";
+  acessoRestrito: boolean;
+  audioHash?: string | null;
+  lockVersion: number;
+  sugestao?: SugestaoSessaoOut | null;
+}
+
+export interface GravacoesPendentesOut {
+  segmentos: GravacaoPendenteOut[];
+}
+
+export interface TranscricaoPonteiroOut {
+  id: string;
+  segmentoId: string;
+  situacao: "concluida" | "falhou";
+  transcricaoId?: string | null;
+  versao?: number | null;
+  idioma?: string | null;
+  duracaoS?: number | null;
+  nTrechos?: number | null;
+  coberturaAtribuida?: number | null;
+  modeloAsr?: string | null;
+  modeloDiarizacao?: string | null;
+  categoriaErro?: string | null;
+  detalheErro?: string | null;
+  retentavel?: boolean | null;
+  ocorridoEm: string;
+}
+
+export interface TranscricoesOut {
+  sessaoId: string;
+  itens: TranscricaoPonteiroOut[];
+}
+
+export interface TrechoTranscricaoOut {
+  inicio: number;
+  fim: number;
+  texto: string;
+  oradorId?: string | null;
+  oradorNome?: string | null;
+}
+
+export interface TranscricaoConteudoOut {
+  ponteiro: TranscricaoPonteiroOut;
+  trechos: TrechoTranscricaoOut[];
+}
+
+export interface AtaVersaoOut {
+  id: string;
+  versao: number;
+  origemRedacao: "gerada_automaticamente" | "redigida_externamente";
+  conteudoSha256: string;
+  motivoRetificacao?: string | null;
+  rascunhoId?: string | null;
+  modeloLlmId?: string | null;
+  promptVersao?: string | null;
+  proporcaoAlterada?: number | null;
+  publicadaPorNome?: string | null;
+  publicadaEm: string;
+}
+
+export interface AtaAtualOut {
+  versao: AtaVersaoOut;
+  texto: string;
+}
+
+export interface AtaRascunhoOut {
+  solicitacaoId: string;
+  situacao: "solicitado" | "pronto" | "falhou";
+  solicitadoEm: string;
+  rascunhoId?: string | null;
+  modeloLlmId?: string | null;
+  promptVersao?: string | null;
+  incerteza?: "normal" | "revisar_com_atencao" | null;
+  nCitacoes?: number | null;
+  nCitacoesConferidas?: number | null;
+  nParagrafosSemFonte?: number | null;
+  nPontosAConfirmar?: number | null;
+  categoriaErro?: string | null;
+  detalheErro?: string | null;
+  retentavel?: boolean | null;
+  ocorridoEm: string;
+}
+
+export interface AtaSessaoOut {
+  sessaoId: string;
+  podeTerAta: boolean;
+  atual?: AtaAtualOut | null;
+  versoes: AtaVersaoOut[];
+  rascunho?: AtaRascunhoOut | null;
+}
+
+export interface AtaReciboOut {
+  id: string;
+  versao: number;
+  conteudoSha256: string;
+}
+
+export interface CitacaoRascunhoOut {
+  fonteId: string;
+  trecho?: string | null;
+  inicio: number;
+  fim: number;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo?: string | null;
+}
+
+export interface IncertezaRascunhoOut {
+  nivel: "normal" | "revisar_com_atencao";
+  motivos: string[];
+}
+
+export interface AtaRascunhoConteudoOut {
+  rascunhoId: string;
+  texto: string;
+  textoLimpo: string;
+  incerteza: IncertezaRascunhoOut;
+  citacoes: CitacaoRascunhoOut[];
+  paragrafosSemFonte: number[];
+  pontosAConfirmar: string[];
+  modeloLlmId: string;
+  promptVersao: string;
+}
+
+export interface SolicitacaoRascunhoOut {
+  solicitacaoId: string;
+}
+
+export interface SessaoAnteriorOut {
+  id: string;
+  tipoSessao: string;
+  numeroSequencial: number;
+  abertaEm?: string | null;
+  encerradaEm?: string | null;
+}
+
+export interface AtaParaLerOut {
+  versao: number;
+  texto: string;
+  conteudoSha256: string;
+  origemRedacao: string;
+  publicadaEm: string;
+  publicadaPorNome?: string | null;
+}
+
+export interface LeituraAtaRegistradaOut {
+  modo: "dispensada" | "presencial" | "voz_sintetizada";
+  ataSessaoId: string;
+  ataVersao: number;
+  registradaEm: string;
+  registradaPorNome?: string | null;
+}
+
+export interface LeituraAtaOut {
+  sessaoId: string;
+  podeRegistrar: boolean;
+  anterior?: SessaoAnteriorOut | null;
+  ata?: AtaParaLerOut | null;
+  leitura?: LeituraAtaRegistradaOut | null;
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;
@@ -288,6 +461,7 @@ export interface OradorAtualOut {
   fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
   iniciouEm: string;
   inscricaoId: string | null;
+  tempoConcedidoSegundos: number | null;
   lockVersion: number;
 }
 
@@ -381,4 +555,15 @@ export interface AssiduidadeOut {
   porVereador: AssiduidadePorVereadorOut[];
   detalhe: AssiduidadeDetalheLinhaOut[];
   totais: AssiduidadeTotaisOut;
+}
+
+export interface TempoRegimentalOut {
+  fase: string | null;
+  tipoFala: string;
+  segundos: number;
+  referenciaNormativa: string | null;
+}
+
+export interface TemposRegimentaisOut {
+  itens: TempoRegimentalOut[];
 }

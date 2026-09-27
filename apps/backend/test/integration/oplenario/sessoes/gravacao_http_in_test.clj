@@ -34,7 +34,17 @@
     (buscar-sessao [_ ente-id id] (busca-fn ente-id id))
     (registrar-segmento! [_ ente-id m]
       (reset! capturado (assoc m :ente-id ente-id))
-      {:id (:id m) :lock-version 0})))
+      {:id (:id m) :lock-version 0})
+    (listar-gravacoes-pendentes [_ ente-id limite]
+      (reset! capturado {:ente-id ente-id :limite limite})
+      {:segmentos [{:id #uuid "00000000-0000-0000-0000-0000000000a1" :iniciou-em (java.time.Instant/parse "2026-09-22T17:50:00Z")
+                    :fonte-ingestao "gravacao_local_pos_sessao" :acesso-restrito false :audio-hash "ab" :lock-version 0
+                    :container-bruto-uri "gravacao/x/y"}
+                   {:id #uuid "00000000-0000-0000-0000-0000000000a2" :iniciou-em (java.time.Instant/parse "2026-09-10T10:00:00Z")
+                    :fonte-ingestao "gravacao_local_pos_sessao" :acesso-restrito false :audio-hash "cd" :lock-version 3}]
+       :sessoes [{:id #uuid "00000000-0000-0000-0000-0000000000b1" :tipo-sessao "ordinaria" :numero-sequencial 12
+                  :estado "encerrada" :aberta-em (java.time.Instant/parse "2026-09-22T18:00:00Z")
+                  :encerrada-em (java.time.Instant/parse "2026-09-22T21:00:00Z")}]})))
 
 (defn- fake-store
   "ObjetoStore fake: `guardar-stream!` CONSOME o InputStream (popula o DigestInputStream) e grava os bytes +
@@ -129,6 +139,29 @@
 ;; NB: a guarda de corpo-nulo -> 400 (controllers/diplomat) fica como defesa, mas o Jetty/pt sempre fornece um
 ;; ServletInputStream (mesmo vazio), entao o caso nulo nao e' exercitavel por pt/response-for — sem teste aqui.
 
+(deftest ingestao-papel-captacao-201
+  ;; Faixa A / A.2: o utilitario de captacao no PC do OBS usa uma credencial de papel `captacao` — o MINIMO para
+  ;; enviar arquivos. Nao precisa (nem deve ter) os poderes da secretaria.
+  (let [ente (random-uuid)
+        cap-repo (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ _] nil) cap-repo)
+        r (pt/response-for (service-fn* #{"captacao"} repo-s (fake-store (atom nil)))
+                           :post (str "/gravacoes" meta-ok)
+                           :headers (com-bin (token ente (random-uuid))) :body "x")]
+    (is (= 201 (:status r)) "papel captacao envia a gravacao")
+    (is (nil? (:sessao-id @cap-repo)) "sem sessao: a secretaria vincula depois")))
+
+(deftest ingestao-sessao-nao-realizada-409
+  (let [ente (random-uuid)
+        cap-repo (atom nil) cap-store (atom nil)
+        repo-s (fake-repo-sessoes (fn [_ id] (assoc (sessao-canonica ente id) :estado "nao_realizada")) cap-repo)
+        r (pt/response-for (service-fn* #{"secretario"} repo-s (fake-store cap-store))
+                           :post (str "/gravacoes" meta-ok "&sessao-id=" (random-uuid))
+                           :headers (com-bin (token ente (random-uuid))) :body "x")]
+    (is (= 409 (:status r)) "sessao que nao aconteceu nao recebe gravacao")
+    (is (nil? @cap-store) "o arquivo nem chegou ao object store")
+    (is (nil? @cap-repo) "nada registrado")))
+
 (deftest ingestao-sessao-inexistente-404
   (let [ente (random-uuid)
         repo-s (fake-repo-sessoes (fn [_ _] nil) (atom nil))
@@ -217,3 +250,29 @@
                            :get (str "/sessoes/" (random-uuid) "/gravacao")
                            :headers {"authorization" (str "Bearer " (token ente (random-uuid)))})]
     (is (= 404 (:status r)) "listar de sessao inexistente -> 404")))
+
+;; ---------- GET /gravacoes/pendentes — Faixa A / A.2 ----------
+
+(deftest pendentes-200-com-sugestao
+  (let [ente (random-uuid) cap (atom nil)
+        r (pt/response-for (service-fn* #{"secretario"} (fake-repo-sessoes (fn [_ _] nil) cap) nil)
+                           :get "/gravacoes/pendentes"
+                           :headers {"authorization" (str "Bearer " (token ente (random-uuid)))})
+        [a b] (:segmentos (ler-json r))]
+    (is (= 200 (:status r)))
+    (is (= ente (:ente-id @cap)) "o tenant vem do ator")
+    (is (= "00000000-0000-0000-0000-0000000000b1" (get-in a [:sugestao :sessao-id]))
+        "a gravacao das 17:50 casa com a sessao das 18:00")
+    (is (= {:tipo-sessao "ordinaria" :numero-sequencial 12 :estado "encerrada" :inicio "2026-09-22T18:00:00Z"}
+           (dissoc (:sugestao a) :sessao-id)))
+    (is (= 0 (:lock-version a)) "o token de CAS que o vinculo exige viaja")
+    (is (nil? (:container-bruto-uri a)) "a chave do store nao vaza")
+    (is (nil? (:sugestao b)) "fora de qualquer janela: sem sugestao")
+    (is (= 3 (:lock-version b)))))
+
+(deftest pendentes-so-secretaria
+  (doseq [papel ["captacao" "vereador"]]
+    (let [r (pt/response-for (service-fn* #{papel} (fake-repo-sessoes (fn [_ _] nil) (atom nil)) nil)
+                             :get "/gravacoes/pendentes"
+                             :headers {"authorization" (str "Bearer " (token (random-uuid) (random-uuid)))})]
+      (is (= 403 (:status r)) (str papel " nao ve a fila de gravacoes")))))

@@ -49,6 +49,9 @@
         (:sequential :vector) (str (ts-tipo nome-por-schema (second forma)) "[]")
         :or (str/join " | " (map (partial ts-tipo nome-por-schema) (rest forma)))
         := (pr-str (second forma))                 ; [:= true] -> tipo literal TS `true`
+        ;; B.7: [:map-of K V] -> Record<K, V> (os campos preenchidos do requerimento: nome do campo -> texto)
+        :map-of (let [[k v] (remove map? (rest forma))]
+                  (str "Record<" (ts-tipo nome-por-schema k) ", " (ts-tipo nome-por-schema v) ">"))
         :fn "string"                              ; LocalDate/Instant -> ISO string
         :map "Record<string, unknown>"           ; map aninhado anonimo, sem entrada no manifesto
         "unknown"))

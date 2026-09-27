@@ -78,6 +78,9 @@
 .tempo .data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .tempo .evt { font-weight: 600; color: var(--texto); margin: 0.1rem 0; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .tempo .quem { font-size: var(--t-13); color: var(--texto-2); }
+/* fatia 2b: o recibo de carga da movimentacao — linha propria, com o check de "assinado" em --marca */
+.tempo .recebido { display: block; font-size: var(--t-13); color: var(--texto-2); margin-top: 0.15rem; }
+.tempo .recebido::before { content: "✓ "; color: var(--marca); font-weight: 700; }
 /* link "Abrir parecer" na aba Pareceres (Onda B Slice 5) — mesmo vocabulário visual de `a.ir` do rail
    (RailParecer, ../parecer/parecer.css), escopado aqui pra não vazar pro resto da .tempo (tramitação/
    emendas não têm link). */

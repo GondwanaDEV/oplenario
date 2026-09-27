@@ -44,8 +44,12 @@ export type FichaVista = {
   autorTexto: string | null;
   estagios: EstagioTramitacao[];
   normaPublicada: NormaPublicadaVista | null;
+  // Faixa A / A.8b: o resumo em linguagem simples PUBLICADO pela Casa (null = ainda não publicou)
+  resumo: ResumoVista | null;
   comentarios: ComentarioVista[];
 };
+
+export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
 export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | null): FichaVista {
   const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado);
@@ -66,6 +70,13 @@ export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | nul
           tipoNorma: ficha.norma.tipoNorma,
           numero: ficha.norma.numero,
           ano: ficha.norma.ano,
+        }
+      : null,
+    resumo: ficha.resumo
+      ? {
+          paragrafos: ficha.resumo.texto.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean),
+          geradoComIa: ficha.resumo.geradoComIa,
+          publicadoEm: ficha.resumo.publicadoEm,
         }
       : null,
     // fail-closed: `comentarios` chega `null` quando o fetch daquela seção degradou (Global Constraints —

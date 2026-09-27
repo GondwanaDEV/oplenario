@@ -83,8 +83,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   position: sticky; top: 0; z-index: 30;
   background: var(--topo-bg);
   /* Aqui o desfoque nao e' decoracao: a pagina rola POR BAIXO da barra. */
-  backdrop-filter: var(--desfoque);
+  /* Ordem importa: o compilador de CSS do Next funde as duas e guarda so' a ULTIMA. Com a prefixada por ultimo,
+     o Chrome/Android (que so' le' a padrao) ficava sem desfoque e o texto aparecia atraves da barra. */
   -webkit-backdrop-filter: var(--desfoque);
+  backdrop-filter: var(--desfoque);
   border-bottom: 1px solid var(--linha);
   box-shadow: inset 0 -1px 0 var(--vidro-brilho);
 }
@@ -166,7 +168,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .btn[aria-disabled="true"] { opacity: .42; cursor: not-allowed; transform: none; box-shadow: none; }
 
 /* ============== BARRA DE COMANDO (.comando) — fixa no rodapé ============== */
-.comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); backdrop-filter: var(--desfoque); -webkit-backdrop-filter: var(--desfoque); border-top: 1px solid var(--linha); box-shadow: inset 0 1px 0 var(--vidro-brilho), 0 -18px 44px -30px var(--sombra-cor-2); }
+.comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); -webkit-backdrop-filter: var(--desfoque); backdrop-filter: var(--desfoque); border-top: 1px solid var(--linha); box-shadow: inset 0 1px 0 var(--vidro-brilho), 0 -18px 44px -30px var(--sombra-cor-2); }
 .comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
 .comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
 .comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }

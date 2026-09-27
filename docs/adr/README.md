@@ -18,3 +18,12 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0003](0003-camada-relacoes-pode-tocar-o-db-do-proprio-modulo.md) | `relacoes/` pode importar o `db/` do próprio módulo | 🟡 Rascunho |
 | [0004](0004-a-guarda-de-transicao-so-le-verdade-apurada.md) | A guarda de transição só lê verdade apurada | Aceito |
 | [0005](0005-conceder-acesso-e-area-do-admin-ente.md) | "Conceder acesso" pertence à área do `admin_ente`, não à tela de cadastro | Aceito |
+| [0006](0006-satelite-de-ia-apps-ia.md) | Satélite de IA em `apps/ia/` (Python): silhueta, porta de inferência e trilho de CI | Aceito |
+| [0007](0007-captacao-da-gravacao-local.md) | Captação da gravação local: `apps/captacao`, papel `captacao` e vínculo pós-sessão | Aceito |
+| [0008](0008-fronteira-core-ia-eventos-de-integracao.md) | Fronteira core ↔ IA: eventos de integração por feed e caixa de entrada, conteúdo sob demanda | Aceito |
+| [0009](0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md) | Catálogo de ações no core: uma entrada por ação de domínio, `diplomat/catalogo.clj` e lint de rotas | Aceito |
+| [0010](0010-identidade-delegada-do-agente.md) | Identidade delegada do agente: credencial opaca emitida pelo core, ator com `:via`, interseção a cada chamada | Aceito |
+| [0011](0011-normas-de-referencia-por-dispositivo.md) | Normas de referência por dispositivo: módulo `normas`, parser determinístico e conferência humana | Aceito |
+| [0012](0012-proposta-de-ato.md) | Proposta de ato: o agente prepara, a pessoa confirma na tela | Aceito |
+| [0013](0013-agente-institucional-e-conferencia.md) | Agente institucional da Casa (concessão do admin) e a conferência das proposições | Aceito |
+| [0014](0014-orcamento-de-ia-e-painel-da-casa.md) | Orçamento de IA por Casa, a cota no satélite e o painel da Casa | Aceito |

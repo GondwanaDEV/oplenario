@@ -3,20 +3,32 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
+  (:require [oplenario.agente :as agente]
+            [oplenario.busca :as busca]
+            [oplenario.catalogo :as catalogo]
+            [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.cadastros.diplomat.http.in :as cadastros-http]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
+            [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia-comp]
+            [oplenario.integracao-ia.diplomat.http.in :as integracao-ia-http]
+            [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
+            [oplenario.mcp :as mcp]
+            [oplenario.normas.components.repositorio :as repo-normas-comp]
+            [oplenario.normas.diplomat.http.in :as normas-http]
             [oplenario.paineis.diplomat.http.in :as paineis-http]
             [oplenario.participacao.diplomat.http.in :as participacao-http]
+            [oplenario.propostas :as propostas]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo-sessoes-comp]
             [oplenario.sessoes.logic :as sessoes-logic]
@@ -37,6 +49,26 @@
   sem subir o sistema inteiro (mesmo racional de `presenca-resumo-wire`/`esic-cumprimento-wire`)."
   [repo-cadastros ente-id identidade-id]
   (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)))
+
+(defn resolver-autor-vereador
+  "identidade-id -> {:id :nome} do vereador NESTA Casa, para a AUTORIA do requerimento que ele protocola
+  (fatia 2a) — mesma exceção nomeada de `resolver-vereador` (§22.5.3), só que devolve também o nome de
+  exibição: o nome parlamentar, ou o civil quando não há parlamentar. `nil` sem cadastro de vereador neste
+  ente (a borda traduz → 404, nunca 500)."
+  [repo-cadastros ente-id identidade-id]
+  (when-let [v (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)]
+    {:id (:id v) :nome (or (not-empty (:nome-parlamentar v)) (:nome v))}))
+
+(defn colegas-da-casa
+  "ente-id -> [{:id :nome :partido}] dos vereadores com mandato VIGENTE hoje nesta Casa, para o convite de
+  subscricao do requerimento coletivo (fatia 2c) — mesma excecao nomeada de `resolver-vereador` (§22.5.3).
+  Parte de `roster-da-casa` (o conjunto que compoe a Casa) e mantem so' 'vigente': licenciado nao subscreve
+  como parlamentar em exercicio. Nome de exibicao = o parlamentar, ou o civil quando nao ha'."
+  [repo-cadastros ente-id hoje]
+  (->> (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id hoje)
+       (filter #(= "vigente" (:estado-mandato %)))
+       (mapv (fn [l] {:id (:vereador-id l) :nome (or (not-empty (:nome-parlamentar l)) (:nome l))
+                      :partido (:partido l)}))))
 
 (defn resolver-comissoes
   "comissao-ids -> {comissao-id nome} NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma forma de
@@ -67,6 +99,44 @@
   [repo-identidade ente-id identidade-id]
   (when (seq (repo-identidade-comp/vinculos-de repo-identidade ente-id identidade-id))
     (:nome (repo-identidade-comp/nome-por-id repo-identidade identidade-id))))
+
+;; ---------- Faixa A / A.3 (ADR-0008): os seams da fronteira com a IA ----------
+
+(defn contexto-para-ia
+  "sessao -> {:sessao :segmentos :falas :nomes} para a IA (host wiring, §22.10: integracao_ia nunca importa
+  sessoes nem cadastros). `nomes` = {vereador-id nome} da composicao da Casa NA DATA da sessao — o nome
+  parlamentar, ou o civil. nil = sessao inexistente no tenant. O sigilo e' decidido por integracao_ia em cima
+  disto (sessao secreta, segmento restrito)."
+  [repo-sessoes repo-cadastros ente-id sessao-id]
+  (when-let [c (repo-sessoes-comp/contexto-para-ia repo-sessoes ente-id sessao-id)]
+    ;; mesma data de referencia da /chamada (sessoes-logic): a composicao DE ENTAO, nunca a de hoje. Sessao sem
+    ;; data nenhuma nao tem composicao conhecida — vai sem nomes (a IA marca os oradores como nao nomeados).
+    (let [data  (try (sessoes-logic/data-de-referencia-da-sessao (:sessao c))
+                     (catch clojure.lang.ExceptionInfo _ nil))
+          nomes (if data
+                  (into {} (map (fn [l] [(:vereador-id l) (or (not-empty (:nome-parlamentar l)) (:nome l))]))
+                        (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
+                  {})]
+      (assoc c :nomes nomes))))
+
+(defn ata-para-ia
+  "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
+  [repo-sessoes ente-id sessao-id versao]
+  (when-let [s (repo-sessoes-comp/buscar-sessao repo-sessoes ente-id sessao-id)]
+    (if (= "secreta" (:tipo-sessao s))
+      :restrita
+      (repo-sessoes-comp/ata-versao repo-sessoes ente-id sessao-id versao))))
+
+(defn abrir-gravacao-para-ia
+  "segmento -> {:stream :audio-hash} | :restrita | nil (host wiring). So' serve gravacao VINCULADA a uma sessao
+  (a IA so' conhece o que o core promoveu) e NUNCA a restrita — mesmo que alguem peca pelo id."
+  [repo-sessoes objeto-store ente-id segmento-id]
+  (when-let [seg (repo-sessoes-comp/buscar-segmento repo-sessoes ente-id segmento-id)]
+    (cond
+      (nil? (:sessao-id seg))   nil
+      (:acesso-restrito seg)    :restrita
+      :else (when-let [in (objeto-store-comp/abrir objeto-store (:container-bruto-uri seg))]
+              {:stream in :audio-hash (:audio-hash seg)}))))
 
 (def ^:private teto-de-janelas
   "Teto de intervalos devolvidos por `janelas-de-exercicio`. Cada janela vira um ramo de OR sobre `data` no
@@ -195,7 +265,7 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
-           keycloak sessao identidade-existe?]
+           keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -208,7 +278,9 @@
         ;; participacao (prazo LAI) e legislativo (Onda B Slice 5, `agora` do gatilho de emissao do parecer,
         ;; review MEDIUM fe-11-parecer) usam a MESMA instancia; determinismo em teste vem de cada fragmento de
         ;; rotas receber `relogio-fixo` no lugar, direto.
-        relogio-producao (tempo/relogio-sistema)
+        ;; `:relogio` nos deps (teste) substitui o do sistema em todos os fragmentos que recebem este — sem ele a
+        ;; data de um teste de rota vira a data de hoje (previa de requerimento quebrou ao virar o dia).
+        relogio-producao (or relogio (tempo/relogio-sistema))
         ;; cross-modulo via inversao de dependencia: o host fecha sobre o Repo de sessoes e expoe a consulta-fato
         ;; que o endpoint SSE (G3) E a vertical de votacao ao vivo (F4 Slice 3, no legislativo) precisam p/
         ;; autorizar (a RLS escopa por tenant). Os modulos chamam por esta fn, nunca importam sessoes (§22.10).
@@ -397,7 +469,14 @@
         ;; (:absoluta-h/:ociosa-min) — mesmo padrao `or` de `keycloak`/`info-ente` acima (fallback pra
         ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
         ;; ela mesma).
-        sessao (or sessao (:sessao (config/carregar)))]
+        sessao (or sessao (:sessao (config/carregar)))
+        integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
+        ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
+        ;; responde indisponivel (R-IA-1), nunca 500.
+        ia (plataforma-ia/plataforma-ia integracao-ia)
+        ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
+        ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
+        ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
           ["/eu"                :get [auth http/eu] :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
@@ -418,14 +497,25 @@
                                    ;; Etapa 5 fatia 5: os dois ports da folha, ja' construidos+decorados acima.
                                    :serializador-folha serializador-folha-fn
                                    :renderizador-pdf renderizador-pdf-fn
-                                   :nome-na-casa nome-na-casa-fn}))
+                                   :nome-na-casa nome-na-casa-fn
+                                   :ler-transcricao ler-transcricao-fn
+                                   :ler-rascunho-ata ler-rascunho-ata-fn}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
                                        :pode-ver-votacao-aberta? pode-ver-votacao-aberta?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
+                                       :resolver-autor (fn [ente-id identidade-id]
+                                                         (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                                        :resolver-comissoes resolver-comissoes-fn
+                                       ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
+                                       :nome-na-casa nome-na-casa-fn
+                                       ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
+                                       :colegas-da-casa (fn [ente-id]
+                                                          (colegas-da-casa repo-cadastros ente-id
+                                                                           (tempo/hoje (tempo/relogio-sistema)
+                                                                                       tempo/zona-civil-padrao)))
                                        :vereador-vinculado? vereador-vinculado?
                                        ;; sec MEDIUM-2 FIX: gate #2 — a rota da Mesa so' registra voto nominal
                                        ;; para quem compoe a Casa com mandato vigente (roster). Mesmo seam
@@ -437,8 +527,20 @@
                                        ;; ja' injetado em sessoes (hoje no fuso civil), mesma inversao de
                                        ;; dependencia de consultar-sessao (legislativo NAO importa cadastros, §22.10).
                                        :membros-da-casa membros-da-casa
+                                       :ler-rascunho-resumo ler-rascunho-resumo-fn
+                                       ;; Faixa B / B.7: o copiloto do requerimento — o rascunho da IA para o formulario
+                                       :copiloto-requerimento (fn [ente-id pedido] (plataforma-ia/rascunhar-requerimento ia ente-id pedido))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
+        ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
+        (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
+                                                             :repo-sessoes repo-sessoes})}))
+        ;; Faixa B / B.4 (ADR-0011): a curadoria das normas de referencia (importar, conferir, publicar). O municipio da
+        ;; Casa (a LOM e' do Municipio) vem de cadastros pelo host — normas nunca importa cadastros (§22.10).
+        (into (normas-http/rotas {:auth auth :repo-normas repo-normas
+                                   :municipio-do-ente (fn [ente-id] (:municipio-ibge (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))}))
+        ;; Faixa B / B.3: a tela pergunta ao assistente da Casa (credencial delegada por execucao, ADR-0010).
+        (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia :repo-integracao-ia repo-integracao-ia}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
                                      :identidade-existe? identidade-existe?}))
@@ -457,9 +559,66 @@
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo
                                    :esic-cumprimento esic-cumprimento
-                                   :relatores-pendentes relatores-pendentes}))
+                                   :relatores-pendentes relatores-pendentes
+                                   :relogio relogio-producao
+                                   ;; Faixa B / B.9 (ADR-0014): o painel da IA da Casa — o orcamento (integracao_ia), o
+                                   ;; consumo (satelite) e os desfechos (notas do legislativo, propostas da integracao)
+                                   :ia (when repo-integracao-ia
+                                         {:orcamento-ia (fn [ente-id] (repo-ia-comp/orcamento-atual repo-integracao-ia ente-id))
+                                          :consumo-ia (fn [ente-id mes] (plataforma-ia/consumo ia ente-id mes))
+                                          :desfechos-ia (fn [ente-id desde ate]
+                                                          {:notas (repo-legislativo-comp/contar-notas-tecnicas
+                                                                   repo-legislativo ente-id desde ate)
+                                                           :propostas (repo-ia-comp/contar-propostas
+                                                                       repo-integracao-ia ente-id desde ate)})})}))
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
         (into (auth-http/rotas {:info-ente info-ente :keycloak keycloak
                                 :idp idp :repo-identidade repo-identidade
                                 :relogio relogio-producao :sessao sessao}))
-        (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp})))))
+        (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp}))
+        ;; Faixa A / A.3 (ADR-0008): a fronteira de SERVICO com o satelite de IA. So' entra com o Repo (os testes de
+        ;; outras verticais montam sem ele). Os seams abaixo sao o unico caminho da IA ate' sessoes/cadastros.
+        (into (if repo-integracao-ia
+                (integracao-ia-http/rotas
+                 {:repo-integracao-ia repo-integracao-ia
+                  :segredo (:segredo integracao-ia)
+                  :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
+                  :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
+                  :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
+                  :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!
+                  :ata-para-ia (fn [ente-id sessao-id versao] (ata-para-ia repo-sessoes ente-id sessao-id versao))
+                  ;; Faixa A / A.8: o resumo cidadao — o texto publico da proposicao e o ponteiro do rascunho (legislativo)
+                  :registrar-resumo repo-legislativo-comp/registrar-resumo-em-tx!
+                  :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))
+                  ;; Faixa B / B.4b: os dispositivos da versao vigente de uma norma da Casa (normas), para o indice
+                  :dispositivos-vigentes (fn [ente-id vid] (repo-normas-comp/dispositivos-vigentes repo-normas ente-id vid))
+                  ;; Faixa B / B.8 (ADR-0013): a credencial do agente institucional — so' com a concessao do admin_ente
+                  :emitir-credencial-institucional (fn [ente-id agente]
+                                                     (auten/emitir-credencial-institucional! repo-identidade ente-id agente))
+                  :revogar-credencial-institucional (fn [_ente-id execucao-id]
+                                                      (repo-identidade-comp/revogar-credencial-agente! repo-identidade execucao-id))})
+                #{}))
+        ;; Faixa B / B.3 (ADR-0009/0010): o servidor MCP do catalogo de acoes — so' com a credencial delegada do agente.
+        ;; B.6 (ADR-0012): as MESMAS deps servem a confirmacao da proposta de ato na tela (a entrada roda como a pessoa).
+        (into (if repo-integracao-ia
+                (let [deps-catalogo
+                      {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
+                       :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       :registrar-chamada (catalogo/registrador repo-integracao-ia)
+                       ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
+                       :repo-normas repo-normas
+                       :buscar-dispositivos-ia (fn [ente-id consulta limite]
+                                                 (:resultados (plataforma-ia/buscar ia ente-id {:consulta consulta
+                                                                                               :tipos ["dispositivo"]
+                                                                                               :limite limite})))
+                       ;; B.6: o requerimento do vereador (o primeiro ato) e os seams da proposta
+                       :resolver-autor (fn [ente-id identidade-id]
+                                         (resolver-autor-vereador repo-cadastros ente-id identidade-id))
+                       :resolver-municipio resolver-municipio
+                       :relogio relogio-producao
+                       :propor (propostas/propositor repo-integracao-ia relogio-producao)
+                       :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]
+                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo})
+                        (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
+                                          :deps-catalogo deps-catalogo})))
+                #{})))))

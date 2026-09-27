@@ -93,7 +93,7 @@
 
 (def ^:private cols-fala
   [:id :ente_id :sessao_id :inscricao_id :orador_id :tipo_fala :fala_pai_id :fase :proposicao_ref_id
-   :iniciou_em :encerrou_em :tempo_efetivamente_usado_segundos :lock_version])
+   :iniciou_em :encerrou_em :tempo_efetivamente_usado_segundos :tempo_concedido_segundos :lock_version])
 
 (def ^:private cols-cronometro
   [:id :ente_id :fala_id :tipo :ocorrido_em :segundos_adicionais])
@@ -108,25 +108,97 @@
                            :ocorrido_em ocorrido-em :segundos_adicionais segundos-adicionais
                            :created_by created-by :efetivado_em [:now]}]})))
 
+(defn tempo-regimental
+  "Segundos que o regimento DESTA Casa da' a um `tipo-fala` na `fase`, ou nil (a Casa nao configurou — a fala
+  corre sem limite, como antes da mig 0081). Le as (no maximo duas) linhas candidatas — a da fase e a generica
+  (fase NULL) — e deixa `logic/escolher-tempo-regimental` (pura) decidir: a especifica vence. RLS isola."
+  [tx ente-id fase tipo-fala]
+  (logic/escolher-tempo-regimental
+   (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:fase :segundos] :from [:sessoes.tempo_regimental]
+                   :where [:and [:= :ente_id ente-id] [:= :tipo_fala tipo-fala]
+                           [:or [:= :fase fase] [:= :fase nil]]]})))))
+
+(defn definir-tempo-regimental!
+  "Define o tempo regimental de (fase, tipo-fala) nesta Casa — `fase` nil = a linha generica ('em qualquer
+  fase'). Substitui a linha anterior do MESMO par (DELETE + INSERT na mesma tx, em vez de ON CONFLICT: o indice
+  unico e' de EXPRESSAO, COALESCE(fase,''), e a inferencia do ON CONFLICT com parametro nao casa com ele).
+  Valida o vocabulario e segundos > 0 antes do CHECK do banco (fail-closed). Devolve {:segundos}."
+  [tx {:keys [ente-id fase tipo-fala segundos referencia-normativa created-by]}]
+  (logic/validar-tipo-fala tipo-fala)
+  (when (some? fase) (logic/validar-fase fase))
+  (when-not (and (int? segundos) (pos? segundos))
+    (throw (ex-info "definir-tempo-regimental!: segundos deve ser inteiro > 0" {:segundos segundos})))
+  (jdbc/execute-one! tx
+    (sql/format {:delete-from :sessoes.tempo_regimental
+                 :where [:and [:= :ente_id ente-id] [:= :tipo_fala tipo-fala]
+                         [:= :fase fase]]}))  ; fase nil -> IS NULL (HoneySQL)
+  (jdbc/execute-one! tx
+    (sql/format {:insert-into :sessoes.tempo_regimental
+                 :values [{:ente_id ente-id :fase fase :tipo_fala tipo-fala :segundos segundos
+                           :referencia_normativa referencia-normativa :created_by created-by
+                           :efetivado_em [:now]}]}))
+  {:segundos segundos})
+
+(defn listar-tempos-regimentais
+  "A tabela de tempos regimentais DESTA Casa (tela \"Tempos da tribuna\"): [{:fase :tipo-fala :segundos
+  :referencia-normativa}], por tipo de fala e, dentro dele, a linha generica (fase nil) antes das especificas.
+  Vazia = a Casa nao configurou (as falas correm sem limite). RLS isola."
+  [tx ente-id]
+  (->> (jdbc/execute! tx
+         (sql/format {:select [:fase :tipo_fala :segundos :referencia_normativa]
+                      :from [:sessoes.tempo_regimental]
+                      :where [:= :ente_id ente-id]}))
+       comum/linhas->kebab
+       (sort-by (juxt :tipo-fala #(or (:fase %) "")))
+       vec))
+
+(defn substituir-tempos-regimentais!
+  "Troca a tabela INTEIRA de tempos da Casa pela `itens` ([{:fase :tipo-fala :segundos :referencia-normativa?}])
+  — o que nao veio, sai (a tela salva a tabela toda; vazia = sem limite). DELETE + INSERT na MESMA tx do
+  chamador: uma fala iniciada ao mesmo tempo ve a tabela velha ou a nova, nunca metade. Valida a tabela
+  (`logic/validar-tempos-regimentais!`) antes de tocar o banco. As falas ja' iniciadas nao mudam: o limite foi
+  fotografado nelas (mig 0081). Devolve a tabela como ficou."
+  [tx ente-id itens created-by]
+  (logic/validar-tempos-regimentais! itens)
+  (jdbc/execute-one! tx
+    (sql/format {:delete-from :sessoes.tempo_regimental :where [:= :ente_id ente-id]}))
+  (when (seq itens)
+    (jdbc/execute-one! tx
+      (sql/format {:insert-into :sessoes.tempo_regimental
+                   :values (for [{:keys [fase tipo-fala segundos referencia-normativa]} itens]
+                             {:ente_id ente-id :fase fase :tipo_fala tipo-fala :segundos segundos
+                              :referencia_normativa referencia-normativa :created_by created-by
+                              :efetivado_em [:now]})})))
+  (listar-tempos-regimentais tx ente-id))
+
 (defn iniciar-fala!
   "Inicia uma fala (execucao): INSERE a fala (em curso) e LOGA o evento 'iniciada' (ocorrido_em = iniciou-em),
   atomico. Valida tipo-fala/fase + nil-guard de auditoria (fail-closed); a coerencia aparte<->fala_pai_id e' o
-  CHECK da migration. `inscricao-id`/`fala-pai-id`/`proposicao-ref-id` opcionais. Devolve {:id}."
+  CHECK da migration. `inscricao-id`/`fala-pai-id`/`proposicao-ref-id` opcionais.
+
+  TEMPO-LIMITE (mig 0081): `tempo-concedido-segundos` informado pela Mesa vence; ausente, vale o regimental da
+  Casa para (fase, tipo) (`tempo-regimental`, na MESMA tx); nenhum dos dois = nil (sem limite). O valor e'
+  FOTOGRAFADO na fala — reconfigurar a Casa depois nao muda a fala de quem ja' esta na tribuna. Devolve
+  {:id :tempo-concedido-segundos}."
   [tx {:keys [id ente-id sessao-id inscricao-id orador-id tipo-fala fala-pai-id fase proposicao-ref-id
-              iniciou-em created-by]}]
+              iniciou-em created-by tempo-concedido-segundos]}]
   (logic/validar-tipo-fala tipo-fala)
   (logic/validar-fase fase)
   (when (nil? created-by)
     (throw (ex-info "iniciar-fala!: created-by e' obrigatorio (trilha de quem registrou a fala)" {:id id})))
-  (jdbc/execute-one! tx
-    (sql/format {:insert-into :sessoes.fala_executada
-                 :values [{:id id :ente_id ente-id :sessao_id sessao-id :inscricao_id inscricao-id
-                           :orador_id orador-id :tipo_fala tipo-fala :fala_pai_id fala-pai-id :fase fase
-                           :proposicao_ref_id proposicao-ref-id :iniciou_em iniciou-em
-                           :created_by created-by :efetivado_em [:now]}]}))
-  (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "iniciada" :ocorrido-em iniciou-em
-                         :created-by created-by})
-  {:id id})
+  (let [concedido (or tempo-concedido-segundos (tempo-regimental tx ente-id fase tipo-fala))]
+    (jdbc/execute-one! tx
+      (sql/format {:insert-into :sessoes.fala_executada
+                   :values [{:id id :ente_id ente-id :sessao_id sessao-id :inscricao_id inscricao-id
+                             :orador_id orador-id :tipo_fala tipo-fala :fala_pai_id fala-pai-id :fase fase
+                             :proposicao_ref_id proposicao-ref-id :iniciou_em iniciou-em
+                             :tempo_concedido_segundos concedido
+                             :created_by created-by :efetivado_em [:now]}]}))
+    (logar-cronometro! tx {:ente-id ente-id :fala-id id :tipo "iniciada" :ocorrido-em iniciou-em
+                           :created-by created-by})
+    {:id id :tempo-concedido-segundos concedido}))
 
 (defn registrar-evento-cronometro!
   "Registra um evento MANUAL do cronometro (pausada|retomada|aparte_concedido|tempo_adicional_concedido) —

@@ -25,6 +25,7 @@ import { PainelTribuna } from "./painel-tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
 import { FormItemPauta } from "../form-item-pauta";
 import { PainelApreciacao } from "./painel-apreciacao";
+import { PainelLeituraAta } from "./painel-leitura-ata";
 import { PainelAtosMesa, type MateriaDaPauta } from "./painel-atos-mesa";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import "./conduzir.css";
@@ -331,6 +332,11 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
             </div>
           </div>
         </section>
+
+        {/* Faixa A / A.7 — a leitura da ata anterior abre o Expediente; depois de encerrada, fica o registro */}
+        {sessao.estado !== "agendada" && sessao.estado !== "nao_realizada" && (
+          <PainelLeituraAta sessaoId={sessao.id} token={token} />
+        )}
 
         {sessao.estado === "aberta" && (
           <PainelVotacao

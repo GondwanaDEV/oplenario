@@ -125,3 +125,27 @@ describe("Tribuna — chave de enum não chega ao telão", () => {
     expect(texto).not.toMatch(/Orador com a palavra/);
   });
 });
+
+describe("Tribuna — tempo-limite da fala no telão (mig 0081)", () => {
+  const comLimite = { ...oradorAna, tempoConcedidoSegundos: 120 };
+
+  it("com limite: contagem regressiva e 'Restantes de'", () => {
+    const { container } = render(<Tribuna estado={estadoBase({ oradorAtual: comLimite })} agora={Date.parse("2026-09-01T23:00:30Z")} />);
+    const timer = container.querySelector("[role=timer]");
+    expect(timer?.textContent).toBe("01:30");
+    expect(container.textContent).toContain("Restantes de 02:00");
+  });
+
+  it("esgotado: 'Tempo esgotado' e o excedido — o mesmo número da TV e da Mesa", () => {
+    const { container } = render(<Tribuna estado={estadoBase({ oradorAtual: comLimite })} agora={Date.parse("2026-09-01T23:02:15Z")} />);
+    expect(container.querySelector("[role=timer]")?.textContent).toBe("+00:15");
+    expect(container.querySelector("[role=timer]")?.className).toContain("esgotado");
+    expect(container.textContent).toContain("Tempo esgotado");
+  });
+
+  it("sem limite: continua só contando", () => {
+    const { container } = render(<Tribuna estado={estadoBase({ oradorAtual: oradorAna })} agora={Date.parse("2026-09-01T23:02:15Z")} />);
+    expect(container.querySelector("[role=timer]")?.textContent).toBe("02:15");
+    expect(container.textContent).toContain("No uso da palavra");
+  });
+});

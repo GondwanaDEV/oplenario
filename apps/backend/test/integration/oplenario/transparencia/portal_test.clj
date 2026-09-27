@@ -28,6 +28,7 @@
             [oplenario.motor.components.registro-fatos :as rf]
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
+            [oplenario.transparencia.db.materia]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.diplomat.consumers :as consumers]
             [oplenario.transparencia.suporte-presenca :as sp])
@@ -471,3 +472,28 @@
           "a presenca chegou via o relay REAL (tipos-consumidos + dispatch), nao so' via a fn isolada")
       (is (= 1 (:sessoes-com-chamada resumo))
           "o denominador tambem conta a sessao chegada pelo relay"))))
+
+;; ---------- A.8b: publicar-resumo! (Repo) -> proposicao.resumo-publicado -> ficha publica ----------
+
+(deftest resumo-publicado-chega-a-ficha-publica-e-so-avanca
+  (let [ente (random-uuid)
+        {pid :id} (legislativo-repo/protocolar! *repo-legislativo* ente
+                    {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+                     :municipio-nome "Fortaleza" :ementa "Institui hortas comunitarias" :texto "Art. 1o X."})]
+    (drenar!)
+    (is (nil? (:resumo-texto (transparencia-repo/buscar-materia *repo-transparencia* ente pid))) "sem resumo ainda")
+    (legislativo-repo/publicar-resumo! *repo-legislativo* ente
+      {:proposicao-id pid :texto "Cria hortas nos terrenos sem uso." :publicado-por (random-uuid)})
+    (legislativo-repo/publicar-resumo! *repo-legislativo* ente
+      {:proposicao-id pid :texto "Cria hortas comunitarias nos terrenos publicos sem uso." :publicado-por (random-uuid)})
+    (drenar!)
+    (let [m (transparencia-repo/buscar-materia *repo-transparencia* ente pid)]
+      (is (= ["Cria hortas comunitarias nos terrenos publicos sem uso." 2 false]
+             ((juxt :resumo-texto :resumo-versao :resumo-gerado-com-ia) m)))
+      (is (some? (:resumo-publicado-em m))))
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx] (oplenario.transparencia.db.materia/atualizar-resumo!
+                 tx {:ente-id ente :proposicao-id pid :versao 1 :texto "velho" :gerado-com-ia false
+                     :publicado-em (java.time.Instant/now)})))
+    (is (= 2 (:resumo-versao (transparencia-repo/buscar-materia *repo-transparencia* ente pid)))
+        "reentrega de versao velha nao volta atras")))

@@ -57,6 +57,30 @@
    ["SegmentoOut" out/SegmentoOut]
    ["SegmentosOut" out/SegmentosOut]
    ["VinculoGravacaoOut" out/VinculoGravacaoOut]
+   ;; Faixa A / A.2 — a fila de gravacoes sem sessao. Folhas ANTES do agregado (campos aninhados).
+   ["SugestaoSessaoOut" out/SugestaoSessaoOut]
+   ["GravacaoPendenteOut" out/GravacaoPendenteOut]
+   ["GravacoesPendentesOut" out/GravacoesPendentesOut]
+   ;; Faixa A / A.3 — a transcricao. Folhas ANTES dos agregados.
+   ["TranscricaoPonteiroOut" out/TranscricaoPonteiroOut]
+   ["TranscricoesOut" out/TranscricoesOut]
+   ["TrechoTranscricaoOut" out/TrechoTranscricaoOut]
+   ["TranscricaoConteudoOut" out/TranscricaoConteudoOut]
+   ;; Faixa A / A.6 — a ata. Folhas ANTES dos agregados.
+   ["AtaVersaoOut" out/AtaVersaoOut]
+   ["AtaAtualOut" out/AtaAtualOut]
+   ["AtaRascunhoOut" out/AtaRascunhoOut]
+   ["AtaSessaoOut" out/AtaSessaoOut]
+   ["AtaReciboOut" out/AtaReciboOut]
+   ["CitacaoRascunhoOut" out/CitacaoRascunhoOut]
+   ["IncertezaRascunhoOut" out/IncertezaRascunhoOut]
+   ["AtaRascunhoConteudoOut" out/AtaRascunhoConteudoOut]
+   ["SolicitacaoRascunhoOut" out/SolicitacaoRascunhoOut]
+   ;; Faixa A / A.7 — a leitura da ata anterior. Folhas antes do agregado.
+   ["SessaoAnteriorOut" out/SessaoAnteriorOut]
+   ["AtaParaLerOut" out/AtaParaLerOut]
+   ["LeituraAtaRegistradaOut" out/LeituraAtaRegistradaOut]
+   ["LeituraAtaOut" out/LeituraAtaOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]
@@ -91,7 +115,10 @@
    ["AssiduidadePorVereadorOut" out/AssiduidadePorVereadorOut]
    ["AssiduidadeDetalheLinhaOut" out/AssiduidadeDetalheLinhaOut]
    ["AssiduidadeTotaisOut" out/AssiduidadeTotaisOut]
-   ["AssiduidadeOut" out/AssiduidadeOut]])
+   ["AssiduidadeOut" out/AssiduidadeOut]
+   ;; Tela "Tempos da tribuna" — TempoRegimentalOut ANTES de TemposRegimentaisOut (campo :itens aninhado).
+   ["TempoRegimentalOut" out/TempoRegimentalOut]
+   ["TemposRegimentaisOut" out/TemposRegimentaisOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

@@ -1,7 +1,8 @@
 /* Chrome da tela "Agendar sessão" (/agendar-sessao, interno). Tokens + chassi (.btn, .bloco, .envelope,
    .chip) vêm de globals.css/chassi.css — aqui só o desta superfície. */
 
-.agendar-sessao { padding: clamp(1.2rem, 3vw, 2rem) 0 4rem; display: grid; gap: 1.2rem; align-content: start; }
+/* só topo/base: o recuo lateral é o do .envelope (chassi) — um `padding` inteiro aqui o zerava no celular */
+.agendar-sessao { padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem; display: grid; gap: 1.2rem; align-content: start; }
 
 .agendar-sessao .cabecalho .eyebrow {
   font-family: var(--mono); font-size: var(--t-12); letter-spacing: 0.1em; text-transform: uppercase;

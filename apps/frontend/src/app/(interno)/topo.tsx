@@ -27,12 +27,34 @@ import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
 import "./topo.css";
 
-const DESTINOS_NAV = [
+const DESTINOS_NAV: { rotulo: string; href: string; papel?: string }[] = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
+  // Faixa A / A.5 da Track IA — busca intra-câmara (proposições + o que foi dito em plenário). Gated "secretario"
+  // (GuardSecretaria + exige-papel no backend). Logo depois da Central: é a outra porta de entrada da secretaria.
+  { rotulo: "Busca", href: "/busca" },
+  // Faixa B / B.3 da Track IA — o assistente da Casa: pergunta em palavras, ele consulta o sistema com as permissoes de
+  // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
+  // aceita secretario ou vereador).
+  { rotulo: "Assistente", href: "/assistente" },
+  // Faixa B / B.4 — as normas de referencia (LOM, Regimento, leis) que o assistente consulta; a secretaria importa e
+  // confere. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Normas", href: "/normas" },
+  // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
+  // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Conferências", href: "/conferencias" },
+  // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
+  // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
+  { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
+  // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
+  // é a outra metade do mesmo trabalho. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Recebimentos", href: "/recebimentos" },
+  // Faixa A / A.2 da Track IA — gravações enviadas pelo PC da transmissão que ainda não têm sessão. Gated
+  // "secretario" (GuardSecretaria + exige-papel no backend). Vincular leva a gravação à transcrição e à ata.
+  { rotulo: "Gravações", href: "/gravacoes" },
   { rotulo: "Proposições", href: "/proposicoes" },
   // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
   // Proposições (documento administrativo não é matéria legislativa).
@@ -42,6 +64,10 @@ const DESTINOS_NAV = [
   // Agendar sessão (GAP docs/20 → tela de servidor): cria a sessão no estado agendada. Gated "secretario"
   // (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota ficaria órfã.
   { rotulo: "Agendar sessão", href: "/agendar-sessao" },
+  // Tempos da tribuna (pedido do stakeholder: "3 min e adicionais de 1 min") — a tabela de tempos regimentais
+  // da Casa. Gated "secretario" (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota
+  // ficaria órfã.
+  { rotulo: "Tempos da tribuna", href: "/tempos-da-tribuna" },
   // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
   { rotulo: "Vereadores", href: "/cadastros/vereadores" },
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
@@ -74,7 +100,7 @@ export function TopoInterno({ area }: { area: string }) {
         <div className="topo-sep" aria-hidden="true" />
         <span className="area-tag">{area}</span>
         <nav className="nav-interna" aria-label="Navegação interna">
-          {DESTINOS_NAV.map((d) => (
+          {DESTINOS_NAV.filter((d) => !d.papel || (dados?.papeis ?? []).includes(d.papel)).map((d) => (
             <Link
               key={d.href}
               href={comToken(d.href, token)}

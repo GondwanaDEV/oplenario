@@ -25,6 +25,10 @@
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
+            [oplenario.legislativo.db.recebimento :as recebimento]
+            [oplenario.legislativo.db.nota-tecnica :as nota-tecnica]
+            [oplenario.legislativo.db.resumo :as resumo]
+            [oplenario.legislativo.db.subscricao :as subscricao]
             [oplenario.legislativo.db.texto-versao :as texto]
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
@@ -41,6 +45,8 @@
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe acoes atomicamente.")
   (protocolar! [this ente-id proposicao] "Gate eixo H: numera (gapless) + URN + insere, atomico.")
   (buscar-proposicao [this ente-id id])
+  (buscar-proposicao-por-numero [this ente-id tipo ano sequencial]
+    "B.1 (catalogo): a proposicao por especie + ano + sequencial ('PL 12/2026'), ou nil.")
   (resumos-de-proposicoes [this ente-id ids]
     "Modo TV (docs/22): {id -> {:tipo :ano :sequencial :ementa :autor-texto}} de um LOTE, numa tx. Id fora do tenant nao
      volta. Consumido por `sessoes` (pauta) via seam injetado pelo host — sessoes nunca importa legislativo.")
@@ -61,6 +67,28 @@
   (buscar-proposicao-detalhe [this ente-id id]
     "{:proposicao ... :texto (a linha de texto/vigente, ou nil)}, uma leitura. `:proposicao` carrega
      `:aprovada` (Fatia 2) na MESMA tx — ver proposicao-aprovada-em-votacao? logo abaixo.")
+  (resumo-da-proposicao [this ente-id proposicao-id]
+    "Faixa A / A.8: {:proposicao :texto-base-sha256 :rascunho :atual :versoes} numa tx — o resumo cidadao da materia
+     (o ultimo rascunho da IA, a versao publicada e o historico) e a versao ATUAL do texto, para dizer o que ficou
+     para tras. nil = proposicao inexistente.")
+  (buscar-rascunho-resumo-pronto [this ente-id proposicao-id rascunho-id]
+    "O ponteiro 'pronto' do rascunho `rascunho-id` desta proposicao, ou nil.")
+  (publicar-resumo! [this ente-id m]
+    "Publica a proxima versao do resumo cidadao. Com :rascunho-id, o ponteiro TEM de ser um rascunho pronto desta
+     proposicao (modelo, prompt e a versao do texto vem dele); sem, a versao do texto e' a vigente. Numa tx. nil =
+     proposicao inexistente.")
+  (registrar-nota-tecnica! [this ente-id m]
+    "Faixa B / B.8 (ADR-0013): o rascunho de nota tecnica do agente institucional ({:proposicao-id :agente :execucao-id
+     :texto :citacoes :paragrafos-sem-fonte :incerteza :motivos-incerteza :modelo-llm-id}). nil = proposicao inexistente
+     nesta Casa; nota ja' existente (mesma proposicao e agente) volta como esta', com `:nova?` false.")
+  (notas-tecnicas [this ente-id estado limite] "B.8: a fila da secretaria (estado nil = todas), mais antigas primeiro.")
+  (nota-tecnica [this ente-id id] "B.8: uma nota, com a identificacao da proposicao; nil = inexistente nesta Casa.")
+  (decidir-nota-tecnica! [this ente-id id decisao]
+    "B.8: a secretaria aproveita ou descarta uma nota PENDENTE; nil = inexistente ou ja' decidida.")
+  (contar-notas-tecnicas [this ente-id desde ate] "B.9: {estado n} das notas criadas em [desde, ate).")
+  (texto-para-ia [this ente-id proposicao-id]
+    "O texto PUBLICO da proposicao para a IA redigir o resumo (ADR-0008): tipo, numero, ementa, autoria, texto vigente
+     inline e o `texto-sha256` da versao. nil = inexistente.")
   (aprovacao-vigente [this ente-id proposicao-id]
     "T3-A2 — a votacao que aprovou esta materia: {:votacao-id :texto-versao-id}, ou nil. O
      `:texto-versao-id` e' o CONTEUDO deliberado (congelado na abertura, mig 0075) e pode ser nil em
@@ -108,6 +136,23 @@
   (criar-transicao! [this ente-id transicao])
   (transicionar! [this ente-id registro args] "Engine: guard via motor + historico + muda estado, 1 tx.")
   (historico-da-proposicao [this ente-id proposicao-id])
+  (receber-movimentacao! [this ente-id registro args]
+    "Fatia 2b: recebe e ASSINA a movimentacao pendente (db/recebimento/receber!) + emite proposicao.recebida,
+     na MESMA tx. `args` = {:proposicao-id :transicao-id :ator :agora :assinador}.")
+  (recebimentos-pendentes [this ente-id] "Fatia 2b: as materias da Casa em carga ainda nao recebida.")
+  ;; fatia 2c — requerimento COLETIVO: proposta que espera subscricoes antes do protocolo (db/subscricao)
+  (criar-proposta-requerimento! [this ente-id proposta]
+    "Grava a proposta (texto congelado) + um convite por coautor, 1 tx.")
+  (buscar-proposta-requerimento [this ente-id id vereador-id]
+    "A proposta + subscricoes, so' para quem participa dela (autor ou convidado); senao nil.")
+  (responder-subscricao! [this ente-id resposta]
+    "O coautor confirma (assina) ou recusa. `resposta` = {:proposta-id :vereador-id :identidade-id :acao :assinador}.")
+  (protocolar-proposta-requerimento! [this ente-id proposta-id autor-vereador-id p]
+    "Trava a proposta do autor, protocola `p` (mesmo contrato de protocolar!) e fecha a proposta + convites
+     pendentes ('nao consta'), 1 tx. nil = proposta inexistente/de outro autor. Devolve o de protocolar! +
+     `:coautores` (os que constam).")
+  (convites-de-subscricao [this ente-id vereador-id] "Convites pendentes para este vereador.")
+  (propostas-abertas-do-autor [this ente-id vereador-id] "Propostas deste autor ainda esperando subscricoes.")
   (tramitacao-da-proposicao [this ente-id proposicao-id limite]
     "Fatia 3 — tudo o que a tela de tramitacao precisa, NUMA UNICA tx (mesma disciplina de
      ficha-completa-da-proposicao). Diferente daquela, aqui as leituras sao DEPENDENTES: as candidatas e o
@@ -371,6 +416,46 @@
         (vec linhas))
       truncado?])))
 
+(defn- protocolar-na-tx!
+  "O corpo de `protocolar!` sobre uma tx JA' ABERTA — para compor o protocolo com outra escrita na MESMA tx
+  (fatia 2c: o protocolo da proposta de requerimento fecha a proposta e os convites junto com a numeracao)."
+  [bus tx ente-id p]
+  (when-let [corpo (:texto p)]
+    (when (= :objeto-store (logic/decidir-armazenamento corpo))
+      (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
+                      {:tipo :validacao/invalido :campos [:texto]}))))
+  (let [r (proposicao/protocolar! tx (assoc p :ente-id ente-id))
+        ;; fatia 2a: o requerimento do VEREADOR chega com `:assinador` + `:assinado-por` — assina os
+        ;; bytes do texto protocolado e grava o selo no MESMO insert da versao (mig 0082). Sem
+        ;; assinador (o protocolo da Mesa), a versao nasce sem assinatura do autor, como antes.
+        assinatura (when-let [assinador (:assinador p)]
+                     (when-not (:texto p)
+                       (throw (ex-info "protocolar!: assinatura exige texto (nao ha' o que assinar)"
+                                       {:tipo :validacao/invalido :campos [:texto]})))
+                     (assinador-icp/assinar assinador (.getBytes ^String (:texto p) "UTF-8")))]
+    (when-let [corpo (:texto p)]
+      (let [versao-id (random-uuid)]
+        (texto/nova-versao! tx (cond-> {:id versao-id :ente-id ente-id :proposicao-id (:id r)
+                                        :origem-versao "protocolo" :formato "markdown"
+                                        :texto-inline corpo :created-by (:created-by p)}
+                                 assinatura (assoc :assinatura-algoritmo (:algoritmo assinatura)
+                                                   :assinatura-b64 (:assinatura-b64 assinatura)
+                                                   :assinado-por (:assinado-por p))))
+        (texto/promover! tx {:ente-id ente-id :proposicao-id (:id r) :versao-id versao-id
+                              :updated-by (:created-by p) :lock-version 0})))
+    (producers/emitir-protocolada! bus tx ente-id
+      {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
+       ;; o estado vem do RETORNO de protocolar! (= a linha), nao de um literal: com o elo
+       ;; materia<->template (mig 0076) a materia nasce no `estado_inicial` do rito da Casa, que
+       ;; nao e' necessariamente 'protocolada'. Cravar a string aqui faria o evento publico
+       ;; AFIRMAR um estado que a linha nao tem — e o portal projeta deste evento (§22.10).
+       :urn-lex (:urn-lex r) :ementa (:ementa p) :estado (:estado r)
+       :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
+       ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
+       ;; o UUID/fromString do consumer (Onda E fatia 2).
+       :autor-id (some-> (:autor-id p) str)})
+    (cond-> r assinatura (assoc :assinatura assinatura))))
+
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
@@ -378,33 +463,10 @@
   ;; outbox-com-o-ato §22.9 E2 — a materia so aparece no portal se o protocolo commitou). O read-model de
   ;; transparencia projeta deste evento (§22.10: sem import/JOIN cross-modulo).
   (protocolar! [this ente-id p]
-    (transacao this ente-id
-      (fn [tx]
-        (when-let [corpo (:texto p)]
-          (when (= :objeto-store (logic/decidir-armazenamento corpo))
-            (throw (ex-info "texto excede o limite inline (32KB); objeto_store fora do escopo desta fatia"
-                            {:tipo :validacao/invalido :campos [:texto]}))))
-        (let [r (proposicao/protocolar! tx (assoc p :ente-id ente-id))]
-          (when-let [corpo (:texto p)]
-            (let [versao-id (random-uuid)]
-              (texto/nova-versao! tx {:id versao-id :ente-id ente-id :proposicao-id (:id r)
-                                       :origem-versao "protocolo" :formato "markdown"
-                                       :texto-inline corpo :created-by (:created-by p)})
-              (texto/promover! tx {:ente-id ente-id :proposicao-id (:id r) :versao-id versao-id
-                                    :updated-by (:created-by p) :lock-version 0})))
-          (producers/emitir-protocolada! bus tx ente-id
-            {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
-             ;; o estado vem do RETORNO de protocolar! (= a linha), nao de um literal: com o elo
-             ;; materia<->template (mig 0076) a materia nasce no `estado_inicial` do rito da Casa, que
-             ;; nao e' necessariamente 'protocolada'. Cravar a string aqui faria o evento publico
-             ;; AFIRMAR um estado que a linha nao tem — e o portal projeta deste evento (§22.10).
-             :urn-lex (:urn-lex r) :ementa (:ementa p) :estado (:estado r)
-             :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
-             ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
-             ;; o UUID/fromString do consumer (Onda E fatia 2).
-             :autor-id (some-> (:autor-id p) str)})
-          r))))
+    (transacao this ente-id #(protocolar-na-tx! bus % ente-id p)))
   (buscar-proposicao [this ente-id id] (transacao this ente-id #(proposicao/buscar % ente-id id)))
+  (buscar-proposicao-por-numero [this ente-id tipo ano sequencial]
+    (transacao this ente-id #(proposicao/buscar-por-numero % ente-id tipo ano sequencial)))
   (resumos-de-proposicoes [this ente-id ids]
     (if (empty? ids)
       {}
@@ -440,11 +502,15 @@
               (texto/promover! tx {:ente-id ente-id :proposicao-id (:id m) :versao-id versao-id
                                     :updated-by (:updated-by m) :lock-version 0})))
           (producers/emitir-editada! bus tx ente-id
-            {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
-             :autor-texto (:autor-texto r)
-             ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
-             ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
-             :autor-id (some-> (:autor-id r) str)})
+            (cond->
+              {:proposicao-id (:id r) :ementa (:ementa r) :autor-tipo (:autor-tipo r)
+               :autor-texto (:autor-texto r)
+               ;; some-> : (str nil) daria "" e quebraria o UUID/fromString do consumer (mesmo bug corrigido
+               ;; em protocolar! -> emitir-protocolada!, Onda E fatia 2).
+               :autor-id (some-> (:autor-id r) str)}
+              ;; A.8: so' quando o TEXTO mudou — o sinal que faz a IA redigir de novo o resumo cidadao (sem ele, uma
+              ;; edicao so' de texto teria a mesma chave de integracao da anterior e seria deduplicada)
+              (:texto m) (assoc :hash-texto (logic/sha256-hex (:texto m)))))
           r))))
   ;; Onda B Slice 2: leitura composta (proposicao + texto vigente) NUMA UNICA tx — mesmo snapshot MVCC
   ;; (mesma disciplina de listar-e-contar-proposicoes). Nao lanca quando a proposicao nao existe: devolve
@@ -457,6 +523,58 @@
       (fn [tx]
         {:proposicao (proposicao-com-aprovada tx ente-id id)
          :texto (texto/vigente tx ente-id id)})))
+  ;; Faixa A / A.8 — o resumo cidadao. Tudo na tx do tenant: a versao do texto e' lida junto do que se compara a ela.
+  (resumo-da-proposicao [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          {:proposicao p
+           :texto-base-sha256 (logic/texto-base-sha256 (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))
+           :rascunho (resumo/ultimo-rascunho tx ente-id proposicao-id)
+           :atual (resumo/atual tx ente-id proposicao-id)
+           :versoes (resumo/listar-versoes tx ente-id proposicao-id)}))))
+  (buscar-rascunho-resumo-pronto [this ente-id proposicao-id rascunho-id]
+    (transacao this ente-id #(resumo/buscar-pronto % ente-id proposicao-id rascunho-id)))
+  (publicar-resumo! [this ente-id {:keys [proposicao-id rascunho-id] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          (let [r (when rascunho-id
+                    (or (resumo/buscar-pronto tx ente-id proposicao-id rascunho-id)
+                        (throw (ex-info "o rascunho informado nao e' um rascunho pronto desta proposicao"
+                                        {:tipo :conflito/rascunho-desconhecido :proposicao-id proposicao-id}))))
+                v (resumo/publicar! tx
+                    (cond-> {:ente-id ente-id :proposicao-id proposicao-id :texto (:texto m)
+                             :conteudo-sha256 (logic/sha256-hex (:texto m)) :publicado-por (:publicado-por m)
+                             :origem-redacao "redigida_pela_casa"
+                             :texto-base-sha256 (logic/texto-base-sha256
+                                                 (:ementa p) (:texto-inline (texto/vigente tx ente-id proposicao-id)))}
+                      r (assoc :origem-redacao "gerada_automaticamente" :rascunho-id rascunho-id
+                               :modelo-llm-id (:modelo-llm-id r) :prompt-versao (:prompt-versao r)
+                               ;; o resumo descreve a versao do texto que a IA LEU, mesmo que o texto tenha mudado
+                               :texto-base-sha256 (:texto-base-sha256 r))))]
+            ;; A.8b: o portal projeta o resumo publicado a partir deste evento, na MESMA tx da versao
+            (producers/emitir-resumo-publicado! bus tx ente-id
+              {:proposicao-id proposicao-id :versao (:versao v) :texto (:texto m)
+               :origem-redacao (:origem-redacao v) :publicado-em (str (:publicado-em v))})
+            v)))))
+  ;; Faixa B / B.8 — a nota tecnica de conferencia (o rascunho do agente institucional e a decisao da secretaria)
+  (registrar-nota-tecnica! [this ente-id m]
+    (transacao this ente-id #(nota-tecnica/registrar! % (assoc m :ente-id ente-id))))
+  (notas-tecnicas [this ente-id estado limite]
+    (transacao this ente-id #(nota-tecnica/listar % ente-id estado limite)))
+  (nota-tecnica [this ente-id id] (transacao this ente-id #(nota-tecnica/buscar % ente-id id)))
+  (decidir-nota-tecnica! [this ente-id id decisao]
+    (transacao this ente-id #(nota-tecnica/decidir! % ente-id id decisao)))
+  (contar-notas-tecnicas [this ente-id desde ate]
+    (transacao this ente-id #(nota-tecnica/contar-por-estado % ente-id desde ate)))
+  (texto-para-ia [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+          (let [t (:texto-inline (texto/vigente tx ente-id proposicao-id))]
+            {:proposicao-id (:id p) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial p) :ementa (:ementa p)
+             :autor-texto (:autor-texto p) :texto t :texto-sha256 (logic/texto-base-sha256 (:ementa p) t)})))))
   ;; T3-A (guarda-autografo-votacao): o fato de aprovacao servido como LEITURA — o controller o consulta
   ;; antes de gerar o autografo, e o read-model o publica p/ o FE gatear o botao na mesma verdade.
   (proposicao-aprovada-em-votacao? [this ente-id proposicao-id]
@@ -495,7 +613,11 @@
            :tramitacao tramitacao :tramitacao-truncado tramitacao-truncado
            :apensadas apensadas :apensadas-truncado apensadas-truncado
            :emendas emendas :emendas-truncado emendas-truncado
-           :pareceres pareceres :pareceres-truncado pareceres-truncado}))))
+           :pareceres pareceres :pareceres-truncado pareceres-truncado
+           ;; fatia 2b: quem recebeu cada movimentacao (o controller anota o historico com o nome)
+           :recebimentos (recebimento/recebimentos-da-proposicao tx ente-id id)
+           ;; fatia 2c: os coautores que constam (subscricao confirmada antes do protocolo)
+           :coautores (subscricao/coautores-da-proposicao tx ente-id id)}))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))
@@ -523,6 +645,32 @@
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
+  (receber-movimentacao! [this ente-id registro args]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (recebimento/receber! tx (assoc args :registro registro :ente-id ente-id))]
+          (producers/emitir-recebida! bus tx ente-id
+            {:proposicao-id (:proposicao-id r) :movimentacao-id (:transicao-id r) :estado (:estado r)
+             :recebido-por (:recebido-por r) :recebido-em (str (:recebido-em r))
+             :assinatura-algoritmo (:assinatura-algoritmo r)})
+          r))))
+  (recebimentos-pendentes [this ente-id] (transacao this ente-id #(recebimento/listar-pendentes % ente-id)))
+  (criar-proposta-requerimento! [this ente-id m]
+    (transacao this ente-id #(subscricao/criar-proposta! % (assoc m :ente-id ente-id))))
+  (buscar-proposta-requerimento [this ente-id id vereador-id]
+    (transacao this ente-id #(subscricao/buscar-proposta % ente-id id vereador-id)))
+  (responder-subscricao! [this ente-id m]
+    (transacao this ente-id #(subscricao/responder! % (assoc m :ente-id ente-id))))
+  (protocolar-proposta-requerimento! [this ente-id proposta-id autor-vereador-id p]
+    (transacao this ente-id
+      (fn [tx]
+        (when (subscricao/travar-para-protocolo! tx ente-id proposta-id autor-vereador-id)
+          (let [r (protocolar-na-tx! bus tx ente-id p)]
+            (assoc r :coautores (subscricao/fechar-com-protocolo! tx ente-id proposta-id (:id r))))))))
+  (convites-de-subscricao [this ente-id vereador-id]
+    (transacao this ente-id #(subscricao/convites-pendentes % ente-id vereador-id)))
+  (propostas-abertas-do-autor [this ente-id vereador-id]
+    (transacao this ente-id #(subscricao/propostas-abertas-do-autor % ente-id vereador-id)))
   ;; Fatia 3 (a LEITURA da tramitacao). Sem rito (`template_id` NULL) NAO se consulta o template: nao ha'
   ;; o que consultar, e o historico tambem vem vazio por construcao (nada jamais tramitou). Lido `nil` na
   ;; proposicao, as outras tres leituras sao PULADAS — nao ha' recurso, nao ha' nada que dizer sobre ele.
@@ -538,7 +686,10 @@
            ;; deixar de valer. O custo de medir e' uma query indexada.
            :historico (if p (tram/historico-da-proposicao tx ente-id pid limite) [])
            :candidatas (if (and p tid) (tram/transicoes-do-estado tx ente-id tid (:estado p)) [])
-           :estado-no-template (when (and p tid) (proposicao/estado-no-template tx ente-id tid (:estado p)))}))))
+           :estado-no-template (when (and p tid) (proposicao/estado-no-template tx ente-id tid (:estado p)))
+           ;; fatia 2b: quem recebeu cada movimentacao + a carga que a materia espera AGORA (se houver)
+           :recebimentos (if p (recebimento/recebimentos-da-proposicao tx ente-id pid) {})
+           :recebimento-pendente (when p (recebimento/pendente tx ente-id pid))}))))
   ;; eixo D / F3.4 — emendas. aprovar! compoe (nova-versao rascunho + muda estado) numa UNICA tx do tenant.
   (criar-emenda! [this ente-id e] (transacao this ente-id #(emenda/criar! % (assoc e :ente-id ente-id))))
   (buscar-emenda [this ente-id id] (transacao this ente-id #(emenda/buscar % ente-id id)))
@@ -1090,3 +1241,9 @@
                              "docs/16-ledger-prontidao.md)")
                      {:id id :ente-id ente-id}))
         nil))))
+
+(defn registrar-resumo-em-tx!
+  "Faixa A / A.8 (ADR-0008): grava o fato que a IA devolveu sobre o resumo cidadao de uma proposicao NA TX DO CHAMADOR
+  (a caixa de entrada da fronteira) — mesmo molde de `sessoes/registrar-rascunho-ata-em-tx!`."
+  [tx ente-id m]
+  (resumo/registrar-rascunho! tx (assoc m :ente-id ente-id)))

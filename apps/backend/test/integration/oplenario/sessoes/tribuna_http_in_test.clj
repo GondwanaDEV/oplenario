@@ -103,7 +103,22 @@
     (is (= (str iniciou-em) (:iniciou-em (:orador-atual body))))
     (is (= (str inscricao-orador-1) (:inscricao-id (:orador-atual body))))
     (is (= 4 (:lock-version (:orador-atual body)))
-        "ledger de prontidao Fase 8 achado #2: GET .../tribuna e' a UNICA fonte do lock-version que POST .../falas/:fala-id/encerrar exige no corpo")))
+        "ledger de prontidao Fase 8 achado #2: GET .../tribuna e' a UNICA fonte do lock-version que POST .../falas/:fala-id/encerrar exige no corpo")
+    (is (and (contains? (:orador-atual body) :tempo-concedido-segundos)
+             (nil? (:tempo-concedido-segundos (:orador-atual body))))
+        "mig 0081: fala sem limite -> a chave vem, com null (a TV distingue 'sem limite' de 'campo ausente')")))
+
+(deftest orador-atual-carrega-o-tempo-concedido
+  ;; mig 0081: a TV aberta DEPOIS da fala comecar (reload, reconexao) so' sabe o limite por esta leitura —
+  ;; sem ele, a contagem regressiva e a campainha somem ate' a proxima fala.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-aberta ente id))
+                                  (fn [_ _] {:fala-em-curso (assoc (fala-em-curso-doc) :tempo-concedido-segundos 300)
+                                             :marcos [] :inscricoes []}))
+        r (pt/response-for (service-fn* #{} repo-s)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (= 300 (:tempo-concedido-segundos (:orador-atual (ler-json r)))))))
 
 ;; ---------- 2: nenhuma fala em curso -> orador-atual nil, marcos vazio ----------
 

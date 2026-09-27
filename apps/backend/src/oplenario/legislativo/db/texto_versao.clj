@@ -18,9 +18,14 @@
 (defn nova-versao!
   "Insere uma versao NOVA em estado 'rascunho'. numero_versao = proximo ordinal local da proposicao
   (a UNIQUE (ente_id,proposicao_id,numero_versao) barra corrida). Conteudo XOR: passe :texto-inline OU
-  :conteudo-uri (o caller decide via logic/decidir-armazenamento + objeto_store). Devolve {:id :numero-versao}."
+  :conteudo-uri (o caller decide via logic/decidir-armazenamento + objeto_store). Devolve {:id :numero-versao}.
+
+  ASSINATURA (fatia 2a, mig 0082): opcional — `:assinatura-algoritmo` + `:assinatura-b64` + `:assinado-por`
+  andam juntos (o CHECK `texto_versao_assinatura_completa` barra o incompleto); `assinado_em` = now() do
+  banco, no MESMO insert do conteudo assinado. Ausentes = versao sem assinatura do autor (o caso da Mesa)."
   [tx {:keys [id ente-id proposicao-id origem-versao origem-ref origem-tipo formato
-              texto-inline conteudo-uri hash-conteudo created-by]}]
+              texto-inline conteudo-uri hash-conteudo created-by
+              assinatura-algoritmo assinatura-b64 assinado-por]}]
   (let [prox (-> (jdbc/execute-one! tx
                    (sql/format {:select [[[:+ [:coalesce [:max :numero_versao] 0] 1] :n]]
                                 :from [:legislativo.proposicao_texto_versao]
@@ -32,6 +37,8 @@
                              :origem_versao origem-versao :origem_ref origem-ref :origem_tipo origem-tipo
                              :estado_versao "rascunho" :formato (or formato "markdown")
                              :texto_inline texto-inline :conteudo_uri conteudo-uri :hash_conteudo hash-conteudo
+                             :assinatura_algoritmo assinatura-algoritmo :assinatura_b64 assinatura-b64
+                             :assinado_por assinado-por :assinado_em (when assinatura-algoritmo [:now])
                              :created_by created-by :efetivado_em [:now]}]}))
     {:id id :numero-versao prox}))
 
@@ -70,6 +77,19 @@
         (throw (ex-info "promover!: proposicao inexistente ou filtrada (pointer nao reapontado)"
                         {:proposicao-id proposicao-id :ente-id ente-id}))))
     {:versao-id versao-id :estado "vigente"}))
+
+(defn assinatura-vigente
+  "A assinatura da versao VIGENTE da proposicao ({:assinatura-algoritmo :assinatura-b64 :assinado-por
+  :assinado-em}), ou nil (sem vigente, ou vigente nao assinada pelo autor). Leitura propria, fora de
+  `colunas`, para nao alargar o mapa de versao que as demais leituras projetam."
+  [tx ente-id proposicao-id]
+  (let [l (comum/linha->kebab
+           (jdbc/execute-one! tx
+             (sql/format {:select [:assinatura_algoritmo :assinatura_b64 :assinado_por :assinado_em]
+                          :from [:legislativo.proposicao_texto_versao]
+                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                  [:= :estado_versao "vigente"]]})))]
+    (when (:assinatura-algoritmo l) l)))
 
 (defn buscar [tx ente-id id]
   (linha->versao
