@@ -1,12 +1,14 @@
 (ns oplenario.agente
   "Host (§22.10): a TELA conversa com o agente pelo core (docs/25 Eixo 5.2 — navegador -> core -> satelite; o satelite
-  nunca e' exposto). A pessoa pergunta numa tela; o core emite a credencial delegada DAQUELA execucao (ADR-0010, so'
-  leitura por enquanto), chama o satelite, devolve a conversa em SSE e revoga a credencial ao fim — com sucesso ou nao.
+  nunca e' exposto). A pessoa pergunta numa tela; o core emite a credencial delegada DAQUELA execucao (ADR-0010:
+  leitura, e ato — que por agente so' vira PROPOSTA, ADR-0012), chama o satelite, devolve a conversa em SSE e revoga a
+  credencial ao fim — com sucesso ou nao.
 
   O publico do agente sai do papel da pessoa: 'secretario' -> conjunto da secretaria, 'vereador' -> do vereador; quem
   tem os dois escolhe pelo campo `publico`, e nunca um publico cujo papel nao tem (403).
 
-  SSE (§22.3.2): `passo` (cada ferramenta chamada, com o desfecho), depois `resposta` (texto, citacoes conferidas,
+  SSE (§22.3.2): `passo` (cada ferramenta chamada, com o desfecho), `proposta` (cada proposta de ato criada na execucao,
+  para a tela levar a pessoa a confirmar), depois `resposta` (texto, citacoes conferidas,
   incerteza) ou `indisponivel` (R-IA-1: 'siga pela tela'), e `fim`. Hoje o satelite responde de uma vez e o core
   emite os eventos em sequencia; quando o fornecedor real transmitir aos poucos, a mesma forma carrega o fluxo."
   (:require [clojure.string :as str]
@@ -14,6 +16,7 @@
             [jsonista.core :as json]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-id]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
             [oplenario.interceptors :as it]
             [oplenario.kernel.autorizacao :as authz]))
@@ -47,15 +50,18 @@
 
 (defn conversa
   "Executa uma pergunta e devolve os eventos SSE (string). A credencial vive so' durante esta chamada."
-  [{:keys [repo-identidade ia]} ator {:keys [pergunta publico]}]
+  [{:keys [repo-identidade ia repo-integracao-ia]} ator {:keys [pergunta publico]}]
   (let [{:keys [execucao-id credencial]}
         (auten/emitir-credencial-agente! repo-identidade ator {:agente agente-da-casa :publico publico
-                                                               :classes #{:leitura}})]
+                                                               :classes #{:leitura :ato}})]
     (try
       (let [r (plataforma-ia/executar-agente ia (:ente-id ator) {:pergunta pergunta :credencial credencial
                                                                   :correlation_id (str execucao-id)})]
         (str (apply str (for [p (:passos r)]
                           (evento "passo" {:ferramenta (:ferramenta p) :argumentos (:argumentos p) :ok (:ok p)})))
+             (apply str (for [p (when repo-integracao-ia
+                                  (repo-ia/propostas-da-execucao repo-integracao-ia (:ente-id ator) execucao-id))]
+                          (evento "proposta" {:id (str (:id p)) :titulo (:titulo p) :ritual (:ritual p)})))
              (if-let [resp (:resposta r)]
                (evento "resposta" (select-keys resp [:texto :citacoes :paragrafos-sem-fonte :incerteza :modelo
                                                      :contaminado]))

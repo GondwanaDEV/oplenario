@@ -22,7 +22,9 @@
 (def conjuntos
   "Publico -> nomes das ferramentas que um agente daquele publico oferece."
   {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}
-   :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}})
+   :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"
+                ;; B.6: o requerimento do proprio vereador — o agente so' PROPOE; ele assina na tela (ADR-0012)
+                "modelos_de_requerimento" "protocolar_requerimento"}})
 
 (defn- publico-do [ator]
   (or (get-in ator [:via :publico])

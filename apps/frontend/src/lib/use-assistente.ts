@@ -14,13 +14,19 @@ export type Turno = { pergunta: string } & (
   | { fase: "erro"; mensagem: string }
 );
 
-export async function perguntarAoAssistente(token: string | null, pergunta: string): Promise<Conversa | string> {
+/** `publico`: qual conjunto de ferramentas o agente oferece (o core confere contra os papéis). Quem tem os dois papéis
+ *  escolhe pela tela onde está: o app do vereador pede "vereador"; sem ele, o core escolhe a secretaria. */
+export async function perguntarAoAssistente(
+  token: string | null,
+  pergunta: string,
+  publico?: "secretaria" | "vereador",
+): Promise<Conversa | string> {
   try {
     const r = await apiFetch("/api/agente/perguntas", {
       token: token ?? undefined,
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-      body: JSON.stringify({ pergunta }),
+      body: JSON.stringify(publico ? { pergunta, publico } : { pergunta }),
       cache: "no-store",
     });
     if (!r.ok) return mensagemDeErroAssistente(r.status);
@@ -30,14 +36,14 @@ export async function perguntarAoAssistente(token: string | null, pergunta: stri
   }
 }
 
-export function useAssistente(token: string | null) {
+export function useAssistente(token: string | null, publico?: "secretaria" | "vereador") {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const ocupado = turnos.some((t) => t.fase === "respondendo");
 
   const perguntar = useCallback(
     async (pergunta: string) => {
       setTurnos((ts) => [...ts, { pergunta, fase: "respondendo" }]);
-      const r = await perguntarAoAssistente(token, pergunta);
+      const r = await perguntarAoAssistente(token, pergunta, publico);
       setTurnos((ts) =>
         ts.map((t, i) =>
           i === ts.length - 1 && t.fase === "respondendo"
@@ -48,7 +54,7 @@ export function useAssistente(token: string | null) {
         ),
       );
     },
-    [token],
+    [token, publico],
   );
 
   return { turnos, ocupado, perguntar };

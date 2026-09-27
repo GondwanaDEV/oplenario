@@ -9,6 +9,7 @@ from __future__ import annotations
 import html
 import json
 import re
+from typing import Any
 
 from oplenario_ia.ata.fake import frase
 from oplenario_ia.inferencia.modelo import PedidoInferencia
@@ -33,6 +34,16 @@ _NORMATIVA = re.compile(
     r"regimento|lei org[âa]nica|\bLOM\b|qu[óo]rum|prazo|\bveto\b|maioria|compet[êe]ncia|\brito\b|dispositivo",
     re.IGNORECASE,
 )
+_REQUERIMENTO = re.compile(
+    r"\b(protocol\w*|fa[çc]a|fazer|crie|criar|redija|redigir|prepar\w*|abr\w*)\b.*\brequerimento", re.IGNORECASE
+)
+_DESTINATARIO = re.compile(
+    r"\b(?:à|ao|a|para a|para o)\s+((?:Secretaria|Prefeitura|Prefeito|Companhia|Autarquia|Superintend[êe]ncia|"
+    r"Procuradoria|Coordenadoria|Guarda)[^,.;?]*?)(?=\s+sobre\b|[,.;?]|$)",
+    re.IGNORECASE,
+)
+_ASSUNTO = re.compile(r"\bsobre\s+(.+?)[.?!]*$", re.IGNORECASE)
+_ITEM = re.compile(r"^itens\.(\d+)\.(id|nome|campos\.\d+): (.+)$", re.MULTILINE)
 _FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"(?: versao="([^"]*)")?>\n(.*?)\n</fonte>', re.DOTALL)
 _PREFERIDAS = ("ementa:", "estado-atual:", "estado:", "itens.1.proposicao.ementa:", "itens.1.texto-descricao:")
 
@@ -55,7 +66,55 @@ def _disponiveis(pedido: PedidoInferencia) -> set[str]:
     return nomes
 
 
+def _fonte(pedido: PedidoInferencia, ferramenta: str) -> tuple[str, str] | None:
+    """(fonte-id, texto) do resultado da `ferramenta` já recebido nesta execução, ou None."""
+    for bruto in pedido.conteudo:
+        for fid, _rotulo, _versao, texto in _FONTE.findall(bruto):
+            if fid.startswith(f"ferramenta:{ferramenta}#"):
+                return fid, html.unescape(texto)
+    return None
+
+
+def _modelos(texto: str) -> list[dict[str, Any]]:
+    por_item: dict[str, dict[str, Any]] = {}
+    for n, chave, valor in _ITEM.findall(texto):
+        item = por_item.setdefault(n, {"campos": []})
+        if chave.startswith("campos."):
+            item["campos"].append(valor.strip())
+        else:
+            item[chave] = valor.strip()
+    return [m for _, m in sorted(por_item.items(), key=lambda kv: int(kv[0])) if "id" in m]
+
+
+def _planejar_requerimento(pedido: PedidoInferencia, pergunta: str, disponiveis: set[str]) -> str | None:
+    """B.6: "protocole um requerimento à Secretaria X sobre Y" — lê os modelos, depois PROPÕE (o ato não executa)."""
+    if not (_REQUERIMENTO.search(pergunta) and {"modelos_de_requerimento", "protocolar_requerimento"} <= disponiveis):
+        return None
+    responder = json.dumps({"acao": "responder"})
+    if _fonte(pedido, "protocolar_requerimento") or any(c.startswith("A ferramenta ") for c in pedido.conteudo):
+        return responder
+    lidos = _fonte(pedido, "modelos_de_requerimento")
+    if lidos is None:
+        return json.dumps({"acao": "ferramenta", "nome": "modelos_de_requerimento", "argumentos": {}})
+    modelos = _modelos(lidos[1])
+    if not modelos:
+        return responder
+    informacao = [m for m in modelos if "informa" in m.get("nome", "").lower()]
+    modelo = informacao[0] if informacao and "informa" in pergunta.lower() else modelos[0]
+    d = _DESTINATARIO.search(pergunta)
+    a = _ASSUNTO.search(pergunta)
+    destinatario = d.group(1).strip() if d else ""
+    assunto = a.group(1).strip() if a else ""
+    campos = {c: (destinatario if c == "destinatario" else assunto) for c in modelo["campos"]}
+    ementa = f"Informações sobre {assunto}" if assunto else pergunta[:200]
+    argumentos = {"modelo-id": modelo["id"], "ementa": ementa, "campos": {k: v for k, v in campos.items() if v}}
+    return json.dumps({"acao": "ferramenta", "nome": "protocolar_requerimento", "argumentos": argumentos})
+
+
 def planejar(pedido: PedidoInferencia) -> str:
+    requerimento = _planejar_requerimento(pedido, _pergunta(pedido), _disponiveis(pedido))
+    if requerimento is not None:
+        return requerimento
     ja_consultou = any(c.startswith(("<fonte id=", "A ferramenta ")) for c in pedido.conteudo)
     if ja_consultou:
         return json.dumps({"acao": "responder"})
@@ -97,6 +156,13 @@ def responder(pedido: PedidoInferencia) -> str:
     ]
     if not fontes:
         return "Não encontrei nas informações da Casa o que responder a essa pergunta."
+    for fid, _r, _v, texto in fontes:
+        titulo = next((linha for linha in texto.split("\n") if linha.startswith("titulo: ")), None)
+        if titulo and any(linha.startswith("proposta-id: ") for linha in texto.split("\n")):
+            return (
+                f"Preparei a proposta: {titulo.removeprefix('titulo: ')}. Nada foi protocolado ainda: revise o texto, "
+                f"assine e protocole na tela Propostas — ou recuse. [[{fid} | {titulo}]]"
+            )
     paragrafos = []
     for fid, rotulo, versao, texto in fontes[:2]:
         if fid.startswith("norma:"):

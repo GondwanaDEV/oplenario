@@ -1,0 +1,27 @@
+/* As propostas de ato do assistente (Faixa B / B.6, ADR-0012). A tela de uma proposta reusa o ritual de assinatura
+   (assinar.css); aqui mora só o que é da proposta: quem preparou, o estado, a validade e o aviso de conteúdo de fora
+   da Casa (Eixo 4.5). */
+
+.prop-origem-agente { font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--cobalto-texto); margin: 0.6rem 0 0.2rem; }
+.prop-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; margin: 0.4rem 0 1rem; }
+.prop-selo { display: inline-block; font-size: var(--t-12); font-weight: 700; padding: 0.15rem 0.6rem;
+  border-radius: var(--raio-capsula); border: 1px solid var(--linha); color: var(--texto); background: var(--surface-2); }
+.prop-selo-aguardando { border-color: var(--cobalto); color: var(--cobalto-texto); background: color-mix(in srgb, var(--cobalto) 12%, transparent); }
+.prop-selo-confirmada { border-color: var(--jade-medio); color: var(--texto); background: color-mix(in srgb, var(--jade-medio) 16%, transparent); }
+.prop-validade { font-size: var(--t-12); color: var(--texto-2); }
+.prop-aviso-origem { margin: 0 0 1rem; padding: 0.6rem 0.8rem; border: 1px solid var(--linha);
+  border-left: 3px solid var(--aviso-texto); border-radius: 8px; color: var(--texto); font-size: var(--t-13); }
+.prop-recibo { margin: 0 0 1rem; padding: 0.6rem 0.8rem; border: 1px solid var(--jade-medio); border-radius: 8px;
+  background: color-mix(in srgb, var(--jade-medio) 16%, transparent); color: var(--texto); font-weight: 600; }
+.prop-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+
+.propostas { max-width: 640px; margin: 0 auto; padding: 1.2rem 1rem 6rem; }
+.propostas-titulo { font-family: var(--display); font-size: var(--t-21); color: var(--texto); margin: 0; }
+.propostas-sub { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0 1.2rem; }
+.propostas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.propostas-item a { display: grid; gap: 0.25rem; padding: 0.8rem 1rem; border: 1px solid var(--linha); border-radius: var(--raio);
+  background: var(--surface-2); color: var(--texto); text-decoration: none; }
+.propostas-item a:hover, .propostas-item a:focus-visible { border-color: var(--cobalto); }
+.propostas-item .prop-aviso-origem { margin: 0; padding: 0.2rem 0.5rem; font-size: var(--t-12); }
+.prop-voltar { display: block; text-align: center; margin: 1.2rem 0 0; }

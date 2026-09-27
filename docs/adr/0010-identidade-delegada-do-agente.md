@@ -42,7 +42,7 @@ dela: a pessoa já está autenticada **no core** (sessão opaca de cookie, §22.
    credencial (`oplenario.catalogo`: ferramenta fora dele não existe) ∩ classes concedidas (`exige-classe!` no
    kernel do catálogo). O catálogo **só atende ator com `:via`**.
 4. **`ato` por agente nunca executa direto** — nem com a classe concedida: é negado (`:ato-so-por-proposta`) até a
-   proposta de ato da B.6, confirmada pela pessoa na tela (Eixo 4.2 B). O **agente institucional** (sem pessoa,
+   proposta de ato da B.6 (entregue: ADR-0012 — o `ato` pedido por agente agora vira proposta, e `:ato-so-por-proposta` deixou de existir), confirmada pela pessoa na tela (Eixo 4.2 B). O **agente institucional** (sem pessoa,
    3.1 b) nunca recebe `ato` — `CHECK` no banco e negação no kernel; o ator dele nasce sem papel algum até a
    concessão pelo `admin_ente` existir (B.8), então nada executa por construção.
 5. **Portas separadas.** Um interceptor novo, `autenticacao-agente`, aceita **só** a credencial delegada (bearer) —

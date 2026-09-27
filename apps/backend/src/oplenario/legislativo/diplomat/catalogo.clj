@@ -1,14 +1,20 @@
 (ns oplenario.legislativo.diplomat.catalogo
   "As entradas do CATALOGO DE ACOES que sao do legislativo (ADR-0009). Cada uma e' a mesma acao de uma rota da tela —
   mesmo controller, mesmo wire/out — com descricao para o agente. As primeiras (§22.11 Eixo 2, 'migracao'): as
-  consultas que um agente da Casa precisa antes de tudo: a situacao da materia e a tramitacao dela."
+  consultas que um agente da Casa precisa antes de tudo: a situacao da materia e a tramitacao dela. B.6 (ADR-0012): o
+  primeiro ATO — protocolar o requerimento do vereador —, que o agente so' PROPOE; a pessoa confirma e assina na tela."
   (:require [oplenario.kernel.catalogo :as catalogo]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
+            [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.legislativo.logic :as logic]
-            [oplenario.legislativo.wire.out.proposicao :as wire]))
+            [oplenario.legislativo.wire.out.proposicao :as wire]
+            [oplenario.legislativo.wire.out.requerimento :as wire-req])
+  (:import (java.time ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -30,7 +36,7 @@
   (or proposicao-id
       (:id (repo/buscar-proposicao-por-numero repo-legislativo ente-id tipo ano sequencial))))
 
-(def entradas
+(def ^:private entradas-materia
   [(catalogo/entrada
     {:nome "situacao_da_materia"
      :descricao (str "Consulta uma proposicao da Camara (projeto de lei, requerimento, indicacao, mocao...): numero, "
@@ -63,3 +69,63 @@
                                                                  ente-id id
                                                                  (:limite (adapters-in-proposicao/tramitacao-query->dominio {})))]
                        (adapters-out-proposicao/tramitacao->wire t)))))})])
+
+;; ---------- B.6 (ADR-0012): o requerimento do vereador — o agente propoe, a pessoa assina ----------
+
+(def ^:private Campos
+  [:map-of {:max 50 :description "Os campos que o modelo pede, pelo nome (ex.: destinatario, assunto)."}
+   [:string {:min 1 :max 100}] [:string {:max 2000}]])
+
+(def ProtocolarRequerimento
+  [:map {:closed true}
+   [:modelo-id {:description "Id do modelo de requerimento (vem de modelos_de_requerimento)."} :uuid]
+   [:ementa {:description "Uma linha que resume o pedido; aparece nas listas e no portal."}
+    [:and [:string {:min 1 :max 2000}] [:re #"\S"]]]
+   [:campos {:optional true} Campos]])
+
+;; a mesma data civil da borda HTTP do legislativo (`diplomat/http/in`, zona propria do modulo — o legislativo ainda nao
+;; consome a constante de fuso do kernel): o texto assinado pela proposta e pela tela tem a mesma data.
+(def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
+
+(defn- hoje [{:keys [relogio]}] (tempo/hoje (or relogio (tempo/relogio-sistema)) zona-civil))
+
+(def ^:private entradas-requerimento
+  [(catalogo/entrada
+    {:nome "modelos_de_requerimento"
+     :descricao (str "Lista os modelos de requerimento que a Casa oferece ao vereador (ex.: 'Requerimento de "
+                     "informacao'), cada um com os campos que o texto pede. Use antes de propor um requerimento, "
+                     "para escolher o modelo e saber o que preencher. Autor e data entram sozinhos no texto.")
+     :classe :leitura
+     :papeis #{"vereador"}
+     :entrada [:map {:closed true}]
+     :saida wire-req/ModelosRequerimentoOut
+     :rotas #{:legislativo/meus-modelos-requerimento}
+     :executar (fn [{:keys [repo-legislativo]} ator _]
+                 (adapters-out-requerimento/modelos->wire (controllers/modelos-de-requerimento repo-legislativo ator)))})
+   (catalogo/entrada
+    {:nome "protocolar_requerimento"
+     :descricao (str "Prepara o protocolo de um requerimento do proprio vereador: o modelo da Casa, a ementa e os "
+                     "campos que o modelo pede. Voce NAO protocola: isto cria uma PROPOSTA com o texto ja' formatado, "
+                     "e o vereador revisa, assina e protocola na tela da plataforma (ou recusa). Consulte antes "
+                     "modelos_de_requerimento para o modelo-id e os nomes dos campos.")
+     :classe :ato
+     :ritual :assinatura
+     :papeis #{"vereador"}
+     :entrada ProtocolarRequerimento
+     :saida wire-req/RequerimentoProtocoladoOut
+     :rotas #{:legislativo/protocolar-requerimento}
+     :apresentar (fn [{:keys [repo-legislativo resolver-autor] :as deps} ator {:keys [modelo-id campos ementa]}]
+                   (when-let [{:keys [texto]} (controllers/previa-requerimento repo-legislativo resolver-autor ator
+                                                                               {:modelo-id modelo-id
+                                                                                :campos (or campos {})
+                                                                                :hoje (hoje deps)})]
+                     {:titulo (str "Protocolar o requerimento “" ementa "”") :texto texto}))
+     :executar (fn [{:keys [repo-legislativo resolver-municipio resolver-autor] :as deps} ator
+                    {:keys [modelo-id campos ementa]}]
+                 (some-> (controllers/meu-protocolar-requerimento
+                           repo-legislativo resolver-municipio resolver-autor (assinador-icp/assinador-stub) ator
+                           {:id (random-uuid) :modelo-id modelo-id :campos (or campos {}) :ementa ementa
+                            :hoje (hoje deps)})
+                         adapters-out-requerimento/protocolado->wire))})])
+
+(def entradas (into entradas-materia entradas-requerimento))

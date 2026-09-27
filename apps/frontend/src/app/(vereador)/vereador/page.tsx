@@ -19,6 +19,8 @@ import { useMeuPainel } from "@/lib/use-meu-painel";
 import { useSessoes, type EstadoSessoes } from "@/lib/use-sessoes";
 import { useAcusarCiencia } from "@/lib/use-acusar-ciencia";
 import { useSubscricoesHome } from "@/lib/use-subscricao";
+import { usePropostas } from "@/lib/use-propostas";
+import { validadeDaProposta } from "@/lib/propostas-vista";
 import { derivarHome, type HomeVereadorVista } from "@/lib/meu-painel-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
@@ -39,6 +41,9 @@ export default function PaginaHomeVereador() {
   const vista = derivarHome(dados, sessoes);
   // fatia 2c: pedidos de subscrição para mim + meus requerimentos coletivos esperando coautores
   const { convites, propostas } = useSubscricoesHome(token);
+  // B.6: o que o assistente preparou e espera a decisão do vereador (ADR-0012)
+  const doAssistente = usePropostas(token);
+  const propostasDoAssistente = doAssistente.fase === "pronto" ? doAssistente.dado : [];
 
   if (estado === "erro") {
     return (
@@ -110,6 +115,26 @@ export default function PaginaHomeVereador() {
         </section>
       )}
 
+      {propostasDoAssistente.length > 0 && (
+        <section aria-label="Propostas do assistente">
+          <h2 className="secao-tit">Propostas do assistente</h2>
+          {propostasDoAssistente.map((p) => (
+            <article key={p.id} className="card">
+              <div className="card-top">
+                <span className="num">Nada foi feito ainda</span>
+              </div>
+              <h3>{p.titulo}</h3>
+              <p className="meta">{validadeDaProposta(p)}</p>
+              <div className="card-acao">
+                <Link className="btn btn-primaria btn-mini" href={comToken(`/propostas/${p.id}`, token)}>
+                  {p.ritual === "assinatura" ? "Revisar e assinar" : "Revisar e confirmar"}
+                </Link>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+
       {convites.length > 0 && (
         <section aria-label="Pedidos de subscrição">
           <h2 className="secao-tit">Pedidos de subscrição</h2>
@@ -177,9 +202,14 @@ export default function PaginaHomeVereador() {
       <div className="secao-linha">
         <h2 className="secao-tit">Suas proposições</h2>
         {/* fatia 2a: o requerimento nasce aqui, no login do vereador (modelo da Casa + assinatura) */}
-        <Link className="btn btn-primaria btn-mini" href={comToken("/requerimento/novo", token)}>
-          Novo requerimento
-        </Link>
+        <span className="secao-acoes">
+          <Link className="btn btn-contorno btn-mini" href={comToken("/vereador/assistente", token)}>
+            Pedir ao assistente
+          </Link>
+          <Link className="btn btn-primaria btn-mini" href={comToken("/requerimento/novo", token)}>
+            Novo requerimento
+          </Link>
+        </span>
       </div>
       {vista.proposicoesTruncado && (
         <p role="status" className="aviso-corte">
