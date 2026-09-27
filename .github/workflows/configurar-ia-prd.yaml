@@ -1,8 +1,9 @@
 name: Configurar satelite de IA no Dokploy (prd)
 
-# LIMPEZA: remove os dois apps de IA duplicados criados por uma versao anterior deste workflow (vazios, sem
-# credencial, nunca deployados). Trava: so' apaga os appNames EXATOS abaixo e se recusa a tocar nos apps em uso
-# (oplenario-iaapi-h9hzqw / oplenario-iatrabalhador-izlwf3). Nenhum valor de segredo e' lido ou impresso.
+# CARGA INICIAL DO INDICE DE BUSCA (Track IA A.4): publica no feed da IA as proposicoes que JA' existem na Casa
+# (`ia-republicar-proposicoes`, o comando da propria imagem da API). Mesma promocao do relay (`proposicao.editada`),
+# idempotente pela chave — rodar de novo nao duplica. Mesma conexao do passo `migrate` do build-api-prd.yaml.
+# Depois espera o trabalhador indexar (ele le o feed a cada 15 s) e confere a busca como a secretaria.
 
 on:
   push:
@@ -10,43 +11,76 @@ on:
     paths:
       - ".github/workflows/configurar-ia-prd.yaml"
 
+env:
+  ENTE: 10000000-0000-0000-0000-000000000001
+
 jobs:
-  limpar:
+  republicar:
     runs-on: ubuntu-latest
     environment:
       name: production
-    env:
-      DK: https://${{ vars.DOKPLOY_DOMAIN }}/api
-      DK_KEY: ${{ secrets.DOKPLOY_KEY }}
-      APP_CORE: ${{ secrets.DOKPLOY_APPLICATION_ID_API }}
-      APAGAR: "oplenario-ia-api-lxzklp oplenario-ia-trabalhador-9blnqb"
-      MANTER: "oplenario-iaapi-h9hzqw oplenario-iatrabalhador-izlwf3 oplenario-backend-zvr55n"
+    concurrency:
+      group: configurar-ia-prd
+      cancel-in-progress: false
     steps:
-      - name: Apagar os apps duplicados (so' os dois appNames exatos)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Publicar as proposicoes da Casa no feed da IA
+        env:
+          APP_ENV: production
+          DATABASE_URL: jdbc:postgresql://204.12.227.116:5433/oplenario
+          DB_USER: oplenario-application
+          DB_PASSWORD: ${{ secrets.HML_DB_PASSWORD }}
         run: |
-          set -euo pipefail
-          get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
-          ENV_ID=$(get "application.one?applicationId=$APP_CORE" | jq -r '.environmentId')
-          IDS=$({ get "environment.one?environmentId=$ENV_ID" 2>/dev/null | jq -r '(.applications // [])[] | .applicationId' \
-                  || get project.all | jq -r --arg e "$ENV_ID" '.[] | (.environments // [])[] | select(.environmentId == $e) | (.applications // [])[] | .applicationId'; })
-          apagados=0
-          for id in $IDS; do
-            info=$(get "application.one?applicationId=$id" | jq -c '{appName, name, deploys: ((.deployments // []) | length)}')
-            an=$(jq -r '.appName' <<<"$info")
-            for m in $MANTER; do [ "$an" = "$m" ] && continue 2; done
-            for a in $APAGAR; do
-              if [ "$an" = "$a" ]; then
-                echo "::add-mask::$id"
-                echo "apagando: $info"
-                curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' \
-                  -d "{\"applicationId\": \"$id\"}" "$DK/application.delete" > /dev/null
-                apagados=$((apagados+1))
-              fi
-            done
-          done
-          echo "apagados: $apagados"
-          echo "== apps de IA que restam no ambiente"
-          for id in $({ get "environment.one?environmentId=$ENV_ID" 2>/dev/null | jq -r '(.applications // [])[] | .applicationId' \
-                  || get project.all | jq -r --arg e "$ENV_ID" '.[] | (.environments // [])[] | select(.environmentId == $e) | (.applications // [])[] | .applicationId'; }); do
-            get "application.one?applicationId=$id" | jq -r 'select(.appName | startswith("oplenario-ia")) | "\(.appName) (\(.name)) comando=\(.command // "-")"'
-          done
+          docker run --rm -e APP_ENV -e DATABASE_URL -e DB_USER -e DB_PASSWORD \
+            ghcr.io/gondwanadev/oplenario-api-prd:latest ia-republicar-proposicoes "$ENTE"
+
+  conferir:
+    needs: republicar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i -D playwright@1.47.2 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+      - name: Esperar o trabalhador indexar
+        run: sleep 90
+      - name: Conferir a busca (so' leitura)
+        env:
+          SEC_ID: 60ac7fcd-ab93-4c28-95bb-46761b4a2a52
+        run: |
+          cat > conferir.mjs <<'JS'
+          import { chromium } from 'playwright';
+          const B = 'https://oplenario.calvetec.com.br';
+          const browser = await chromium.launch();
+          try {
+            const ctx = await browser.newContext({ locale: 'pt-BR' });
+            const p = await ctx.newPage();
+            await p.goto(`${B}/api/auth/login?ente=${process.env.ENTE}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await p.waitForSelector('#username', { timeout: 25000 });
+            await p.fill('#username', process.env.SEC_ID); await p.fill('#password', 'Plenario@2026');
+            await Promise.all([ p.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(()=>{}), p.click('#kc-login') ]);
+            await p.waitForTimeout(2500);
+            let total = 0, ia = 0;
+            for (const q of ['escola', 'saude', 'municipio', 'servidor publico', 'obras']) {
+              const r = await ctx.request.get(`${B}/api/busca?q=${encodeURIComponent(q)}`, { headers: { accept: 'application/json' } });
+              let j = {}; try { j = await r.json(); } catch {}
+              const res = j.resultados || [];
+              total += res.length; if (j.modo === 'ia') ia++;
+              const ex = res[0]?.proposicao ? ` ex: "${(res[0].proposicao.ementa || '').slice(0, 70)}"` : '';
+              console.log(`busca "${q}": status=${r.status()} modo=${j.modo} resultados=${res.length}${ex}`);
+            }
+            console.log(`== ${ia}/5 pela IA, ${total} resultado(s) no total`);
+            if (ia < 5) process.exitCode = 1;
+          } finally { await browser.close(); }
+          JS
+          node conferir.mjs
