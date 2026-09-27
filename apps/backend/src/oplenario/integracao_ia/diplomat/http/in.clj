@@ -71,6 +71,16 @@
         (= :restrita r) (http/json-resposta 403 {:erro "sessao sigilosa nao vai para a IA"})
         :else           (http/json-resposta 200 (adapters-out/ata->wire r))))))
 
+(defn- texto-handler
+  "A.8: o texto PUBLICO de uma proposicao, para a IA redigir o resumo cidadao."
+  [texto-da-proposicao]
+  (fn [req]
+    (let [ente (adapters-in/id-de-caminho (get-in req [:path-params :ente-id]) "ente-id")
+          pid  (adapters-in/id-de-caminho (get-in req [:path-params :proposicao-id]) "proposicao-id")]
+      (if-let [t (controllers/texto-para-ia texto-da-proposicao ente pid)]
+        (http/json-resposta 200 (adapters-out/texto-proposicao->wire t))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
 (defn- receber-handler [repo-ia efeitos]
   (fn [req]
     (try
@@ -81,20 +91,21 @@
         (case (:tipo (ex-data e))
           :validacao/evento-desconhecido
           (http/json-resposta 422 {:erro (ex-message e) :evento (:evento (ex-data e)) :versao (:versao (ex-data e))})
-          (:validacao/transcricao-fora-da-sessao :validacao/rascunho-fora-da-sessao)
+          (:validacao/transcricao-fora-da-sessao :validacao/rascunho-fora-da-sessao :validacao/resumo-sem-proposicao)
           (http/json-resposta 422 {:erro (ex-message e)})
           (throw e))))))
 
 (defn rotas
   "Fragmento de rotas da fronteira. `segredo` = OPLENARIO_IA_SEGREDO; os seams vem do host (rotas/montar)."
   [{:keys [repo-integracao-ia segredo contexto-da-sessao abrir-gravacao registrar-transcricao registrar-rascunho-ata
-           ata-para-ia]}]
+           ata-para-ia registrar-resumo texto-da-proposicao]}]
   (let [servico (exige-servico-ia segredo)]
     #{[(str logic/prefixo "/eventos") :get [servico (feed-handler repo-integracao-ia)]
        :route-name :integracao-ia/feed]
       [(str logic/prefixo "/eventos") :post
        [servico it/corpo-json (receber-handler repo-integracao-ia {:registrar-transcricao registrar-transcricao
-                                                                  :registrar-rascunho-ata registrar-rascunho-ata})]
+                                                                  :registrar-rascunho-ata registrar-rascunho-ata
+                                                                  :registrar-resumo registrar-resumo})]
        :route-name :integracao-ia/receber]
       [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/contexto") :get
        [servico (contexto-handler contexto-da-sessao)]
@@ -102,6 +113,9 @@
       [(str logic/prefixo "/entes/:ente-id/sessoes/:sessao-id/atas/:versao") :get
        [servico (ata-handler (or ata-para-ia (fn [_ _ _] nil)))]
        :route-name :integracao-ia/ata]
+      [(str logic/prefixo "/entes/:ente-id/proposicoes/:proposicao-id/texto") :get
+       [servico (texto-handler (or texto-da-proposicao (fn [_ _] nil)))]
+       :route-name :integracao-ia/texto-proposicao]
       [(str logic/prefixo "/entes/:ente-id/gravacoes/:segmento-id/conteudo") :get
        [servico (conteudo-handler abrir-gravacao)]
        :route-name :integracao-ia/conteudo]}))

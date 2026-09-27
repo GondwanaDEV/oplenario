@@ -93,7 +93,9 @@
    [:ementa :string]
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
-   [:autor-id {:optional true} [:maybe :string]]])
+   [:autor-id {:optional true} [:maybe :string]]
+   ;; A.8: presente so' quando a edicao trocou o TEXTO (o sinal para a IA redigir de novo o resumo cidadao)
+   [:hash-texto {:optional true} :string]])
 
 (defn editada
   "Constroi o envelope de `proposicao.editada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca

@@ -19,6 +19,9 @@
   (ler-rascunho-ata [this ente-id rascunho-id]
     "Faixa A / A.6b: o rascunho da ata (texto, texto limpo, citacoes conferidas, incerteza, pontos a confirmar) ou
     nil. Lanca `:ia/indisponivel`.")
+  (ler-rascunho-resumo [this ente-id rascunho-id]
+    "Faixa A / A.8: o rascunho do resumo cidadao (texto, texto limpo, citacoes conferidas, incerteza) ou nil. Lanca
+    `:ia/indisponivel`.")
   (buscar [this ente-id pedido]
     "Faixa A / A.5: a busca no indice do satelite. `pedido` = {:consulta :tipos? :limite?} -> {:modelo :resultados
     [{:tipo :ref-id :parte :texto :meta :score}]}: ids e trechos, nunca a decisao do que o usuario ve (o core hidrata).
@@ -54,6 +57,8 @@
     (ler-json url segredo cliente (str "/v1/entes/" ente-id "/transcricoes/" transcricao-id)))
   (ler-rascunho-ata [_ ente-id rascunho-id]
     (ler-json url segredo cliente (str "/v1/entes/" ente-id "/atas/rascunhos/" rascunho-id)))
+  (ler-rascunho-resumo [_ ente-id rascunho-id]
+    (ler-json url segredo cliente (str "/v1/entes/" ente-id "/resumos/rascunhos/" rascunho-id)))
   (buscar [_ ente-id pedido]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/busca") pedido (Duration/ofSeconds 2))
         (indisponivel! "busca sem resposta"))))

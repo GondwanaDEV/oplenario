@@ -22,6 +22,7 @@
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.requerimento :as adapters-in-requerimento]
+            [oplenario.legislativo.adapters.in.resumo :as adapters-in-resumo]
             [oplenario.legislativo.adapters.in.votacao :as adapters-in]
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
@@ -35,6 +36,7 @@
             [oplenario.legislativo.adapters.out.protocolo-geral :as adapters-out-protocolo]
             [oplenario.legislativo.adapters.out.relator-pendente :as adapters-out-relator]
             [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
+            [oplenario.legislativo.adapters.out.resumo :as adapters-out-resumo]
             [oplenario.legislativo.adapters.out.tramitacao-executiva :as adapters-out-tramitacao-executiva]
             [oplenario.legislativo.adapters.out.votacao :as adapters-out]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
@@ -930,6 +932,57 @@
         (http/json-resposta 201 (adapters-out-meu-painel/acusar-ciencia->wire recibo))
         (http/json-resposta 404 {:erro "vereador sem cadastro vinculado neste ente"})))))
 
+;; ========================= Faixa A / A.8: o resumo cidadao (secretaria) =========================
+
+(def ^:private msg-ia-fora
+  "A IA está indisponível agora. Siga pela tela — o resumo pode ser escrito à mão.")
+
+(defn- resumo-handler
+  "GET /legislativo/proposicoes/:id/resumo — o rascunho da IA, a versao publicada e o historico."
+  [repo-leg]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/resumo-da-proposicao repo-leg ente-id id)]
+        (http/json-resposta 200 (adapters-out-resumo/resumo->wire r))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- rascunho-resumo-handler
+  "GET /legislativo/proposicoes/:id/resumo/rascunhos/:rid — o conteudo do rascunho, lido da IA. IA fora -> 503 com a
+  mensagem R-IA-1."
+  [repo-leg ler-rascunho-resumo]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          rid (adapters-in/id-param->uuid (get-in req [:path-params :rid]))]
+      (try
+        (if-let [r (controllers/rascunho-resumo repo-leg ler-rascunho-resumo ente-id id rid)]
+          (http/json-resposta 200 (adapters-out-resumo/conteudo-rascunho->wire r))
+          (http/json-resposta 404 {:erro "rascunho nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro msg-ia-fora})
+            (throw e)))))))
+
+(defn- publicar-resumo-handler
+  "POST /legislativo/proposicoes/:id/resumo {texto, rascunho-id?} — publica a proxima versao (vai para o portal)."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-resumo/publicar->dominio (:json-params req))]
+      (try
+        (if-let [v (controllers/publicar-resumo! repo-leg ator id m)]
+          (http/json-resposta 201 (adapters-out-resumo/recibo->wire v))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/rascunho-desconhecido
+            (http/json-resposta 409 {:erro "o rascunho informado nao e' um rascunho pronto desta proposicao"})
+            :conflito/resumo-versao
+            (http/json-resposta 409 {:erro "outra versao do resumo foi publicada ao mesmo tempo: recarregue"})
+            (throw e)))))))
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer + borda /meu do vereador (table
   syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do
@@ -960,7 +1013,7 @@
   movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio resolver-autor nome-na-casa colegas-da-casa]}]
+           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
@@ -1001,6 +1054,18 @@
        :route-name :legislativo/criar-proposicao]
       ["/legislativo/proposicoes/:id" :get [auth papel-leitura (detalhe-proposicao-handler repo-legislativo)]
        :route-name :legislativo/detalhe-proposicao]
+      ;; Faixa A / A.8 — o resumo cidadao (secretaria revisa e publica; o publicado vai para o portal). Sem o seam da
+      ;; IA (testes de outras verticais), a leitura do rascunho responde 503 (R-IA-1).
+      ["/legislativo/proposicoes/:id/resumo" :get [auth papel (resumo-handler repo-legislativo)]
+       :route-name :legislativo/resumo]
+      ["/legislativo/proposicoes/:id/resumo" :post
+       [auth papel it/corpo-json (publicar-resumo-handler repo-legislativo)]
+       :route-name :legislativo/publicar-resumo]
+      ["/legislativo/proposicoes/:id/resumo/rascunhos/:rid" :get
+       [auth papel (rascunho-resumo-handler repo-legislativo
+                                            (or ler-rascunho-resumo
+                                                (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
+       :route-name :legislativo/rascunho-resumo]
       ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch

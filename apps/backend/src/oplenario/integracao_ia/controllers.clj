@@ -23,10 +23,25 @@
 
 (defn receber!
   "Aplica o evento da IA uma vez so' (dedup pela chave, na tx do tenant). O efeito vai para o seam do dono do dado:
-  transcricao -> `registrar-transcricao`; rascunho de ata (A.6b) -> `registrar-rascunho-ata`. Devolve {:aplicado boolean}."
-  [repo-ia {:keys [registrar-transcricao registrar-rascunho-ata]} evento]
+  transcricao -> `registrar-transcricao`; rascunho de ata (A.6b) -> `registrar-rascunho-ata`; rascunho do resumo
+  cidadao (A.8) -> `registrar-resumo` (dono: legislativo). Devolve {:aplicado boolean}."
+  [repo-ia {:keys [registrar-transcricao registrar-rascunho-ata registrar-resumo]} evento]
   (repo/receber-evento! repo-ia evento
     (fn [tx ente-id ev]
-      (if (contains? logic/eventos-de-ata (:tipo ev))
+      (cond
+        (contains? logic/eventos-de-ata (:tipo ev))
         (registrar-rascunho-ata tx ente-id (logic/fato-do-rascunho ev))
+
+        (contains? logic/eventos-de-resumo (:tipo ev))
+        (if registrar-resumo
+          (registrar-resumo tx ente-id (logic/fato-do-resumo ev))
+          (throw (ex-info "resumo cidadao sem destino configurado" {:tipo :ia/sem-destino :evento (:tipo ev)})))
+
+        :else
         (registrar-transcricao tx ente-id (logic/ponteiro-da-transcricao ev))))))
+
+(defn texto-para-ia
+  "O texto PUBLICO da proposicao para o resumo cidadao (A.8), pelo seam do legislativo. nil = inexistente no tenant.
+  Proposicao e' ato publico: nao ha' sigilo a filtrar aqui."
+  [texto-da-proposicao ente-id proposicao-id]
+  (texto-da-proposicao ente-id proposicao-id))

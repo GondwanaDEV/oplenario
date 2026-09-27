@@ -41,7 +41,7 @@
             :encerrou-em (Instant/parse "2026-09-22T21:15:00Z")}]
    :nomes {#uuid "40000000-0000-0000-0000-000000000004" "Ana Ribeiro"}})
 
-(defn- servico [& {:keys [seg-redo contexto abrir efeitos recebidos ata]
+(defn- servico [& {:keys [seg-redo contexto abrir efeitos recebidos ata texto]
                    :or {seg-redo segredo recebidos (atom [])}}]
   (-> (http/servico (config/carregar)
                     (ia-http/rotas {:repo-integracao-ia (fake-repo recebidos)
@@ -50,7 +50,9 @@
                                     :abrir-gravacao (or abrir (fn [_ _] nil))
                                     :registrar-transcricao (fn [_tx e m] (some-> efeitos (swap! conj [e m])))
                                     :registrar-rascunho-ata (fn [_tx e m] (some-> efeitos (swap! conj [:ata e m])))
-                                    :ata-para-ia (or ata (fn [_ _ _] nil))})
+                                    :ata-para-ia (or ata (fn [_ _ _] nil))
+                                    :registrar-resumo (fn [_tx e m] (some-> efeitos (swap! conj [:resumo e m])))
+                                    :texto-da-proposicao (or texto (fn [_ _] nil))})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -142,7 +144,7 @@
       (is (= "entrada" (:categoria-erro (second (first @efeitos)))))))
   (testing "contrato desconhecido ou invalido nao e' aplicado"
     (is (= 422 (:status (post (servico) (evento "k-2" :versao 2)))) "versao que o core ainda nao conhece")
-    (is (= 422 (:status (post (servico) (evento "k-3" :tipo "ResumoCidadaoPronto")))))
+    (is (= 422 (:status (post (servico) (evento "k-3" :tipo "EmbeddingsGerados")))))
     (is (= 400 (:status (post (servico) (evento "k-4" :payload {"sessao-id" "x"})))))
     (is (= 400 (:status (post (servico) (evento "k-5" :tipo "TranscricaoFalhou"
                                               :payload {"sessao-id" (str sid) "segmento-id" (str seg)
@@ -192,3 +194,38 @@
     (is (= 404 (:status (pt/response-for svc :get (url 3) :headers (com-segredo)))))
     (is (= 400 (:status (pt/response-for svc :get (url "x") :headers (com-segredo)))))
     (is (= 401 (:status (pt/response-for svc :get (url 1) :headers (com-segredo "errado")))))))
+
+;; ---------- A.8: o resumo cidadao ----------
+
+(def pid #uuid "a0000000-0000-0000-0000-000000000001")
+
+(deftest texto-da-proposicao-para-a-ia
+  (let [svc (servico :texto (fn [e p] (when (and (= ente e) (= pid p))
+                                        {:proposicao-id p :tipo "projeto_lei" :ano 2026 :sequencial 7 :ementa "Hortas."
+                                         :autor-texto nil :texto "Art. 1o X." :texto-sha256 "sha256:ab"})))
+        caminho (str "/integracao/ia/v1/entes/" ente "/proposicoes/" pid "/texto")
+        r (pt/response-for svc :get caminho :headers (com-segredo))]
+    (is (= 200 (:status r)))
+    (is (= {:proposicao-id (str pid) :tipo "projeto_lei" :ano 2026 :sequencial 7 :ementa "Hortas." :autor-texto nil
+            :texto "Art. 1o X." :texto-sha256 "sha256:ab"}
+           (ler r)))
+    (is (= 404 (:status (pt/response-for svc :get (str "/integracao/ia/v1/entes/" (random-uuid) "/proposicoes/" pid "/texto")
+                                         :headers (com-segredo)))))
+    (is (= 401 (:status (pt/response-for svc :get caminho))))))
+
+(deftest caixa-de-entrada-do-resumo
+  (let [efeitos (atom []) svc (servico :efeitos efeitos) rid (random-uuid)
+        pronto {"proposicao-id" (str pid) "rascunho-id" (str rid) "texto-base-sha256" "sha256:ab"
+                "modelo-llm-id" "fake:fake-1" "prompt-versao" "resumo-v1" "incerteza" "revisar_com_atencao"
+                "n-citacoes" 2 "n-citacoes-conferidas" 2 "n-paragrafos-sem-fonte" 1}]
+    (is (= 201 (:status (post svc (evento "r-1" :tipo "ResumoCidadaoPronto" :payload pronto)))))
+    (is (= [:resumo ente {:situacao "pronto" :proposicao-id pid :rascunho-id rid :texto-base-sha256 "sha256:ab"
+                          :modelo-llm-id "fake:fake-1" :prompt-versao "resumo-v1" :incerteza "revisar_com_atencao"
+                          :n-citacoes 2 :n-citacoes-conferidas 2 :n-paragrafos-sem-fonte 1
+                          :ocorrido-em (Instant/parse "2026-09-26T22:00:00Z")}]
+           (first @efeitos)))
+    (is (= 201 (:status (post svc (evento "r-2" :tipo "ResumoFalhou"
+                                          :payload {"proposicao-id" (str pid) "categoria" "modelo" "detalhe" "x"
+                                                    "retentavel" false})))))
+    (is (= "falhou" (:situacao (nth (second @efeitos) 2))))
+    (is (= 400 (:status (post svc (evento "r-3" :tipo "ResumoCidadaoPronto" :payload (assoc pronto "incerteza" "alta"))))))))

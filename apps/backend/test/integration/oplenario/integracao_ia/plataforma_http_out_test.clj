@@ -62,3 +62,9 @@
                (json/read-value (:corpo @visto)))))))
   (com-servidor 503 "{}" (fn [url _] (is (indisponivel? #(out/buscar (out/plataforma-ia {:url url :segredo "s"}) "e" {:consulta "xx"})))))
   (is (indisponivel? #(out/buscar (out/plataforma-ia {:url nil :segredo nil}) "e" {:consulta "xx"}))))
+
+(deftest le-o-rascunho-do-resumo
+  (com-servidor 200 "{\"texto\":\"Resumo.\",\"texto-limpo\":\"Resumo.\"}"
+    (fn [url visto]
+      (is (= "Resumo." (:texto (out/ler-rascunho-resumo (out/plataforma-ia {:url url :segredo "s"}) "e1" "r1"))))
+      (is (= "/v1/entes/e1/resumos/rascunhos/r1" (:path @visto))))))
