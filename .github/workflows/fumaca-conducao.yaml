@@ -229,10 +229,25 @@ jobs:
               await p.waitForTimeout(3000);
               const t = await texto(p);
               await shot(p, '8-folha');
+              const autores = (await p.locator('.versao-por').allInnerTexts().catch(() => []))
+                .map(s => s.replace(/\s+/g, ' ').replace(/^Congelada por /, '').trim());
               await p.close();
               const ok = /A folha de presen[cç]a/i.test(t) && !ERRO_TELA.test(t);
               rec('/sessoes/:id/folha', ok ? 'OK' : 'ERRO', ok ? 'folha renderizou (sessao encerrada)' : t.slice(0,160));
+              // "Congelada por" mostra o NOME de quem congelou (PR #35), nunca o fallback "usuário <id curto>".
+              const semNome = autores.filter(a => /^usu[aá]rio [0-9a-f]{8}\b/i.test(a));
+              if (!autores.length) rec('folha: Congelada por <nome>', 'OK', 'nenhuma versao congelada na tela — nao se aplica');
+              else rec('folha: Congelada por <nome>', semNome.length ? 'ERRO' : 'OK',
+                       semNome.length ? `fallback sem nome: ${semNome.join(' | ').slice(0,140)}` : `versoes=${autores.length} autor="${autores[0].slice(0,60)}"`);
             } catch (e) { rec('/sessoes/:id/folha', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+            if (encerrada) try {
+              const r = await api(cSec, `/api/sessoes/${encerrada.id}/folhas`);
+              const fs_ = r.body?.folhas || [];
+              const sem = fs_.filter(f => !f['gerada-por-nome']);
+              const ok = r.status === 200 && !sem.length;
+              rec('GET /sessoes/:id/folhas', ok ? 'OK' : 'ERRO',
+                  `status=${r.status} versoes=${fs_.length} sem-nome=${sem.length}` + (fs_[0]?.['gerada-por-nome'] ? ` nome="${fs_[0]['gerada-por-nome']}"` : ''));
+            } catch (e) { rec('GET /sessoes/:id/folhas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA (conducao / producao) =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
