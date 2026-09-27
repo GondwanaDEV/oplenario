@@ -1,0 +1,46 @@
+name: Configurar satelite de IA no Dokploy (prd)
+
+# Provisiona o satelite de IA (apps/ia) no Dokploy usando os secrets que os deploys ja' usam — nenhum valor
+# sensivel passa pelo log (so' nomes; valores de variavel NUNCA sao impressos).
+# Fase atual: RECONHECIMENTO (so' leitura) — lista projetos/ambientes/apps e a forma do app da API do core.
+
+on:
+  push:
+    branches: ["production"]
+    paths:
+      - ".github/workflows/configurar-ia-prd.yaml"
+
+jobs:
+  configurar:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: configurar-ia-prd
+      cancel-in-progress: false
+    env:
+      DK: https://${{ vars.DOKPLOY_DOMAIN }}/api
+      DK_KEY: ${{ secrets.DOKPLOY_KEY }}
+      APP_API: ${{ secrets.DOKPLOY_APPLICATION_ID_API }}
+    steps:
+      - name: Reconhecimento (so' leitura, so' nomes)
+        run: |
+          set -euo pipefail
+          get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
+
+          echo "== projetos / ambientes / servicos (nomes)"
+          get project.all | jq -r '
+            .[] | "projeto: \(.name)",
+              ( (.environments // [{name:"(sem ambientes)", applications:.applications, postgres:.postgres}])[]
+                | "  ambiente: \(.name)",
+                  ( (.applications // [])[] | "    app: \(.name) | appName=\(.appName) | fonte=\(.sourceType) | imagem=\(.dockerImage // "-")" ),
+                  ( (.postgres // [])[]     | "    postgres: \(.name) | appName=\(.appName)" ) )'
+
+          echo "== app da API do core (forma, sem valores)"
+          get "application.one?applicationId=$APP_API" | jq -r '
+            "nome=\(.name) appName=\(.appName) fonte=\(.sourceType) imagem=\(.dockerImage // "-")",
+            "registryId? \(.registryId != null)  username? \((.username // "") != "")  registryUrl=\(.registryUrl // "-")",
+            "command=\(.command // "-")  environmentId? \(.environmentId != null)  projectId? \(.projectId != null)  serverId? \(.serverId != null)",
+            "chaves do objeto: \(keys | join(","))",
+            "variaveis (so nomes): \((.env // "") | split("\n") | map(select(test("^[A-Za-z_][A-Za-z0-9_]*=")) | split("=")[0]) | join(","))",
+            "dominios: \((.domains // []) | map("\(.host):\(.port)") | join(","))"'
