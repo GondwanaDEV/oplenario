@@ -82,10 +82,34 @@ A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedo
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
+**O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
+mesmo banco do core (schema `ia`, **o Postgres precisa de pgvector**), ligados ao core pelo segredo compartilhado; a
+busca responde `modo: "ia"` e o acervo da Casa demo foi indexado (`ia-republicar-proposicoes`). Topologia,
+variáveis, deploy (`build-ia-prd.yaml`, só na branch `production`), reindexação, orçamento e o que fazer quando a
+busca cai em `sem-ia`: **`docs/27-runbook-ia-producao.md`**. Smoke das telas de IA: `fumaca-ia.yaml`.
 
-**2. Dois IdPs abertos.** O broker **gov.br** (cidadão) não tem uma linha — bloqueia os fluxos de
-escrita autenticados do cidadão (a consulta pública não exige login, então M5 não está bloqueado).
-O IdP do operador (`admin_sistema`) é um **stub de 3 linhas** — bloqueia o console supratenant.
+**2. IdPs — o gov.br do cidadão ENTREGUE (27/09/2026); o do operador segue aberto.** O broker **gov.br**
+([ADR-0015](docs/adr/0015-cidadao-entra-pelo-govbr.md)) é IdP do realm de cada Casa (OIDC+PKCE, `GOVBR_AMBIENTE`
+= producao|homologacao|simulado): do gov.br entram só CPF e nome, o 1º login cria identidade (pelo CPF) + vínculo
+de cidadão + consentimento, e a sessão aberta pelo gov.br é **só de cidadão** (zero papéis, mesmo para quem é
+vereador). O portal tem "Entrar para participar" (`/portal/casa/[ente]/participar`); a cidadã cai em
+`/acompanhamentos`. Dev/demo/CI usam o **gov.br simulado** (`demo/govbr_simulado.clj`, realm no próprio Keycloak).
+**Formulários do cidadão ENTREGUES (27/09/2026):** no portal, abrir pedido de e-SIC (`/esic/novo`), exercer direito
+LGPD (`/lgpd/novo?tipo=`), manifestar à ouvidoria (`/ouvidoria`, inclusive anônima), comentar e acompanhar a matéria
+na ficha pública — cada escrita devolve o recibo com protocolo. Na área da cidadã, `/meus-protocolos` (rota
+`GET /portal/meus-protocolos`) mostra estado, prazo e a resposta da Câmara, e o recurso do e-SIC. **Fora por não
+existir no backend:** anexo da ouvidoria, cartão do ouvidor, denunciar comentário (sem desenho). **Falta, `[GAP]`
+externo:** o credenciamento no gov.br (client de homologação/produção + URL de retorno por Casa).
+**O console do operador ENTREGUE (27/09/2026, [ADR-0016](docs/adr/0016-operador-da-plataforma-e-registro-de-casas.md)):**
+o operador entra pelo realm `operacao` (Keycloak separado em produção, `OPERACAO_KC_*`) com **senha + chave física**
+(WebAuthn cross-platform; atestação `direct` exige as raízes FIDO no truststore em produção, `none` em dev/demo/CI),
+cookie `sessao_operacao`; nenhuma credencial de Casa abre o console e vice-versa (2ª dimensão do vazamento, testada).
+Em `/operacao` ele vê as Câmaras, **provisiona** (registro emite o `ente_id`, perfil no cadastros, 1º `admin_ente` pelo
+CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º administrador entra (evento
+`identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
+`oplenario.main operador-convidar`. **Falta:** a área própria do `admin_ente` (ADR-0005 destravado — hoje quem só
+tem esse papel cai na tela da cidadã), suspender/encerrar Casa, acesso de suporte (12.7, `[GAP]` jurídico), flags
+(12.3), billing (12.2, parqueado).
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
@@ -94,7 +118,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 | Veredito | Telas |
 |---|---|
-| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` · `console-operador-tenant` · `livro-atas` · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
 | **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
@@ -106,8 +130,8 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
   contábil, e entra só a camada de publicação, por consumo. É `[GAP]` de conector externo (qual sistema,
   qual protocolo), da mesma família do layout SIM do TCE-CE. **Não é backlog de engenharia.**
-- `console-operador` (+tenant) — `admin_sistema/diplomat/http/in.clj` tem **3 linhas e zero rotas**, e o
-  IdP do operador é o stub do item 2 acima.
+- `console-operador` (+tenant) — ✅ **entregue em 27/09/2026** (ADR-0016, item 2 acima): lista, provisionar e a ficha
+  da Casa com o handoff e a atuação selada. Os blocos de acesso de suporte e flags por Casa esperam fatia própria.
 - `observabilidade-ia` — Track IA, item 1 acima.
 
 E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).

@@ -79,6 +79,8 @@
            :realm        (str (:realm-prefixo keycloak) ente-id)
            :base-url     (:base-url-publico keycloak)
            :client-id    (:web-client-id keycloak)
+           ;; ADR-0015: o realm tem o broker gov.br? O portal so' mostra 'Entrar com gov.br' quando tem.
+           :govbr        (some? (:govbr keycloak))
            :nome-oficial (:nome-oficial e)
            :nome-curto   (:nome-curto e)})
         (http/json-resposta 404 {:erro "ente nao encontrado"})))))
@@ -126,14 +128,24 @@
         ociosa   (Duration/ofMinutes ociosa-min)]
     (fn [req]
       (let [token (corpo->token (:json-params req))]
-        (if-let [claims (idp/verificar-token idp token)]
-          (if-let [ator (auten/resolver-sessao repo-identidade claims)]
+        (if-let [verificadas (idp/verificar-token idp token)]
+          ;; ADR-0015: o login pelo gov.br cria no 1o acesso o que falta (identidade pelo CPF, vinculo de cidadao,
+          ;; consentimento) e a sessao nasce SO' de cidadao — `vinculo-tipo` fica gravado nela.
+          (if-let [ator (auten/resolver-sessao repo-identidade
+                                               (if (auten/govbr? verificadas)
+                                                 {:identidade-id (auten/garantir-cidadao! repo-identidade verificadas)
+                                                  :ente-id (:ente-id verificadas) :vinculo-tipo "cidadao"}
+                                                 (dissoc verificadas :vinculo-tipo)))]
             (let [^Instant agora-inst (tempo/agora relogio)
                   seg (repo/criar-sessao! repo-identidade
-                        {:identidade-id (:identidade-id ator)
-                         :ente-id       (:ente-id ator)
-                         :expira-em     (.plus agora-inst absoluta)
-                         :ocioso-ate    (.plus agora-inst ociosa)})]
+                        (cond-> {:identidade-id (:identidade-id ator)
+                                 :ente-id       (:ente-id ator)
+                                 :expira-em     (.plus agora-inst absoluta)
+                                 :ocioso-ate    (.plus agora-inst ociosa)}
+                          (auten/govbr? verificadas) (assoc :vinculo-tipo "cidadao")))]
+              ;; ADR-0016: o 1o acesso do vinculo vira evento (o registro de Casas ativa a Casa quando e' o 1o admin)
+              (when (:vinculo-ativo-id ator)
+                (repo/registrar-primeiro-acesso! repo-identidade (:ente-id ator) ator))
               (http/json-resposta 200 {:sessao seg}))
             (http/json-resposta 401 {:erro "sem vinculo ativo"}))
           (http/json-resposta 401 {:erro "token invalido"}))))))

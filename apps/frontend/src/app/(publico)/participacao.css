@@ -1,0 +1,114 @@
+/* Formulários do cidadão no portal (ADR-0015) — porte de ficha-materia-publica.html (.acomp, .compor) e
+   ouvidoria.html (.pf-*). Tokens do sistema; nada de cor solta além do que o design já fixa. */
+.acomp { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin: 1.2rem 0 0; padding: 1rem 1.2rem;
+  background: color-mix(in srgb, var(--marca) 6%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); }
+.acomp .t { font-size: var(--t-13); color: var(--texto-2); }
+.acomp .t b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
+.acomp .btn { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; }
+.acomp .compor-aviso { margin: 0; flex-basis: 100%; }
+
+.compor { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio);
+  padding: 1rem 1.2rem; margin: 0 0 1.4rem; }
+.compor label { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); margin: 0 0 0.4rem; }
+.compor textarea { width: 100%; min-height: 80px; resize: vertical; font-family: var(--corpo); font-size: var(--t-16);
+  color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem; }
+.compor-rod { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.compor-rod .ident { font-size: var(--t-12); color: var(--texto-2); display: inline-flex; align-items: center; gap: 0.4rem; }
+.compor-rod .ident svg { color: var(--cobalto-texto); }
+.compor-rod .btn { margin-left: auto; }
+.compor-ok { font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.compor-ok b { color: var(--texto); }
+.compor-aviso { font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0 0 1.4rem; }
+.link-simples { background: none; border: 0; padding: 0; color: var(--marca); font: inherit; font-weight: 600;
+  text-decoration: underline; cursor: pointer; }
+/* Mesma forma do .form-erro interno (formulario-proposicao.css): --acento-texto, sem token de erro próprio. */
+.superficie-publica .form-erro { color: var(--acento-texto); background: var(--surface-2); border: 1px solid var(--linha);
+  border-radius: var(--raio-sm); padding: 0.6rem 0.9rem; font-size: var(--t-13); margin: 0.6rem 0 0; }
+
+/* ---------- formulários (porte de ouvidoria.html; prefixo pf- para não colidir com o chassi) ---------- */
+.pf-hero { padding: 2.2rem 0 1.4rem; }
+.pf-hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(2rem, 5vw, var(--t-40)); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0.4rem 0 0; line-height: 1.05; }
+.pf-hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.7rem 0 0; max-width: 60ch; }
+.pf-lei { display: inline-flex; align-items: center; gap: 0.55rem; margin: 1.1rem 0 0; padding: 0.55rem 0.9rem;
+  background: color-mix(in srgb, var(--marca) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 28%, var(--linha));
+  border-radius: 999px; font-size: var(--t-13); color: var(--texto); }
+.pf-lei svg { color: var(--marca); flex: 0 0 auto; }
+.pf-lei b { font-weight: 600; }
+
+.pf-grade { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 1.6rem; align-items: start; margin: 0.6rem 0 2.5rem; }
+@media (max-width: 880px) { .pf-grade { grid-template-columns: minmax(0, 1fr); } }
+
+.pf-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra);
+  padding: 1.5rem clamp(1.2rem, 4vw, 1.8rem); min-width: 0; }
+.pf-card h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.3rem; }
+.pf-ajuda { font-size: var(--t-13); color: var(--texto-2); margin: 0 0 1.3rem; line-height: 1.5; }
+.pf-ajuda a, .pf-rcard a { color: var(--marca); font-weight: 600; }
+.pf-card .pt-govbr { margin-top: 0.4rem; }
+
+.pf-fieldset { border: none; margin: 0 0 1.3rem; padding: 0; min-width: 0; }
+.pf-fieldset legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); margin-bottom: 0.6rem; padding: 0; }
+.pf-tipos { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.6rem; }
+.pf-tipo { position: relative; }
+.pf-tipo input { position: absolute; opacity: 0; pointer-events: none; }
+.pf-tipo label { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.8rem; border: 1.5px solid var(--linha);
+  border-radius: var(--raio); cursor: pointer; background: var(--surface-2); height: 100%; }
+.pf-tipo label b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+.pf-tipo label span { font-size: var(--t-12); color: var(--texto-2); line-height: 1.35; }
+.pf-tipo input:checked + label { border-color: var(--marca); background: color-mix(in srgb, var(--marca) 7%, var(--surface-2));
+  box-shadow: inset 0 0 0 1px var(--marca); }
+.pf-tipo input:focus-visible + label { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+.pf-campo { display: grid; gap: 0.35rem; margin: 0 0 1.1rem; }
+.pf-campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.pf-req { color: var(--acento-texto); }
+.pf-campo input, .pf-campo textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.7rem 0.8rem;
+  min-height: 48px; width: 100%; box-sizing: border-box; }
+.pf-campo textarea { min-height: 120px; resize: vertical; line-height: 1.55; }
+.pf-dica { max-width: 72ch; font-size: var(--t-12); color: var(--texto-2); }
+
+.pf-ident { border: 1px solid var(--linha); border-radius: var(--raio); overflow: hidden; margin: 0.3rem 0 1.3rem; padding: 0; }
+.pf-op { display: flex; gap: 0.7rem; padding: 0.9rem 1rem; border-top: 1px solid var(--linha); align-items: flex-start; cursor: pointer; }
+.pf-op:first-of-type { border-top: none; }
+.pf-op input { margin-top: 3px; flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--marca); }
+.pf-op .t b { font-size: var(--t-13); color: var(--texto); display: block; }
+.pf-op .t span { font-size: var(--t-12); color: var(--texto-2); line-height: 1.4; }
+
+.pf-enviar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+.pf-protege { font-size: var(--t-12); color: var(--texto-2); display: flex; align-items: center; gap: 0.4rem; margin: 0.8rem 0 0; }
+.pf-enviar .pf-protege { margin: 0; }
+.pf-protege svg { color: var(--marca); flex: 0 0 auto; }
+
+.pf-rail { display: grid; gap: 1rem; min-width: 0; }
+.pf-rcard { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.2rem; }
+.pf-rcard h3 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.7rem; }
+.pf-rcard p { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0; line-height: 1.5; }
+.pf-rcard p b { color: var(--texto); }
+.pf-prazo-lista { margin: 0.3rem 0 0; padding-left: 1.3rem; display: grid; gap: 0.6rem; font-size: var(--t-13); color: var(--texto); }
+.pf-prazo-lista li::marker { font-family: var(--mono); font-weight: 600; color: var(--marca); }
+.pf-acompanhar { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.pf-acompanhar input { flex: 1; min-width: 0; font-family: var(--mono); font-size: var(--t-13); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 50%, var(--linha)); border-radius: var(--raio-sm); padding: 0.5rem 0.6rem;
+  min-height: 42px; color: var(--texto); }
+
+.pf-recibo .pf-protocolo { font-family: var(--mono); font-weight: 600; font-size: var(--t-28); color: var(--texto); margin: 0.6rem 0 0.8rem;
+  letter-spacing: 0.02em; overflow-wrap: anywhere; }
+.pf-acoes { display: flex; gap: 0.7rem; flex-wrap: wrap; margin: 0.4rem 0 0; }
+
+/* entradas dos formulários nos balcões e na navegação cívica */
+.superficie-publica a.direito-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.nota-ident { font-size: var(--t-12); color: var(--texto-2); margin: 0.6rem 0 0; }
+.balcao-acoes .nota-ident { margin: 0; }
+.superficie-publica a.civico-link { display: block; text-decoration: none; color: inherit;
+  border-color: color-mix(in srgb, var(--marca) 35%, var(--linha)); }
+.superficie-publica a.civico-link:hover { border-color: var(--marca); }
+.superficie-publica a.civico-link .em-breve-titulo { color: var(--marca); }
+
+/* `.superficie-publica a` pinta todo link com a cor de marca e vencia os botões-link (texto sumia no
+   .btn-primaria). Botão que é link mantém a cor do botão. */
+.superficie-publica a.btn-primaria, .superficie-publica a.btn-primaria:hover { color: var(--acao-texto); text-decoration: none; }
+.superficie-publica a.btn-contorno, .superficie-publica a.btn-contorno:hover { color: var(--texto); text-decoration: none; }
+.pf-hero .eyebrow, .pf-recibo .eyebrow { color: var(--acento-texto); }

@@ -19,13 +19,28 @@
     (edn/read-string (slurp r))
     (throw (ex-info "config.edn ausente do classpath" {}))))
 
+(def govbr-simulado-client-id
+  "O client do broker no realm `govbr-simulado` (dev/demo/CI, ADR-0015). Fixo: o simulado nao guarda segredo real."
+  "oplenario-broker")
+(def govbr-simulado-client-secret "govbr-simulado-dev")
+
+(defn- herdar-operacao
+  "O que o `:operacao` nao declara vem do `:keycloak` (URL, credencial admin, cache de JWKS, SMTP) — em dev/CI e' o
+  mesmo container. Em producao o deploy declara o Keycloak separado e nada e' herdado."
+  [config]
+  (update config :operacao
+          #(merge (select-keys (:keycloak config) [:base-url :base-url-publico :admin-usuario :admin-senha
+                                                  :jwks-cache-ttl-s :smtp])
+                  %)))
+
 (defn carregar
   "Le o config.edn e aplica overrides do ambiente. `env` default = System/getenv (java.util.Map);
   os testes injetam um mapa. Sobrepoe credenciais alem da URL — senao o pool ignoraria a URL de
   producao e tentaria o user/password default do EDN."
   ([] (carregar (System/getenv)))
   ([env]
-   (cond-> (base)
+   (herdar-operacao
+    (cond-> (base)
      (get env "APP_ENV")      (assoc :env (get env "APP_ENV"))
      (get env "DATABASE_URL") (assoc-in [:db :jdbc-url] (get env "DATABASE_URL"))
      (get env "DB_USER")      (assoc-in [:db :user]     (get env "DB_USER"))
@@ -63,4 +78,28 @@
      (get env "KEYCLOAK_SMTP_USUARIO")   (assoc-in [:keycloak :smtp :usuario]  (get env "KEYCLOAK_SMTP_USUARIO"))
      (get env "KEYCLOAK_SMTP_SENHA")     (assoc-in [:keycloak :smtp :senha]    (get env "KEYCLOAK_SMTP_SENHA"))
      (get env "SESSAO_ABSOLUTA_H")  (assoc-in [:sessao :absoluta-h] (Integer/parseInt (get env "SESSAO_ABSOLUTA_H")))
-     (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN"))))))
+     (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN")))
+     ;; ADR-0015: o broker gov.br do cidadao. Sem GOVBR_AMBIENTE = sem gov.br (o realm nao ganha o IdP e o portal
+     ;; nao mostra o botao). producao|homologacao pedem o client credenciado no gov.br (cofre); o simulado (realm
+     ;; `govbr-simulado` no proprio Keycloak, dev/demo/CI) tem client fixo semeado por `demo/govbr_simulado.clj`.
+     (get env "GOVBR_AMBIENTE")
+     (assoc-in [:keycloak :govbr]
+               (let [simulado? (= "simulado" (get env "GOVBR_AMBIENTE"))]
+                 {:ambiente      (get env "GOVBR_AMBIENTE")
+                  :client-id     (or (get env "GOVBR_CLIENT_ID") (when simulado? govbr-simulado-client-id))
+                  :client-secret (or (get env "GOVBR_CLIENT_SECRET") (when simulado? govbr-simulado-client-secret))}))
+     ;; ADR-0016: o IdP do operador. Em producao aponta para o Keycloak SEPARADO; sem isto herda o das Casas (dev/CI).
+     (get env "OPERACAO_KC_BASE_URL")         (assoc-in [:operacao :base-url]         (get env "OPERACAO_KC_BASE_URL"))
+     (get env "OPERACAO_KC_BASE_URL_PUBLICO") (assoc-in [:operacao :base-url-publico] (get env "OPERACAO_KC_BASE_URL_PUBLICO"))
+     (get env "OPERACAO_KC_ADMIN_USUARIO")    (assoc-in [:operacao :admin-usuario]    (get env "OPERACAO_KC_ADMIN_USUARIO"))
+     (get env "OPERACAO_KC_ADMIN_SENHA")      (assoc-in [:operacao :admin-senha]      (get env "OPERACAO_KC_ADMIN_SENHA"))
+     (get env "OPERACAO_REDIRECT_URIS") (assoc-in [:operacao :redirect-uris] (lista-csv (get env "OPERACAO_REDIRECT_URIS")))
+     (get env "OPERACAO_WEB_ORIGINS")   (assoc-in [:operacao :web-origins]   (lista-csv (get env "OPERACAO_WEB_ORIGINS")))
+     ;; modelos de chave fisica aceitos (AAGUID, CSV). Vazio = qualquer chave de seguranca (cross-platform).
+     (get env "OPERACAO_AAGUIDS")       (assoc-in [:operacao :aaguids]       (lista-csv (get env "OPERACAO_AAGUIDS")))
+     (get env "OPERACAO_ATESTACAO")
+     (assoc-in [:operacao :atestacao]
+               (let [v (get env "OPERACAO_ATESTACAO")]
+                 (if (#{"none" "indirect" "direct"} v)
+                   v
+                   (throw (ex-info "OPERACAO_ATESTACAO invalida — use none|indirect|direct" {:valor v})))))))))

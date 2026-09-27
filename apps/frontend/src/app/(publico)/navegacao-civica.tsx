@@ -19,6 +19,7 @@
 // Component (sem "use client"), mesmo quando composto dentro do page.tsx.
 
 import { EmBreve } from "@/lib/em-breve";
+import "./participacao.css";
 
 const CARTOES = [
   {
@@ -31,7 +32,8 @@ const CARTOES = [
   },
   {
     titulo: "Ouvidoria",
-    motivo: "Reclamação, denúncia, elogio ou sugestão, com resposta em até 30 dias (prorrogável, Lei 13.460) — chega numa fatia futura; ainda sem rota pública.",
+    motivo: "Reclamação, denúncia, elogio ou sugestão, com resposta em até 30 dias (prorrogável, Lei 13.460).",
+    rota: "ouvidoria",
   },
   {
     titulo: "Dados abertos",
@@ -47,7 +49,7 @@ const CARTOES = [
   },
 ];
 
-export function NavegacaoCivica() {
+export function NavegacaoCivica({ ente }: { ente: string }) {
   return (
     <section className="secao" id="civico" aria-labelledby="civico-titulo">
       <div className="secao-cabeca">
@@ -56,7 +58,15 @@ export function NavegacaoCivica() {
       <ul className="civico">
         {CARTOES.map((c) => (
           <li key={c.titulo}>
-            <EmBreve titulo={c.titulo} motivo={c.motivo} />
+            {"rota" in c && c.rota ? (
+              // O primeiro destino com rota própria (formulários do cidadão, ADR-0015): cartão-link.
+              <a className="em-breve civico-link" href={`/portal/casa/${ente}/${c.rota}`}>
+                <p className="em-breve-titulo">{c.titulo}</p>
+                <p className="em-breve-motivo">{c.motivo}</p>
+              </a>
+            ) : (
+              <EmBreve titulo={c.titulo} motivo={c.motivo} />
+            )}
           </li>
         ))}
       </ul>

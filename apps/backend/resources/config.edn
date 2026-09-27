@@ -38,6 +38,17 @@
  ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
  ;; ler este valor em vez de ter default proprio.
  :sessao {:absoluta-h 12 :ociosa-min 30}
+ ;; ADR-0016: o IdP do OPERADOR da plataforma — realm proprio, sem Casa. Em producao e' um Keycloak FISICAMENTE
+ ;; SEPARADO (OPERACAO_KC_BASE_URL etc.); o que nao for dado aqui e' herdado de :keycloak (dev/CI: o mesmo
+ ;; container). Sessao do console mais curta que a da Casa (8h absoluta, 15 min ociosa).
+ :operacao {:realm "operacao" :audiencia "oplenario-operacao" :client-id "oplenario-console"
+            :redirect-uris ["http://localhost:3000/api/operacao/callback"]
+            :web-origins ["http://localhost:3000"]
+            :aaguids []
+            ;; atestacao da chave no registro: "direct" (producao: exige as raizes FIDO no truststore do Keycloak) |
+            ;; "none" (dev/demo/CI, chave virtual). OPERACAO_ATESTACAO sobrepoe.
+            :atestacao "direct"
+            :sessao {:absoluta-h 8 :ociosa-min 15}}
  ;; ADR-0008: fronteira com o satelite de IA. Segredo SO' por ambiente (OPLENARIO_IA_SEGREDO); nil = desligada.
  :integracao-ia {:segredo nil :url nil}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)

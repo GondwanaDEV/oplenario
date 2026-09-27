@@ -70,7 +70,7 @@ export default async function PaginaPortalCidadao({
             </div>
           </section>
 
-          <NavegacaoCivica />
+          <NavegacaoCivica ente={ente} />
         </div>
       </main>
       <RodapeInstitucional nomeCasa={nomeCasa} />

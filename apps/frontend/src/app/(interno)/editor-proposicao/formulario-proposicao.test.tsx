@@ -29,6 +29,19 @@ describe("FormularioProposicao", () => {
     expect(screen.getByLabelText(/objeto da indicação/i)).toBeTruthy();
   });
 
+  it("o atributo de cada espécie é obrigatório (o banco recusa a proposição sem ele)", () => {
+    render(<FormularioProposicao aoSubmeter={vi.fn()} enviando={false} erro={null} rotuloAcaoPrimaria="Protocolar" />);
+    const especie = screen.getByLabelText(/espécie/i);
+    for (const [valor, rotulo] of [
+      ["indicacao", /objeto da indicação/i],
+      ["requerimento", /tipo do requerimento/i],
+      ["mocao", /categoria da moção/i],
+    ] as const) {
+      fireEvent.change(especie, { target: { value: valor } });
+      expect((screen.getByLabelText(rotulo) as HTMLInputElement).required).toBe(true);
+    }
+  });
+
   it("helper de inserção 'Art. Nº' insere o snippet no textarea", () => {
     render(<FormularioProposicao aoSubmeter={vi.fn()} enviando={false} erro={null} rotuloAcaoPrimaria="Protocolar" />);
     const textarea = screen.getByLabelText(/texto da proposição/i) as HTMLTextAreaElement;

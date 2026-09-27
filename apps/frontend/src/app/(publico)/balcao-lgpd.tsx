@@ -12,13 +12,14 @@
 
 import { useEncarregado } from "@/lib/use-encarregado";
 import { EmBreve } from "@/lib/em-breve";
-
+import "./participacao.css";
+// Cada direito leva ao formulário já com ele marcado (formulários do cidadão, ADR-0015).
 const DIREITOS = [
-  { rotulo: "Acessar meus dados" },
-  { rotulo: "Corrigir um dado" },
-  { rotulo: "Eliminar meus dados" },
-  { rotulo: "Com quem foram compartilhados" },
-  { rotulo: "Revogar um consentimento que dei", larga: true },
+  { rotulo: "Acessar meus dados", tipo: "acessar" },
+  { rotulo: "Corrigir um dado", tipo: "corrigir" },
+  { rotulo: "Eliminar meus dados", tipo: "eliminar" },
+  { rotulo: "Com quem foram compartilhados", tipo: "com_quem_compartilhado" },
+  { rotulo: "Revogar um consentimento que dei", tipo: "revogar_consentimento", larga: true },
 ];
 
 export function BalcaoLgpd({ ente }: { ente: string }) {
@@ -44,21 +45,16 @@ export function BalcaoLgpd({ ente }: { ente: string }) {
         </span>
       </p>
 
-      <ul className="direitos" aria-describedby="lgpd-direitos-embreve">
+      <ul className="direitos">
         {DIREITOS.map((d) => (
           <li key={d.rotulo} className={d.larga ? "larga" : undefined}>
-            <button className="direito-btn" type="button" disabled aria-disabled="true">
+            <a className="direito-btn" href={`/portal/casa/${ente}/lgpd/novo?tipo=${d.tipo}`}>
               {d.rotulo}
-            </button>
+            </a>
           </li>
         ))}
       </ul>
-      <div id="lgpd-direitos-embreve">
-        <EmBreve
-          titulo="Exercer um direito da LGPD"
-          motivo="Pedir para acessar, corrigir, eliminar ou revogar um consentimento exige identificação formal (Entrar com gov.br) — chega numa fatia futura de autenticação."
-        />
-      </div>
+      <p className="nota-ident">Exercer um direito exige identificação formal pelo gov.br — a Câmara só responde ao próprio titular.</p>
 
       <p className="prazo-lgpd">
         <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">

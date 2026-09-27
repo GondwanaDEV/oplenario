@@ -63,3 +63,31 @@
     (is (pos? (get-in c [:keycloak :jwks-cache-ttl-s])))
     (is (= "oplenario-web" (get-in c [:keycloak :web-client-id])) "client id publico default do edn")
     (is (= "http://localhost:8090" (get-in c [:keycloak :base-url-publico])) "base-url publico default do edn")))
+
+(deftest govbr-so-existe-com-ambiente
+  ;; ADR-0015: sem GOVBR_AMBIENTE o realm nao ganha o broker (fail-closed)
+  (is (nil? (get-in (config/carregar {}) [:keycloak :govbr])))
+  (is (= {:ambiente "producao" :client-id "cid" :client-secret "seg"}
+         (get-in (config/carregar {"GOVBR_AMBIENTE" "producao" "GOVBR_CLIENT_ID" "cid" "GOVBR_CLIENT_SECRET" "seg"})
+                 [:keycloak :govbr])))
+  (is (= "oplenario-broker" (get-in (config/carregar {"GOVBR_AMBIENTE" "simulado"}) [:keycloak :govbr :client-id]))
+      "o simulado tem client fixo")
+  (is (nil? (get-in (config/carregar {"GOVBR_AMBIENTE" "producao"}) [:keycloak :govbr :client-id]))
+      "producao nunca herda o client do simulado"))
+
+(deftest operacao-herda-o-keycloak-em-dev-e-separa-em-producao
+  ;; ADR-0016: sem OPERACAO_KC_* o console usa o mesmo Keycloak (dev/CI); com eles, o Keycloak separado.
+  (let [dev (config/carregar {})]
+    (is (= "operacao" (get-in dev [:operacao :realm])))
+    (is (= (get-in dev [:keycloak :base-url]) (get-in dev [:operacao :base-url])))
+    (is (= (get-in dev [:keycloak :smtp]) (get-in dev [:operacao :smtp]))))
+  (let [prod (config/carregar {"KEYCLOAK_BASE_URL" "https://kc-casas" "OPERACAO_KC_BASE_URL" "https://kc-operacao"
+                               "OPERACAO_KC_ADMIN_SENHA" "outra" "OPERACAO_REDIRECT_URIS" "https://app/api/operacao/callback"
+                               "OPERACAO_AAGUIDS" "a, b"})]
+    (is (= "https://kc-operacao" (get-in prod [:operacao :base-url])))
+    (is (= "outra" (get-in prod [:operacao :admin-senha])))
+    (is (= ["https://app/api/operacao/callback"] (get-in prod [:operacao :redirect-uris])))
+    (is (= ["a" "b"] (get-in prod [:operacao :aaguids])))
+    (is (= "direct" (get-in prod [:operacao :atestacao]))))
+  (is (= "none" (get-in (config/carregar {"OPERACAO_ATESTACAO" "none"}) [:operacao :atestacao])))
+  (is (thrown? clojure.lang.ExceptionInfo (config/carregar {"OPERACAO_ATESTACAO" "talvez"}))))

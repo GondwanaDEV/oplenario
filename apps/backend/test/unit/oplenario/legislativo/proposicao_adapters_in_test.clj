@@ -80,3 +80,26 @@
     (is (= id (:id m)))
     (is (= (:identidade-id ator) (:updated-by m)))
     (is (= "Y" (:ementa m)))))
+
+;; ---------- o atributo quente de cada especie (o 500 da indicacao) ----------
+
+(defn- campo-invalido [f]
+  (try (f) nil (catch clojure.lang.ExceptionInfo e (when (= :validacao/invalido (:tipo (ex-data e))) (:campo (ex-data e))))))
+
+(deftest criar-proposicao->dominio-exige-o-atributo-da-especie
+  (let [ator {:identidade-id (random-uuid)}
+        criar #(adapters/criar-proposicao->dominio ator (merge {"ano" 2026 "ementa" "X"} %))]
+    (is (= :objeto-indicacao (campo-invalido #(criar {"tipo" "indicacao"}))))
+    (is (= :tipo-requerimento (campo-invalido #(criar {"tipo" "requerimento"}))))
+    (is (= :categoria-mocao (campo-invalido #(criar {"tipo" "mocao"}))))
+    (is (= :objeto-indicacao (campo-invalido #(criar {"tipo" "indicacao" "objeto-indicacao" "   "}))))
+    (is (= "Tapa-buraco" (:objeto-indicacao (criar {"tipo" "indicacao" "objeto-indicacao" "Tapa-buraco"}))))))
+
+(deftest editar-proposicao->dominio-recusa-atributo-da-especie-em-branco
+  ;; no PATCH ausente/null nao mexe na coluna (o `some?` do db/editar!); so' o branco apagaria o atributo.
+  (let [ator {:identidade-id (random-uuid)} id (random-uuid)
+        editar #(adapters/editar-proposicao->dominio ator id (merge {"lock-version" 0} %))]
+    (is (= :objeto-indicacao (campo-invalido #(editar {"objeto-indicacao" ""}))))
+    (is (= :tipo-requerimento (campo-invalido #(editar {"tipo-requerimento" "  "}))))
+    (is (= :categoria-mocao (campo-invalido #(editar {"categoria-mocao" " "}))))
+    (is (= "Novo objeto" (:objeto-indicacao (editar {"objeto-indicacao" "Novo objeto"}))))))

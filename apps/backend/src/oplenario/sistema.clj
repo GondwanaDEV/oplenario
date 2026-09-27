@@ -4,6 +4,9 @@
   os Components de cada modulo via `using`. So recurso stateful e' componente. O host (raiz de
   composicao) PODE requerer modulos — e' aqui que os Repo-Components recebem o :datasource."
   (:require [com.stuartsierra.component :as component]
+            [oplenario.admin-sistema.components.idp-admin :as idp-admin]
+            [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema]
+            [oplenario.admin-sistema.diplomat.consumers :as admin-sistema-consumers]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.compliance.components.repositorio :as repo-compliance]
@@ -83,7 +86,9 @@
                         (legislativo-consumers/registrar resolver-identidade-do-vereador)
                         ;; Faixa A / A.3 (ADR-0008): a fronteira com a IA promove eventos de dominio escolhidos
                         ;; (gravacao vinculada) a eventos de integracao no feed que o satelite puxa.
-                        (integracao-ia-consumers/registrar))]
+                        (integracao-ia-consumers/registrar)
+                        ;; ADR-0016: o 1o acesso do 1o administrador ativa a Casa no registro (handoff)
+                        (admin-sistema-consumers/registrar))]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que
@@ -98,6 +103,10 @@
    ;; Valkey abre antes do relay comecar a publicar).
    :relay           (component/using (outbox-relay/relay {:registro registro}) [:datasource :canal-store])
    :repo-cadastros  (component/using (repo-cadastros/repositorio) [:datasource])
+   ;; ADR-0016: o operador da plataforma (supratenant). Janela de ociosidade da sessao do console = a do config.
+   :repo-admin-sistema (component/using (repo-admin-sistema/repositorio
+                                         (* 60 (or (get-in config [:operacao :sessao :ociosa-min]) 15)))
+                                        [:datasource])
    ;; janela de ociosidade da sessao vem do config (:sessao :ociosa-min) — o mint computa o ocioso-ate
    ;; inicial do mesmo config, e o resolver desliza usando ESTE valor: fonte unica (senao o slide da 1a
    ;; request autenticada silenciosamente reverteria p/ o default 1800s, anulando um SESSAO_OCIOSA_MIN
@@ -155,6 +164,13 @@
     (idp-dev/idp-dev)
     (keycloak-idp/keycloak-idp (:keycloak config))))
 
+(defn- idp-operacao-para
+  "O IdP do operador (ADR-0016), pela mesma regra de `idp-para`: so' dev/test ligam o fake."
+  [config]
+  (if (#{"dev" "test"} (:env config))
+    (idp-admin/idp-operacao-dev)
+    (idp-admin/keycloak-operacao (:operacao config))))
+
 (defn sistema-serve
   "Sistema do host com o SERVIDOR HTTP (caminho `serve` do main). Separado de `novo-sistema` p/ os testes de
   boot do dominio (sistema_test/motor/repo/marco) NAO subirem o Jetty (sem bind de porta em teste). W1 serve so
@@ -164,6 +180,7 @@
          ;; IdP por ambiente (idp-para: dev/test = idp-dev; qualquer outro :env, incl. nao-reconhecido,
          ;; = KeycloakIdp real — default fail-safe).
          :idp (idp-para config)
+         :idp-operacao (idp-operacao-para config)
          ;; servidor `using` idp + repo-identidade -> a rotas-fn (rotas/montar) monta o interceptor de auth
          ;; sobre as instancias iniciadas. W3: +repo-sessoes p/ a vertical de rotas de sessoes (o fan-out por
          ;; modulo acrescenta cada Repo aqui). G3: +canal-store p/ o endpoint SSE. F4 Slice 3: +repo-legislativo
@@ -173,6 +190,6 @@
          ;; `repo/transicionar-parecer!` ja recebe via chamada direta nos testes de integracao).
          :servidor-http (component/using
                          (http-servidor/servidor-http config rotas/montar)
-                         [:idp :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
+                         [:idp :idp-operacao :repo-admin-sistema :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
                           :canal-store :objeto-store :registro-fatos :repo-integracao-ia :repo-normas])))

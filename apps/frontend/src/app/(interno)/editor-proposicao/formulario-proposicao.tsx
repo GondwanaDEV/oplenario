@@ -180,6 +180,7 @@ export function FormularioProposicao({
             <input
               id="f-objeto-indicacao"
               type="text"
+              required
               value={valores.objetoIndicacao ?? ""}
               onChange={(e) => setValores((v) => ({ ...v, objetoIndicacao: e.target.value }))}
             />
@@ -191,6 +192,7 @@ export function FormularioProposicao({
             <input
               id="f-tipo-requerimento"
               type="text"
+              required
               value={valores.tipoRequerimento ?? ""}
               onChange={(e) => setValores((v) => ({ ...v, tipoRequerimento: e.target.value }))}
             />
@@ -202,6 +204,7 @@ export function FormularioProposicao({
             <input
               id="f-categoria-mocao"
               type="text"
+              required
               value={valores.categoriaMocao ?? ""}
               onChange={(e) => setValores((v) => ({ ...v, categoriaMocao: e.target.value }))}
             />

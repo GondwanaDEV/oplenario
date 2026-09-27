@@ -35,7 +35,7 @@
   pelo caller (:expira-em = teto absoluto; :ocioso-ate = janela de ociosidade inicial — o caller deriva
   ambos da config, nao esta fn). Devolve o segredo CRU — a UNICA vez que ele existe fora do cookie do
   cliente; se perdido aqui, a sessao fica orfa (sem forma de re-obter o segredo do hash, por design)."
-  [conn {:keys [identidade-id ente-id expira-em ocioso-ate]}]
+  [conn {:keys [identidade-id ente-id expira-em ocioso-ate vinculo-tipo]}]
   {:pre [(some? identidade-id) (some? ente-id) (some? expira-em) (some? ocioso-ate)]}
   (let [segredo (gerar-segredo)]
     (jdbc/execute-one! conn
@@ -43,12 +43,13 @@
                    :values [{:sessao_hash (sha256-bytes segredo)
                              :identidade_id identidade-id
                              :ente_id ente-id
+                             :vinculo_tipo vinculo-tipo
                              :expira_em expira-em
                              :ocioso_ate ocioso-ate}]}))
     segredo))
 
 (defn resolver!
-  "Resolve o segredo cru -> {:identidade-id :ente-id} SE a sessao existe e esta' DENTRO dos dois prazos
+  "Resolve o segredo cru -> {:identidade-id :ente-id [:vinculo-tipo]} SE a sessao existe e esta' DENTRO dos dois prazos
   (`now() <= expira_em` E `now() <= ocioso_ate`, comparados no SQL = relogio do banco, nao da JVM). Em
   acerto valido, DESLIZA `ocioso_ate = now() + janela-ociosa-seg` na MESMA instrucao (UPDATE...RETURNING
   e' atomico — sem corrida entre ler e deslizar). nil se o hash e' desconhecido OU se algum dos dois
@@ -63,8 +64,10 @@
                            :where [:and [:= :sessao_hash (sha256-bytes segredo)]
                                         [:<= [:now] :expira_em]
                                         [:<= [:now] :ocioso_ate]]
-                           :returning [:identidade_id :ente_id]})))
-          (select-keys [:identidade-id :ente-id])))
+                           :returning [:identidade_id :ente_id :vinculo_tipo]})))
+          ;; `:vinculo-tipo` so' quando a sessao e' de cidadao (ADR-0015) — a institucional segue com as 2 chaves
+          ((fn [r] (cond-> (select-keys r [:identidade-id :ente-id])
+                     (:vinculo-tipo r) (assoc :vinculo-tipo (:vinculo-tipo r)))))))
 
 (defn apagar!
   "DELETE por hash — idempotente (apagar 2x, ou um segredo desconhecido, e' no-op silencioso; logout

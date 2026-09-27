@@ -21,6 +21,8 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { TemaProvider, useTema } from "@/lib/tema";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
+import { usePathname } from "next/navigation";
+import "./cidadao.css";
 
 export default function LayoutCidadao({ children }: { children: React.ReactNode }) {
   return (
@@ -50,6 +52,7 @@ function TopoCidadao() {
   const { tema, alternar } = useTema();
   const { token } = useAuth();
   const { dados, estado } = useMeuIdentidade(token);
+  const rota = usePathname();
   const nome = estado === "pronto" && dados ? dados.nome : estado === "carregando" ? "Carregando…" : "Sessão";
   const papel = estado === "pronto" && dados ? rotuloPapel(dados.papeis) : "";
 
@@ -63,6 +66,14 @@ function TopoCidadao() {
             <p className="marca-orgao">Portal do Cidadão</p>
           </div>
         </div>
+        <nav className="cid-nav" aria-label="Minha área">
+          <a href="/acompanhamentos" aria-current={rota === "/acompanhamentos" ? "page" : undefined}>
+            Minhas matérias
+          </a>
+          <a href="/meus-protocolos" aria-current={rota === "/meus-protocolos" ? "page" : undefined}>
+            Meus protocolos
+          </a>
+        </nav>
         <div className="topo-dir">
           <button
             className="tema-btn"

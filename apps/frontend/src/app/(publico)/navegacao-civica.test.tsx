@@ -9,26 +9,27 @@ describe("NavegacaoCivica", () => {
   afterEach(() => cleanup());
 
   it("mostra o título da seção", () => {
-    render(<NavegacaoCivica />);
+    render(<NavegacaoCivica ente="fortaleza" />);
     expect(screen.getByRole("heading", { name: "Tudo o que a Câmara publica" })).toBeTruthy();
   });
 
-  it("mostra os 6 cartões, todos em-breve honesto (role=status)", () => {
-    render(<NavegacaoCivica />);
+  it("mostra os 6 cartões; a Ouvidoria já é link, os outros 5 seguem em-breve honesto", () => {
+    render(<NavegacaoCivica ente="fortaleza" />);
     const titulos = ["Sessões", "Transparência", "Ouvidoria", "Dados abertos", "Agenda pública", "Carta de Serviços"];
     for (const titulo of titulos) {
       expect(screen.getByText(titulo).textContent).toBe(titulo);
     }
-    expect(screen.getAllByRole("status")).toHaveLength(6);
+    expect(screen.getAllByRole("status")).toHaveLength(5);
+    expect(screen.getByRole("link", { name: /ouvidoria/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/ouvidoria");
   });
 
   it("não fabrica uma agenda de sessão específica (sem 'Próxima: ...' inventado)", () => {
-    render(<NavegacaoCivica />);
+    render(<NavegacaoCivica ente="fortaleza" />);
     expect(screen.queryByText(/16ª ordinária/i)).toBeNull();
   });
 
   it("o prazo da Ouvidoria é a constante legal (Lei 13.460), não um dado por instância", () => {
-    render(<NavegacaoCivica />);
+    render(<NavegacaoCivica ente="fortaleza" />);
     expect(screen.getByText(/até 30 dias.*lei 13\.460/i)).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@
   como cache/objeto_store/idp. `transacao` permite compor varias acoes numa UNICA tx do tenant."
   (:require [oplenario.cadastros.db.comissao :as comissao]
             [oplenario.cadastros.db.estrutura :as estrutura]
+            [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastro]
             [oplenario.kernel.tenancy :as tenancy])
@@ -16,6 +17,10 @@
   (transacao [this ente-id f] "Roda (f tx) numa UNICA tx do tenant — compoe varias acoes atomicamente.")
   ;; ente / legislatura / sessao
   (criar-ente! [this ente-id ente])
+  (garantir-municipio! [this municipio]
+    "ADR-0016: o municipio de referencia da Casa que o operador provisiona — so' INSERE se falta (nunca sobrescreve
+    capital/populacao de quem ja' semeou). Supratenant (tabela de referencia, sem ente_id): roda no pool, fora do
+    com-tenant*, com a permissao do role do operador.")
   (buscar-ente [this ente-id])
   (uf-e-municipio [this ente-id]
     "uf + nome do municipio do ente — o FATO que legislativo/protocolar! precisa (injetado pelo host,
@@ -110,6 +115,7 @@
   RepoCadastros
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
   (criar-ente! [this ente-id ente] (transacao this ente-id #(estrutura/inserir-ente! % ente)))
+  (garantir-municipio! [_ m] (referencia/garantir-municipio! (:ds datasource) m))
   (buscar-ente [this ente-id] (transacao this ente-id estrutura/buscar-ente))
   (uf-e-municipio [this ente-id] (transacao this ente-id estrutura/uf-e-municipio))
   (criar-legislatura! [this ente-id leg] (transacao this ente-id #(estrutura/inserir-legislatura! % leg)))

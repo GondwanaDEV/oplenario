@@ -17,9 +17,13 @@ import { derivarFicha } from "@/lib/ficha-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
+import { useSessaoCidada } from "@/lib/use-sessao-cidada";
+import { AcompanharMateria, ComporComentario } from "./participar-materia";
+import "./participacao.css";
 
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const { ficha, comentarios, estado } = useFicha(ente, proposicaoId);
+  const sessao = useSessaoCidada(ente);
 
   // review A2.3 item 5: affordance de carregamento (consistência com secao-em-tramitacao.tsx) — sem
   // skeleton, só o `aria-busy` honesto para leitor de tela/testes; nenhum conteúdo visível ainda.
@@ -106,6 +110,8 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
         </p>
       )}
 
+      <AcompanharMateria ente={ente} proposicaoId={proposicaoId} sessao={sessao} />
+
       <section className="secao">
         <h2>O que este projeto faz</h2>
         {/* Faixa A / A.8b: o resumo PUBLICADO pela Casa (revisado por uma pessoa, §16.8). Sem resumo publicado, o
@@ -169,6 +175,8 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
             moderação da Câmara antes de aparecer.
           </span>
         </p>
+
+        <ComporComentario ente={ente} proposicaoId={proposicaoId} sessao={sessao} />
 
         {comentarios === null ? (
           <div className="em-breve" role="status">

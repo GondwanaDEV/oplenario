@@ -21,3 +21,13 @@
                             :corpo corpo :respondido_por respondido-por :respondida_em respondida-em
                             :efetivado_em [:now]}]
                   :returning [:*]}))))
+
+(defn listar-da-solicitacao
+  "Respostas de UMA solicitacao (ente, solicitacao_id), mais antigas primeiro (ordem cronologica da prova)."
+  [tx ente-id solicitacao-id]
+  {:pre [(some? ente-id) (some? solicitacao-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:id :solicitacao_id :corpo :respondida_em] :from [:participacao.resposta_titular]
+                  :where [:and [:= :ente_id ente-id] [:= :solicitacao_id solicitacao-id]]
+                  :order-by [[:respondida_em :asc] [:id :asc]]}))))

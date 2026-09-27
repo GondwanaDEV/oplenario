@@ -58,6 +58,7 @@
             [oplenario.participacao.adapters.out.comentario :as adapters-out-comentario]
             [oplenario.participacao.adapters.out.denuncia-comentario :as adapters-out-denunciar]
             [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
+            [oplenario.participacao.adapters.out.meus-protocolos :as adapters-out-meus]
             [oplenario.participacao.adapters.out.esic-cumprimento :as adapters-out-esic-cumprimento]
             [oplenario.participacao.adapters.out.manifestacao-ouvidoria :as adapters-out-manifestacao]
             [oplenario.participacao.adapters.out.moderacao-comentario :as adapters-out-moderacao]
@@ -109,6 +110,14 @@
       (if-let [detalhe (controllers/meu-pedido repo-participacao (:ator req) relogio id)]
         (http/json-resposta 200 (adapters-out-pedido/pedido->wire detalhe))
         (http/json-resposta 404 {:erro "pedido nao encontrado"})))))
+
+(defn- meus-protocolos-handler
+  "GET /portal/meus-protocolos (cidada autenticada): o que ELA protocolou na Casa da sessao — pedidos de e-SIC,
+  solicitacoes LGPD e manifestacoes identificadas —, cada um com estado e prazo. adapters/out projeta por allowlist."
+  [repo-participacao relogio]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-meus/meus-protocolos->wire
+                             (controllers/meus-protocolos repo-participacao (:ator req) relogio)))))
 
 (defn- acompanhar-handler
   "GET /portal/:ente/esic/acompanhar/:protocolo (PUBLICA, sem auth). resolver-ente-publico coage o :ente
@@ -332,6 +341,10 @@
   #{["/portal/esic/pedidos" :post
      [auth it/corpo-json (protocolar-handler repo-participacao relogio)]
      :route-name :participacao/protocolar-esic]
+    ;; CIDADA: o que ela protocolou (formularios do cidadao). Literal no nivel 2 — sem colisao com `casa/:ente`.
+    ["/portal/meus-protocolos" :get
+     [auth (meus-protocolos-handler repo-participacao relogio)]
+     :route-name :participacao/meus-protocolos]
     ["/portal/esic/pedidos/:id" :get
      [auth (meu-pedido-handler repo-participacao relogio)]
      :route-name :participacao/meu-pedido-esic]

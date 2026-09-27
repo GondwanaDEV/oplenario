@@ -97,3 +97,15 @@
                   :where [:and [:= :ente_id ente-id] [:= :id id]
                           [:in :estado [[:inline "protocolada"] [:inline "em_analise"]]]]
                   :returning [:*]}))))
+
+(defn listar-por-manifestante
+  "'Minhas manifestacoes' IDENTIFICADAS (ente, manifestante_identidade_id), mais recentes primeiro, com teto. A
+  anonima nunca aparece: ela nao persiste o manifestante (CHECK manifestacao_anonima_coerente, mig 0042)."
+  [tx ente-id manifestante-id]
+  {:pre [(some? ente-id) (some? manifestante-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select cols :from [:participacao.manifestacao_ouvidoria]
+                  :where [:and [:= :ente_id ente-id] [:= :manifestante_identidade_id manifestante-id]]
+                  :order-by [[:criado_em :desc] [:id :asc]]
+                  :limit 100}))))

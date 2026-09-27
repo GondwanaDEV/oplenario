@@ -65,3 +65,15 @@
                   :set (merge {:estado para :atualizado_em [:now]} extra)
                   :where [:and [:= :ente_id ente-id] [:= :id id] [:= :estado de]]
                   :returning [:*]}))))
+
+(defn ultimo-do-pedido
+  "O recurso mais recente de UM pedido (ente, pedido_id) ou nil — 'Meus protocolos' mostra o recurso no lugar do
+  botao de recorrer (V1: uma instancia por pedido)."
+  [tx ente-id pedido-id]
+  {:pre [(some? ente-id) (some? pedido-id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select cols :from [:participacao.recurso_esic]
+                  :where [:and [:= :ente_id ente-id] [:= :pedido_id pedido-id]]
+                  :order-by [[:instancia :desc] [:criado_em :desc]]
+                  :limit 1}))))

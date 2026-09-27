@@ -108,7 +108,7 @@ export function BarraInstitucional({
             <span aria-hidden="true">{tema === "escuro" ? "☾" : "☀"}</span>
             <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
           </button>
-          <a className="govbr-topo" href="#" aria-label="Entrar com conta gov.br">
+          <a className="govbr-topo" href={`/portal/casa/${ente}/participar`} aria-label="Entrar com conta gov.br">
             <span className="g" aria-hidden="true">
               gov.br
             </span>

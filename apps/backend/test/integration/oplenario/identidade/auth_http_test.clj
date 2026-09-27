@@ -103,7 +103,9 @@
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ ente-id identidade-id] (snapshot-ator ente-id identidade-id))
     (criar-sessao! [_ sessao] (criar-sessao! sessao))
-    (apagar-sessao! [_ segredo] (apagar-sessao! segredo))))
+    (apagar-sessao! [_ segredo] (apagar-sessao! segredo))
+    ;; ADR-0016: o mint marca o 1o acesso do vinculo (o evento que ativa a Casa); aqui nao ha' banco
+    (registrar-primeiro-acesso! [_ _ente _ator] false)))
 
 (defn- vinculo-ativo-fixture [] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis #{}})
 
@@ -253,3 +255,10 @@
 (deftest cookie-sessao-nao-confunde-cookie-de-nome-parecido
   ;; "outra-sessao=xyz" NAO deve ser lido como o par "sessao=" (prefixo estrito, nao substring).
   (is (nil? (it/cookie-sessao {:headers {"cookie" "outra-sessao=xyz"}}))))
+
+(deftest descoberta-diz-se-ha-govbr
+  ;; ADR-0015: o portal so' mostra 'Entrar com gov.br' quando o realm tem o broker
+  (let [ente (random-uuid)
+        r (pt/response-for (service-fn {}) :get (str "/auth/descoberta/" ente))]
+    (is (= 200 (:status r)))
+    (is (contains? (ler-json r) :govbr))))

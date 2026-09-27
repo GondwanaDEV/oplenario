@@ -18,6 +18,8 @@ interface Descoberta {
   realm: string;
   "base-url": string;
   "client-id": string;
+  // ADR-0015: o realm desta Casa tem o broker gov.br (o backend só diz `true` quando está configurado).
+  govbr?: boolean;
 }
 
 function falhaFechada(origin: string): NextResponse {
@@ -60,6 +62,15 @@ export async function iniciarLogin(
     return falhaFechada(origin);
   }
 
+  // `via=govbr`: o cidadão pediu para entrar pelo gov.br. Casa sem o broker ligado volta à tela de participar
+  // dizendo que não está disponível — nunca cai na tela de login institucional como se fosse a mesma coisa.
+  const viaGovbr = request.nextUrl.searchParams.get("via") === "govbr";
+  if (viaGovbr && descoberta.govbr !== true) {
+    const volta = new URL(`/portal/casa/${encodeURIComponent(ente)}/participar`, origin);
+    volta.searchParams.set("erro", "indisponivel");
+    return NextResponse.redirect(volta);
+  }
+
   const realm = descoberta.realm;
   const baseUrl = descoberta["base-url"];
   const clientId = descoberta["client-id"];
@@ -78,6 +89,8 @@ export async function iniciarLogin(
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", codeChallenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
+  // O Keycloak da Casa pula a própria tela e vai direto ao gov.br (o IdP fica escondido da tela institucional).
+  if (viaGovbr) authorizeUrl.searchParams.set("kc_idp_hint", "govbr");
 
   const response = NextResponse.redirect(authorizeUrl);
   // Cookie de curta duração — só precisa sobreviver entre este redirect e o callback (T9).

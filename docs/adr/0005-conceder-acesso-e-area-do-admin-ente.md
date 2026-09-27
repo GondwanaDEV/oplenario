@@ -73,6 +73,9 @@ e a secretaria deixa de ver uma função que nunca poderia executar.
 ### 4. Pré-requisitos, nesta ordem
 - **P1 — bootstrap do 1º `admin_ente` (bloqueante).** Enquanto `admin_sistema` não tiver rota, a área
   não tem usuário possível. Construir a UI antes disto é construir para ninguém.
+  **Resolvido pelo [ADR-0016](0016-operador-da-plataforma-e-registro-de-casas.md) (27/09/2026):** o operador
+  provisiona a Casa pelo console e o 1º `admin_ente` nasce convidado, pelo CPF. A área própria do `admin_ente`
+  deixa de ser construir para ninguém.
 - **P2 — abrir `GET /cadastros/vereadores` e `GET /cadastros/vereadores/:id` a `admin_ente`.**
   Para conceder acesso é preciso escolher a quem. É **leitura**, não escrita: não toca a invariante, que
   é sobre *ligar identidade*. Mesma família do `feat(authz)` que já abriu leitura a vereador/presidente.
