@@ -76,7 +76,7 @@ avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #
 artefato legal do core com retificação, rascunho pelo núcleo com citação conferida e `[confirmar: …]`, revisão humana
 medida de volta na IA — PRs #43–#47 — e **leitura da ata anterior (A.7)** como ato da sessão (voz sintetizada,
 presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a decisão do fornecedor de voz). **Tudo roda
-com o fornecedor fake** (conferência real, texto de roteiro). Faltam A.4/A.5 (busca) e A.8 (resumo cidadão); a A.1 (qualidade medida) espera o áudio de
+com o fornecedor fake** (conferência real, texto de roteiro). **Índice único e busca intra-câmara (A.4/A.5)** entregues — PR #49 e o seguinte: a IA devolve ids, o core decide o que se vê; IA fora cai na busca pela ementa. Falta a A.8 (resumo cidadão); a A.1 (qualidade medida) espera o áudio de
 Baturité com 15 min anotados. A Faixa B (agente, consulta LOM/RI, copiloto) não começou. M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
