@@ -8,9 +8,12 @@ import type { AtaRascunhoOut, CitacaoRascunhoOut } from "./contrato-sessoes.gen"
 const MARCA = /\[\[\s*([^|\]\s"]+)\s*(?:\|\s*([\s\S]*?)\s*)?\]\]/g;
 const PONTO = /\[\s*confirmar\s*:\s*([^\]]+?)\s*\]/gi;
 
+// Só o que a vista usa de uma citação: serve à ata (A.6b) e ao resumo cidadão (A.8), que conferem do mesmo jeito.
+export type CitacaoVista = Pick<CitacaoRascunhoOut, "fonteId" | "trecho" | "status" | "rotulo">;
+
 export type Parte =
   | { tipo: "texto"; texto: string }
-  | { tipo: "citacao"; n: number; citacao: CitacaoRascunhoOut | null }
+  | { tipo: "citacao"; n: number; citacao: CitacaoVista | null }
   | { tipo: "confirmar"; texto: string };
 
 export type Paragrafo = { semFonte: boolean; partes: Parte[] };
@@ -30,7 +33,7 @@ function pontosEm(texto: string): Parte[] {
 /** O texto marcado -> parágrafos com as citações numeradas NA ORDEM (a mesma do satélite: casam pela posição na
  * lista) e os pontos a confirmar destacados. Parágrafo = bloco separado por linha em branco; título `#` não conta
  * como parágrafo para o "sem fonte" (igual ao satélite). */
-export function paragrafosDoRascunho(texto: string, citacoes: CitacaoRascunhoOut[], semFonte: number[]): Paragrafo[] {
+export function paragrafosDoRascunho(texto: string, citacoes: CitacaoVista[], semFonte: number[]): Paragrafo[] {
   const sem = new Set(semFonte);
   let n = 0;
   let contados = 0;
@@ -67,10 +70,10 @@ export function avisoDoRascunho(nivel: string, motivos: string[]): string | null
   return frases.length ? `Revise com atenção: ${frases.join("; ")}.` : "Revise com atenção antes de usar.";
 }
 
-export function rotuloDaCitacao(c: CitacaoRascunhoOut | null): string {
+export function rotuloDaCitacao(c: CitacaoVista | null, contra = "a transcrição"): string {
   if (!c) return "Fonte não identificada";
   const onde = c.rotulo ?? c.fonteId;
-  return c.status === "conferida" ? onde : `${onde} — não confere com a transcrição`;
+  return c.status === "conferida" ? onde : `${onde} — não confere com ${contra}`;
 }
 
 export type Situacao = { titulo: string; detalhe: string; podePedir: boolean; revisar: boolean };

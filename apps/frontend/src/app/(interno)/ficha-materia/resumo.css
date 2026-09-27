@@ -1,0 +1,43 @@
+/* Aba "Resumo cidadão" da ficha (Faixa A / A.8). Mesma receita da tela da ata (sessoes/[id]/ata/ata.css): o texto
+   publicado vai no PAPEL (claro nos dois temas — é o que o cidadão lê), o rascunho da IA mostra as citações conferidas
+   e o parágrafo sem fonte. */
+.resumo, .resumo-editor, .resumo-revisao { display: grid; gap: 0.9rem; min-width: 0; max-width: 80ch; }
+.resumo h3, .resumo-editor h3, .resumo-revisao h3 { margin: 0; font-size: var(--t-16); color: var(--texto); }
+.resumo-ok { margin: 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--acao); background: var(--surface-2); color: var(--texto); }
+.resumo-linha { margin: 0; font-weight: 700; color: var(--texto); }
+.resumo-vazio { margin: 0; color: var(--texto-2); }
+.resumo-texto {
+  margin: 0.6rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; max-width: 72ch;
+  font-size: var(--t-16); background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha);
+  border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1rem, 3vw, 1.4rem);
+}
+.resumo-rascunho { white-space: normal; }
+.resumo-rascunho p { margin: 0 0 1rem; white-space: pre-wrap; }
+.resumo-rascunho p:last-child { margin-bottom: 0; }
+.resumo-sem-fonte { border-left: 3px solid var(--aviso-texto); padding-left: 0.7rem; margin-left: -0.85rem; }
+.resumo-selo { display: block; font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--papel-texto-2); margin-bottom: 0.2rem; }
+.resumo-cita { font-family: var(--mono); font-size: var(--t-11); font-weight: 700; margin-left: 0.15rem; color: var(--papel-texto-2); cursor: help; }
+.resumo-cita-falha { color: var(--acento-texto); }
+.resumo-rascunho .resumo-cita-falha { color: var(--telha-fundo); }
+.resumo-fontes summary { cursor: pointer; color: var(--texto); font-weight: 600; min-height: 44px; display: flex; align-items: center; }
+.resumo-fontes ol { margin: 0.4rem 0 0; padding-left: 1.4rem; display: grid; gap: 0.35rem; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+.resumo-fontes b { color: var(--texto); font-weight: 600; }
+.resumo-ia { padding: 1rem 1.1rem; border: 1px dashed var(--linha); border-radius: 12px; background: var(--surface); }
+.resumo-ia p { margin: 0.3rem 0 0; color: var(--texto-2); line-height: 1.5; }
+.resumo-aviso { margin: 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--aviso-texto); background: var(--surface-2); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.resumo-dica { margin: 0; color: var(--texto-2); line-height: 1.5; }
+.resumo-editor .campo { display: grid; gap: 0.3rem; min-width: 0; }
+.resumo-editor .campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); letter-spacing: .01em; }
+.resumo-editor .campo textarea {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent);
+  border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; width: 100%; resize: vertical; line-height: 1.6; min-height: 10rem;
+}
+.resumo-editor [readonly] { opacity: 0.85; }
+.resumo-contagem { margin: 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.resumo-erro { margin: 0; color: var(--acento-texto); }
+.resumo-falta { flex-basis: 100%; margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+.resumo-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 0.6rem; }
+.resumo-confirmacao { padding: 0.9rem 1rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 12px; background: var(--surface); }
+.resumo-confirmacao p { margin: 0; color: var(--texto); line-height: 1.5; }
+.resumo-historico ol { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.5rem; color: var(--texto-2); font-size: var(--t-13); }
