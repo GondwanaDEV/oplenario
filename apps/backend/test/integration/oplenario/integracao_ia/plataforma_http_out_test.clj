@@ -2,6 +2,7 @@
   "O cliente core -> IA (ADR-0008) contra um servidor HTTP local de verdade: segredo e tenant no pedido, 404 = nil,
   qualquer outra coisa = `:ia/indisponivel` (R-IA-1), inclusive IA fora do ar."
   (:require [clojure.test :refer [deftest is]]
+            [jsonista.core :as json]
             [oplenario.integracao-ia.diplomat.http.out :as out])
   (:import (com.sun.net.httpserver HttpExchange HttpHandler HttpServer)
            (java.net InetSocketAddress)))
@@ -14,7 +15,9 @@
                               (let [^HttpExchange ex ex
                                     b (.getBytes ^String corpo "UTF-8")]
                                 (reset! visto {:path (str (.getRequestURI ex))
-                                               :auth (.getFirst (.getRequestHeaders ex) "Authorization")})
+                                               :auth (.getFirst (.getRequestHeaders ex) "Authorization")
+                                               :metodo (.getRequestMethod ex)
+                                               :corpo (slurp (.getRequestBody ex) :encoding "UTF-8")})
                                 (.sendResponseHeaders ex status (alength b))
                                 (with-open [o (.getResponseBody ex)] (.write o b))))))
     (.start s)
@@ -28,7 +31,7 @@
     (fn [url visto]
       (let [r (out/ler-transcricao (out/plataforma-ia {:url (str url "/") :segredo "s"}) "e1" "t1")]
         (is (= "Ana" (get-in r [:trechos 0 :orador-nome])))
-        (is (= {:path "/v1/entes/e1/transcricoes/t1" :auth "Bearer s"} @visto))))))
+        (is (= {:path "/v1/entes/e1/transcricoes/t1" :auth "Bearer s"} (select-keys @visto [:path :auth])))))))
 
 (deftest nao-existe-e-nil
   (com-servidor 404 "{}" (fn [url _] (is (nil? (out/ler-transcricao (out/plataforma-ia {:url url :segredo "s"}) "e" "t"))))))
@@ -47,3 +50,15 @@
         (is (= ["Ata." ["hora"]] [(:texto r) (:pontos-a-confirmar r)]))
         (is (= "/v1/entes/e1/atas/rascunhos/r1" (:path @visto))))))
   (is (indisponivel? #(out/ler-rascunho-ata (out/plataforma-ia {:url nil :segredo nil}) "e" "r"))))
+
+(deftest busca-posta-a-consulta-e-devolve-os-ids
+  (com-servidor 200 "{\"modelo\":\"fake-hash-384\",\"resultados\":[{\"tipo\":\"proposicao\",\"ref-id\":\"p1\",\"parte\":0,\"texto\":\"Merenda.\",\"meta\":{},\"score\":0.03}]}"
+    (fn [url visto]
+      (let [r (out/buscar (out/plataforma-ia {:url url :segredo "s"}) "e1"
+                          {:consulta "merenda escolar" :tipos ["proposicao"] :limite 10})]
+        (is (= [["proposicao" "p1" "Merenda."]] (map (juxt :tipo :ref-id :texto) (:resultados r))))
+        (is (= {:path "/v1/entes/e1/busca" :auth "Bearer s" :metodo "POST"} (select-keys @visto [:path :auth :metodo])))
+        (is (= {"consulta" "merenda escolar" "tipos" ["proposicao"] "limite" 10}
+               (json/read-value (:corpo @visto)))))))
+  (com-servidor 503 "{}" (fn [url _] (is (indisponivel? #(out/buscar (out/plataforma-ia {:url url :segredo "s"}) "e" {:consulta "xx"})))))
+  (is (indisponivel? #(out/buscar (out/plataforma-ia {:url nil :segredo nil}) "e" {:consulta "xx"}))))
