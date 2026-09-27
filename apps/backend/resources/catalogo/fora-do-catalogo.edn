@@ -20,6 +20,23 @@
                  :motivo "tela de conferencia de uma versao; o agente le so' o vigente, pela B.5 (ler dispositivo)"}
  :legislativo/copiloto-requerimento {:categoria :so-tela
                                       :motivo "a tela pede a IA um rascunho para o formulario (B.7); o agente tem protocolar_requerimento"}
+ ;; ---------- B.8 / ADR-0013: o agente institucional e a nota tecnica ----------
+ :integracao-ia/credencial-institucional {:categoria :servico
+                                          :motivo "fronteira de servico: o satelite pede a credencial de uma execucao do agente institucional (B.8)"}
+ :integracao-ia/revogar-credencial-institucional {:categoria :servico
+                                                  :motivo "fronteira de servico: o satelite encerra a credencial da execucao do agente institucional"}
+ :identidade/agentes-institucionais {:categoria :so-tela
+                                     :motivo "o painel do admin da Casa com os agentes institucionais; agente nao administra agente"}
+ :identidade/ligar-agente-institucional {:categoria :so-tela
+                                         :motivo "conceder o agente institucional e' do admin_ente, na tela (docs/25 3.3); o agente nunca se concede"}
+ :identidade/desligar-agente-institucional {:categoria :so-tela
+                                            :motivo "revogar a concessao do agente institucional e' do admin_ente, na tela"}
+ :legislativo/notas-tecnicas {:categoria :so-tela
+                              :motivo "a fila de revisao da secretaria; o agente institucional escreve pela ferramenta registrar_nota_tecnica"}
+ :legislativo/nota-tecnica {:categoria :so-tela
+                            :motivo "a tela onde a secretaria le o rascunho da IA antes de decidir"}
+ :legislativo/decidir-nota-tecnica {:categoria :so-tela
+                                    :motivo "aproveitar ou descartar a nota e' decisao da pessoa (revisao humana, §16.8); a IA nunca decide"}
  ;; ---------- B.6 / ADR-0012: a confirmacao de proposta de ato e' so' da tela ----------
  :propostas/listar {:categoria :so-tela
                     :motivo "as propostas de ato que esperam a pessoa (Eixo 4.2 B); o agente cria proposta pela ferramenta do ato"}

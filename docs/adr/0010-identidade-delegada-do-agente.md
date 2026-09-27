@@ -44,7 +44,8 @@ dela: a pessoa já está autenticada **no core** (sessão opaca de cookie, §22.
 4. **`ato` por agente nunca executa direto** — nem com a classe concedida: é negado (`:ato-so-por-proposta`) até a
    proposta de ato da B.6 (entregue: ADR-0012 — o `ato` pedido por agente agora vira proposta, e `:ato-so-por-proposta` deixou de existir), confirmada pela pessoa na tela (Eixo 4.2 B). O **agente institucional** (sem pessoa,
    3.1 b) nunca recebe `ato` — `CHECK` no banco e negação no kernel; o ator dele nasce sem papel algum até a
-   concessão pelo `admin_ente` existir (B.8), então nada executa por construção.
+   concessão pelo `admin_ente` existir (B.8 — entregue: ADR-0013, a concessão dá o papel `agente_institucional` enquanto
+   estiver ativa), então nada executa por construção.
 5. **Portas separadas.** Um interceptor novo, `autenticacao-agente`, aceita **só** a credencial delegada (bearer) —
    é o que as rotas do catálogo (o MCP da B.3) usarão. O interceptor das telas não reconhece a credencial (nem como
    bearer, nem como cookie), e o do agente não reconhece a sessão da pessoa. É o "token de agente só é aceito em

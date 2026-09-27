@@ -24,7 +24,9 @@
   {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"}
    :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "buscar_dispositivos" "ler_dispositivo"
                 ;; B.6: o requerimento do proprio vereador — o agente so' PROPOE; ele assina na tela (ADR-0012)
-                "modelos_de_requerimento" "protocolar_requerimento"}})
+                "modelos_de_requerimento" "protocolar_requerimento"}
+   ;; B.8 (ADR-0013): o agente institucional da Casa (sem pessoa) — le a materia e as normas, e so' deixa RASCUNHO
+   :institucional #{"situacao_da_materia" "buscar_dispositivos" "ler_dispositivo" "registrar_nota_tecnica"}})
 
 (defn- publico-do [ator]
   (or (get-in ator [:via :publico])

@@ -85,6 +85,23 @@
         (is (thrown-with-msg? clojure.lang.ExceptionInfo #"viola o contrato"
                               (catalogo/executar torta {} secretaria {:n 3})))))))
 
+;; B.8: a entrada com mapas ANINHADOS chega do MCP com chaves string em todos os niveis (JSON de verdade)
+(def ^:private aninhado
+  {:nome "aninhado" :descricao "Registra itens com mapas aninhados, como as citacoes de uma nota tecnica." :classe :leitura :papeis #{"secretario"}
+   :entrada [:map {:closed true}
+             [:itens [:vector [:map {:closed true} [:fonte-id :string] [:status [:enum "a" "b"]]]]]
+             [:campos {:optional true} [:map-of :string :string]]]
+   :saida [:map [:itens [:vector [:map [:fonte-id :string] [:status :string]]]]
+           [:campos {:optional true} [:map-of :string :string]]]
+   :rotas #{} :executar (fn [_ _ m] m)})
+
+(deftest mapas-aninhados-do-json
+  (let [e (catalogo/entrada aninhado)
+        r (catalogo/executar e {} secretaria {"itens" [{"fonte-id" "x" "status" "a" "estranha" 1}]
+                                              "campos" {"destinatario" "Obras"}})]
+    (is (= [{:fonte-id "x" :status "a"}] (:itens r)) "chave declarada vira keyword; a estranha cai")
+    (is (= {"destinatario" "Obras"} (:campos r)) "map-of guarda as chaves livres como vieram")))
+
 ;; ---------- ADR-0010: o ator de AGENTE (com `:via`) — interseccao de classes e audit das escritas ----------
 
 (defn- via [classes & {:as extra}]

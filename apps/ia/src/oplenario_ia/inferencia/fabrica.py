@@ -6,6 +6,8 @@ from oplenario_ia.agente import fake as agente_fake
 from oplenario_ia.agente.laco import OPERACAO_PLANEJAR, OPERACAO_RESPONDER
 from oplenario_ia.ata import fake as ata_fake
 from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
+from oplenario_ia.conferencia import fake as conferencia_fake
+from oplenario_ia.conferencia.roteiro import OPERACAO as CONFERENCIA_REDIGIR
 from oplenario_ia.config import Config
 from oplenario_ia.inferencia.fake import PortaFake
 from oplenario_ia.inferencia.porta import PortaInferencia
@@ -27,6 +29,7 @@ def criar_porta(config: Config) -> PortaInferencia:
                 OPERACAO_RESPONDER: agente_fake.responder,
                 OPERACAO_PREENCHER: requerimento_fake.preencher,
                 OPERACAO_JUSTIFICAR: requerimento_fake.justificar,
+                CONFERENCIA_REDIGIR: conferencia_fake.redigir,
             }
         )
     if config.vendor == "anthropic":

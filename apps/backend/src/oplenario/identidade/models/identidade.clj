@@ -54,3 +54,15 @@
    [:versao-termo {:optional true} [:maybe :string]]])
 
 (def CriadoEm Instante?)
+
+;; ---- agentes institucionais (B.8, ADR-0013, docs/25 3.1 b / 5.4) ----
+;; Os agentes da Casa SEM pessoa por tras que o `admin_ente` pode ligar. A definicao do agente (instrucoes, roteiro,
+;; avaliacoes) mora no satelite; aqui fica o que a Casa concede: o id (o que aparece em "via agente X") e as classes —
+;; nunca `ato`. Agente fora desta lista nao recebe concessao nem credencial.
+(def agentes-institucionais
+  {"conferencia-normativa"
+   {:classes #{:leitura :rascunho}
+    :titulo "Conferência das proposições contra a LOM e o Regimento"
+    :descricao (str "A cada proposição protocolada, a IA lê o texto e os dispositivos da Lei Orgânica e do Regimento "
+                    "Interno que tratam do assunto e deixa uma nota técnica em rascunho, com citações, na fila da "
+                    "secretaria. Ela não decide nada: a secretaria aproveita a nota ou descarta.")}})

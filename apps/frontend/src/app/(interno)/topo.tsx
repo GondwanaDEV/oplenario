@@ -41,6 +41,9 @@ const DESTINOS_NAV = [
   // Faixa B / B.4 — as normas de referencia (LOM, Regimento, leis) que o assistente consulta; a secretaria importa e
   // confere. Gated "secretario" (GuardSecretaria + exige-papel no backend).
   { rotulo: "Normas", href: "/normas" },
+  // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
+  // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Conferências", href: "/conferencias" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:

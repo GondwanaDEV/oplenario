@@ -23,6 +23,7 @@ from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.fronteira.contrato import (
     AtaPublicada,
     ContextoSessao,
+    CredencialAgente,
     DispositivosDaNorma,
     EventoParaCore,
     Feed,
@@ -104,6 +105,32 @@ class ClienteCore:
         if r.status_code >= 400:
             raise _erro_http(r, "dispositivos da norma")
         return DispositivosDaNorma.model_validate(r.json())
+
+    def credencial_institucional(self, ente_id: str, agente: str) -> CredencialAgente | None:
+        """B.8 (ADR-0013): a credencial de UMA execução do agente institucional da Casa. None = o `admin_ente` não ligou
+        o agente (ou o desligou): não há nada a rodar, e não é falha."""
+        caminho = f"/integracao/ia/v1/entes/{ente_id}/agentes/{agente}/execucoes"
+        try:
+            r = self._http.request("POST", f"{self._base}{caminho}", headers=self._cab)
+        except httpx.HTTPError as e:
+            raise ErroIA(
+                Categoria.INFRAESTRUTURA,
+                f"credencial do agente: core inalcançável ({type(e).__name__})",
+                retentavel=True,
+                vendor="core",
+            ) from e
+        if r.status_code == 404:
+            return None
+        if r.status_code >= 400:
+            raise _erro_http(r, "credencial do agente")
+        return CredencialAgente.model_validate(r.json())
+
+    def encerrar_execucao(self, ente_id: str, agente: str, execucao_id: str) -> None:
+        """A execução acabou: a credencial dela deixa de abrir qualquer coisa. Falha aqui não desfaz o trabalho — a
+        credencial expira sozinha em minutos."""
+        caminho = f"/integracao/ia/v1/entes/{ente_id}/agentes/{agente}/execucoes/{execucao_id}"
+        with contextlib.suppress(ErroIA, Sigiloso):
+            self._pedir("DELETE", caminho, "encerrar execução do agente")
 
     def baixar(self, uri: str, destino: Path) -> str:
         """Baixa a gravação em streaming para `destino` e confere o sha256 que o core informa. Devolve o hash."""

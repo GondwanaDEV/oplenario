@@ -404,3 +404,19 @@
   nao redigir de novo a mesma versao, e o que diz a secretaria (e o portal) que um resumo ficou para tras."
   [ementa texto]
   (sha256-hex (str ementa "\n\n" (or texto ""))))
+
+;; ========================= Faixa B / B.8: a nota tecnica de conferencia =========================
+
+(def ^:private marca-de-citacao
+  "A mesma marca que o satelite confere (`confianca/citacao.py`): [[id-da-fonte | trecho literal]]."
+  #"(?s)\[\[\s*[^|\]\s\"]+\s*(?:\|\s*.*?\s*)?\]\]")
+
+(defn texto-limpo
+  "O texto de um rascunho da IA sem as marcas de citacao (elas ficam na tela de revisao, nao no que a secretaria
+  aproveita) — o mesmo `texto_limpo` do satelite: espacos repetidos colapsados e sem espaco antes de pontuacao."
+  [texto]
+  (let [sem (str/replace (or texto "") marca-de-citacao "")
+        linhas (map #(str/trimr (str/replace % #"[ \t]{2,}" " ")) (str/split sem #"\n" -1))]
+    (str/trim (str/replace (str/join "\n" linhas) #" +([.,;:])" "$1"))))
+
+(def desfechos-nota-tecnica #{"aproveitada" "descartada"})

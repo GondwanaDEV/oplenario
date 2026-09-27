@@ -499,3 +499,48 @@ export interface ResumoReciboOut {
   versao: number;
   conteudoSha256: string;
 }
+
+export interface CitacaoNotaOut {
+  fonteId: string;
+  trecho: string | null;
+  status: "conferida" | "sem_trecho" | "trecho_nao_encontrado" | "fonte_nao_lida";
+  rotulo: string | null;
+}
+
+export interface NotaTecnicaResumoOut {
+  id: string;
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: "pendente" | "aproveitada" | "descartada";
+  incerteza: "normal" | "revisar_com_atencao";
+  criadaEm: string;
+  decididaEm: string | null;
+}
+
+export interface NotasTecnicasOut {
+  itens: NotaTecnicaResumoOut[];
+}
+
+export interface NotaTecnicaOut {
+  id: string;
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+  estado: "pendente" | "aproveitada" | "descartada";
+  agente: string;
+  texto: string;
+  textoLimpo: string;
+  citacoes: CitacaoNotaOut[];
+  paragrafosSemFonte: number[];
+  incerteza: "normal" | "revisar_com_atencao";
+  motivosIncerteza: string[];
+  modeloLlmId: string;
+  textoFinal: string | null;
+  criadaEm: string;
+  decididaEm: string | null;
+}

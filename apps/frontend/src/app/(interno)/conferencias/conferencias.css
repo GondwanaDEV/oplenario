@@ -1,0 +1,74 @@
+/* /conferencias — a conferência das proposições pela IA (Faixa B / B.8). Arquétipo "consulta" (cabeça + lista de
+   cartões, o vocabulário de /normas e /recebimentos) e a ilha de PAPEL para o texto da nota (a mesma do resumo cidadão
+   e das normas: clara nos dois temas). Padding só vertical: o gutter lateral é do .envelope. */
+.conf { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1.1rem; align-content: start; min-width: 0; }
+.conf-cabeca { display: grid; gap: 0.35rem; max-width: 52rem; }
+.conf-cabeca h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.015em; line-height: 1.15; color: var(--texto); overflow-wrap: anywhere; }
+.conf-nota .conf-cabeca h1 { font-size: var(--t-21); line-height: 1.3; }
+.conf-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; }
+.conf-sub a, .conf-voltar { color: var(--marca); font-weight: 600; }
+.conf-voltar { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; }
+.conf-numero { margin: 0; font-family: var(--mono); font-size: var(--t-12); font-weight: 700; letter-spacing: 0.04em; color: var(--texto-2); }
+.conf-erro { margin: 0; color: var(--acento-texto); }
+.conf-vazio { margin: 0; color: var(--texto-2); max-width: 60ch; }
+
+/* o agente institucional: tracejado quando desligado (como o rascunho da IA), cheio quando ligado */
+.conf-agente { max-width: 52rem; padding: 1rem 1.1rem; border: 1px dashed var(--linha); border-radius: 12px; background: var(--surface);
+  display: flex; flex-wrap: wrap; gap: 0.8rem 1.2rem; align-items: flex-end; justify-content: space-between; }
+.conf-agente-ligado { border-style: solid; border-left: 3px solid var(--jade-medio); }
+.conf-agente-texto { display: grid; gap: 0.3rem; flex: 1 1 26rem; min-width: 0; }
+.conf-agente h2 { margin: 0; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.conf-agente p { margin: 0; color: var(--texto-2); line-height: 1.5; font-size: var(--t-13); }
+.conf-agente .conf-agente-estado { font-size: var(--t-12); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto); display: flex; align-items: center; gap: 0.4rem; }
+.conf-ponto { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--texto-2); flex: none; }
+.conf-agente-ligado .conf-ponto { background: var(--jade-medio); }
+.conf-agente .conf-agente-limite { color: var(--texto); }
+.conf-agente .conf-agente-quem { font-style: italic; }
+
+.conf-abas { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); gap: 0.4rem; }
+.conf-aba { min-height: 44px; padding: 0 0.9rem; white-space: nowrap; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: var(--surface); color: var(--texto-2); font: inherit; font-size: var(--t-13); font-weight: 600; cursor: pointer; }
+.conf-aba[aria-pressed="true"] { border-color: var(--marca); color: var(--texto); background: color-mix(in srgb, var(--marca) 12%, transparent); }
+@media (max-width: 480px) {
+  .conf-abas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+  .conf-aba { padding: 0 0.4rem; font-size: var(--t-12); }
+}
+
+.conf-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; max-width: 52rem; }
+.conf-item a { display: grid; gap: 0.25rem; padding: 0.9rem 1.1rem; min-width: 0; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); color: var(--texto); text-decoration: none; }
+.conf-item a:hover, .conf-item a:focus-visible { border-color: var(--marca); }
+.conf-item .conf-numero { font-size: var(--t-12); }
+.conf-ementa { font-weight: 600; overflow-wrap: anywhere; }
+.conf-linha { display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: center; font-size: var(--t-13); color: var(--texto-2); }
+.conf-atencao { font-size: var(--t-12); font-weight: 700; padding: 0.1rem 0.5rem; border-radius: var(--raio-capsula); border: 1px solid var(--aviso-texto); color: var(--aviso-texto); }
+
+/* a nota */
+.conf-selo-ia { margin: 0; max-width: 52rem; padding: 0.6rem 0.8rem; border-left: 3px solid var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.conf-aviso { margin: 0; max-width: 52rem; padding: 0.6rem 0.8rem; border-left: 3px solid var(--aviso-texto); background: var(--surface-2); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.conf-papel {
+  margin: 0; max-width: 52rem; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: var(--t-16);
+  background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio);
+  box-shadow: var(--sombra-papel); padding: clamp(1rem, 3vw, 1.6rem);
+}
+.conf-rascunho { white-space: normal; }
+.conf-rascunho p { margin: 0 0 1rem; white-space: pre-wrap; }
+.conf-rascunho p:last-child { margin-bottom: 0; }
+.conf-sem-fonte { border-left: 3px solid var(--aviso-texto); padding-left: 0.7rem; margin-left: -0.85rem; }
+.conf-selo { display: block; font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--papel-texto-2); margin-bottom: 0.2rem; }
+.conf-cita { font-family: var(--mono); font-size: var(--t-11); font-weight: 700; margin-left: 0.15rem; color: var(--papel-texto-2); cursor: help; }
+.conf-rascunho .conf-cita-falha { color: var(--telha-fundo); }
+.conf-fontes { max-width: 52rem; }
+.conf-fontes h2, .conf-editor h2 { margin: 0 0 0.4rem; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.conf-fontes ol { margin: 0; padding-left: 1.4rem; display: grid; gap: 0.35rem; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
+.conf-fontes b { color: var(--texto); font-weight: 600; }
+.conf-fontes .conf-cita-falha b { color: var(--acento-texto); }
+.conf-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.conf-confirma { max-width: 52rem; padding: 0.9rem 1rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 12px; background: var(--surface); display: grid; gap: 0.6rem; }
+.conf-confirma p { margin: 0; color: var(--texto); line-height: 1.5; }
+.conf-editor { max-width: 52rem; display: grid; gap: 0.5rem; min-width: 0; }
+.conf-editor label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.conf-editor textarea {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: var(--raio-sm);
+  padding: 0.6rem 0.7rem; width: 100%; resize: vertical; line-height: 1.6; min-height: 14rem;
+}
+.conf-falta { margin: 0; color: var(--texto-2); font-size: var(--t-13); }

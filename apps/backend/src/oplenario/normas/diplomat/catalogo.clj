@@ -6,7 +6,8 @@
 
   A busca pelo sentido e' da IA (seam `:buscar-dispositivos-ia` do host sobre a fronteira); o core so' devolve o que
   ainda e' da versao vigente. IA fora: a busca cai nas palavras exatas do texto (R-IA-1)."
-  (:require [oplenario.kernel.catalogo :as catalogo]
+  (:require [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.catalogo :as catalogo]
             [oplenario.normas.components.repositorio :as repo]))
 
 (set! *warn-on-reflection* true)
@@ -89,7 +90,7 @@
                      "coisa sobre prazo, quorum, rito ou competencia: 'qual o quorum para derrubar um veto?'. Devolve "
                      "cada dispositivo com a citacao pronta ('Regimento Interno, art. 45, § 1º') e o endereco para ler.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
      :entrada [:map {:closed true}
                [:consulta {:description "O assunto ou o numero, em palavras: 'quorum veto', 'art. 45'."}
                 [:string {:min 2 :max 300}]]
@@ -105,7 +106,7 @@
                      "(artigo), 'art45_par1' (§ 1º), 'art45_par1u' (paragrafo unico), 'art45_cpt_inc2' (inciso II do "
                      "caput), 'art45_par1_inc2_ali1' (alinea a). Leia o dispositivo antes de cita-lo.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
      :entrada [:and
                [:map {:closed true :description "Informe norma-id ou especie, e o endereco."}
                 [:norma-id {:optional true :description "Id da norma (vem da busca)."} :uuid]

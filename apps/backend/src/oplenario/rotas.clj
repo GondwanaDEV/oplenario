@@ -11,6 +11,7 @@
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
+            [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
             [oplenario.identidade.diplomat.http.auth-in :as auth-http]
             [oplenario.identidade.diplomat.http.in :as identidade-http]
@@ -578,7 +579,12 @@
                   :registrar-resumo repo-legislativo-comp/registrar-resumo-em-tx!
                   :texto-da-proposicao (fn [ente-id pid] (repo-legislativo-comp/texto-para-ia repo-legislativo ente-id pid))
                   ;; Faixa B / B.4b: os dispositivos da versao vigente de uma norma da Casa (normas), para o indice
-                  :dispositivos-vigentes (fn [ente-id vid] (repo-normas-comp/dispositivos-vigentes repo-normas ente-id vid))})
+                  :dispositivos-vigentes (fn [ente-id vid] (repo-normas-comp/dispositivos-vigentes repo-normas ente-id vid))
+                  ;; Faixa B / B.8 (ADR-0013): a credencial do agente institucional — so' com a concessao do admin_ente
+                  :emitir-credencial-institucional (fn [ente-id agente]
+                                                     (auten/emitir-credencial-institucional! repo-identidade ente-id agente))
+                  :revogar-credencial-institucional (fn [_ente-id execucao-id]
+                                                      (repo-identidade-comp/revogar-credencial-agente! repo-identidade execucao-id))})
                 #{}))
         ;; Faixa B / B.3 (ADR-0009/0010): o servidor MCP do catalogo de acoes — so' com a credencial delegada do agente.
         ;; B.6 (ADR-0012): as MESMAS deps servem a confirmacao da proposta de ato na tela (a entrada roda como a pessoa).

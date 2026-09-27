@@ -112,6 +112,15 @@ class TextoProposicao(Fio):
     texto_sha256: str
 
 
+class CredencialAgente(Fio):
+    """A credencial de UMA execução do agente institucional (B.8, ADR-0013), emitida pelo core só com a concessão do
+    `admin_ente`. O segredo vive só na memória do trabalho que a pediu."""
+
+    execucao_id: str
+    credencial: str
+    expira_em: str
+
+
 class AtaPublicada(Fio):
     versao: int
     texto: str

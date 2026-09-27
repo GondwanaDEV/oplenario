@@ -26,6 +26,7 @@
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
             [oplenario.legislativo.db.recebimento :as recebimento]
+            [oplenario.legislativo.db.nota-tecnica :as nota-tecnica]
             [oplenario.legislativo.db.resumo :as resumo]
             [oplenario.legislativo.db.subscricao :as subscricao]
             [oplenario.legislativo.db.texto-versao :as texto]
@@ -76,6 +77,14 @@
     "Publica a proxima versao do resumo cidadao. Com :rascunho-id, o ponteiro TEM de ser um rascunho pronto desta
      proposicao (modelo, prompt e a versao do texto vem dele); sem, a versao do texto e' a vigente. Numa tx. nil =
      proposicao inexistente.")
+  (registrar-nota-tecnica! [this ente-id m]
+    "Faixa B / B.8 (ADR-0013): o rascunho de nota tecnica do agente institucional ({:proposicao-id :agente :execucao-id
+     :texto :citacoes :paragrafos-sem-fonte :incerteza :motivos-incerteza :modelo-llm-id}). nil = proposicao inexistente
+     nesta Casa; nota ja' existente (mesma proposicao e agente) volta como esta', com `:nova?` false.")
+  (notas-tecnicas [this ente-id estado limite] "B.8: a fila da secretaria (estado nil = todas), mais antigas primeiro.")
+  (nota-tecnica [this ente-id id] "B.8: uma nota, com a identificacao da proposicao; nil = inexistente nesta Casa.")
+  (decidir-nota-tecnica! [this ente-id id decisao]
+    "B.8: a secretaria aproveita ou descarta uma nota PENDENTE; nil = inexistente ou ja' decidida.")
   (texto-para-ia [this ente-id proposicao-id]
     "O texto PUBLICO da proposicao para a IA redigir o resumo (ADR-0008): tipo, numero, ementa, autoria, texto vigente
      inline e o `texto-sha256` da versao. nil = inexistente.")
@@ -548,6 +557,14 @@
               {:proposicao-id proposicao-id :versao (:versao v) :texto (:texto m)
                :origem-redacao (:origem-redacao v) :publicado-em (str (:publicado-em v))})
             v)))))
+  ;; Faixa B / B.8 — a nota tecnica de conferencia (o rascunho do agente institucional e a decisao da secretaria)
+  (registrar-nota-tecnica! [this ente-id m]
+    (transacao this ente-id #(nota-tecnica/registrar! % (assoc m :ente-id ente-id))))
+  (notas-tecnicas [this ente-id estado limite]
+    (transacao this ente-id #(nota-tecnica/listar % ente-id estado limite)))
+  (nota-tecnica [this ente-id id] (transacao this ente-id #(nota-tecnica/buscar % ente-id id)))
+  (decidir-nota-tecnica! [this ente-id id decisao]
+    (transacao this ente-id #(nota-tecnica/decidir! % ente-id id decisao)))
   (texto-para-ia [this ente-id proposicao-id]
     (transacao this ente-id
       (fn [tx]
