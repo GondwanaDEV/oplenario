@@ -82,6 +82,11 @@ A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedo
 não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
+**O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
+mesmo banco do core (schema `ia`, **o Postgres precisa de pgvector**), ligados ao core pelo segredo compartilhado; a
+busca responde `modo: "ia"` e o acervo da Casa demo foi indexado (`ia-republicar-proposicoes`). Topologia,
+variáveis, deploy (`build-ia-prd.yaml`, só na branch `production`), reindexação, orçamento e o que fazer quando a
+busca cai em `sem-ia`: **`docs/27-runbook-ia-producao.md`**. Smoke das telas de IA: `fumaca-ia.yaml`.
 
 **2. IdPs — o gov.br do cidadão ENTREGUE (27/09/2026); o do operador segue aberto.** O broker **gov.br**
 ([ADR-0015](docs/adr/0015-cidadao-entra-pelo-govbr.md)) é IdP do realm de cada Casa (OIDC+PKCE, `GOVBR_AMBIENTE`
