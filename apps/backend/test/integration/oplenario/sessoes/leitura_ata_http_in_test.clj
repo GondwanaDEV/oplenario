@@ -43,7 +43,7 @@
 (defn- servico [& {:keys [papeis] :or {papeis #{"secretario"}} :as opts}]
   (let [auth (it/autenticacao (idp-dev/idp-dev) (fake-identidade papeis))]
     (-> (http/servico (config/carregar)
-                      (sessoes-http/rotas {:auth auth :repo-sessoes (fake-repo opts)
+                      (sessoes-http/rotas {:auth auth :resolver-ente-publico parse-uuid :casa-existe? (constantly true) :repo-sessoes (fake-repo opts)
                                            :roster-da-casa-em-datas (fn [& _]) :resumir-proposicoes (fn [& _])
                                            :nome-na-casa (fn [_ i] ({quem "Maria Secretária" eu "João Mesa"} i))})
                       it/globais)

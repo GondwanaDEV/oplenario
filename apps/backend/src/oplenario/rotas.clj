@@ -504,7 +504,10 @@
                                    :renderizador-pdf renderizador-pdf-fn
                                    :nome-na-casa nome-na-casa-fn
                                    :ler-transcricao ler-transcricao-fn
-                                   :ler-rascunho-ata ler-rascunho-ata-fn}))
+                                   :ler-rascunho-ata ler-rascunho-ata-fn
+                                   ;; Onda E: o livro de atas publico (mesmo seam V1 do portal: UUID coagido)
+                                   :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                   :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?

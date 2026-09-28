@@ -13,14 +13,17 @@ describe("NavegacaoCivica", () => {
     expect(screen.getByRole("heading", { name: "Tudo o que a Câmara publica" })).toBeTruthy();
   });
 
-  it("mostra os 6 cartões; a Ouvidoria já é link, os outros 5 seguem em-breve honesto", () => {
+  it("mostra os 7 cartões; Ouvidoria e Atas já são link, os outros 5 seguem em-breve honesto", () => {
     render(<NavegacaoCivica ente="fortaleza" />);
-    const titulos = ["Sessões", "Transparência", "Ouvidoria", "Dados abertos", "Agenda pública", "Carta de Serviços"];
+    const titulos = [
+      "Sessões", "Atas das sessões", "Transparência", "Ouvidoria", "Dados abertos", "Agenda pública", "Carta de Serviços",
+    ];
     for (const titulo of titulos) {
       expect(screen.getByText(titulo).textContent).toBe(titulo);
     }
     expect(screen.getAllByRole("status")).toHaveLength(5);
     expect(screen.getByRole("link", { name: /ouvidoria/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/ouvidoria");
+    expect(screen.getByRole("link", { name: /atas das sessões/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/atas");
   });
 
   it("não fabrica uma agenda de sessão específica (sem 'Próxima: ...' inventado)", () => {

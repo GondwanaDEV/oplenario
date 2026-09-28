@@ -1,6 +1,6 @@
 // NavegacaoCivica — a navegação cívica de fechamento (Task 2.3, Fatia A2.2). Porte de
 // portal-cidadao.html:623-662 (6 cartões: Sessões, Transparência, Ouvidoria, Dados abertos, Agenda
-// pública, Carta de Serviços).
+// pública, Carta de Serviços) + as Atas das sessões (Onda E, livro de atas).
 //
 // NENHUM dos 6 destinos tem rota pública própria ainda nesta fatia (Legislação/A2.4 é a próxima
 // candidata; as demais nem isso) — em vez de linkar para uma rota que 404a silenciosamente, os 6 usam
@@ -24,7 +24,12 @@ import "./participacao.css";
 const CARTOES = [
   {
     titulo: "Sessões",
-    motivo: "Assistir ao vivo, rever com legendas e ler as atas oficiais chega numa fatia futura (rota pública de sessões ainda não existe).",
+    motivo: "Assistir ao vivo e rever com legendas chega numa fatia futura (rota pública de sessões ainda não existe).",
+  },
+  {
+    titulo: "Atas das sessões",
+    motivo: "O registro oficial de cada sessão pública, com as retificações — nenhuma versão é apagada.",
+    rota: "atas",
   },
   {
     titulo: "Transparência",

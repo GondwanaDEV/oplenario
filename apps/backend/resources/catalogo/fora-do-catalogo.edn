@@ -100,4 +100,9 @@
  :admin-sistema/reenviar-convite {:categoria :supratenant
                                   :motivo "reenvia o convite ao 1o administrador enquanto a Casa espera o handoff"}
  :admin-sistema/reprovisionar-realm {:categoria :supratenant
-                                     :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}}
+                                     :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}
+ ;; ---------- Onda E: o livro de atas no portal ----------
+ :sessoes/livro-atas-publico {:categoria :so-tela
+                              :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}
+ :sessoes/ata-do-livro-publica {:categoria :so-tela
+                                :motivo "uma ata no portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}}

@@ -619,6 +619,15 @@
   [sessao]
   (boolean (and (:gera-ata-regimental sessao) (contains? estados-com-ata (:estado sessao)))))
 
+;; ---------- Onda E: o LIVRO DE ATAS ----------
+
+(defn ata-no-portal?
+  "PURO: a ata desta sessao entra no livro PUBLICO (portal do cidadao) — transmissao publica E nao secreta. As duas
+  condicoes, nao so' a primeira: a `sessao-anterior` da A.7 ja' trata `secreta` pelo tipo, e o portal nao pode depender
+  de o cadastro do tipo ter vindo com `transmite-publica` coerente. `true?`: campo ausente NEGA (fail-closed)."
+  [sessao]
+  (and (true? (:transmite-publica sessao)) (not= "secreta" (:tipo-sessao sessao))))
+
 ;; ---------- Faixa A / A.7: a LEITURA da ata anterior ----------
 
 (def modos-leitura-ata

@@ -80,6 +80,7 @@ const O_QUE: Record<string, (a: Record<string, unknown>) => string> = {
   situacao_da_materia: (a) => `a situação do ${materia(a)}`,
   tramitacao_da_materia: (a) => `a tramitação do ${materia(a)}`,
   pauta_da_sessao: (a) => (a.sessaoId ?? a["sessao-id"] ? "a pauta da sessão" : "a pauta da próxima sessão"),
+  ata_da_sessao: (a) => (a.sessaoId ?? a["sessao-id"] ? "a ata da sessão" : "a ata da última sessão"),
   modelos_de_requerimento: () => "os modelos de requerimento da Casa",
   buscar_dispositivos: (a) => `as normas da Casa sobre “${String(a.consulta ?? "")}”`,
   ler_dispositivo: dispositivo,

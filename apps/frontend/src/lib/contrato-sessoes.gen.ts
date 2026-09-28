@@ -365,6 +365,52 @@ export interface LeituraAtaOut {
   leitura?: LeituraAtaRegistradaOut | null;
 }
 
+export interface SessaoDoLivroOut {
+  id: string;
+  tipoSessao: string;
+  numeroSequencial: number;
+  abertaEm?: string | null;
+  encerradaEm?: string | null;
+  agendadaPara?: string | null;
+}
+
+export interface LeituraDoLivroOut {
+  modo: "dispensada" | "presencial" | "voz_sintetizada";
+  registradaEm: string;
+  ataVersao: number;
+}
+
+export interface AtaDoLivroItemOut {
+  sessao: SessaoDoLivroOut;
+  versao: number;
+  origemRedacao: "gerada_automaticamente" | "redigida_externamente";
+  conteudoSha256: string;
+  publicadaEm: string;
+  leitura?: LeituraDoLivroOut | null;
+}
+
+export interface LivroAtasOut {
+  atas: AtaDoLivroItemOut[];
+}
+
+export interface VersaoDoLivroOut {
+  versao: number;
+  origemRedacao: "gerada_automaticamente" | "redigida_externamente";
+  conteudoSha256: string;
+  motivoRetificacao?: string | null;
+  publicadaEm: string;
+  publicadaPorNome?: string | null;
+}
+
+export interface AtaDoLivroOut {
+  sessao: SessaoDoLivroOut;
+  versao: VersaoDoLivroOut;
+  texto: string;
+  vigente: boolean;
+  versoes: VersaoDoLivroOut[];
+  leitura?: LeituraDoLivroOut | null;
+}
+
 export interface PautaItemAdicionadoOut {
   id: string;
   ordem: number;
