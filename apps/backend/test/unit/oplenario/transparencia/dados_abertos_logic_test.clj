@@ -28,6 +28,7 @@
   (testing "todo dataset tem arquivo .csv e cada coluna tem descricao"
     (doseq [d da/datasets]
       (is (str/ends-with? (:arquivo d) ".csv"))
-      (is (every? (fn [[nome descricao f]] (and (seq nome) (>= (count descricao) 10) (fn? f))) (:colunas d))
+      (is (every? (fn [[nome descricao g]] (and (seq nome) (>= (count descricao) 10) (or (keyword? g) (fn? g))))
+                  (:colunas d))
           (:chave d))))
   (is (= ["proposicoes" "legislacao" "votos-nominais"] (map :chave da/datasets))))

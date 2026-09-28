@@ -13,48 +13,48 @@
 (defn- ->txt [x] (if (nil? x) "" (str x)))
 
 (def datasets
-  "Os datasets na ordem do catalogo. `:colunas` = [nome descricao (fn [linha nomes] valor)]; `nomes` =
-  {vereador-id nome} (so' o de votos usa)."
+  "Os datasets na ordem do catalogo. `:colunas` = [nome descricao valor], onde `valor` e' a chave da linha ou, para
+  a coluna calculada, (fn [linha nomes] valor); `nomes` = {vereador-id nome} (so' o de votos usa)."
   [{:chave "proposicoes"
     :arquivo "proposicoes.csv"
     :titulo "Proposições e tramitação"
     :descricao "Todas as proposições publicadas no portal, com a situação atual no rito da Casa."
-    :colunas [["proposicao_id" "Identificador da proposição no portal (o mesmo do link da ficha)." #(:proposicao-id %1)]
-              ["tipo" "Espécie legislativa (vocabulário da Casa)." #(:tipo %1)]
-              ["numero" "Número da proposição dentro da espécie e do ano." #(:sequencial %1)]
-              ["ano" "Ano da proposição." #(:ano %1)]
-              ["urn_lex" "Identificador LexML." #(:urn-lex %1)]
-              ["ementa" "Ementa." #(:ementa %1)]
-              ["autor_tipo" "Tipo de autor (vereador, comissão, Mesa, Executivo...)." #(:autor-tipo %1)]
-              ["autor" "Nome do autor como publicado." #(:autor-texto %1)]
-              ["situacao" "Estado atual da tramitação, no vocabulário do rito da Casa." #(:estado %1)]
-              ["atualizado_em" "Última atualização da situação no portal (ISO 8601, UTC)." #(:atualizado-em %1)]]}
+    :colunas [["proposicao_id" "Identificador da proposição no portal (o mesmo do link da ficha)." :proposicao-id]
+              ["tipo" "Espécie legislativa (vocabulário da Casa)." :tipo]
+              ["numero" "Número da proposição dentro da espécie e do ano." :sequencial]
+              ["ano" "Ano da proposição." :ano]
+              ["urn_lex" "Identificador LexML." :urn-lex]
+              ["ementa" "Ementa: o resumo oficial do conteúdo." :ementa]
+              ["autor_tipo" "Tipo de autor (vereador, comissão, Mesa, Executivo...)." :autor-tipo]
+              ["autor" "Nome do autor como publicado." :autor-texto]
+              ["situacao" "Estado atual da tramitação, no vocabulário do rito da Casa." :estado]
+              ["atualizado_em" "Última atualização da situação no portal (ISO 8601, UTC)." :atualizado-em]]}
    {:chave "legislacao"
     :arquivo "legislacao.csv"
     :titulo "Legislação publicada"
     :descricao "As normas publicadas pela Casa (leis, resoluções, decretos legislativos, emendas à Lei Orgânica)."
-    :colunas [["norma_id" "Identificador da norma no portal." #(:norma-id %1)]
-              ["tipo_norma" "Espécie da norma." #(:tipo-norma %1)]
-              ["numero" "Número da norma." #(:numero %1)]
-              ["ano" "Ano da norma." #(:ano %1)]
-              ["urn" "Identificador LexML da norma." #(:urn %1)]
-              ["ementa" "Ementa." #(:ementa %1)]
-              ["publicado_em" "Instante da publicação oficial (ISO 8601, UTC)." #(:publicado-em %1)]
-              ["veiculo_publicacao" "Onde foi publicada (prova da publicação)." #(:veiculo-publicacao %1)]
-              ["proposicao_id" "A proposição de origem." #(:proposicao-id %1)]]}
+    :colunas [["norma_id" "Identificador da norma no portal." :norma-id]
+              ["tipo_norma" "Espécie da norma." :tipo-norma]
+              ["numero" "Número da norma." :numero]
+              ["ano" "Ano da norma." :ano]
+              ["urn" "Identificador LexML da norma." :urn]
+              ["ementa" "Ementa: o resumo oficial do conteúdo." :ementa]
+              ["publicado_em" "Instante da publicação oficial (ISO 8601, UTC)." :publicado-em]
+              ["veiculo_publicacao" "Onde foi publicada (prova da publicação)." :veiculo-publicacao]
+              ["proposicao_id" "A proposição de origem." :proposicao-id]]}
    {:chave "votos-nominais"
     :arquivo "votos-nominais.csv"
     :titulo "Votações nominais"
     :descricao (str "Cada voto nominal registrado em plenário: quem votou, como e em qual matéria. Votações "
                     "secretas não têm voto individual e não entram.")
-    :colunas [["votacao_id" "Identificador da votação." #(:votacao-id %1)]
-              ["ocorrido_em" "Instante do voto (ISO 8601, UTC)." #(:ocorrido-em %1)]
-              ["proposicao_id" "A proposição votada (vazio se a matéria não foi publicada)." #(:proposicao-id %1)]
+    :colunas [["votacao_id" "Identificador da votação." :votacao-id]
+              ["ocorrido_em" "Instante do voto (ISO 8601, UTC)." :ocorrido-em]
+              ["proposicao_id" "A proposição votada (vazio se a matéria não foi publicada)." :proposicao-id]
               ["materia" "A matéria como tipo número/ano (vazio se não foi publicada)."
-               #(when (:materia-tipo %1) (str (:materia-tipo %1) " " (:materia-sequencial %1) "/" (:materia-ano %1)))]
-              ["vereador_id" "Identificador do vereador (o mesmo do perfil público)." #(:vereador-id %1)]
-              ["vereador" "Nome parlamentar do vereador, ou o civil quando não há." #(get %2 (:vereador-id %1))]
-              ["voto" "sim, nao ou abstencao." #(:voto %1)]]}])
+               (fn [l _] (when (:materia-tipo l) (str (:materia-tipo l) " " (:materia-sequencial l) "/" (:materia-ano l))))]
+              ["vereador_id" "Identificador do vereador (o mesmo do perfil público)." :vereador-id]
+              ["vereador" "Nome parlamentar do vereador, ou o civil quando não há." (fn [l nomes] (get nomes (:vereador-id l)))]
+              ["voto" "sim, nao ou abstencao." :voto]]}])
 
 (def por-arquivo (into {} (map (juxt :arquivo identity)) datasets))
 
@@ -72,6 +72,7 @@
   "O dataset `d` inteiro como CSV: BOM + cabecalho + uma linha por registro, CRLF."
   [d linhas nomes]
   (let [cols (:colunas d)
-        linha (fn [vs] (str (str/join "," (map campo vs)) "\r\n"))]
+        linha (fn [vs] (str (str/join "," (map campo vs)) "\r\n"))
+        valor (fn [l [_ _ g]] (if (keyword? g) (get l g) (g l nomes)))]
     (apply str bom (linha (map first cols))
-           (map (fn [l] (linha (map (fn [[_ _ f]] (f l nomes)) cols))) linhas))))
+           (map (fn [l] (linha (map #(valor l %) cols))) linhas))))
