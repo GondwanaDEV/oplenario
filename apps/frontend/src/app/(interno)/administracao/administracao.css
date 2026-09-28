@@ -1,0 +1,16 @@
+/* Área do administrador da Casa (ADR-0005). Tokens do chassi (var(--texto), var(--linha), ...); o form reusa
+   .painel-cad/.form-cad do cadastro de vereadores. */
+.adm { padding-block: 2rem 3rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.adm-cabeca h1 { font-family: var(--display); margin: 0.25rem 0 0.5rem; }
+.adm-sobre { margin: 0; font-size: var(--t-13); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.adm-texto { margin: 0; color: var(--texto-2); max-width: 62ch; }
+.adm-aviso { margin: 0; padding: 0.75rem 1rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); }
+.adm-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.adm-item { border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.75rem 1rem; background: var(--surface); }
+.adm-linha { display: flex; align-items: center; gap: 0.75rem; }
+.adm-avatar { width: 2.25rem; height: 2.25rem; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; font-size: var(--t-13); flex: none; }
+.adm-quem { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.adm-quem span { font-size: var(--t-13); color: var(--texto-2); }
+.adm-outras h2 { font-family: var(--display); font-size: var(--t-16); margin: 0 0 0.5rem; }
+.adm-outras ul { margin: 0; padding-left: 1.1rem; }
+.adm-outras span { color: var(--texto-2); }

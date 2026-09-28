@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { TopoInterno } from "./topo";
+import { TopoInterno, destinosVisiveis } from "./topo";
 import { TemaProvider } from "@/lib/tema";
 import { AuthProvider } from "@/lib/auth";
 
@@ -62,5 +62,26 @@ describe("TopoInterno", () => {
     );
     await waitFor(() => expect(screen.getByText("Sessão")).toBeTruthy());
     expect(screen.getByText("indisponível")).toBeTruthy();
+  });
+});
+
+describe("destinosVisiveis — a nav por papel", () => {
+  const rotulos = (papeis: string[]) => destinosVisiveis(papeis).map((d) => d.rotulo);
+
+  it("a secretaria vê as telas de trabalho e NÃO vê as do administrador", () => {
+    const r = rotulos(["secretario"]);
+    expect(r).toContain("Proposições");
+    expect(r).not.toContain("Administração");
+    expect(r).not.toContain("IA da Casa");
+  });
+
+  it("quem é SÓ administrador da Casa vê só a área dele — nada que o leve a 'Acesso restrito' (ADR-0005)", () => {
+    expect(rotulos(["admin_ente"])).toEqual(["IA da Casa", "Administração"]);
+  });
+
+  it("quem acumula secretaria e administração vê as duas", () => {
+    const r = rotulos(["secretario", "admin_ente"]);
+    expect(r).toContain("Proposições");
+    expect(r).toContain("Administração");
   });
 });

@@ -90,6 +90,22 @@
                            :get "/cadastros/vereadores" :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 403 (:status r)) "ator sem papel 'secretario' -> authz grossa nega -> 403")))
 
+(deftest listar-vereadores-admin-ente-le-200
+  ;; ADR-0005 P2: o admin_ente escolhe a quem conceder acesso — a LEITURA abre a ele (a escrita, nao).
+  (let [r (pt/response-for (service-fn #{"admin_ente"} (fake-repo-cadastros [(linha-canonica (random-uuid))] nil))
+                           :get "/cadastros/vereadores" :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 200 (:status r)) "admin_ente (sem secretario) le a lista -> 200")
+    (is (= 1 (count (:vereadores (ler-json r)))))))
+
+(deftest criar-vereador-admin-ente-403
+  ;; a abertura e' SO' de leitura: o admin_ente nao mantem o cadastro (segregacao de funcoes, ADR-0005)
+  (let [r (pt/response-for (service-fn #{"admin_ente"} (fake-repo-cadastros [] nil))
+                           :post "/cadastros/vereadores"
+                           :headers (merge (com-bearer (token (random-uuid) (random-uuid)))
+                                           {"content-type" "application/json"})
+                           :body (json/write-value-as-string {:nome "Fulano"}))]
+    (is (= 403 (:status r)) "admin_ente sem secretario nao escreve no cadastro -> 403")))
+
 (deftest listar-vereadores-sem-token-401
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-cadastros [] nil))
                            :get "/cadastros/vereadores")]
@@ -119,6 +135,14 @@
                            :get "/cadastros/vereadores/nao-e-um-uuid"
                            :headers (com-bearer (token (random-uuid) (random-uuid))))]
     (is (= 404 (:status r)) "path param nao-UUID -> 404, nunca 500")))
+
+(deftest ficha-vereador-admin-ente-le-200
+  (let [id (random-uuid)
+        r (pt/response-for (service-fn #{"admin_ente"} (fake-repo-cadastros [] (ficha-canonica id)))
+                           :get (str "/cadastros/vereadores/" id)
+                           :headers (com-bearer (token (random-uuid) (random-uuid))))]
+    (is (= 200 (:status r)) "admin_ente (sem secretario) le a ficha -> 200")
+    (is (= "Helena Matos" (:nome (ler-json r))))))
 
 (deftest ficha-vereador-sem-papel-403
   (let [r (pt/response-for (service-fn #{"vereador"} (fake-repo-cadastros [] (ficha-canonica (random-uuid))))

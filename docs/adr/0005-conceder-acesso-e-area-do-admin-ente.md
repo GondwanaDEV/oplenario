@@ -81,6 +81,11 @@ e a secretaria deixa de ver uma função que nunca poderia executar.
   é sobre *ligar identidade*. Mesma família do `feat(authz)` que já abriu leitura a vereador/presidente.
 
 ### 5. Até P1 e P2 existirem, o form fica onde está — marcado
+**Executado (28/09/2026):** P1 e P2 existem, e o form mudou. A área é `/administracao` (`GuardAdminEnte`); quem só
+tem `admin_ente` pousa nela depois do login (`destinoPorPapeis`) e a nav interna mostra a esse ator só as entradas
+dele. `GET /cadastros/vereadores` e `/:id` aceitam `secretario` OU `admin_ente` (só leitura; as escritas do
+cadastro seguem `secretario`, e ligar identidade segue `admin_ente`). `/cadastros/vereadores` voltou a ser só o
+cadastro.
 Não se move nem se apaga código testado para um destino que ainda não pode existir. Fica no lugar, com
 ponteiro para esta ADR, para que ninguém "conserte" abrindo o guard — que é precisamente a correção
 errada, e a mesma armadilha que já produziu teste obsoleto neste repositório.

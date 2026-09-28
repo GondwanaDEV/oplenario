@@ -1,0 +1,162 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import PaginaAdministracao from "./page";
+import { AuthProvider } from "@/lib/auth";
+import { TemaProvider } from "@/lib/tema";
+
+// A área do administrador da Casa (ADR-0005). Mesma disciplina dos demais page.test.tsx: não mocka os hooks —
+// mocka `global.fetch` e deixa useVereadores / useConcederAcesso reais rodarem. Tokens de dev (modo test:
+// usePapeis lê os papéis DO TOKEN). O 1º administrador de uma Casa nasce SÓ com admin_ente (ADR-0016).
+const TOKEN_ADMIN = '{"sub":"u","papeis":["admin_ente"]}';
+const TOKEN_SECRETARIA = '{"sub":"u","papeis":["secretario"]}';
+
+const listaFake = {
+  vereadores: [
+    { id: "v1", nome: "Helena Past", "nome-parlamentar": null, partido: "PT", "estado-mandato": "vigente", "cargo-mesa": null },
+    { id: "v2", nome: "Rafael Melo", "nome-parlamentar": "Rafa", partido: "PSDB", "estado-mandato": "licenciado", "cargo-mesa": null },
+  ],
+};
+
+function montar(token: string) {
+  return render(
+    <AuthProvider tokenQuery={token}>
+      <TemaProvider>
+        <PaginaAdministracao />
+      </TemaProvider>
+    </AuthProvider>,
+  );
+}
+
+const agente = (ligado: boolean) => ({
+  itens: [{ agente: "conferencia-normativa", titulo: "Conferência das proposições contra a LOM e o Regimento",
+    descricao: "A cada proposição protocolada, a IA lê o texto…", classes: ["leitura", "rascunho"], ligado,
+    "ligado-em": ligado ? "2026-09-27T12:00:00Z" : null }],
+});
+
+function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean } = {}) {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    if (method === "GET" && url === "/api/identidade/agentes-institucionais") {
+      return { ok: true, status: 200, json: async () => agente(false) } as Response;
+    }
+    if (method === "PUT" && url === "/api/identidade/agentes-institucionais/conferencia-normativa/concessao") {
+      return { ok: true, status: 200, json: async () => agente(true) } as Response;
+    }
+    if (method === "GET" && url === "/api/meu/identidade") {
+      return { ok: true, status: 200, json: async () => ({ nome: "Ana Moreira", papeis: ["admin_ente"] }) } as Response;
+    }
+    if (method === "GET" && url === "/api/cadastros/vereadores") {
+      if (opts.lista500) return { ok: false, status: 500 } as Response;
+      return { ok: true, status: 200, json: async () => listaFake } as Response;
+    }
+    if (method === "POST" && url === "/api/identidade/identidades") {
+      return { ok: true, status: 201, json: async () => ({ "identidade-id": "id-9" }) } as Response;
+    }
+    if (method === "PATCH" && /\/identidade$/.test(url)) {
+      if (opts.identidadeVinculada409) {
+        return {
+          ok: false, status: 409,
+          json: async () => ({ erro: "identidade ja vinculada a outro vereador nesta Casa" }),
+        } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ id: "v1", "identidade-id": "id-9" }) } as Response;
+    }
+    if (method === "POST" && url === "/api/identidade/acessos") {
+      return { ok: true, status: 201, json: async () => ({ "vinculo-id": "vin-1", convite: "enviado" }) } as Response;
+    }
+    return { ok: false, status: 404 } as Response;
+  });
+}
+
+async function abrirFormDe(nome: string) {
+  fireEvent.click(await screen.findByRole("button", { name: `Conceder acesso a ${nome}` }));
+  return screen.findByRole("form", { name: /^conceder acesso$/i });
+}
+
+function preencherESubmeter(form: HTMLElement) {
+  fireEvent.change(within(form).getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+  fireEvent.change(within(form).getByLabelText(/e-mail institucional/i), { target: { value: "helena@camara.local" } });
+  fireEvent.submit(form);
+}
+
+describe("Área do administrador da Casa (/administracao)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("sem o papel admin_ente (ex.: secretaria) a área mostra 'Acesso restrito' e não carrega nada", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_SECRETARIA);
+    expect(await screen.findByText("Esta área é do administrador da Casa.")).toBeTruthy();
+    expect(f.mock.calls.some(([url]) => url === "/api/cadastros/vereadores")).toBe(false);
+  });
+
+  it("lista os vereadores com o nome de exibição, o partido e o estado do mandato", async () => {
+    global.fetch = fetchMock() as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    expect(await screen.findByRole("heading", { name: "Acessos dos vereadores" })).toBeTruthy();
+    const lista = await screen.findByRole("list", { name: "Vereadores" });
+    expect(within(lista).getByText("Helena Past")).toBeTruthy();
+    expect(within(lista).getByText("Rafa")).toBeTruthy(); // nome parlamentar vence o civil
+    expect(within(lista).getByText("PT · Mandato ativo")).toBeTruthy();
+    expect(within(lista).getByText("PSDB · Licença")).toBeTruthy();
+    // o atalho vive na seção da administração (a nav também tem "IA da Casa" para o admin_ente)
+    const outras = screen.getByRole("region", { name: "Outras áreas da administração" });
+    expect(within(outras).getByRole("link", { name: "IA da Casa" })).toBeTruthy();
+  });
+
+  it("Conceder acesso: os 3 passos NA ORDEM (acesso por último), o form fecha e a confirmação aparece", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+
+    const form = await abrirFormDe("Helena Past");
+    // o nome de quem recebe é exibido, não pedido
+    expect(within(form).getByText("Helena Past")).toBeTruthy();
+    preencherESubmeter(form);
+
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Acesso concedido a Helena Past/));
+    const mutacoes = f.mock.calls
+      .map(([url, init]) => [url, (init as RequestInit | undefined)?.method])
+      .filter(([, metodo]) => metodo && metodo !== "GET");
+    expect(mutacoes).toEqual([
+      ["/api/identidade/identidades", "POST"],
+      ["/api/cadastros/vereadores/v1/identidade", "PATCH"],
+      ["/api/identidade/acessos", "POST"],
+    ]);
+    expect(screen.queryByRole("form", { name: /^conceder acesso$/i })).toBeNull();
+  });
+
+  it("Conceder acesso: 409 no passo 2 aparece como alerta, o passo 3 nunca dispara e o form segue aberto", async () => {
+    const f = fetchMock({ identidadeVinculada409: true });
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+
+    const form = await abrirFormDe("Helena Past");
+    preencherESubmeter(form);
+
+    await waitFor(() => expect(screen.getByText(/identidade ja vinculada a outro vereador/i)).toBeTruthy());
+    expect(f.mock.calls.some(([url]) => url === "/api/identidade/acessos")).toBe(false);
+    expect(screen.getByRole("form", { name: /^conceder acesso$/i })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("se a lista não carregar, diz isso — nunca uma lista vazia fingindo que não há vereadores", async () => {
+    global.fetch = fetchMock({ lista500: true }) as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    expect(await screen.findByText(/Não foi possível carregar os vereadores/)).toBeTruthy();
+    expect(screen.queryByText(/Nenhum vereador cadastrado/)).toBeNull();
+  });
+
+  it("o administrador liga a conferência automática daqui — o painel não fica preso na tela da secretaria", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    expect(await screen.findByRole("heading", { name: "Conferência automática" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Ligar a conferência" }));
+    expect(await screen.findByRole("button", { name: "Desligar" })).toBeTruthy();
+    expect(f.mock.calls.some(([u, i]) => String(u).endsWith("/concessao") && (i as RequestInit)?.method === "PUT")).toBe(true);
+  });
+});

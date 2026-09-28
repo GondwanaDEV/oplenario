@@ -194,13 +194,17 @@
   `participacao-http/rotas`) e `identidade-existe?` (Onda D Slice 5 Task 9 — guard de SERVICO injetado
   pelo host, mesma forma de `info-ente`; `cadastros` nunca importa `identidade`, §22.10). Todas as rotas
   EXIGEM authz grossa — a maioria papel 'secretario', MAS `/identidade` exige `admin_ente` (ligar
-  identidade e' parte de CONCEDER ACESSO, nao de cadastro; ver docstring de `ligar-identidade-handler`)."
+  identidade e' parte de CONCEDER ACESSO, nao de cadastro; ver docstring de `ligar-identidade-handler`), e a
+  LEITURA (lista + ficha) aceita 'secretario' OU 'admin_ente' (ADR-0005 P2)."
   [{:keys [auth repo-cadastros relogio identidade-existe?]}]
   (let [papel (it/exige-papel "secretario")
-        papel-admin-ente (it/exige-papel "admin_ente")]
-    #{["/cadastros/vereadores"     :get [auth papel (listar-handler repo-cadastros relogio)]
+        papel-admin-ente (it/exige-papel "admin_ente")
+        ;; ADR-0005 P2: a LEITURA do cadastro abre tambem ao admin_ente — para conceder acesso e' preciso escolher a
+        ;; quem. So' leitura: a invariante (quem mantem o cadastro nao liga a propria identidade) e' da ESCRITA.
+        papel-leitura (it/exige-algum-papel #{"secretario" "admin_ente"})]
+    #{["/cadastros/vereadores"     :get [auth papel-leitura (listar-handler repo-cadastros relogio)]
        :route-name :cadastros/listar-vereadores]
-      ["/cadastros/vereadores/:id" :get [auth papel (ficha-handler repo-cadastros relogio)]
+      ["/cadastros/vereadores/:id" :get [auth papel-leitura (ficha-handler repo-cadastros relogio)]
        :route-name :cadastros/ficha-vereador]
       ["/cadastros/vereadores" :post [auth papel it/corpo-json (criar-vereador-handler repo-cadastros)]
        :route-name :cadastros/criar-vereador]

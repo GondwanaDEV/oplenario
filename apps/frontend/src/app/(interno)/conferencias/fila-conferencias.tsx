@@ -19,7 +19,8 @@ import {
 import { mudarAgente, useAgentesInstitucionais, useNotasTecnicas } from "@/lib/use-conferencias";
 import type { NotaTecnicaResumoOut } from "@/lib/contrato-legislativo.gen";
 
-function PainelAgente({ token, agentes }: { token: string | null; agentes: ReturnType<typeof useAgentesInstitucionais> }) {
+// Exportado: a área do administrador da Casa (/administracao) monta o mesmo painel — é ele quem liga e desliga.
+export function PainelAgente({ token, agentes }: { token: string | null; agentes: ReturnType<typeof useAgentesInstitucionais> }) {
   const { papeis } = usePapeis();
   const admin = papeis.includes("admin_ente");
   const { estado, setEstado } = agentes;
