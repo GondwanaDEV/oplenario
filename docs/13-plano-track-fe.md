@@ -123,7 +123,7 @@ consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
 | `vereador-estatisticas` | PARCIAL — o `proposicoes.estado` não está mais morto (a tramitação o move), mas é o vocabulário do rito de cada Casa, sem categoria que case com os 5 grupos fixos do design | ✅ entregue (28/09/2026) — `(vereador)/vereador/atuacao`, aba "Perfil": autoria, leis, pareceres como relator, presença em fração, votos por opção e proposições agrupadas pelo estado do rito da Casa. Fora por falta de dado: percentual (proibido), presença por mês, ausência justificada, filtro de período |
 | `transparencia-fiscal` | BLOQUEADA — **o SSOT veta produzir o dado**; falta o conector contábil | `[GAP]` externo |
 | `console-operador` (+tenant) | BLOQUEADA — `admin_sistema` tem 3 linhas e zero rotas | gated por IdP do operador |
-| `livro-atas` | BLOQUEADA — a ata existe como *capacidade* (`gera_ata_regimental`), não como artefato | aberta |
+| `livro-atas` | era BLOQUEADA (a ata não era artefato) — destravada pela ata-IA (A.6: `sessoes.ata`, versionada e append-only) | ✅ entregue (28/09/2026) — interno `(interno)/atas` e portal `/portal/casa/[ente]/atas`; a vigente aberta como folha, retificação como nova versão legível, leitura no plenário (A.7), SHA-256 do texto. Selo "Publicada", nunca "Aprovada" (o sistema não registra aprovação da ata). Sessão secreta: só a secretaria, nunca o portal. Fora: quórum/deliberações da lombada, assinaturas (ICP é `[GAP]`), filtros de ano/tipo |
 | `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` | BLOQUEADAS — zero entidade no backend | aberta |
 | `observabilidade-ia` | BLOQUEADA — Track IA tem zero código | IA-gated |
 | `ata-revisao` · `legendas-ao-vivo` | IA-gated desde a origem | IA-gated |

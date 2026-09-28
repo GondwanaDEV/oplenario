@@ -72,6 +72,9 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string }[] = [
   { rotulo: "Tempos da tribuna", href: "/tempos-da-tribuna" },
   // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
   { rotulo: "Vereadores", href: "/cadastros/vereadores" },
+  // Onda E — o livro de atas: as atas publicadas das sessões (a de sessão secreta, só para a secretaria — o servidor
+  // filtra). Sem papel: vereador e secretaria leem o mesmo livro.
+  { rotulo: "Atas", href: "/atas" },
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
   // compliance). Sem esta entrada a rota existiria órfã, alcançável só por URL digitada.
   { rotulo: "Calendário", href: "/calendario" },

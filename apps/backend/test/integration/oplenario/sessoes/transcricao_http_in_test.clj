@@ -40,7 +40,7 @@
 (defn- servico [& {:keys [papeis casa ler] :or {papeis #{"secretario"} casa ente}}]
   (let [auth (it/autenticacao (idp-dev/idp-dev) (fake-identidade papeis))]
     (-> (http/servico (config/carregar)
-                      (sessoes-http/rotas {:auth auth :repo-sessoes (fake-repo casa)
+                      (sessoes-http/rotas {:auth auth :resolver-ente-publico parse-uuid :casa-existe? (constantly true) :repo-sessoes (fake-repo casa)
                                            :roster-da-casa-em-datas (fn [& _]) :resumir-proposicoes (fn [& _])
                                            :nome-na-casa (fn [& _]) :ler-transcricao ler})
                       it/globais)

@@ -151,6 +151,31 @@ jobs:
               else rec('/vereador/atuacao', 'ERRO', `numeros=${nums} sem-percentual=${semPercentual} :: ${txt.slice(0,140)}`);
             } catch (e) { rec('/vereador/atuacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 5) LIVRO DE ATAS — interno (secretaria) e portal (anonimo, contexto sem cookie)
+            try {
+              const r = await api(cSec, '/api/atas');
+              const n = Array.isArray(r.body?.atas) ? r.body.atas.length : null;
+              const p = await cSec.newPage();
+              await p.goto(`${B}/atas`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.close();
+              const ok = r.status === 200 && n !== null && /Atas das sess/.test(txt) && !/Aprovada/.test(txt);
+              rec('/atas', ok ? 'OK' : 'ERRO', `status=${r.status} atas=${n ?? '-'} :: ${txt.slice(txt.indexOf('Atas das'), txt.indexOf('Atas das') + 120)}`);
+            } catch (e) { rec('/atas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const r = await api(anon, `/api/portal/casa/${E}/atas`);
+              const n = Array.isArray(r.body?.atas) ? r.body.atas.length : null;
+              const p = await anon.newPage();
+              await p.goto(`${B}/portal/casa/${E}/atas`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await anon.close();
+              const ok = r.status === 200 && n !== null && /Atas das sess/.test(txt);
+              rec('/portal/casa/:ente/atas', ok ? 'OK' : 'ERRO', `anonimo status=${r.status} atas-publicas=${n ?? '-'}`);
+            } catch (e) { rec('/portal/casa/:ente/atas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

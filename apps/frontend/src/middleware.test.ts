@@ -80,6 +80,12 @@ describe("middleware — gate de presença do cookie sessao em rotas protegidas"
     expect(middleware(req("/meus-protocolos", "sessao=segredo-opaco")).headers.get("location")).toBeNull();
   });
 
+  it("/atas (livro de atas interno) sem cookie → mesmo gate de sessão", async () => {
+    const resp = middleware(req("/atas"));
+    expect(new URL(resp.headers.get("location")!).searchParams.get("redirect")).toBe("/atas");
+    expect(middleware(req("/atas", "sessao=segredo-opaco")).headers.get("location")).toBeNull();
+  });
+
   it("/administracao (área do admin_ente) sem cookie → mesmo gate de sessão", async () => {
     const resp = middleware(req("/administracao"));
     expect(resp.status).toBe(307);

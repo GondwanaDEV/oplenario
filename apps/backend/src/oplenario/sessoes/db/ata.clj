@@ -68,3 +68,37 @@
    (jdbc/execute-one! tx (sql/format {:select (conj meta-cols :texto) :from [:sessoes.ata]
                                       :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
                                               [:= :versao versao]]}))))
+
+(defn livro
+  "O LIVRO DE ATAS da Casa: uma linha por sessao com ata publicada — a versao VIGENTE (metadados, sem texto), os dados
+  da sessao que a situam e o ato de LEITURA dessa ata no plenario, se ja' houve (a primeira). `so-publicas?` restringe
+  as sessoes de transmissao publica e nao secretas (o portal do cidadao); a visibilidade do servidor e' decidida no
+  controller, por linha. Ordem: sessao mais recente primeiro (pelo inicio: aberta_em, ou a data agendada)."
+  [tx ente-id so-publicas?]
+  (let [linhas (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format
+                   {:select-distinct-on [[:a.sessao_id]
+                                         :a.sessao_id :a.versao :a.origem_redacao :a.conteudo_sha256 :a.publicada_em
+                                         :s.tipo_sessao :s.numero_sequencial :s.aberta_em :s.encerrada_em
+                                         :s.agendada_para :s.transmite_publica
+                                         [:l.modo :leitura_modo] [:l.registrada_em :leitura_registrada_em]
+                                         [:l.ata_versao :leitura_ata_versao]]
+                    :from [[:sessoes.ata :a]]
+                    :join [[:sessoes.sessao :s] [:and [:= :s.ente_id :a.ente_id] [:= :s.id :a.sessao_id]]]
+                    :left-join [[:sessoes.leitura_ata :l] [:and [:= :l.ente_id :a.ente_id]
+                                                           [:= :l.ata_sessao_id :a.sessao_id]]]
+                    :where (cond-> [:and [:= :a.ente_id ente-id]]
+                             so-publicas? (conj [:= :s.transmite_publica true]
+                                                [:<> :s.tipo_sessao [:inline "secreta"]]))
+                    :order-by [:a.sessao_id [:a.versao :desc] [:l.registrada_em :asc]]})))
+        inicio #(str (or (:aberta-em %) (:agendada-para %)))]
+    (vec (sort-by (juxt inicio (comp str :sessao-id)) #(compare %2 %1) linhas))))
+
+(defn primeira-leitura
+  "O ato de LEITURA da ata desta sessao no plenario (a primeira, se mais de uma sessao a leu), ou nil."
+  [tx ente-id sessao-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx (sql/format {:select [:modo :registrada_em :ata_versao] :from [:sessoes.leitura_ata]
+                                      :where [:and [:= :ente_id ente-id] [:= :ata_sessao_id sessao-id]]
+                                      :order-by [[:registrada_em :asc]] :limit 1}))))
