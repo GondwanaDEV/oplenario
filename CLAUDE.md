@@ -120,7 +120,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 | Veredito | Telas |
 |---|---|
 | **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
-| **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` · `notificacoes` ✅ |
+| **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
 
@@ -135,7 +135,10 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
   da Casa com o handoff e a atuação selada. Os blocos de acesso de suporte e flags por Casa esperam fatia própria.
 - `observabilidade-ia` — Track IA, item 1 acima.
 
-E `vereador-estatisticas` esbarra no `proposicoes.estado` morto (4 dos 5 buckets).
+`vereador-estatisticas` ✅ **entregue em 28/09/2026** como "Minha atuação" (`/vereador/atuacao`, aba Perfil do app do
+vereador): os números do perfil público + pareceres como relator + votos por opção; as proposições agrupadas pelo estado
+do rito da Casa (o estado não está mais morto, mas não tem categoria para os 5 grupos fixos do design). Fora por falta de
+dado: percentual (proibido), presença por mês, ausência justificada e filtro de período.
 
 **4. A verificação independente começou — CI destravado na infra, 3 testes `demo.*` faltam.**
 *(atualizado 15/09/2026, tarde)* O repositório **tem remote** (`github.com/GondwanaDEV/oplenario`) e

@@ -148,6 +148,26 @@
                    :from [:transparencia.voto_parlamentar]
                    :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]})))))
 
+(defn votos-por-opcao-do-vereador
+  "\"Como votou\" em numeros: quantos votos PUBLICOS do vereador foram sim, nao e abstencao, e o TOTAL — num
+  unico `GROUP BY` sobre o mesmo prefixo (ente_id, vereador_id) de `idx_voto_parlamentar_vereador`. Substitui
+  o `count(*)` de `contar-votos-do-vereador` no perfil sem acrescentar statement: o total e' a soma dos grupos
+  (inclusive de qualquer valor fora dos tres — o CHECK do legislativo nao deixa haver, mas o total nao depende
+  disso). Votos secretos nao estao aqui: `voto_parlamentar` so' recebe voto nominal (mig 0064)."
+  [tx ente-id vereador-id]
+  {:pre [(some? ente-id) (some? vereador-id)]}
+  (let [grupos (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select [:voto [[:count :*] :contagem]]
+                               :from [:transparencia.voto_parlamentar]
+                               :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]
+                               :group-by [:voto]})))
+        de (fn [v] (or (some #(when (= v (:voto %)) (:contagem %)) grupos) 0))]
+    {:total     (reduce + 0 (map :contagem grupos))
+     :sim       (de "sim")
+     :nao       (de "nao")
+     :abstencao (de "abstencao")}))
+
 (defn- predicado-de-janela
   "OR dos intervalos de exercicio sobre a coluna `data` — INCLUSIVO nos dois lados (`fim` nil = em aberto,
   logo so' a borda esquerda entra no predicado). UM unico WHERE, nunca um JOIN contra a lista: com OR, dois

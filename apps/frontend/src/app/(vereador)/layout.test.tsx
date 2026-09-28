@@ -62,6 +62,25 @@ describe("GuardVereador", () => {
   });
 });
 
+describe("GuardVereador — aba Perfil", () => {
+  afterEach(cleanup);
+
+  it("a aba 'Perfil' aponta para a Minha atuação (/vereador/atuacao)", () => {
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
+        <TemaProvider>
+          <GuardVereador>
+            <div data-testid="conteudo">home do vereador</div>
+          </GuardVereador>
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const link = screen.getByText("Perfil").closest("a");
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute("href")).toMatch(/^\/vereador\/atuacao/);
+  });
+});
+
 describe("GuardVereador (modo real — papéis via /eu)", () => {
   afterEach(() => {
     cleanup();
