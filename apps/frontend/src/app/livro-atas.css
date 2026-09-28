@@ -1,0 +1,48 @@
+/* O LIVRO DE ATAS — porte de produto/design-system/o-plenario/telas/livro-atas.html (tokens do sistema; o papel
+   usa --papel-*, que o design system já mede para AA nos dois temas). */
+.livro-atas { padding-bottom: 2.5rem; }
+.livro-atas .pg-cab { padding: 1.5rem 0 0; }
+.livro-atas .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
+.livro-atas .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.livro-atas .pg-cab .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.livro-atas .estado { color: var(--texto-2); font-size: var(--t-13); margin: 1.2rem 0 0; }
+.livro-atas .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.6rem 0 0.7rem; }
+
+/* a ata aberta (ilha-papel, só leitura) */
+.livro-atas .papel { background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio); box-shadow: var(--sombra-papel); padding: clamp(1.4rem, 3vw, 2.2rem); position: relative; font-size: 1rem; line-height: 1.7; }
+.livro-atas .papel .selo-ap { position: absolute; top: 1.2rem; right: 1.2rem; display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #234429; border: 1.5px solid #6B9B72; border-radius: 999px; padding: 0.2rem 0.6rem; transform: rotate(2deg); background: var(--papel); }
+.livro-atas .papel .folha-topo { text-align: center; border-bottom: 1px solid var(--papel-linha); padding: 1.6rem 0 0.9rem; margin-bottom: 1.3rem; }
+.livro-atas .papel .folha-topo .casa { font-family: var(--display); font-weight: 700; font-size: var(--t-13); letter-spacing: .02em; color: var(--papel-texto); text-transform: uppercase; display: block; }
+.livro-atas .papel .folha-topo .tit { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--papel-texto); margin: 0.3rem 0 0; }
+.livro-atas .papel .folha-topo .quando-sessao { font-size: var(--t-13); color: var(--papel-texto-2); margin: 0.2rem 0 0; }
+.livro-atas .papel .texto-ata p { margin: 0 0 0.8rem; white-space: pre-line; }
+.livro-atas .papel .secao-ata { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .08em; text-transform: uppercase; color: var(--papel-marca); margin: 1.2rem 0 0.4rem; font-weight: 600; }
+.livro-atas .papel a { color: var(--papel-marca); font-weight: 600; }
+.livro-atas .papel .aviso-versao { background: var(--papel-2); border: 1px solid var(--papel-linha); border-radius: 10px; padding: 0.6rem 0.8rem; font-size: var(--t-13); margin: 0 0 1rem; }
+.livro-atas .papel .proveniencia { margin: 1.4rem 0 0; padding-top: 1rem; border-top: 1px solid var(--papel-linha); display: grid; gap: 0.5rem; font-size: var(--t-13); }
+.livro-atas .papel .proveniencia div { display: grid; grid-template-columns: 7.5rem 1fr; gap: 0.6rem; }
+.livro-atas .papel .proveniencia dt { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .06em; color: var(--papel-texto-2); }
+.livro-atas .papel .proveniencia dd { margin: 0; color: var(--papel-texto); }
+.livro-atas .papel .proveniencia .hash { font-family: var(--mono); font-size: var(--t-12); word-break: break-all; }
+.livro-atas .papel .versoes ol { margin: 0; padding-left: 1.2rem; font-size: var(--t-13); }
+.livro-atas .papel .versoes .motivo { color: var(--papel-texto-2); }
+
+/* a lombada */
+.livro-atas .livro { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+.livro-atas .ata-row { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 0.4rem 1rem; align-items: center; padding: 0.85rem 1.1rem; border-top: 1px solid var(--linha); }
+.livro-atas .ata-row:first-child { border-top: none; }
+.livro-atas .ata-row[aria-current="true"] { background: var(--surface-2); }
+.livro-atas .ata-row .lomb { width: 36px; height: 44px; border-radius: 4px; background: var(--surface-2); border-left: 3px solid var(--marca); display: grid; place-items: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--marca); }
+.livro-atas .ata-row .ar-mid b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; }
+.livro-atas .ata-row .ar-mid span { font-size: var(--t-12); color: var(--texto-2); }
+.livro-atas .ata-row .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+.livro-atas .schip { font-size: var(--t-11); font-weight: 600; font-family: var(--mono); border-radius: 999px; padding: 0.12rem 0.55rem; white-space: nowrap; }
+.livro-atas .schip-pub { color: var(--marca); background: color-mix(in srgb, #6B9B72 16%, var(--surface)); border: 1px solid color-mix(in srgb, #6B9B72 38%, transparent); }
+.livro-atas .schip-rev { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border: 1px solid color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+.livro-atas .ata-row .ler { font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; min-height: 24px; min-width: 24px; }
+.livro-atas .ata-row .ler:hover { text-decoration: underline; }
+.livro-atas .ata-row .ler-atual { color: var(--texto-2); font-weight: 500; }
+@media (max-width: 640px) {
+  .livro-atas .ata-row { grid-template-columns: auto 1fr auto; }
+  .livro-atas .ata-row .quando { grid-column: 2; }
+}

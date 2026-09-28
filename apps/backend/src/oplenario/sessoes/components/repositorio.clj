@@ -163,6 +163,12 @@
   (ata-versao [this ente-id sessao-id versao] "A.6c: a versao publicada (com texto), ou nil.")
   (ata-da-sessao [this ente-id sessao-id]
     "{:atual (com texto) :versoes (metadados) :rascunho (situacao do pedido de rascunho mais recente)} numa tx.")
+  (livro-de-atas [this ente-id so-publicas?]
+    "O livro de atas: uma linha por sessao com ata publicada (vigente, sem texto) + a leitura dela, se houve.
+    `so-publicas?` = so' sessoes de transmissao publica e nao secretas (portal).")
+  (ata-do-livro [this ente-id sessao-id versao]
+    "{:ata (a versao pedida — ou a vigente com `versao` nil —, com texto) :versoes (metadados) :leitura} numa tx.
+    `:ata` nil = a sessao nao tem essa versao publicada.")
   (solicitar-rascunho-ata! [this ente-id m]
     "Faixa A / A.6b: grava o pedido de rascunho e emite `ata.rascunho-solicitado` (core->IA) na MESMA tx. `pode-pedir?`
     (fn [ultimo] -> bool) decide DENTRO da tx se ja' ha' pedido em curso — dois cliques nao viram dois pedidos.")
@@ -545,6 +551,14 @@
     (transacao this ente-id (fn [tx] {:atual    (ata/atual tx ente-id sessao-id)
                                       :versoes  (ata/listar-versoes tx ente-id sessao-id)
                                       :rascunho (ata-rascunho/ultimo-da-sessao tx ente-id sessao-id)})))
+  (livro-de-atas [this ente-id so-publicas?]
+    (transacao this ente-id #(ata/livro % ente-id so-publicas?)))
+  (ata-do-livro [this ente-id sessao-id versao]
+    (transacao this ente-id (fn [tx] {:ata     (if versao
+                                                 (ata/versao tx ente-id sessao-id versao)
+                                                 (ata/atual tx ente-id sessao-id))
+                                      :versoes (ata/listar-versoes tx ente-id sessao-id)
+                                      :leitura (ata/primeira-leitura tx ente-id sessao-id)})))
   (solicitar-rascunho-ata! [this ente-id {:keys [sessao-id solicitacao-id pode-pedir?] :as m}]
     (transacao this ente-id
       (fn [tx]

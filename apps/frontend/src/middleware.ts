@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const PREFIXOS_PROTEGIDOS = [
   "/acompanhamentos",
   "/administracao",
+  "/atas",
   "/meus-protocolos",
   "/editor-proposicao",
   "/expediente",
@@ -91,6 +92,7 @@ export const config = {
   matcher: [
     "/acompanhamentos/:path*",
     "/administracao/:path*",
+    "/atas/:path*",
     "/meus-protocolos/:path*",
     "/editor-proposicao/:path*",
     "/expediente/:path*",

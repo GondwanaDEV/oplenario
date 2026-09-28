@@ -499,6 +499,61 @@
    [:ata {:optional true} [:maybe AtaParaLerOut]]
    [:leitura {:optional true} [:maybe LeituraAtaRegistradaOut]]])
 
+;; ---------- Onda E: o LIVRO DE ATAS (interno e portal, o MESMO contrato) ----------
+
+(def SessaoDoLivroOut
+  "A sessao que situa uma ata do livro. As datas sao as da sessao (a ata nao tem data propria alem da publicacao)."
+  [:map {:closed true}
+   [:id :string]
+   [:tipo-sessao :string]
+   [:numero-sequencial :int]
+   [:aberta-em {:optional true} [:maybe :string]]
+   [:encerrada-em {:optional true} [:maybe :string]]
+   [:agendada-para {:optional true} [:maybe :string]]])
+
+(def LeituraDoLivroOut
+  "Como a ata foi apresentada ao plenario (A.7), na primeira sessao que a leu — e qual versao foi lida."
+  [:map {:closed true}
+   [:modo (km/enum-de logic/modos-leitura-ata)]
+   [:registrada-em :string]
+   [:ata-versao :int]])
+
+(def AtaDoLivroItemOut
+  "Uma linha do livro: a versao VIGENTE da ata de uma sessao (sem o texto). `versao` > 1 = houve retificacao."
+  [:map {:closed true}
+   [:sessao SessaoDoLivroOut]
+   [:versao :int]
+   [:origem-redacao (km/enum-de logic/origens-redacao-ata)]
+   [:conteudo-sha256 :string]
+   [:publicada-em :string]
+   [:leitura {:optional true} [:maybe LeituraDoLivroOut]]])
+
+(def LivroAtasOut
+  [:map {:closed true}
+   [:atas [:sequential AtaDoLivroItemOut]]])
+
+(def VersaoDoLivroOut
+  "Uma versao publicada, sem o texto e sem a proveniencia interna da IA (rascunho, modelo, prompt — isso e' da tela
+  da secretaria). `publicada-por-nome` so' na tela interna; no portal sai nulo."
+  [:map {:closed true}
+   [:versao :int]
+   [:origem-redacao (km/enum-de logic/origens-redacao-ata)]
+   [:conteudo-sha256 :string]
+   [:motivo-retificacao {:optional true} [:maybe :string]]
+   [:publicada-em :string]
+   [:publicada-por-nome {:optional true} [:maybe :string]]])
+
+(def AtaDoLivroOut
+  "Uma ata do livro, aberta: a versao exibida (a vigente, ou a pedida por `?versao=`) com o texto, se ela e' a
+  vigente, o historico inteiro (retificar nunca apaga a anterior) e a leitura no plenario."
+  [:map {:closed true}
+   [:sessao SessaoDoLivroOut]
+   [:versao VersaoDoLivroOut]
+   [:texto :string]
+   [:vigente :boolean]
+   [:versoes [:sequential VersaoDoLivroOut]]
+   [:leitura {:optional true} [:maybe LeituraDoLivroOut]]])
+
 (def VinculoGravacaoOut
   "Recibo da VINCULACAO de um segmento a uma sessao (resposta 201 de POST /sessoes/:id/gravacao/:seg-id/vincular,
   Opcao A pos-upload). Carrega o `id` do segmento + a `sessao-id` a que foi vinculado. NAO expoe internos

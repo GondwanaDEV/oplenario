@@ -81,6 +81,13 @@
    ["AtaParaLerOut" out/AtaParaLerOut]
    ["LeituraAtaRegistradaOut" out/LeituraAtaRegistradaOut]
    ["LeituraAtaOut" out/LeituraAtaOut]
+   ;; Onda E — o livro de atas. Folhas antes dos agregados.
+   ["SessaoDoLivroOut" out/SessaoDoLivroOut]
+   ["LeituraDoLivroOut" out/LeituraDoLivroOut]
+   ["AtaDoLivroItemOut" out/AtaDoLivroItemOut]
+   ["LivroAtasOut" out/LivroAtasOut]
+   ["VersaoDoLivroOut" out/VersaoDoLivroOut]
+   ["AtaDoLivroOut" out/AtaDoLivroOut]
    ["PautaItemAdicionadoOut" out/PautaItemAdicionadoOut]
    ["PautaItemReordenadoOut" out/PautaItemReordenadoOut]
    ["PautaItemRemovidoOut" out/PautaItemRemovidoOut]

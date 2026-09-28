@@ -21,6 +21,7 @@
             [oplenario.sessoes.adapters.out.gravacao :as adapters-out-grav]
             [oplenario.sessoes.adapters.out.atos-mesa :as adapters-out-atos-mesa]
             [oplenario.sessoes.adapters.out.incidente :as adapters-out-incidente]
+            [oplenario.sessoes.adapters.out.livro-atas :as adapters-out-livro]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
@@ -825,6 +826,53 @@
             :validacao/retificacao-sem-motivo (http/json-resposta 422 {:erro (ex-message e)})
             (throw e)))))))
 
+;; ---------- Onda E: o LIVRO DE ATAS ----------
+
+(defn- versao-da-query
+  "`?versao=N` opcional: ausente = a vigente; presente e malformado = 400 (nunca a vigente em silencio)."
+  [req]
+  (some-> (get-in req [:query-params :versao]) adapters-in/versao-param->int))
+
+(defn- livro-atas-handler
+  "GET /atas (Onda E): o livro de atas da Casa — so' autentica; a visibilidade e' decidida POR LINHA no controller
+  (a ata de sessao secreta so' aparece para a secretaria)."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-livro/livro->wire (controllers/livro-de-atas repo-sessoes (:ator req))))))
+
+(defn- ata-do-livro-handler
+  "GET /atas/:sessao-id[?versao=N] (Onda E): uma ata do livro, com o texto. 404 = sessao inexistente, invisivel para o
+  ator ou sem ata publicada (nessa versao)."
+  [repo-sessoes nome-na-casa]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :sessao-id]))
+          versao (versao-da-query req)]
+      (if-let [r (controllers/ata-do-livro repo-sessoes nome-na-casa (:ator req) id versao)]
+        (http/json-resposta 200 (adapters-out-livro/ata-do-livro->wire r false))
+        (http/json-resposta 404 {:erro "ata nao encontrada"})))))
+
+(defn- livro-atas-publico-handler
+  "GET /portal/casa/:ente/atas (PUBLICA, sem auth): o livro de atas no portal do cidadao — so' sessoes de transmissao
+  publica e nao secretas. :ente malformado -> 400; Casa inexistente -> 404 (a mesma voz da rota-pai do portal)."
+  [repo-sessoes resolver-ente-publico casa-existe?]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if (casa-existe? ente-id)
+        (http/json-resposta 200 (adapters-out-livro/livro->wire (controllers/livro-de-atas-publico repo-sessoes ente-id)))
+        (http/json-resposta 404 {:erro "ente nao encontrado"})))))
+
+(defn- ata-do-livro-publica-handler
+  "GET /portal/casa/:ente/atas/:sessao-id[?versao=N] (PUBLICA): uma ata do livro publico. 404 unico para inexistente,
+  secreta ou sem essa versao."
+  [repo-sessoes resolver-ente-publico casa-existe?]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :sessao-id]))
+          versao (versao-da-query req)]
+      (if-let [r (when (casa-existe? ente-id) (controllers/ata-do-livro-publica repo-sessoes ente-id id versao))]
+        (http/json-resposta 200 (adapters-out-livro/ata-do-livro->wire r true))
+        (http/json-resposta 404 {:erro "ata nao encontrada"})))))
+
 (def ^:private msg-ia-fora
   "A IA está indisponível agora. Siga pela tela — redija a ata sem o rascunho, nada depende dela.")
 
@@ -1076,7 +1124,7 @@
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
            serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa
-           ler-transcricao ler-rascunho-ata]}]
+           ler-transcricao ler-rascunho-ata resolver-ente-publico casa-existe?]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1100,6 +1148,17 @@
     (throw (ex-info "sessoes/rotas: seam :nome-na-casa ausente ou nao-funcao"
                     {:tipo :servidor/erro
                      :classe (some-> nome-na-casa class .getName)})))
+  ;; Onda E: o livro de atas publico resolve o :ente do path por este seam — sem ele a rota anonima nao tem tenant.
+  (when-not (ifn? resolver-ente-publico)
+    (throw (ex-info "sessoes/rotas: seam :resolver-ente-publico ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> resolver-ente-publico class .getName)})))
+  ;; ...e o da EXISTENCIA da Casa: colecao publica de Casa inexistente e' 404, como a rota-pai e as irmas do
+  ;; portal (achado B do teste exploratorio, `portal_ente_inexistente_test`) — nunca 200 com lista vazia.
+  (when-not (ifn? casa-existe?)
+    (throw (ex-info "sessoes/rotas: seam :casa-existe? ausente ou nao-funcao"
+                    {:tipo :servidor/erro
+                     :classe (some-> casa-existe? class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
@@ -1297,7 +1356,15 @@
      :route-name :sessoes/folha-html]
     ["/sessoes/:id/folhas/:versao/pdf" :get
      [auth (it/exige-papel "secretario") (folha-pdf-handler repo-sessoes objeto-store)]
-     :route-name :sessoes/folha-pdf]}))
+     :route-name :sessoes/folha-pdf]
+    ;; Onda E — o LIVRO DE ATAS. Interno: so' autentica (visibilidade por linha/por sessao no controller).
+    ["/atas" :get [auth (livro-atas-handler repo-sessoes)] :route-name :sessoes/livro-atas]
+    ["/atas/:sessao-id" :get [auth (ata-do-livro-handler repo-sessoes nome-na-casa)] :route-name :sessoes/ata-do-livro]
+    ;; PUBLICAS (sem auth), sob o disambiguador estatico `casa/` do portal, como as de transparencia/participacao.
+    ["/portal/casa/:ente/atas" :get [(livro-atas-publico-handler repo-sessoes resolver-ente-publico casa-existe?)]
+     :route-name :sessoes/livro-atas-publico]
+    ["/portal/casa/:ente/atas/:sessao-id" :get [(ata-do-livro-publica-handler repo-sessoes resolver-ente-publico casa-existe?)]
+     :route-name :sessoes/ata-do-livro-publica]}))
 
 (defn presenca-resumo-wire
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO

@@ -701,6 +701,48 @@
        :ata (some-> ata (assoc :publicada-por-nome (get nomes (:publicada-por ata))))
        :leitura (some-> leitura (assoc :registrada-por-nome (get nomes (:registrada-por leitura))))})))
 
+(defn livro-de-atas
+  "Onda E, `livro-atas`: as atas publicadas da Casa, a mais recente primeiro — a vigente de cada sessao (sem texto) e a
+  leitura dela no plenario. Autoriza POR LINHA com a mesma politica da listagem geral (`pode-ver-quorum-da-sessao?`:
+  transmissao publica OU papel 'secretario'): a ata de sessao secreta simplesmente nao aparece para quem nao a pode
+  ver — nenhum id, nenhuma data (ver a docstring de `listar-sessoes`)."
+  [repo-sessoes ator]
+  (->> (repo/livro-de-atas repo-sessoes (:ente-id ator) false)
+       (filter #(logic/pode-ver-quorum-da-sessao? ator (assoc % :ente-id (:ente-id ator))))
+       vec))
+
+(defn ata-do-livro
+  "Onda E, `livro-atas`: uma ata do livro — a versao pedida (nil = a vigente) com o texto, o historico de versoes (com
+  o nome de quem publicou) e a leitura no plenario. nil (404) = sessao inexistente, que o ator nao pode ver (secreta
+  sem o papel 'secretario': 404 e nao 403, nao se confirma que ela existe) ou sem essa versao publicada."
+  [repo-sessoes nome-na-casa ator sessao-id versao]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (when (logic/pode-ver-quorum-da-sessao? ator s)
+      (let [{:keys [ata versoes leitura]} (repo/ata-do-livro repo-sessoes (:ente-id ator) sessao-id versao)]
+        (when ata
+          (let [nomes (nomes-de-quem-congelou nome-na-casa (:ente-id ator)
+                                              (map #(hash-map :gerada-por (:publicada-por %)) versoes))
+                nome #(assoc % :publicada-por-nome (get nomes (:publicada-por %)))]
+            {:sessao s :ata (nome ata) :vigente (= (:versao ata) (:versao (first versoes)))
+             :versoes (mapv nome versoes) :leitura leitura}))))))
+
+(defn livro-de-atas-publico
+  "O livro de atas do PORTAL (sem ator): so' sessoes de transmissao publica e nao secretas (`logic/ata-no-portal?`,
+  filtrado no SQL). O `ente-id` vem do path; a RLS isola."
+  [repo-sessoes ente-id]
+  (repo/livro-de-atas repo-sessoes ente-id true))
+
+(defn ata-do-livro-publica
+  "Uma ata do livro PUBLICO: 404 (nil) para sessao inexistente, secreta/sem transmissao publica ou sem essa versao —
+  o mesmo 404 para os tres, a rota anonima nao distingue. Sem nomes de servidor: quem publicou fica na tela interna."
+  [repo-sessoes ente-id sessao-id versao]
+  (when-let [s (repo/buscar-sessao repo-sessoes ente-id sessao-id)]
+    (when (logic/ata-no-portal? s)
+      (let [{:keys [ata versoes leitura]} (repo/ata-do-livro repo-sessoes ente-id sessao-id versao)]
+        (when ata
+          {:sessao s :ata ata :vigente (= (:versao ata) (:versao (first versoes))) :versoes versoes
+           :leitura leitura})))))
+
 (defn registrar-leitura-ata!
   "Faixa A / A.7: a Mesa registra como a ata anterior foi apresentada (voz sintetizada, presencial ou dispensada).
   So' com a sessao ABERTA (`:conflito/sessao-nao-aberta`); a versao TEM de ser a vigente (conferido na tx); uma

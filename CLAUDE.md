@@ -119,7 +119,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 | Veredito | Telas |
 |---|---|
-| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
 | **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
@@ -134,6 +134,11 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 - `console-operador` (+tenant) — ✅ **entregue em 27/09/2026** (ADR-0016, item 2 acima): lista, provisionar e a ficha
   da Casa com o handoff e a atuação selada. Os blocos de acesso de suporte e flags por Casa esperam fatia própria.
 - `observabilidade-ia` — Track IA, item 1 acima.
+
+`livro-atas` ✅ **entregue em 28/09/2026**, destravada pela ata-IA: `/atas` (interno; a ata de sessão secreta só para a
+secretaria) e `/portal/casa/[ente]/atas` (cidadão; só sessões públicas). A vigente aberta como folha, retificação como
+versão legível, a leitura no plenário e o SHA-256 do texto; selo "Publicada", nunca "Aprovada" — o sistema não registra
+aprovação da ata. O assistente lê atas pela ferramenta `ata_da_sessao` (só sessões públicas).
 
 `vereador-estatisticas` ✅ **entregue em 28/09/2026** como "Minha atuação" (`/vereador/atuacao`, aba Perfil do app do
 vereador): os números do perfil público + pareceres como relator + votos por opção; as proposições agrupadas pelo estado
