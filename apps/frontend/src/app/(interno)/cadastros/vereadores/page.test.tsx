@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import PaginaVereadores from "./page";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
@@ -38,12 +38,7 @@ function renderComProviders(tokenQuery: string | null) {
 // "secretario" faz o guard renderizar "Acesso restrito" e NADA do conteudo montar — toda query aqui
 // esperaria para sempre (era exatamente por isso que este arquivo inteiro dava timeout de 5s por teste).
 const TOKEN_SECRETARIA = '{"sub":"u","papeis":["secretario"]}';
-// DOIS papeis, e isso NAO e' capricho do teste: o form "Conceder acesso" exige `admin_ente` por dentro
-// (page.tsx `podeConcederAcesso`), mas a PAGINA exige `secretario` na porta (<GuardSecretaria>). Nenhuma
-// persona real acumula os dois — sao funcoes SEGREGADAS no backend de proposito. Este token existe para
-// exercitar o form em isolamento, nao porque alguem assim exista. DECIDIDO em docs/adr/0005: o destino e'
-// area propria do admin_ente, e o guard desta pagina NAO deve ser aberto (as 8 rotas de dado daqui sao
-// `secretario`-only). O `it` logo abaixo, com TOKEN_SECRETARIA, e' quem trava o lado de ca' da regra.
+// Com admin_ente junto: prova que "Conceder acesso" SAIU deste cadastro (ADR-0005 — mudou para /administracao).
 const TOKEN_SECRETARIA_ADMIN = '{"sub":"u","papeis":["secretario","admin_ente"]}';
 
 const listaFake = {
@@ -366,86 +361,13 @@ describe("PaginaVereadores", () => {
     await waitFor(() => expect(screen.getByText(/não foi possível carregar/i)).toBeTruthy());
   });
 
-  // --- Task 11: "Conceder acesso" só existe pra quem tem o papel admin_ente ---
+  // --- ADR-0005: "Conceder acesso" é da área do administrador da Casa (/administracao), não do cadastro ---
 
-  it("sem o papel admin_ente (ex.: secretário) o botão 'Conceder acesso' nem aparece", async () => {
+  it("o cadastro não oferece 'Conceder acesso' — nem a quem também é admin_ente (mudou para /administracao)", async () => {
     global.fetch = fetchMockPara(fichas);
-    renderComProviders(TOKEN_SECRETARIA); // secretário SEM admin_ente — passa na porta, não vê o form
+    renderComProviders(TOKEN_SECRETARIA_ADMIN);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
     expect(screen.queryByRole("button", { name: /conceder acesso/i })).toBeNull();
-  });
-
-  it("com o papel admin_ente o botão 'Conceder acesso' aparece e abre o form", async () => {
-    const fetchMock = fetchMockComEscrita(fichas);
-    global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders(TOKEN_SECRETARIA_ADMIN);
-
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
-    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
-    // o nome do vereador é EXIBIDO no form (confirmação de quem recebe o acesso), não pedido como campo —
-    // só CPF e e-mail são inputs.
-    expect(within(form).getByText("Helena Past")).toBeTruthy();
-    expect(within(form).queryAllByRole("textbox").length + within(form).queryAllByRole("spinbutton").length)
-      .toBeLessThanOrEqual(2); // CPF + e-mail, nada mais
-  });
-
-  it("Conceder acesso: submeter CPF+e-mail válidos dispara os 3 passos NA ORDEM (acesso por último) e fecha o painel", async () => {
-    const fetchMock = fetchMockComEscrita(fichas);
-    global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders(TOKEN_SECRETARIA_ADMIN);
-
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
-    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
-
-    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
-    fireEvent.change(screen.getByLabelText(/e-mail institucional/i), { target: { value: "helena@camara.local" } });
-    fireEvent.submit(form);
-
-    await waitFor(() => {
-      const chamouAcessos = fetchMock.mock.calls.some(([url]) => url === "/api/identidade/acessos");
-      expect(chamouAcessos).toBe(true);
-    });
-
-    // a ordem real das 3 chamadas de "conceder acesso" (ignora as chamadas GET de carregamento da página —
-    // inclusive GET /api/meu/identidade, que TopoInterno agora dispara sozinho no mount e também contém a
-    // substring "/identidade"; o filtro por método, não só por URL, é o que isola as 3 mutações do fluxo)
-    const chamadasDoFluxo = fetchMock.mock.calls
-      .map(([url, init]) => [url, (init as RequestInit | undefined)?.method])
-      .filter(
-        ([url, metodo]) =>
-          typeof url === "string" && Boolean(metodo) &&
-          (url.includes("/identidade") || url === "/api/identidade/acessos"),
-      );
-    expect(chamadasDoFluxo).toEqual([
-      ["/api/identidade/identidades", "POST"],
-      ["/api/cadastros/vereadores/v1/identidade", "PATCH"],
-      ["/api/identidade/acessos", "POST"],
-    ]);
-
-    // painel fecha (voltou ao estado sem form aberto)
-    await waitFor(() => expect(screen.queryByRole("form", { name: /^conceder acesso$/i })).toBeNull());
-  });
-
-  it("Conceder acesso: 409 no passo 2 (identidade já vinculada a outro vereador) aparece como alerta e o passo 3 nunca dispara", async () => {
-    const fetchMock = fetchMockComEscrita(fichas, { identidadeVinculada409: true });
-    global.fetch = fetchMock as unknown as typeof fetch;
-    renderComProviders(TOKEN_SECRETARIA_ADMIN);
-
-    await waitFor(() => expect(screen.getByRole("heading", { name: "Helena Past" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /conceder acesso/i }));
-    const form = await screen.findByRole("form", { name: /^conceder acesso$/i });
-
-    fireEvent.change(screen.getByLabelText(/^cpf/i), { target: { value: "52998224725" } });
-    fireEvent.change(screen.getByLabelText(/e-mail institucional/i), { target: { value: "helena@camara.local" } });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(screen.getByText(/identidade ja vinculada a outro vereador/i)).toBeTruthy());
-    const chamouAcessos = fetchMock.mock.calls.some(([url]) => url === "/api/identidade/acessos");
-    expect(chamouAcessos).toBe(false);
-    // a página não quebrou, o form segue montado pro admin_ente corrigir e tentar de novo
-    expect(screen.getByRole("form", { name: /^conceder acesso$/i })).toBeTruthy();
   });
 });

@@ -2,7 +2,7 @@ name: Fumaca da IA (producao)
 
 # Smoke das telas e leituras da Track IA em producao (oplenario.calvetec.com.br), com o satelite (apps/ia) no ar.
 # Loga de verdade via Keycloak como a persona `apresentacao` (vereador + secretario + admin_ente: a unica que abre
-# todas as telas) e confere que cada tela RENDERIZA e cada leitura da API responde. Por padrao e' SO' LEITURA.
+# todas as telas; inclui a area do administrador, /administracao) e confere que cada tela RENDERIZA e cada leitura da API responde. Por padrao e' SO' LEITURA.
 #
 # `perguntar=true` faz UMA pergunta real ao assistente (POST /agente/perguntas): exercita o laco do agente, o MCP de
 # volta ao core e o fornecedor configurado — grava a execucao e conta na cota da Casa, por isso e' opt-in.
@@ -96,6 +96,8 @@ jobs:
             await tela(ctx, '/propostas', '4-propostas', /Propostas do assistente/);
             await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);
             await tela(ctx, '/paineis/ia', '6-paineis-ia', /IA da Casa/);
+            // a area do administrador da Casa (ADR-0005): conceder acesso + o interruptor da conferencia automatica
+            await tela(ctx, '/administracao', '7-administracao', /Acessos dos vereadores[\s\S]*Confer[eê]ncia autom[aá]tica/);
 
             // ---------- leituras da API ----------
             const lista = async (rota, chave) => {

@@ -25,7 +25,7 @@ import { GuardSecretaria } from "../../guard-secretaria";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth, usePapeis } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { useVereadores } from "@/lib/use-vereadores";
 import { useVereadorFicha } from "@/lib/use-vereador-ficha";
 import { useLegislaturaVigente } from "@/lib/use-legislatura-vigente";
@@ -36,7 +36,6 @@ import { NovoVereadorForm } from "./novo-vereador-form";
 import { EditarVereadorForm } from "./editar-vereador-form";
 import { RegistrarMandatoForm } from "./registrar-mandato-form";
 import { RegistrarLicencaForm } from "./registrar-licenca-form";
-import { ConcederAcessoForm } from "./conceder-acesso-form";
 import type { MandatoVigenteOut } from "@/lib/contrato-cadastros.gen";
 import { TopoInterno } from "../../topo";
 import "./cadastro-vereadores.css";
@@ -60,21 +59,9 @@ function hrefComSelecao(id: string, token: string | null): string {
 
 function ConteudoPaginaVereadores() {
   const { token } = useAuth();
-  // `admin_ente` (Task 11) — guarda só o botão/painel "Conceder acesso" (ligar identidade + abrir a
-  // porta), não a página inteira: o resto do cadastro (criar/editar/mandato/licença) segue aberto a
-  // `secretario`, o papel que já governa as outras rotas desta página no backend. Enquanto `estado` não é
-  // "pronto" (modo real aguardando GET /eu), o botão fica ESCONDIDO, não desabilitado — evita mostrar e
-  // depois sumir a ação de um admin_ente real (flash), mesmo racional de pauta-convocacao/page.tsx.
-  //
-  // ⚠️ INALCANÇÁVEL HOJE, DE PROPÓSITO — ver docs/adr/0005. A página exige `secretario` na porta e este
-  // bloco exige `admin_ente`, e os dois não co-ocorrem: são funções SEGREGADAS no backend (quem mantém o
-  // cadastro não pode fabricar para si um acesso de voto — ver `ligar-identidade-handler`). Mais fundo:
-  // nenhum `admin_ente` existe na plataforma ainda, porque o bootstrap depende de `admin_sistema`, que
-  // não tem rota nenhuma. NÃO "conserte" abrindo o GuardSecretaria a `admin_ente`: as 8 rotas de dado
-  // desta página são `secretario`-only, então ele cairia numa tela de 403s. O destino é área própria
-  // (§22.5: "a administração do ente não é módulo backend — é área de UI").
-  const { papeis, estado: estadoPapeis } = usePapeis();
-  const podeConcederAcesso = estadoPapeis === "pronto" && papeis.includes("admin_ente");
+  // "Conceder acesso" NÃO mora mais aqui (ADR-0005): mudou para a área do administrador da Casa
+  // (/administracao). Esta página é o CADASTRO, da secretaria; conceder acesso é função segregada do
+  // admin_ente (quem mantém o cadastro não fabrica para si um acesso de voto — `ligar-identidade-handler`).
   const router = useRouter();
   const searchParams = useSearchParams();
   const vDaUrl = searchParams.get("v");
@@ -83,7 +70,7 @@ function ConteudoPaginaVereadores() {
   // (criar/editar vereador, registrar mandato/licença) pra forçar useVereadores/useVereadorFicha a se
   // refazerem — nenhum dos dois hooks tem um jeito próprio de "refetch", então isto entra nas deps deles.
   const [versao, setVersao] = useState(0);
-  const [painel, setPainel] = useState<null | "novo" | "editar" | "mandato" | "licenca" | "acesso">(null);
+  const [painel, setPainel] = useState<null | "novo" | "editar" | "mandato" | "licenca">(null);
 
   const { dados: linhas, estado: estadoLista } = useVereadores(token, versao);
   const [busca, setBusca] = useState("");
@@ -395,15 +382,6 @@ function ConteudoPaginaVereadores() {
                   >
                     Registrar licença
                   </button>
-                  {podeConcederAcesso && (
-                    <button
-                      className="btn btn-contorno btn-mini"
-                      type="button"
-                      onClick={() => setPainel("acesso")}
-                    >
-                      Conceder acesso
-                    </button>
-                  )}
                 </div>
                 <div id="vereador-proposicoes-em-breve">
                   <EmBreve
@@ -439,17 +417,6 @@ function ConteudoPaginaVereadores() {
                     <RegistrarLicencaForm
                       token={token}
                       vereadorId={ficha.id}
-                      onSucesso={aoConcluir}
-                      onCancelar={() => setPainel(null)}
-                    />
-                  </div>
-                )}
-                {painel === "acesso" && podeConcederAcesso && (
-                  <div className="painel-cad">
-                    <ConcederAcessoForm
-                      token={token}
-                      vereadorId={ficha.id}
-                      nome={nomeExibicao(ficha)}
                       onSucesso={aoConcluir}
                       onCancelar={() => setPainel(null)}
                     />

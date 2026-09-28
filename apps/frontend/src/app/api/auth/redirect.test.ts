@@ -34,6 +34,15 @@ describe("destinoPorPapeis — cada persona na sua home", () => {
     expect(destinoPorPapeis(["vereador", "secretario"])).toBe(DESTINO_POS_LOGIN);
   });
 
+  it("admin_ente sem outro papel vai para a área dele, não para a tela da cidadã (ADR-0005)", () => {
+    expect(destinoPorPapeis(["admin_ente"])).toBe("/administracao");
+  });
+
+  it("quem acumula admin_ente com um papel de trabalho vai para a home desse papel", () => {
+    expect(destinoPorPapeis(["vereador", "admin_ente"])).toBe("/vereador");
+    expect(destinoPorPapeis(["secretario", "admin_ente"])).toBe(DESTINO_POS_LOGIN);
+  });
+
   it("sem papel de trabalho é a cidadã — vai para a área dela, com o chrome dela", () => {
     expect(destinoPorPapeis([])).toBe("/acompanhamentos");
   });
