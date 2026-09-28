@@ -138,6 +138,19 @@ jobs:
               }
             } catch (e) { rec('/parecer/:id/assinar', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 4) MINHA ATUACAO — a aba Perfil do app da vereadora (os numeros do perfil publico dela)
+            try {
+              const p = await cVer.newPage();
+              await p.goto(`${B}/vereador/atuacao`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              const nums = await p.getByRole('list', { name: 'Números do mandato' }).count();
+              await p.close();
+              const semPercentual = !/\d\s*%/.test(txt);
+              if (nums === 1 && semPercentual) rec('/vereador/atuacao', 'OK', `renderizou: ${txt.slice(txt.indexOf('Minha atua'), txt.indexOf('Minha atua') + 140)}`);
+              else rec('/vereador/atuacao', 'ERRO', `numeros=${nums} sem-percentual=${semPercentual} :: ${txt.slice(0,140)}`);
+            } catch (e) { rec('/vereador/atuacao', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

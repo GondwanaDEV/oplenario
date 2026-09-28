@@ -96,6 +96,12 @@ export interface VotoPublicoOut {
   materiaEmenta: string | null;
 }
 
+export interface VotosPorOpcaoOut {
+  sim: number;
+  nao: number;
+  abstencao: number;
+}
+
 export interface PresencaOut {
   sessoesPresente: number;
   sessoesComChamada: number;
@@ -115,6 +121,7 @@ export interface PerfilVereadorOut {
   normasDeAutoria: number;
   votos: VotoPublicoOut[];
   votosTotal: number;
+  votosPorOpcao: VotosPorOpcaoOut;
   presenca: PresencaOut;
   acervoComEloDeAutoriaDesde: string;
   presencaProjetadaDesde: string;

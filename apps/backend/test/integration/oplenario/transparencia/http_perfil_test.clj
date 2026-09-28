@@ -200,6 +200,8 @@
         (is (= 1 (:normas-de-autoria body)) "o card 'viraram lei' chega a' borda com o valor do read-model")
         (is (= [] (:votos body)))
         (is (= 0 (:votos-total body)))
+        (is (= {:sim 0 :nao 0 :abstencao 0} (:votos-por-opcao body))
+            "sem voto projetado, as tres contagens saem ZERO (nunca ausentes: o wire e' :closed)")
         (is (= {:sessoes-presente 0 :sessoes-com-chamada 0 :janela-de-exercicio-conhecida true
                 :janela-anterior-a-projecao true}
                (:presenca body))
@@ -245,7 +247,7 @@
           body     (ler-json r)]
       (is (= 200 (:status r)))
       (is (= #{:vereador-id :nome-parlamentar :nome-civil :legislatura :cargo-mesa :comissoes
-               :materias :materias-total :normas-de-autoria :votos :votos-total :presenca
+               :materias :materias-total :normas-de-autoria :votos :votos-total :votos-por-opcao :presenca
                :acervo-com-elo-de-autoria-desde :presenca-projetada-desde}
              (set (keys body)))
           "conjunto EXATO de chaves — nada a mais (o :closed do Malli e' o guarda em producao)")
@@ -329,6 +331,8 @@
         (is (= ["nao"] (mapv :voto (:votos body)))
             "e o que sai e' o voto de QUEM foi pedido — 'sim' aqui seria atribuicao de voto a' pessoa errada")
         (is (= 1 (:votos-total body)) "o total tambem e' escopado por vereador, nao pelo ente")
+        (is (= {:sim 0 :nao 1 :abstencao 0} (:votos-por-opcao body))
+            "a contagem por opcao e' escopada por vereador: o 'sim' do OUTRO nao conta aqui")
         (is (= (str votacao) (:votacao-id v)))
         (is (= "nao" (:voto v)) "o voto sai como projetado — nao ha reescrita na borda")
         (is (= "projeto_lei 1/2026" (:materia-rotulo v)) "rotulo legivel montado do tipo/sequencial/ano")
@@ -358,6 +362,35 @@
         (is (= 50 (count (:votos body))) "a lista para no teto server-side")
         (is (= 52 (:votos-total body))
             "sem esta chave o :closed fecharia a unica via de a borda dizer 'mostrando 50 de 52'")))))
+
+(deftest votos-por-opcao-conta-o-universo-e-soma-o-total
+  ;; "Como votou" em numeros (tela Minha atuacao): a contagem por opcao sai do MESMO statement que o total,
+  ;; sobre o universo inteiro — nao sobre a lista de 50. Tres opcoes com contagens DISTINTAS (30/20/5) para
+  ;; que trocar :sim por :nao (ou contar so' a lista truncada) nao passe com a suite verde.
+  (testing "acima do teto, a contagem por opcao cobre todos os votos e a soma e' o :votos-total"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          outro    (random-uuid)
+          votos    (concat (repeat 30 "sim") (repeat 20 "nao") (repeat 5 "abstencao"))]
+      (tenancy/com-tenant* *ds* ente
+        (fn [tx]
+          (doseq [[i voto] (map-indexed vector votos)]
+            (transparencia-repo/projetar-evento! tx
+              {:tipo "voto.registrado" :ente-id ente
+               :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str vereador)
+                         :voto voto :proposicao-id (str (random-uuid))
+                         :ocorrido-em (format "2026-05-18T%02d:%02d:00Z" (quot i 60) (mod i 60))}}))
+          ;; distrator: outro vereador do MESMO ente votando sim
+          (transparencia-repo/projetar-evento! tx
+            {:tipo "voto.registrado" :ente-id ente
+             :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str outro)
+                       :voto "sim" :proposicao-id (str (random-uuid))
+                       :ocorrido-em "2026-05-19T10:00:00Z"}})))
+      (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]
+        (is (= 50 (count (:votos body))) "a lista continua no teto")
+        (is (= {:sim 30 :nao 20 :abstencao 5} (:votos-por-opcao body))
+            "a contagem cobre os 55 votos deste vereador, nao os 50 da lista nem o voto do outro")
+        (is (= 55 (:votos-total body)) "o total e' a soma dos grupos")))))
 
 (deftest sessao-de-outro-vereador-conta-no-denominador-e-nao-no-numerador
   ;; O DISTRATOR que substitui `presenca-chega-a-borda-com-numerador-e-denominador-distintos` (I-5 fatia 6).

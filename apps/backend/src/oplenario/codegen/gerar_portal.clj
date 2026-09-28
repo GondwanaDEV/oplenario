@@ -43,6 +43,7 @@
    ["LegislaturaOut" parlamentar/LegislaturaOut]
    ["MateriaDeAutoriaOut" parlamentar/MateriaDeAutoriaOut]
    ["VotoPublicoOut" parlamentar/VotoPublicoOut]
+   ["VotosPorOpcaoOut" parlamentar/VotosPorOpcaoOut]
    ["PresencaOut" parlamentar/PresencaOut]
    ["PerfilVereadorOut" parlamentar/PerfilVereadorOut]])
 

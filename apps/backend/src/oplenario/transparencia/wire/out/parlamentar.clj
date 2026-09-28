@@ -74,6 +74,14 @@
    [:materia-rotulo [:maybe :string]]
    [:materia-ementa [:maybe :string]]])
 
+(def VotosPorOpcaoOut
+  "\"Como votou\" em numeros: os votos PUBLICOS (nominais) do vereador por opcao. Contagens, nunca percentual —
+  mesmo racional de `PresencaOut`. A soma e' `:votos-total`; votos secretos nao entram (nao ha' vereador neles)."
+  [:map {:closed true}
+   [:sim :int]
+   [:nao :int]
+   [:abstencao :int]])
+
 (def PresencaOut
   "Os DOIS numeros, nunca um percentual. Um '100%' sobre 1 sessao mente por omissao — a UI so' pode montar a
   fracao se tiver o denominador. O servidor NUNCA calcula percentual.
@@ -146,6 +154,7 @@
    [:normas-de-autoria :int]
    [:votos [:vector VotoPublicoOut]]
    [:votos-total :int]
+   [:votos-por-opcao VotosPorOpcaoOut]
    [:presenca PresencaOut]
    [:acervo-com-elo-de-autoria-desde :string]
    [:presenca-projetada-desde :string]])

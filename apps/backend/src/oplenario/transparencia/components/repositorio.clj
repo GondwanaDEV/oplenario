@@ -373,7 +373,7 @@
   ;; o mesmo overclaim existe em legislativo/components/repositorio (ficha-completa-da-proposicao, o
   ;; precedente citado); corrigir so' aqui criaria inconsistencia entre os dois.
   (perfil-parlamentar [this ente-id vereador-id janelas]
-    "{:materias :materias-total :normas-de-autoria :votos :votos-total :presenca} do vereador no read-model
+    "{:materias :materias-total :normas-de-autoria :votos :votos-total :votos-por-opcao :presenca} do vereador no read-model
      publico (sem identidade). DUAS listas truncam e cada uma vem com o seu total: `:materias` no teto de
      `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
      a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
@@ -408,12 +408,15 @@
   (perfil-parlamentar [this ente-id vid janelas]
     (transacao this ente-id
       (fn [tx]
-        {:materias          (db-materia/listar-por-autor tx ente-id vid)
-         :materias-total    (db-materia/contar-por-autor tx ente-id vid)
-         :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
-         :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
-         :votos-total       (db-parlamentar/contar-votos-do-vereador tx ente-id vid)
-         :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)}))))
+        ;; o total de votos sai do MESMO statement que os conta por opcao (sim/nao/abstencao) — segue SEIS
+        (let [por-opcao (db-parlamentar/votos-por-opcao-do-vereador tx ente-id vid)]
+          {:materias          (db-materia/listar-por-autor tx ente-id vid)
+           :materias-total    (db-materia/contar-por-autor tx ente-id vid)
+           :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
+           :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
+           :votos-total       (:total por-opcao)
+           :votos-por-opcao   (dissoc por-opcao :total)
+           :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)})))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

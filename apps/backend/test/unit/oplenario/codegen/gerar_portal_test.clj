@@ -11,7 +11,7 @@
     (is (every? #(str/includes? out (str "export interface " % " {"))
                 ["NormaOut" "MateriaOut" "FichaOut" "EncarregadoOut" "AcompanhamentoEsicOut"
                  "AcompanhamentoOuvidoriaOut"
-                 "LegislaturaOut" "MateriaDeAutoriaOut" "VotoPublicoOut" "PresencaOut"
+                 "LegislaturaOut" "MateriaDeAutoriaOut" "VotoPublicoOut" "VotosPorOpcaoOut" "PresencaOut"
                  "PerfilVereadorOut"])
         "todas as interfaces do manifesto do portal presentes")
     (is (not (re-find #": unknown;" out))
@@ -45,6 +45,9 @@
     (is (str/includes? out "export interface PresencaOut {\n  sessoesPresente: number;\n  sessoesComChamada: number;\n  janelaDeExercicioConhecida: boolean;\n  janelaAnteriorAProjecao: boolean;\n}\n"))
     (is (str/includes? out "presenca: PresencaOut;")
         "referencia nomeada, nao um objeto inlinado — o mesmo racional de FichaOut/NormaOut")
+    (is (str/includes? out "export interface VotosPorOpcaoOut {\n  sim: number;\n  nao: number;\n  abstencao: number;\n}\n")
+        "'como votou' em contagens (nunca percentual), referenciado por nome no perfil")
+    (is (str/includes? out "votosPorOpcao: VotosPorOpcaoOut;"))
     (is (str/includes? out "presencaProjetadaDesde: string;"))
     (is (str/includes? out "acervoComEloDeAutoriaDesde: string;")
         "as DUAS constantes de recorte de projecao chegam ao front, nao so' a de acervo")))
