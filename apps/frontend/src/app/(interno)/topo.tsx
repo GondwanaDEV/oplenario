@@ -47,6 +47,8 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string }[] = [
   // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
   // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
   { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },
+  // ADR-0005 — a área do administrador da Casa (conceder acesso aos vereadores). Só para o admin_ente.
+  { rotulo: "Administração", href: "/administracao", papel: "admin_ente" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
   { rotulo: "Tramitação", href: "/tramitacao" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
@@ -78,6 +80,15 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string }[] = [
   { rotulo: "Moderação", href: "/moderacao" },
 ];
 
+/** As entradas da nav que o ator vê. Entrada com `papel` só aparece para quem o tem. As SEM papel são as telas de
+ *  trabalho da secretaria/Mesa — quem é SÓ administrador da Casa (admin_ente sem secretario nem vereador: como
+ *  nasce o 1º administrador provisionado, ADR-0016) não as vê, porque cada uma o levaria a "Acesso restrito". */
+export function destinosVisiveis(papeis: string[]) {
+  const soAdministracao =
+    papeis.includes("admin_ente") && !papeis.includes("secretario") && !papeis.includes("vereador");
+  return DESTINOS_NAV.filter((d) => (d.papel ? papeis.includes(d.papel) : !soAdministracao));
+}
+
 export function TopoInterno({ area }: { area: string }) {
   const { tema, alternar } = useTema();
   const { token } = useAuth();
@@ -100,7 +111,7 @@ export function TopoInterno({ area }: { area: string }) {
         <div className="topo-sep" aria-hidden="true" />
         <span className="area-tag">{area}</span>
         <nav className="nav-interna" aria-label="Navegação interna">
-          {DESTINOS_NAV.filter((d) => !d.papel || (dados?.papeis ?? []).includes(d.papel)).map((d) => (
+          {destinosVisiveis(dados?.papeis ?? []).map((d) => (
             <Link
               key={d.href}
               href={comToken(d.href, token)}

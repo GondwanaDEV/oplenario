@@ -101,3 +101,20 @@ test("E9 tela /proposicoes do vereador renderiza sem 'Nao foi possivel carregar'
   );
   expect(txt, "o vereador tem leitura — nao pode cair no gate de acesso").not.toContain("Acesso restrito");
 });
+
+// ADR-0005 P2: a LEITURA do cadastro de vereadores abre ao admin_ente (para escolher a quem conceder acesso).
+// Token SO' admin_ente — o 1o administrador nasce assim no provisionamento (ADR-0016), sem secretario.
+test("E9 admin_ente (sem secretario) LE /cadastros/vereadores -> 200", async () => {
+  const ctx = await pwRequest.newContext();
+  const soAdmin = token(demo.identidades.presidente, ["admin_ente"]);
+  const r = await ctx.get(`${BACK}/cadastros/vereadores`, { headers: bearer(soAdmin) });
+  expect(r.status(), "admin_ente GET /cadastros/vereadores deve ser 200").toBe(200);
+  await ctx.dispose();
+});
+
+test("E9 vereador segue SEM leitura do cadastro de vereadores -> 403", async () => {
+  const ctx = await pwRequest.newContext();
+  const r = await ctx.get(`${BACK}/cadastros/vereadores`, { headers: bearer(TOK.vereador) });
+  expect(r.status(), "a abertura e' so' ao admin_ente; o vereador continua negado").toBe(403);
+  await ctx.dispose();
+});
