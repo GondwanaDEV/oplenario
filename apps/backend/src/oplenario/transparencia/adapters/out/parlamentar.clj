@@ -115,7 +115,7 @@
   e' igual ao nome' (achado C-1, revisao Task 4)."
   [{:keys [vereador legislatura comissoes] :as _ficha}
    janelas
-   {:keys [materias materias-total normas-de-autoria votos votos-total presenca] :as _perfil}]
+   {:keys [materias materias-total normas-de-autoria votos votos-total votos-por-opcao presenca] :as _perfil}]
   (validar!
    {:vereador-id       (->str (:id vereador))
     :nome-parlamentar  (:nome-parlamentar vereador)
@@ -128,6 +128,9 @@
     :normas-de-autoria (or normas-de-autoria 0)
     :votos             (mapv voto->wire votos)
     :votos-total       (or votos-total 0)
+    :votos-por-opcao   {:sim       (or (:sim votos-por-opcao) 0)
+                        :nao       (or (:nao votos-por-opcao) 0)
+                        :abstencao (or (:abstencao votos-por-opcao) 0)}
     ;; `:janela-de-exercicio-conhecida` passa por `true?` so' para satisfazer o `:boolean` do wire — o
     ;; read-model SEMPRE devolve o campo (os dois ramos de `resumo-presenca` o escrevem). O default de um
     ;; nil inesperado e' `false` = "sem periodo de exercicio registrado", que e' o lado seguro: a tela para

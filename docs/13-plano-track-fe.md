@@ -120,7 +120,7 @@ consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
 | `notificacoes` | PARCIAL (rota já existia; faltava apresentação) | ✅ incremento entregue |
 | `perfil-vereador-publico` | JÁ FEITA na Onda D | — |
 | `dados-abertos` | PARCIAL — nenhum dataset tem export/CSV bulk | aberta |
-| `vereador-estatisticas` | PARCIAL — 4 dos 5 buckets dependem do `proposicoes.estado` morto | aberta |
+| `vereador-estatisticas` | PARCIAL — o `proposicoes.estado` não está mais morto (a tramitação o move), mas é o vocabulário do rito de cada Casa, sem categoria que case com os 5 grupos fixos do design | ✅ entregue (28/09/2026) — `(vereador)/vereador/atuacao`, aba "Perfil": autoria, leis, pareceres como relator, presença em fração, votos por opção e proposições agrupadas pelo estado do rito da Casa. Fora por falta de dado: percentual (proibido), presença por mês, ausência justificada, filtro de período |
 | `transparencia-fiscal` | BLOQUEADA — **o SSOT veta produzir o dado**; falta o conector contábil | `[GAP]` externo |
 | `console-operador` (+tenant) | BLOQUEADA — `admin_sistema` tem 3 linhas e zero rotas | gated por IdP do operador |
 | `livro-atas` | BLOQUEADA — a ata existe como *capacidade* (`gera_ata_regimental`), não como artefato | aberta |

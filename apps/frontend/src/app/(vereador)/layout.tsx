@@ -9,7 +9,7 @@
 //
 // Chrome persistente (topo compacto + tabbar mobile) mora AQUI (não em page.tsx) — é navegação de app-
 // shell que se repete por toda rota sob (vereador), mesmo racional de TopoInterno em (interno)/topo.tsx.
-// "Pauta"/"Perfil" ainda não têm rota nesta fatia — os tabs ficam desabilitados em vez de linkar para "#"
+// "Pauta" ainda não tem rota ("Perfil" ganhou a "Minha atuação") — o tab fica desabilitado em vez de linkar para "#"
 // (honesto: não finge cobertura que não existe). "Votar" (Onda C3) ganhou rota real.
 
 import { Suspense } from "react";
@@ -120,7 +120,8 @@ const TABS = [
   { rotulo: "Pauta", href: null, ativo: false },
   { rotulo: "Votar", href: "/votar", ativo: true },
   { rotulo: "Avisos", href: "/notificacoes", ativo: true },
-  { rotulo: "Perfil", href: null, ativo: false },
+  // "Perfil" = "Minha atuação" (Onda E, vereador-estatisticas): os números do mandato do próprio vereador.
+  { rotulo: "Perfil", href: "/vereador/atuacao", ativo: true },
 ] as const;
 
 function TabbarVereador() {

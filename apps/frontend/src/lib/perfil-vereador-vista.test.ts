@@ -79,6 +79,7 @@ const perfilBase: PerfilVereadorOut = {
     },
   ],
   votosTotal: 1,
+  votosPorOpcao: { sim: 1, nao: 0, abstencao: 0 },
   presenca: presencaBase,
   // As DUAS constantes de deploy com valores DIFERENTES de propósito (achado T5-05): iguais, uma trocada
   // pela outra em `derivarPerfil` passava despercebida, e é o único ponto que fia as duas.
