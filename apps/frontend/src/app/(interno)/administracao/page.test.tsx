@@ -102,7 +102,9 @@ describe("Área do administrador da Casa (/administracao)", () => {
     expect(within(lista).getByText("Rafa")).toBeTruthy(); // nome parlamentar vence o civil
     expect(within(lista).getByText("PT · Mandato ativo")).toBeTruthy();
     expect(within(lista).getByText("PSDB · Licença")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "IA da Casa" })).toBeTruthy();
+    // o atalho vive na seção da administração (a nav também tem "IA da Casa" para o admin_ente)
+    const outras = screen.getByRole("region", { name: "Outras áreas da administração" });
+    expect(within(outras).getByRole("link", { name: "IA da Casa" })).toBeTruthy();
   });
 
   it("Conceder acesso: os 3 passos NA ORDEM (acesso por último), o form fecha e a confirmação aparece", async () => {
