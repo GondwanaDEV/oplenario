@@ -216,7 +216,10 @@
     (jdbc/execute! tx
       (sql/format
         {:select [:v.id :v.nome :v.nome_parlamentar :m.partido
-                  [:m.estado :estado_mandato] [:cc.cargo :cargo_mesa]]
+                  [:m.estado :estado_mandato] [:cc.cargo :cargo_mesa]
+                  ;; ADR-0005: a area do administrador mostra quem ja' tem identidade ligada (o sim/nao; o id
+                  ;; da identidade nunca sai do modulo)
+                  [[:is-not :v.identidade_id nil] :com_acesso]]
          :from [[:cadastros.vereador :v]]
          :left-join [[[:lateral
                        {:select [:mm.partido :mm.estado]

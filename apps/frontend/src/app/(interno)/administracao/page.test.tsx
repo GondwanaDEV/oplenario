@@ -12,8 +12,9 @@ const TOKEN_SECRETARIA = '{"sub":"u","papeis":["secretario"]}';
 
 const listaFake = {
   vereadores: [
-    { id: "v1", nome: "Helena Past", "nome-parlamentar": null, partido: "PT", "estado-mandato": "vigente", "cargo-mesa": null },
-    { id: "v2", nome: "Rafael Melo", "nome-parlamentar": "Rafa", partido: "PSDB", "estado-mandato": "licenciado", "cargo-mesa": null },
+    { id: "v1", nome: "Helena Past", "nome-parlamentar": null, partido: "PT", "estado-mandato": "vigente", "cargo-mesa": null, "com-acesso": false },
+    { id: "v2", nome: "Rafael Melo", "nome-parlamentar": "Rafa", partido: "PSDB", "estado-mandato": "licenciado", "cargo-mesa": null, "com-acesso": false },
+    { id: "v3", nome: "Sônia Lima", "nome-parlamentar": null, partido: "PDT", "estado-mandato": "vigente", "cargo-mesa": null, "com-acesso": true },
   ],
 };
 
@@ -158,5 +159,15 @@ describe("Área do administrador da Casa (/administracao)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Ligar a conferência" }));
     expect(await screen.findByRole("button", { name: "Desligar" })).toBeTruthy();
     expect(f.mock.calls.some(([u, i]) => String(u).endsWith("/concessao") && (i as RequestInit)?.method === "PUT")).toBe(true);
+  });
+
+  it("quem já tem acesso aparece marcado e sem o botão — conceder de novo só daria conflito", async () => {
+    global.fetch = fetchMock() as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    const lista = await screen.findByRole("list", { name: "Vereadores" });
+    const sonia = within(lista).getByText("Sônia Lima").closest("li")!;
+    expect(within(sonia).getByText("Acesso concedido")).toBeTruthy();
+    expect(within(sonia).queryByRole("button", { name: /conceder acesso/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Conceder acesso a Helena Past" })).toBeTruthy();
   });
 });

@@ -48,6 +48,14 @@
     (is (nil? (:partido (first out))))
     (is (nil? (:estado-mandato (first out))))))
 
+(deftest lista->wire-com-acesso-e-so-o-sim-ou-nao
+  (let [[com sem] (adapters/lista->wire
+                   [{:id (random-uuid) :nome "Dora" :com-acesso true}
+                    {:id (random-uuid) :nome "Eva"}])]
+    (is (true? (:com-acesso com)) "identidade ligada -> com acesso")
+    (is (false? (:com-acesso sem)) "sem a coluna (ou nil) -> false, nunca nil")
+    (is (not (contains? com :identidade-id)) "o id da identidade nunca sai do modulo")))
+
 (deftest lista->wire-vazia
   (is (= [] (adapters/lista->wire []))))
 

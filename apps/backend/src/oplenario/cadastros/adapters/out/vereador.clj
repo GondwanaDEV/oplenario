@@ -21,7 +21,8 @@
 (defn- linha->wire [linha]
   (validado wire/VereadorLinhaOut
             {:id (->str (:id linha)) :nome (:nome linha) :nome-parlamentar (:nome-parlamentar linha)
-             :partido (:partido linha) :estado-mandato (:estado-mandato linha) :cargo-mesa (:cargo-mesa linha)}
+             :partido (:partido linha) :estado-mandato (:estado-mandato linha) :cargo-mesa (:cargo-mesa linha)
+             :com-acesso (boolean (:com-acesso linha))}
             "linha de vereador"))
 
 (defn lista->wire

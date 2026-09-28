@@ -7,7 +7,9 @@
 // O que ele faz aqui: CONCEDER ACESSO aos vereadores — o form que vivia, inalcançável, dentro do cadastro da
 // secretaria. A lista vem de GET /cadastros/vereadores (leitura aberta ao admin_ente pelo P2 da ADR-0005); a
 // escrita segue segregada: o admin_ente não mantém o cadastro (isso é da secretaria) e a secretaria não concede
-// acesso. O form é o mesmo componente (3 passos, acesso por último — use-conceder-acesso.ts). Aqui também fica o
+// acesso. O form é o mesmo componente (3 passos, acesso por último — use-conceder-acesso.ts). Quem já tem acesso
+// (`comAcesso`: a identidade já está ligada ao cadastro) aparece marcado e sem o botão — conceder de novo só daria
+// conflito (409) no passo 2. Aqui também fica o
 // interruptor da conferência automática (o agente institucional, B.8), que só o admin_ente liga.
 
 import { useState } from "react";
@@ -85,7 +87,8 @@ function Conteudo() {
                       <b>{nome}</b>
                       <span>{[v.partido, chip.rotulo].filter(Boolean).join(" · ")}</span>
                     </span>
-                    {aberto !== v.id && (
+                    {v.comAcesso && <span className="adm-chip">Acesso concedido</span>}
+                    {!v.comAcesso && aberto !== v.id && (
                       <button
                         type="button"
                         className="btn btn-contorno btn-mini"

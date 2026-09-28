@@ -14,3 +14,4 @@
 .adm-outras h2 { font-family: var(--display); font-size: var(--t-16); margin: 0 0 0.5rem; }
 .adm-outras ul { margin: 0; padding-left: 1.1rem; }
 .adm-outras span { color: var(--texto-2); }
+.adm-chip { font-size: var(--t-12); padding: 0.2rem 0.6rem; border-radius: var(--raio-capsula); background: var(--jade-fundo); color: var(--texto); white-space: nowrap; }
