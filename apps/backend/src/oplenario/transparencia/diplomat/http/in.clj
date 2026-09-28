@@ -15,6 +15,7 @@
             [oplenario.transparencia.adapters.in.portal :as adapters-in]
             [oplenario.transparencia.adapters.out.acompanhamento :as adapters-out-acomp]
             [oplenario.transparencia.adapters.out.artefato :as adapters-out-artefato]
+            [oplenario.transparencia.adapters.out.dados-abertos :as adapters-out-dados-abertos]
             [oplenario.transparencia.adapters.out.ente :as adapters-out-ente]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
@@ -170,11 +171,37 @@
     (http/json-resposta 200
       (adapters-out-acomp/meus->wire (controllers/meus-acompanhamentos repo-transparencia (:ator req))))))
 
+;; ---------- Onda E: DADOS ABERTOS (Decreto 8.777 + LAI art. 8 §3) ----------
+
+(defn- dados-abertos-handler
+  "GET /portal/casa/:ente/dados-abertos — o catalogo (PUBLICO): cada dataset com dicionario, linhas e ultima
+  atualizacao. Casa inexistente -> 404, como a rota-pai e as irmas (nunca 200 com catalogo de ninguem)."
+  [repo-transparencia resolver-ente-publico info-ente]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if-not (info-ente ente-id)
+        (http/json-resposta 404 {:erro "ente nao encontrado"})
+        (http/json-resposta 200 (adapters-out-dados-abertos/catalogo->wire
+                                 (controllers/catalogo-dados-abertos repo-transparencia ente-id)))))))
+
+(defn- baixar-dataset-handler
+  "GET /portal/casa/:ente/dados-abertos/:arquivo — o dataset INTEIRO em CSV (PUBLICO). 404 para Casa inexistente
+  ou arquivo que nao e' do catalogo."
+  [repo-transparencia resolver-ente-publico info-ente nomes-dos-vereadores]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if-let [r (when (info-ente ente-id)
+                   (controllers/dataset-csv repo-transparencia nomes-dos-vereadores ente-id
+                                            (get-in req [:path-params :arquivo])))]
+        (adapters-out-dados-abertos/->download r)
+        (http/json-resposta 404 {:erro "dataset nao encontrado"})))))
+
 (defn rotas
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
-  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas]}]
+  [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas
+           nomes-dos-vereadores]}]
   #{["/portal/casa/:ente" :get
      [(info-ente-handler info-ente resolver-ente-publico)]
      :route-name :transparencia/info-ente]
@@ -200,6 +227,14 @@
     ["/portal/casa/:ente/vereadores/:vereador_id" :get
      [(perfil-vereador-handler repo-transparencia resolver-ente-publico ficha-e-janelas-publicas)]
      :route-name :transparencia/perfil-vereador]
+    ;; ---- Onda E: DADOS ABERTOS (mais um literal no nivel de `materias`/`legislacao`) ----
+    ["/portal/casa/:ente/dados-abertos" :get
+     [(dados-abertos-handler repo-transparencia resolver-ente-publico info-ente)]
+     :route-name :transparencia/dados-abertos]
+    ["/portal/casa/:ente/dados-abertos/:arquivo" :get
+     [(baixar-dataset-handler repo-transparencia resolver-ente-publico info-ente
+                              (or nomes-dos-vereadores (fn [_] {})))]
+     :route-name :transparencia/baixar-dataset]
     ;; ---- Slice 2: acompanhamento do cidadao (autenticado, SO-auth sem papel) ----
     ["/portal/materias/:proposicao_id/acompanhar" :post
      [auth (seguir-handler repo-transparencia)]

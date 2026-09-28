@@ -42,7 +42,8 @@ const CARTOES = [
   },
   {
     titulo: "Dados abertos",
-    motivo: "Baixar os dados da Câmara em formato aberto chega numa fatia futura de dados abertos.",
+    motivo: "Proposições, leis e votações nominais em formato aberto (CSV), para baixar e usar livremente.",
+    rota: "dados-abertos",
   },
   {
     titulo: "Agenda pública",

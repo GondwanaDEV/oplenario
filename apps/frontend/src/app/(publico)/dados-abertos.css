@@ -1,0 +1,30 @@
+/* DADOS ABERTOS — porte de produto/design-system/o-plenario/telas/dados-abertos.html */
+.dados-abertos { padding: 1.5rem 0 2.5rem; }
+.dados-abertos .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
+.dados-abertos .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.dados-abertos .pg-cab .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.dados-abertos .estado { color: var(--texto-2); font-size: var(--t-13); margin: 1.2rem 0 0; }
+.dados-abertos .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.8rem 0 0.7rem; }
+.dados-abertos ul { list-style: none; margin: 0; padding: 0; }
+.dados-abertos .lista-ds { display: grid; gap: 0.8rem; margin-top: 1.2rem; }
+.dados-abertos .ds { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.1rem 1.3rem; display: grid; grid-template-columns: 1fr auto; gap: 0.5rem 1rem; align-items: center; }
+.dados-abertos .ds h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; }
+.dados-abertos .ds p { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; }
+.dados-abertos .ds .meta { display: flex; align-items: center; gap: 0.4rem 0.8rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.dados-abertos .fmt { font-family: var(--mono); font-size: var(--t-11); font-weight: 600; border-radius: 4px; padding: 0.08rem 0.4rem; border: 1px solid var(--linha); color: var(--texto-2); background: var(--surface-2); }
+.dados-abertos .ds .quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.dados-abertos .ds .baixar { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; font-size: var(--t-13); color: var(--acao-texto); background: var(--acao); border-radius: var(--raio-sm); padding: 0.55rem 0.95rem; min-height: 42px; text-decoration: none; white-space: nowrap; }
+.dados-abertos .ds .baixar:hover { background: var(--acao-hover); }
+.dados-abertos .dicionario { grid-column: 1 / -1; font-size: var(--t-13); }
+.dados-abertos .dicionario summary { cursor: pointer; color: var(--texto-2); font-weight: 600; min-height: 24px; }
+.dados-abertos .dicionario dl { margin: 0.6rem 0 0; display: grid; gap: 0.35rem; }
+.dados-abertos .dicionario dl div { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap: 0.8rem; }
+.dados-abertos .dicionario dt { font-family: var(--mono); font-size: var(--t-12); color: var(--texto); }
+.dados-abertos .dicionario dd { margin: 0; color: var(--texto-2); }
+.dados-abertos .lista-fora { display: grid; gap: 0.8rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.dados-abertos .nota { font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; margin: 1.4rem 0 0; max-width: 80ch; }
+@media (max-width: 560px) {
+  .dados-abertos .ds { grid-template-columns: 1fr; }
+  .dados-abertos .ds .baixar { justify-self: start; }
+  .dados-abertos .dicionario dl div { grid-template-columns: 1fr; gap: 0.1rem; }
+}

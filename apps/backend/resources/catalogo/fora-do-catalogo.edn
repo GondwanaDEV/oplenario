@@ -105,4 +105,9 @@
  :sessoes/livro-atas-publico {:categoria :so-tela
                               :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}
  :sessoes/ata-do-livro-publica {:categoria :so-tela
-                                :motivo "uma ata no portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}}
+                                :motivo "uma ata no portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}
+ ;; ---------- Onda E: dados abertos no portal ----------
+ :transparencia/dados-abertos {:categoria :so-tela
+                               :motivo "o catalogo de dados abertos do portal (anonimo); arquivo para baixar, nao acao de agente"}
+ :transparencia/baixar-dataset {:categoria :so-tela
+                                :motivo "o download CSV do dataset aberto (anonimo); o agente consulta o dominio pelas suas ferramentas"}}

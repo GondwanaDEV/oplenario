@@ -126,3 +126,23 @@ export interface PerfilVereadorOut {
   acervoComEloDeAutoriaDesde: string;
   presencaProjetadaDesde: string;
 }
+
+export interface ColunaDadosAbertosOut {
+  nome: string;
+  descricao: string;
+}
+
+export interface DatasetAbertoOut {
+  chave: string;
+  titulo: string;
+  descricao: string;
+  arquivo: string;
+  formato: "csv";
+  linhas: number;
+  atualizadoEm?: string | null;
+  colunas: ColunaDadosAbertosOut[];
+}
+
+export interface DadosAbertosOut {
+  datasets: DatasetAbertoOut[];
+}

@@ -562,7 +562,17 @@
                                          ;; I-5 fatia 6: a borda passou a CONSUMIR o mapa inteiro
                                          ;; ({:ficha :janelas}) — a ficha decide o 404 e a janela recorta o
                                          ;; denominador de presenca. O host nao desembrulha mais nada.
-                                         :ficha-e-janelas-publicas ficha-e-janelas-fn}))
+                                         :ficha-e-janelas-publicas ficha-e-janelas-fn
+                                         ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
+                                         ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
+                                         ;; mesma inversao de dependencia sobre cadastros (§22.10).
+                                         :nomes-dos-vereadores
+                                         (fn [ente-id]
+                                           (into {} (map (fn [v] [(:id v) (or (some-> (:nome-parlamentar v) not-empty)
+                                                                              (:nome v))]))
+                                                 (repo-cadastros-comp/listar-vereadores
+                                                  repo-cadastros ente-id
+                                                  (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao))))}))
         (into (paineis-http/rotas {:auth auth :repo-paineis repo-paineis
                                    :painel-compliance painel-compliance
                                    :presenca-resumo presenca-resumo
