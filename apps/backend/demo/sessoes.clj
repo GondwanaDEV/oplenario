@@ -55,7 +55,8 @@
   aritmetica. `quorum` e o `base-membros` das votacoes chamam `logic/derivar-linhas-da-chamada` +
   `logic/contar-quorum` / `logic/membros-da-casa-da-chamada` — as MESMAS funcoes PURAS que
   `sessoes.controllers/projetar-chamada` usa na rota real `/sessoes/:id/chamada`."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as str]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.db.estrutura :as estrutura]
@@ -65,7 +66,11 @@
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
             [oplenario.sessoes.db.tribuna :as db-tribuna]
             [oplenario.sessoes.logic :as slogic])
-  (:import (java.time Duration Instant LocalDate)))
+  (:import (java.nio.charset StandardCharsets)
+           (java.security MessageDigest)
+           (java.time Duration Instant LocalDate ZoneId)
+           (java.time.format DateTimeFormatter)
+           (java.util Locale)))
 
 ;; ---------- constantes (UUIDs FIXOS — re-executavel, mesmo racional de `casa/ente-id`) ----------
 
@@ -276,6 +281,86 @@
            :referencia-normativa "valor de demonstracao — confirmar com o Regimento Interno da Casa"
            :created-by nil})))))
 
+;; ---------- a ATA da encerrada (o livro de atas da demo) ----------
+
+(defn- votacoes-da-sessao*
+  "As votacoes APURADAS da sessao com a materia e a contagem por opcao — leitura crua, como `votos-apurados*`."
+  [tx ente-id sessao-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:v.id :v.resultado :p.tipo :p.sequencial :p.ano :p.ementa]
+                  :from [[:legislativo.votacoes :v]]
+                  :join [[:legislativo.proposicoes :p] [:and [:= :p.ente_id :v.ente_id] [:= :p.id :v.objeto_id]]]
+                  :where [:and [:= :v.ente_id ente-id] [:= :v.sessao_id sessao-id] [:= :v.estado "encerrada"]]
+                  :order-by [[:p.ano :asc] [:p.sequencial :asc]]}))))
+
+(defn- contagem-de-votos* [tx ente-id votacao-id]
+  (into {} (map (juxt :voto :n))
+        (comum/linhas->kebab
+         (jdbc/execute! tx (sql/format {:select [:voto [[:count :*] :n]] :from [:legislativo.votos]
+                                        :where [:and [:= :ente_id ente-id] [:= :votacao_id votacao-id]]
+                                        :group-by [:voto]})))))
+
+(def ^:private rotulo-tipo {"projeto_lei" "Projeto de Lei" "projeto_resolucao" "Projeto de Resolução"
+                            "projeto_decreto_legislativo" "Projeto de Decreto Legislativo" "requerimento" "Requerimento"
+                            "indicacao" "Indicação" "mocao" "Moção"})
+
+(def ^:private data-por-extenso
+  (DateTimeFormatter/ofPattern "d 'de' MMMM 'de' yyyy" (Locale/forLanguageTag "pt-BR")))
+
+(defn texto-da-ata
+  "O texto da ata da ENCERRADA, montado dos registros REAIS dela (presentes na chamada, votacoes apuradas com a
+  contagem, uso da tribuna) — nada inventado alem da forma. PURA sobre os dados lidos, para o teste."
+  [{:keys [numero data presentes votacoes]}]
+  (let [votacao (fn [{:keys [tipo sequencial ano ementa resultado sim nao abstencao]}]
+                  (str "Em votação nominal, o " (get rotulo-tipo tipo tipo) " nº " sequencial "/" ano
+                       " — \"" ementa "\" — obteve " sim " voto(s) favorável(is), " nao " contrário(s) e "
+                       abstencao " abstenção(ões), sendo " (if (= "aprovada" resultado) "aprovado" "rejeitado") "."))]
+    (str/join "\n\n"
+              (concat
+               [(str "Aos " (.format data-por-extenso data) ", reuniu-se em sessão ordinária a Câmara Municipal, "
+                     "sob a presidência da Mesa Diretora. Feita a chamada, registrou-se a presença de " presentes
+                     " vereadores, havendo quórum para a abertura dos trabalhos. Esta é a " numero
+                     "ª Sessão Ordinária da sessão legislativa.")
+                "GRANDE EXPEDIENTE — Fez uso da tribuna um vereador previamente inscrito pela secretaria, pelo tempo regimental."
+                "ORDEM DO DIA"]
+               (map votacao votacoes)
+               [(str "ENCERRAMENTO — Nada mais havendo a tratar, o Presidente declarou encerrada a sessão, e a "
+                     "secretaria lavrou a presente ata, publicada no livro de atas da Casa.")
+                "(Ata de demonstração: redigida pela semente da Casa demo a partir dos registros desta sessão.)"]))))
+
+(defn- ->instant
+  "A data da sessao como Instant, venha o driver com Instant, Timestamp ou OffsetDateTime (nil = agora)."
+  ^Instant [x]
+  (cond (instance? Instant x) x
+        (instance? java.sql.Timestamp x) (.toInstant ^java.sql.Timestamp x)
+        (instance? java.time.OffsetDateTime x) (.toInstant ^java.time.OffsetDateTime x)
+        :else (Instant/now)))
+
+(defn- sha256 [^String texto]
+  (str "sha256:" (apply str (map #(format "%02x" %)
+                                 (.digest (MessageDigest/getInstance "SHA-256")
+                                          (.getBytes texto StandardCharsets/UTF_8))))))
+
+(defn- semear-ata-da-encerrada!
+  "Publica a ata da ENCERRADA (versao 1, redigida pela secretaria) — so' se ela ainda nao tem ata. Fora do gate
+  das sessoes, como os tempos regimentais: uma demo semeada antes do livro de atas ganha a ata ao re-rodar o seed."
+  [repo-s ds ente-id publicada-por]
+  (when (and publicada-por (empty? (:versoes (repo-sessoes/ata-da-sessao repo-s ente-id id-encerrada))))
+    (let [s (repo-sessoes/buscar-sessao repo-s ente-id id-encerrada)
+          presentes (count (distinct (map :vereador-id (repo-sessoes/listar-presenca repo-s ente-id id-encerrada))))
+          votacoes (tenancy/com-tenant* ds ente-id
+                     (fn [tx]
+                       (mapv (fn [v] (let [c (contagem-de-votos* tx ente-id (:id v))]
+                                       (assoc v :sim (get c "sim" 0) :nao (get c "nao" 0)
+                                                :abstencao (get c "abstencao" 0))))
+                             (votacoes-da-sessao* tx ente-id id-encerrada))))
+          texto (texto-da-ata {:numero (:numero-sequencial s) :presentes presentes :votacoes votacoes
+                               :data (.toLocalDate (.atZone (->instant (:aberta-em s)) (ZoneId/of "America/Fortaleza")))})]
+      (repo-sessoes/publicar-ata! repo-s ente-id
+        {:sessao-id id-encerrada :texto texto :origem-redacao "redigida_externamente"
+         :conteudo-sha256 (sha256 texto) :publicada-por publicada-por}))))
+
 ;; ---------- a funcao publica ----------
 
 (defn semear!
@@ -289,8 +374,12 @@
   agendar (que colidiria na UNIQUE de numeracao) ou re-registrar presenca/votacao/tribuna sobre um estado
   que ja' avancou.
 
+  `publicada-por` (a identidade da SECRETARIA da demo): quem publica a ata da ENCERRADA — o livro de atas nao
+  abre vazio na apresentacao. Sem ela (a aridade de 2), a ata nao e' semeada.
+
   Devolve `{:encerrada :aberta :agendada}` (os 3 UUIDs)."
-  [sistema ente]
+  ([sistema ente] (semear! sistema ente nil))
+  ([sistema ente publicada-por]
   (let [repo-s (:repo-sessoes sistema)
         repo-l (:repo-legislativo sistema)
         repo-cad (:repo-cadastros sistema)
@@ -303,7 +392,8 @@
         (semear-agendada! repo-s repo-l ente)))
     ;; fora do gate: uma demo ja' semeada antes da mig 0081 tambem ganha os tempos ao re-rodar o seed
     (semear-tempos-regimentais! ds ente)
-    {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada}))
+    (semear-ata-da-encerrada! repo-s ds ente publicada-por)
+    {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada})))
 
 ;; ---------- leituras p/ o teste e p/ a Fase 1/2 do plano (sonda + caminhada) ----------
 
