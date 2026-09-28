@@ -14,6 +14,7 @@ function linha(parcial: Partial<VereadorLinhaOut> & { id: string; nome: string }
     partido: null,
     estadoMandato: null,
     cargoMesa: null,
+    comAcesso: false,
     ...parcial,
   };
 }

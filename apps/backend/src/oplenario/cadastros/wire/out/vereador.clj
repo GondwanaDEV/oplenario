@@ -14,7 +14,10 @@
    [:nome-parlamentar {:optional true} [:maybe :string]]
    [:partido {:optional true} [:maybe :string]]
    [:estado-mandato {:optional true} [:maybe :string]]
-   [:cargo-mesa {:optional true} [:maybe :string]]])
+   [:cargo-mesa {:optional true} [:maybe :string]]
+   ;; ADR-0005: o vereador ja' tem identidade ligada (o acesso foi concedido). So' o sim/nao — o identidade-id
+   ;; nunca vaza (ver adapters/out/vereador).
+   [:com-acesso :boolean]])
 
 (def ComissaoDoVereadorOut
   "Uma comissao (incl. a Mesa Diretora, tipo=\"mesa\") de que o vereador e' membro vigente, com o cargo
