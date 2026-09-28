@@ -160,7 +160,9 @@ jobs:
               await p.waitForTimeout(3000);
               const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
               await p.close();
-              const ok = r.status === 200 && n !== null && /Atas das sess/.test(txt) && !/Aprovada/.test(txt);
+              // a demo tem a ata da sessao encerrada (seed): o livro nao pode abrir vazio, e a folha mostra o texto
+              const ok = r.status === 200 && n >= 1 && /Atas das sess/.test(txt) && /reuniu-se em sess/.test(txt)
+                && !/Aprovada/.test(txt);
               rec('/atas', ok ? 'OK' : 'ERRO', `status=${r.status} atas=${n ?? '-'} :: ${txt.slice(txt.indexOf('Atas das'), txt.indexOf('Atas das') + 120)}`);
             } catch (e) { rec('/atas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
             try {
@@ -172,9 +174,23 @@ jobs:
               await p.waitForTimeout(3000);
               const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
               await anon.close();
-              const ok = r.status === 200 && n !== null && /Atas das sess/.test(txt);
+              const ok = r.status === 200 && n >= 1 && /Atas das sess/.test(txt) && /reuniu-se em sess/.test(txt);
               rec('/portal/casa/:ente/atas', ok ? 'OK' : 'ERRO', `anonimo status=${r.status} atas-publicas=${n ?? '-'}`);
             } catch (e) { rec('/portal/casa/:ente/atas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 6) DADOS ABERTOS — catalogo + um CSV, anonimo
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const r = await api(anon, `/api/portal/casa/${E}/dados-abertos`);
+              const ds = Array.isArray(r.body?.datasets) ? r.body.datasets : [];
+              const csv = await anon.request.get(`${B}/api/portal/casa/${E}/dados-abertos/proposicoes.csv`);
+              const corpo = await csv.text();
+              await anon.close();
+              const ok = r.status === 200 && ds.length === 3 && csv.status() === 200
+                && /text\/csv/.test(csv.headers()['content-type'] || '') && corpo.includes('proposicao_id,tipo,numero');
+              rec('/portal/casa/:ente/dados-abertos', ok ? 'OK' : 'ERRO',
+                  `status=${r.status} datasets=${ds.map(d => d.chave + ':' + d.linhas).join(' ')} csv=${csv.status()} linhas-csv=${corpo.split('\r\n').length - 2}`);
+            } catch (e) { rec('/portal/casa/:ente/dados-abertos', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);

@@ -39,6 +39,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.transparencia.db.acompanhamento :as db-acompanhamento]
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
+            [oplenario.transparencia.db.dados-abertos :as db-dados-abertos]
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
@@ -378,7 +379,10 @@
      `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
      a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
      Task 4) — e CINCO quando `janelas` e' vazia: `resumo-presenca` curto-circuita e nao emite statement
-     nenhum (ver a docstring dela)."))
+     nenhum (ver a docstring dela).")
+  (resumo-dados-abertos [this ente-id] "Onda E: {dataset {:linhas :atualizado-em}} de cada dataset aberto.")
+  (linhas-dados-abertos [this ente-id chave]
+    "Onda E: o dataset `chave` (\"proposicoes\" | \"legislacao\" | \"votos-nominais\") INTEIRO, na ordem estavel."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -416,7 +420,15 @@
            :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
            :votos-total       (:total por-opcao)
            :votos-por-opcao   (dissoc por-opcao :total)
-           :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)})))))
+           :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)}))))
+  (resumo-dados-abertos [this ente-id]
+    (transacao this ente-id #(db-dados-abertos/resumo % ente-id)))
+  (linhas-dados-abertos [this ente-id chave]
+    (transacao this ente-id
+      (case chave
+        "proposicoes"    #(db-dados-abertos/proposicoes % ente-id)
+        "legislacao"     #(db-dados-abertos/normas % ente-id)
+        "votos-nominais" #(db-dados-abertos/votos-nominais % ente-id)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

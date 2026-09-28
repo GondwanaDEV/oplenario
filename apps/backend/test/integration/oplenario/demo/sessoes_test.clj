@@ -33,6 +33,7 @@
             [clojure.set]
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
+            [oplenario.sessoes.components.repositorio :as repo-sessoes]
             [sessoes :as sessoes-demo]))
 
 (deftest tres-sessoes-em-estados-distintos
@@ -40,13 +41,24 @@
     (let [{:keys [ente vereadores identidades]} (casa/semear! s)
           ids-do-roster (set (map :id vereadores))
           _ (acervo/semear! s ente (:vereador identidades))
-          {:keys [encerrada aberta agendada]} (sessoes-demo/semear! s ente)]
+          {:keys [encerrada aberta agendada]} (sessoes-demo/semear! s ente (:secretaria identidades))]
       (testing "os três estados são do CHECK da migration, não inventados"
         (is (= "encerrada" (:estado (sessoes-demo/buscar s ente encerrada))))
         (is (= "aberta"    (:estado (sessoes-demo/buscar s ente aberta))))
         (is (= "agendada"  (:estado (sessoes-demo/buscar s ente agendada)))))
       (testing "a encerrada tem chamada registrada e votação apurada"
         (is (pos? (sessoes-demo/votos-apurados s ente encerrada))))
+      (testing "a encerrada tem a ata publicada — o livro de atas da demo não abre vazio"
+        (let [{:keys [atual versoes]} (repo-sessoes/ata-da-sessao (:repo-sessoes s) ente encerrada)]
+          (is (= 1 (count versoes)))
+          (is (= (:secretaria identidades) (:publicada-por atual)) "publicada pela secretaria da demo")
+          (is (re-find #"registrou-se a presença de \d+ vereadores" (:texto atual)))
+          (is (re-find #"Em votação nominal, o .+ nº \d+/\d{4}" (:texto atual))
+              "as votações apuradas da sessão entram no texto, com a matéria")
+          (is (re-find #"^sha256:[0-9a-f]{64}$" (:conteudo-sha256 atual))))
+        (sessoes-demo/semear! s ente (:secretaria identidades))
+        (is (= 1 (count (:versoes (repo-sessoes/ata-da-sessao (:repo-sessoes s) ente encerrada))))
+            "re-rodar o seed não publica uma segunda versão"))
       (testing "a aberta tem quórum de gente do roster e votação em aberto"
         (is (>= (sessoes-demo/quorum s ente aberta) 9))
         (is (some? (sessoes-demo/votacao-aberta s ente aberta))

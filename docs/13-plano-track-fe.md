@@ -119,7 +119,7 @@ consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
 | `calendario` | PARCIAL (sessões + prazos existem; comissão/audiência/recesso não) | ✅ entregue — `(interno)/calendario` |
 | `notificacoes` | PARCIAL (rota já existia; faltava apresentação) | ✅ incremento entregue |
 | `perfil-vereador-publico` | JÁ FEITA na Onda D | — |
-| `dados-abertos` | PARCIAL — nenhum dataset tem export/CSV bulk | aberta |
+| `dados-abertos` | PARCIAL — nenhum dataset tinha export/CSV bulk | ✅ entregue (28/09/2026) — `/portal/casa/[ente]/dados-abertos`: proposições, legislação e votos nominais (com o nome do vereador) em CSV RFC 4180 inteiro, com o dicionário de cada coluna; catálogo com volume e última atualização. Fora, como em-breve com motivo: despesas (dado fiscal é do sistema contábil — veto do documento-mestre) e presença por sessão (segue a nota docs/14 no perfil; o registro nominal está na ata) |
 | `vereador-estatisticas` | PARCIAL — o `proposicoes.estado` não está mais morto (a tramitação o move), mas é o vocabulário do rito de cada Casa, sem categoria que case com os 5 grupos fixos do design | ✅ entregue (28/09/2026) — `(vereador)/vereador/atuacao`, aba "Perfil": autoria, leis, pareceres como relator, presença em fração, votos por opção e proposições agrupadas pelo estado do rito da Casa. Fora por falta de dado: percentual (proibido), presença por mês, ausência justificada, filtro de período |
 | `transparencia-fiscal` | BLOQUEADA — **o SSOT veta produzir o dado**; falta o conector contábil | `[GAP]` externo |
 | `console-operador` (+tenant) | BLOQUEADA — `admin_sistema` tem 3 linhas e zero rotas | gated por IdP do operador |

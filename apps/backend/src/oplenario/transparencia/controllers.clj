@@ -7,7 +7,8 @@
   (:require [clojure.tools.logging :as log]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.ids :as ids]
-            [oplenario.transparencia.components.repositorio :as repo]))
+            [oplenario.transparencia.components.repositorio :as repo]
+            [oplenario.transparencia.logic.dados-abertos :as dados-abertos]))
 
 (defn listar-materias
   "Portal: {:materias :materias-total} em tramitacao (sem exclusao de estado nesta fatia — lista tudo, mais
@@ -101,3 +102,21 @@
   sitio (c))."
   [repo-transparencia ator]
   (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator)))
+
+;; ---------- Onda E: DADOS ABERTOS ----------
+
+(defn catalogo-dados-abertos
+  "O catalogo dos datasets abertos da Casa: cada um com o dicionario de colunas (da logic) e, do read-model, quantas
+  linhas tem e quando foi atualizado pela ultima vez. Rota PUBLICA (ente do path)."
+  [repo-transparencia ente-id]
+  (let [resumo (repo/resumo-dados-abertos repo-transparencia ente-id)]
+    (mapv (fn [d] (merge d (get resumo (keyword (:chave d))))) dados-abertos/datasets)))
+
+(defn dataset-csv
+  "O CSV do dataset `arquivo` (\"proposicoes.csv\"...), ou nil se o arquivo nao existe. `nomes-dos-vereadores` e'
+  o seam do host (fn [ente-id] -> {vereador-id nome}) — so' chamado para o dataset que o usa."
+  [repo-transparencia nomes-dos-vereadores ente-id arquivo]
+  (when-let [d (get dados-abertos/por-arquivo arquivo)]
+    (let [linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d))
+          nomes (if (= "votos-nominais" (:chave d)) (nomes-dos-vereadores ente-id) {})]
+      {:dataset d :csv (dados-abertos/->csv d linhas nomes)})))

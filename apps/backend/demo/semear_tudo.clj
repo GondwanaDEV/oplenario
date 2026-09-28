@@ -49,7 +49,7 @@
           (println "==> acervo:" (pr-str acervo-r))
           (println "==> requerimento coletivo:"
                    (pr-str (acervo/semear-proposta-coletiva! sys ente (:presidente identidades) (:vereador identidades))))
-          (let [sessoes-r (sessoes/semear! sys ente)]
+          (let [sessoes-r (sessoes/semear! sys ente (:secretaria identidades))]
             (println "==> sessoes:" (pr-str sessoes-r))
             (let [participacao-r (participacao/semear! sys ente)]
               (println "==> participacao:"
