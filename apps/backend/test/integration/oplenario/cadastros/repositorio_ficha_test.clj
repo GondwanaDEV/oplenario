@@ -58,7 +58,8 @@
         hoje (LocalDate/of 2026 7 14)]
     (repo/criar-vereador! *repo* ente {:id ver-id :ente-id ente :nome "Fabio"})
     (let [rows (repo/listar-vereadores *repo* ente hoje)]
-      (is (= ["Fabio"] (map :nome rows))))))
+      (is (= ["Fabio"] (map :nome rows)))
+      (is (false? (:com-acesso (first rows))) "sem identidade ligada -> com-acesso false"))))
 
 ;; ============================================================================
 ;; I-5 fatia 3 — ficha-e-mandatos-do-vereador + licencas-de-mandatos

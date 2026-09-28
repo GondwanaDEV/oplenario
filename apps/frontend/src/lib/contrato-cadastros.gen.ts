@@ -7,6 +7,7 @@ export interface VereadorLinhaOut {
   partido?: string | null;
   estadoMandato?: string | null;
   cargoMesa?: string | null;
+  comAcesso: boolean;
 }
 
 export interface ComissaoDoVereadorOut {
