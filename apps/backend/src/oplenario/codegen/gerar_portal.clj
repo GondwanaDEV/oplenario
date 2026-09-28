@@ -10,6 +10,7 @@
             [oplenario.participacao.wire.out.acompanhamento :as ac-esic]
             [oplenario.participacao.wire.out.acompanhamento-ouvidoria :as ac-ouv]
             [oplenario.participacao.wire.out.encarregado :as encarregado]
+            [oplenario.transparencia.wire.out.dados-abertos :as dados-abertos]
             [oplenario.transparencia.wire.out.materia :as materia]
             [oplenario.transparencia.wire.out.norma :as norma]
             [oplenario.transparencia.wire.out.parlamentar :as parlamentar]))
@@ -45,7 +46,11 @@
    ["VotoPublicoOut" parlamentar/VotoPublicoOut]
    ["VotosPorOpcaoOut" parlamentar/VotosPorOpcaoOut]
    ["PresencaOut" parlamentar/PresencaOut]
-   ["PerfilVereadorOut" parlamentar/PerfilVereadorOut]])
+   ["PerfilVereadorOut" parlamentar/PerfilVereadorOut]
+   ;; Onda E — dados abertos. Folhas antes do agregado.
+   ["ColunaDadosAbertosOut" dados-abertos/ColunaDadosAbertosOut]
+   ["DatasetAbertoOut" dados-abertos/DatasetAbertoOut]
+   ["DadosAbertosOut" dados-abertos/DadosAbertosOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

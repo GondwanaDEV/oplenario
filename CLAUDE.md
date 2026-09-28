@@ -120,7 +120,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 | Veredito | Telas |
 |---|---|
 | **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
-| **PARCIAL** (4) | `dados-abertos` · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
+| **PARCIAL** (4) | `dados-abertos` ✅ · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
 
@@ -139,6 +139,10 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 secretaria) e `/portal/casa/[ente]/atas` (cidadão; só sessões públicas). A vigente aberta como folha, retificação como
 versão legível, a leitura no plenário e o SHA-256 do texto; selo "Publicada", nunca "Aprovada" — o sistema não registra
 aprovação da ata. O assistente lê atas pela ferramenta `ata_da_sessao` (só sessões públicas).
+
+`dados-abertos` ✅ **entregue em 28/09/2026** (`/portal/casa/[ente]/dados-abertos`, Decreto 8.777 + LAI art. 8 §3):
+proposições, legislação e votos nominais em CSV inteiro com dicionário de colunas; despesas e presença por sessão ficam
+como em-breve com o motivo (dado fiscal é do sistema contábil; presença segue a nota docs/14).
 
 `vereador-estatisticas` ✅ **entregue em 28/09/2026** como "Minha atuação" (`/vereador/atuacao`, aba Perfil do app do
 vereador): os números do perfil público + pareceres como relator + votos por opção; as proposições agrupadas pelo estado
