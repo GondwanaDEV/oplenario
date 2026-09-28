@@ -27,9 +27,21 @@ function montar(token: string) {
   );
 }
 
+const agente = (ligado: boolean) => ({
+  itens: [{ agente: "conferencia-normativa", titulo: "Conferência das proposições contra a LOM e o Regimento",
+    descricao: "A cada proposição protocolada, a IA lê o texto…", classes: ["leitura", "rascunho"], ligado,
+    "ligado-em": ligado ? "2026-09-27T12:00:00Z" : null }],
+});
+
 function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean } = {}) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
+    if (method === "GET" && url === "/api/identidade/agentes-institucionais") {
+      return { ok: true, status: 200, json: async () => agente(false) } as Response;
+    }
+    if (method === "PUT" && url === "/api/identidade/agentes-institucionais/conferencia-normativa/concessao") {
+      return { ok: true, status: 200, json: async () => agente(true) } as Response;
+    }
     if (method === "GET" && url === "/api/meu/identidade") {
       return { ok: true, status: 200, json: async () => ({ nome: "Ana Moreira", papeis: ["admin_ente"] }) } as Response;
     }
@@ -134,5 +146,15 @@ describe("Área do administrador da Casa (/administracao)", () => {
     montar(TOKEN_ADMIN);
     expect(await screen.findByText(/Não foi possível carregar os vereadores/)).toBeTruthy();
     expect(screen.queryByText(/Nenhum vereador cadastrado/)).toBeNull();
+  });
+
+  it("o administrador liga a conferência automática daqui — o painel não fica preso na tela da secretaria", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    expect(await screen.findByRole("heading", { name: "Conferência automática" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Ligar a conferência" }));
+    expect(await screen.findByRole("button", { name: "Desligar" })).toBeTruthy();
+    expect(f.mock.calls.some(([u, i]) => String(u).endsWith("/concessao") && (i as RequestInit)?.method === "PUT")).toBe(true);
   });
 });

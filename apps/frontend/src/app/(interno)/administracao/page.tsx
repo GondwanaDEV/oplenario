@@ -7,7 +7,8 @@
 // O que ele faz aqui: CONCEDER ACESSO aos vereadores — o form que vivia, inalcançável, dentro do cadastro da
 // secretaria. A lista vem de GET /cadastros/vereadores (leitura aberta ao admin_ente pelo P2 da ADR-0005); a
 // escrita segue segregada: o admin_ente não mantém o cadastro (isso é da secretaria) e a secretaria não concede
-// acesso. O form é o mesmo componente (3 passos, acesso por último — use-conceder-acesso.ts).
+// acesso. O form é o mesmo componente (3 passos, acesso por último — use-conceder-acesso.ts). Aqui também fica o
+// interruptor da conferência automática (o agente institucional, B.8), que só o admin_ente liga.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -18,7 +19,10 @@ import { comToken } from "@/lib/nav";
 import { GuardAdminEnte } from "../guard-admin-ente";
 import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
+import { PainelAgente } from "../conferencias/fila-conferencias";
+import { useAgentesInstitucionais } from "@/lib/use-conferencias";
 import "../cadastros/vereadores/cadastro-vereadores.css";
+import "../conferencias/conferencias.css";
 import "./administracao.css";
 
 function nomeExibicao(p: { nome: string; nomeParlamentar?: string | null }): string {
@@ -31,6 +35,9 @@ function Conteudo() {
   const { dados: vereadores, estado } = useVereadores(token, versao);
   const [aberto, setAberto] = useState<string | null>(null);
   const [concedido, setConcedido] = useState<string | null>(null);
+  // B.8 (ADR-0013): o agente institucional da Casa é LIGADO pelo admin_ente. O painel vivia só em /conferencias, que
+  // é da secretaria — o administrador que só tem esse papel não o alcançava.
+  const agentes = useAgentesInstitucionais(token);
 
   function abrir(id: string) {
     setConcedido(null);
@@ -109,6 +116,8 @@ function Conteudo() {
             })}
           </ul>
         )}
+
+        <PainelAgente token={token} agentes={agentes} />
 
         <section className="adm-outras" aria-labelledby="adm-outras-titulo">
           <h2 id="adm-outras-titulo">Outras áreas da administração</h2>
