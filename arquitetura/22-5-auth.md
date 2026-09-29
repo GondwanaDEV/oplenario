@@ -77,6 +77,8 @@ Mecanismos para garantir disciplina interna: convenção de naming (`dominio.aca
 
 *Auditoria de decisões.* Toda operação de write registra (permit e deny). Reads sensíveis (audit log próprio, dados de outro vereador) registram. Reads de dado público não registram. Granularidade: ator (identidade + vínculo), ação, recurso (tipo + id), decisão, razão (qual cláusula da política decidiu), `ente_id`, timestamp. Audit log de auth segue retenção do audit log de produto (Invariante 10), particionado por `ente_id` + `created_at` desde V1.
 
+> **Materializado (29/09/2026, [ADR-0017](../docs/adr/0017-trilha-de-auditoria-da-casa.md)):** a trilha da Casa vive no módulo `auditoria` (corrente selada por Casa, particionada por mês, append-only). O interceptor global registra escrita (permit, deny e falha), negação, entrada e a leitura da própria trilha. Quem lê é o papel `auditor`, concedido pelo `admin_ente`; o `admin_ente` vê os atos de acesso e cada pessoa vê a sua. A "razão" (a cláusula da política) ainda não é gravada: o 403 registra a negação, não a regra que negou. Diferenças do texto e o porquê: seção *Materialização* da ADR.
+
 *Testabilidade.* Cobertura obrigatória por operação autorizada: caminho feliz, denial por papel, denial por relação dinâmica, denial por estado do recurso, denial cross-tenant. CI bloqueia merge se cobertura cair abaixo do threshold. Mudança em política de autorização exige PR explícito com diff revisado — política como dado central torna mudanças visíveis. Ambiente de teste com identidades sintéticas em entes sintéticos (já decidido em §22.2).
 
 **Eixo F — MFA e step-up para operações sensíveis.**

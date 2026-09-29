@@ -112,4 +112,13 @@
  :transparencia/dados-abertos {:categoria :so-tela
                                :motivo "o catalogo de dados abertos do portal (anonimo); arquivo para baixar, nao acao de agente"}
  :transparencia/baixar-dataset {:categoria :so-tela
-                                :motivo "o download CSV do dataset aberto (anonimo); o agente consulta o dominio pelas suas ferramentas"}}
+                                :motivo "o download CSV do dataset aberto (anonimo); o agente consulta o dominio pelas suas ferramentas"}
+ ;; ---------- ADR-0017: a trilha de auditoria da Casa ----------
+ :auditoria/trilha {:categoria :so-tela
+                    :motivo "a trilha de auditoria e' prova de integridade lida por pessoas; o agente nao le rastro de pessoas"}
+ :auditoria/integridade {:categoria :so-tela
+                         :motivo "a verificacao da corrente selada e' do auditor da Casa, na tela, nunca do agente"}
+ :auditoria/exportar {:categoria :so-tela
+                      :motivo "exportar a trilha e' ato do auditor registrado na propria trilha; nao e' ferramenta"}
+ :auditoria/selos-publicos {:categoria :so-tela
+                            :motivo "os selos do dia publicados no portal: a ancora publica da corrente, sem registro nenhum"}}

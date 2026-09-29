@@ -3,7 +3,9 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
+  (:require [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
+            [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
+            [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
@@ -268,7 +270,9 @@
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
            keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio
            ;; ADR-0016: o console do operador (supratenant)
-           idp-operacao repo-admin-sistema operacao]
+           idp-operacao repo-admin-sistema operacao
+           ;; ADR-0017: a trilha de auditoria da Casa
+           repo-auditoria]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -547,6 +551,18 @@
         ;; Casa (a LOM e' do Municipio) vem de cadastros pelo host — normas nunca importa cadastros (§22.10).
         (into (normas-http/rotas {:auth auth :repo-normas repo-normas
                                    :municipio-do-ente (fn [ente-id] (:municipio-ibge (repo-cadastros-comp/buscar-ente repo-cadastros ente-id)))}))
+        ;; ADR-0017: a trilha de auditoria da Casa. Quem agiu (nome) vem da identidade e a atuacao da Operacao nesta
+        ;; Casa vem do admin_sistema — pelo host (§22.10). So' entra com o Repo (testes de outras verticais montam sem).
+        (into (if repo-auditoria
+                (auditoria-http/rotas
+                 {:auth auth :repo-auditoria repo-auditoria
+                  :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                  :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))
+                  :seams {:nome-de (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))
+                          :atuacao-da-operacao (fn [ente-id limite]
+                                                 (when repo-admin-sistema
+                                                   (repo-admin-sistema-comp/atuacao-do-ente repo-admin-sistema ente-id limite)))}})
+                #{}))
         ;; Faixa B / B.3: a tela pergunta ao assistente da Casa (credencial delegada por execucao, ADR-0010).
         (into (agente/rotas {:auth auth :repo-identidade repo-identidade :ia ia :repo-integracao-ia repo-integracao-ia}))
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))

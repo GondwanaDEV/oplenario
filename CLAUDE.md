@@ -109,8 +109,8 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
-**Falta:** suspender/encerrar Casa, acesso de suporte (12.7, `[GAP]` jurídico), flags
-(12.3), billing (12.2, parqueado).
+**Falta:** suspender/encerrar Casa (**proposta em [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md), 🟡 esperando o
+"Confirmo"**), acesso de suporte (12.7, `[GAP]` jurídico), flags (12.3), billing (12.2, parqueado).
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
@@ -119,13 +119,27 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 | Veredito | Telas |
 |---|---|
-| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` ✅ |
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` ✅ · `observabilidade-ia` ✅ |
 | **PARCIAL** (4) | `dados-abertos` ✅ · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
 
 ✅ = **entregue** na branch `onda-e-cauda`. As 3 fatias entregáveis foram feitas: `/status` (pública),
 `/calendario` (interno, sessões + prazos de compliance) e o incremento de `/notificacoes`.
+
+**Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
+[`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma
+recomendação; o código começa depois do "Confirmo".
+
+`trilha-auditoria` ✅ **entregue em 29/09/2026** ([ADR-0017](docs/adr/0017-trilha-de-auditoria-da-casa.md), aceita):
+- **o que é:** o módulo `auditoria`, uma corrente selada por Casa (particionada por mês, append-only; só o IP pode virar
+  NULL depois de 6 meses);
+- **o que registra:** o interceptor global grava escrita, negação, entrada e a leitura da trilha;
+- **quem vê** (`/auditoria`): o `auditor` (controle interno, servidor, concedido pelo `admin_ente` em `/administracao`)
+  vê a Casa inteira, confere a cadeia e exporta CSV; o `admin_ente` vê os acessos; cada pessoa vê a sua;
+- **a âncora pública:** o selo do dia, ancorado na atuação da Operação e publicado em Dados abertos do portal;
+- **falta:** o registro não está na tx do ato (é gravado logo depois) e o resumo legível por ação ainda é incremental —
+  ver *Materialização* na ADR.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema

@@ -124,7 +124,8 @@ consomem D1+D2/D3 conforme forem entrando — nenhuma tela é a primeira fatia.
 | `transparencia-fiscal` | BLOQUEADA — **o SSOT veta produzir o dado**; falta o conector contábil | `[GAP]` externo |
 | `console-operador` (+tenant) | BLOQUEADA — `admin_sistema` tem 3 linhas e zero rotas | gated por IdP do operador |
 | `livro-atas` | era BLOQUEADA (a ata não era artefato) — destravada pela ata-IA (A.6: `sessoes.ata`, versionada e append-only) | ✅ entregue (28/09/2026) — interno `(interno)/atas` e portal `/portal/casa/[ente]/atas`; a vigente aberta como folha, retificação como nova versão legível, leitura no plenário (A.7), SHA-256 do texto. Selo "Publicada", nunca "Aprovada" (o sistema não registra aprovação da ata). Sessão secreta: só a secretaria, nunca o portal. Fora: quórum/deliberações da lombada, assinaturas (ICP é `[GAP]`), filtros de ano/tipo |
-| `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` | BLOQUEADAS — zero entidade no backend | aberta |
+| `audiencia-publica` · `julgamento-contas` | BLOQUEADAS — zero entidade no backend | 🟡 propostas para decisão (29/09/2026) em `docs/28` |
+| `trilha-auditoria` | ✅ entregue (29/09/2026) | módulo `auditoria` + `/auditoria` + papel `auditor` + selos do dia no portal (ADR-0017, aceita) |
 | `observabilidade-ia` | era BLOQUEADA (Track IA sem código) — destravada pelo registro da Camada de Confiança | ✅ entregue (29/09/2026) — console do operador `/operacao/ia` (24 h / 7 dias): execuções, p50/p95, custo, o que não rodou e por quê, por capacidade e por fornecedor/modelo, série por hora; todas as Casas sem identificar nenhuma (só quantas usaram). Fora, por não existir: fallback entre fornecedores (a execução não roda — R-IA-1), transcrição e embeddings (não passam pelo registro), selo Operacional/Lentidão (sem alvo de latência definido), custo em R$ e comparação com o período anterior |
 | `ata-revisao` · `legendas-ao-vivo` | IA-gated desde a origem | IA-gated |
 

@@ -1,0 +1,91 @@
+/* Trilha de auditoria (ADR-0017) — porte de produto/design-system/o-plenario/telas/trilha-auditoria.html
+   (arquétipo lista/tabela). Escopado em .aud. */
+.aud .pg-cab { padding: 1.5rem 0 0; }
+.aud .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
+.aud .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 66ch; line-height: 1.5; }
+
+/* ---- selo de integridade (a assinatura) ---- */
+.aud .lacre { display: flex; align-items: center; gap: 0.9rem; background: var(--surface); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; margin: 1.3rem 0 0; box-shadow: var(--sombra); }
+.aud .lacre .selo-ic { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; display: grid; place-items: center; color: var(--palco-bg); background: var(--amarelo); }
+.aud .lacre.quebrada .selo-ic { background: var(--telha-fundo); color: #fff; }
+.aud .lacre .lc-t b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); display: block; }
+.aud .lacre .lc-t span { font-size: var(--t-13); color: var(--texto-2); }
+.aud .lacre .lc-cadeia { margin-left: auto; text-align: right; font-family: var(--mono); }
+.aud .lacre .lc-cadeia b { font-size: var(--t-16); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+.aud .lacre .lc-cadeia span { font-size: var(--t-12); color: var(--texto-2); }
+@media (max-width: 560px) { .aud .lacre .lc-cadeia { display: none; } }
+
+.aud-escopo { margin: 1.1rem 0 0; font-size: var(--t-13); color: var(--texto-2); max-width: 72ch; line-height: 1.5; }
+.aud-aviso, .aud-vazio { margin: 1rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.aud-vazio { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.2rem; }
+
+/* ---- barra de filtros ---- */
+.aud .filtros { display: flex; align-items: flex-end; gap: 0.8rem; flex-wrap: wrap; margin: 1.2rem 0 0; }
+.aud .campo { display: flex; flex-direction: column; gap: 0.3rem; }
+.aud .campo label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; color: var(--texto-2); text-transform: uppercase; }
+.aud .campo select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 58%, var(--linha)); border-radius: var(--raio-sm); padding: 0.55rem 0.7rem; min-height: 44px; }
+.aud .filtros .espaco { margin-left: auto; display: inline-flex; align-items: center; gap: 0.4rem; }
+
+.aud .resumo-linha { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 1.1rem 0 0.2rem; font-size: var(--t-13); color: var(--texto-2); }
+.aud .resumo-linha b { color: var(--texto); font-weight: 600; }
+.aud .resumo-linha .imut { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); color: var(--acento-texto); }
+
+/* ---- a trilha (lista append-only) ---- */
+.aud .trilha { list-style: none; padding: 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; margin: 0.6rem 0 0; }
+.aud .ev { display: grid; grid-template-columns: 132px 1.4fr auto 1.6fr 150px 34px; gap: 0.3rem 1rem; align-items: center; padding: 0.85rem 1.2rem; border-top: 1px solid var(--linha); position: relative; }
+.aud .ev:first-child { border-top: none; }
+.aud .ev.ev-op { grid-template-columns: 132px 1.4fr 1.6fr 150px; }
+.aud .ev .quando b { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); font-variant-numeric: tabular-nums; display: block; }
+.aud .ev .quando span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.aud .ev .ator { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.aud .ev .ator .av { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: var(--t-11); color: #fff; }
+.aud .ev .ator .nm { min-width: 0; }
+.aud .ev .ator .nm b { font-size: var(--t-13); font-weight: 600; color: var(--texto); display: block; line-height: 1.2; }
+.aud .ev .ator .nm span { font-size: var(--t-12); color: var(--texto-2); }
+
+.aud .acao { display: inline-flex; align-items: center; gap: 0.35rem; font-size: var(--t-12); font-weight: 600; border-radius: 999px; padding: 0.18rem 0.6rem; white-space: nowrap; border: 1px solid transparent; }
+.aud .a-criou, .aud .a-aprovou { color: #234429; background: color-mix(in srgb, #6B9B72 14%, var(--surface)); border-color: color-mix(in srgb, #6B9B72 38%, transparent); }
+[data-tema="escuro"] .aud .a-criou, [data-tema="escuro"] .aud .a-aprovou { color: #A6BFA2; }
+.aud .a-editou { color: var(--cobalto-texto); background: color-mix(in srgb, var(--foco) 13%, var(--surface)); border-color: color-mix(in srgb, var(--foco) 40%, transparent); }
+.aud .a-removeu, .aud .a-negado { color: var(--acento-texto); background: var(--surface-2); border-color: color-mix(in srgb, var(--telha) 52%, transparent); }
+.aud .a-exportou { color: var(--aviso-texto); background: color-mix(in srgb, var(--amarelo) 16%, var(--surface)); border-color: color-mix(in srgb, var(--amarelo-traco) 45%, transparent); }
+.aud .a-entrou { color: var(--texto-2); background: var(--surface-2); border-color: var(--linha); }
+
+.aud .ev .obj { min-width: 0; }
+.aud .ev .obj b { font-size: var(--t-13); color: var(--texto); font-weight: 600; display: block; line-height: 1.25; }
+.aud .ev .obj span { font-size: var(--t-12); color: var(--texto-2); }
+.aud .ev .origem { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); line-height: 1.3; }
+.aud .selo { color: var(--acento-texto); }
+.aud .ev .mais { background: none; border: 1px solid var(--linha); color: var(--texto-2); cursor: pointer; border-radius: 7px; width: 32px; height: 32px; display: grid; place-items: center; }
+.aud .ev .mais:hover { color: var(--texto); border-color: var(--texto-2); }
+
+/* detalhe expansível: o que o registro TEM (nunca conteúdo) */
+.aud .ev-det { grid-column: 1 / -1; margin: 0.6rem 0 0; padding: 0.85rem 1rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; }
+.aud .ev-det dt { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.35rem; }
+.aud .ev-det dd { font-size: var(--t-13); color: var(--texto); margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.aud .ev-det dd.mono { font-family: var(--mono); font-size: var(--t-12); }
+.aud .ev-det .selo-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); border-top: 1px dashed var(--linha); padding-top: 0.6rem; }
+@media (max-width: 860px) { .aud .ev-det { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .aud .ev-det { grid-template-columns: 1fr; } }
+
+.aud-mais { margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+
+.aud-operacao { margin: 2rem 0 0; }
+.aud-operacao h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-20, 1.25rem); color: var(--texto); margin: 0; }
+.aud-operacao .sub { font-size: var(--t-13); }
+
+/* rodapé honesto */
+.aud .nota-imut { display: flex; align-items: flex-start; gap: 0.6rem; margin: 1.2rem 0 1.6rem; padding: 0.9rem 1.1rem; background: color-mix(in srgb, var(--marca) 6%, var(--surface)); border: 1px solid color-mix(in srgb, var(--marca) 26%, var(--linha)); border-radius: var(--raio); font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.aud .nota-imut svg { color: var(--marca); flex: 0 0 auto; margin-top: 2px; }
+.aud .nota-imut b { color: var(--texto); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .aud .ev, .aud .ev.ev-op { grid-template-columns: 1fr auto; gap: 0.5rem 0.8rem; }
+  .aud .ev .quando { order: 1; }
+  .aud .ev .acao { order: 2; justify-self: end; }
+  .aud .ev .ator { order: 3; }
+  .aud .ev .obj { order: 4; grid-column: 1 / -1; }
+  .aud .ev .origem { order: 5; grid-column: 1 / -1; }
+  .aud .ev .mais { order: 6; position: absolute; top: 0.85rem; right: 1.2rem; }
+  .aud .ev .ev-det { order: 7; }
+}

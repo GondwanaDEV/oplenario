@@ -146,7 +146,11 @@
               ;; ADR-0016: o 1o acesso do vinculo vira evento (o registro de Casas ativa a Casa quando e' o 1o admin)
               (when (:vinculo-ativo-id ator)
                 (repo/registrar-primeiro-acesso! repo-identidade (:ente-id ator) ator))
-              (http/json-resposta 200 {:sessao seg}))
+              ;; ADR-0017: a entrada vai para a trilha da Casa. O mint nao tem ator na requisicao (e' ele que cria a
+              ;; sessao): entrega o ator ao interceptor da trilha pela resposta (a chave nao vai para o fio).
+              (assoc (http/json-resposta 200 {:sessao seg})
+                     :auditoria {:classe "entrada" :ator ator
+                                 :rotulo (if (auten/govbr? verificadas) "entrou pelo gov.br" "entrou")}))
             (http/json-resposta 401 {:erro "sem vinculo ativo"}))
           (http/json-resposta 401 {:erro "token invalido"}))))))
 

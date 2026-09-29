@@ -85,9 +85,43 @@ export async function concederAcesso(
   return { identidadeId };
 }
 
+// ADR-0017 — o CONTROLE INTERNO (procuradoria, controladoria): um servidor da Casa com o papel `auditor`, que só lê a
+// trilha de auditoria. Não há cadastro de vereador a ligar, então são 2 passos, com a MESMA garantia "acesso por
+// último": a identidade (idempotente por CPF, não concede nada) e só então o vínculo de servidor com o papel.
+export type ConcederAuditorEntrada = { cpf: string; nome: string; email: string };
+
+export async function concederAuditor(
+  entrada: ConcederAuditorEntrada,
+  chamar: ChamarApi = fetch,
+): Promise<{ identidadeId: string }> {
+  const passo1 = (await postar(chamar, "/api/identidade/identidades", "POST", {
+    cpf: entrada.cpf,
+    nome: entrada.nome,
+  })) as { "identidade-id": string };
+  const identidadeId = passo1["identidade-id"];
+  await postar(chamar, "/api/identidade/acessos", "POST", {
+    "identidade-id": identidadeId,
+    tipo: "servidor",
+    papeis: ["auditor"],
+    email: entrada.email,
+  });
+  return { identidadeId };
+}
+
 type Estado = "ocioso" | "enviando" | "erro";
 
 export function useConcederAcesso(token: string | null) {
+  return useFluxoDeAcesso<ConcederAcessoEntrada>(token, concederAcesso);
+}
+
+export function useConcederAuditor(token: string | null) {
+  return useFluxoDeAcesso<ConcederAuditorEntrada>(token, concederAuditor);
+}
+
+function useFluxoDeAcesso<E>(
+  token: string | null,
+  fluxo: (entrada: E, chamar: ChamarApi) => Promise<{ identidadeId: string }>,
+) {
   const [estado, setEstado] = useState<Estado>("ocioso");
   const [erro, setErro] = useState<string | null>(null);
   const vivoRef = useRef(true);
@@ -103,7 +137,7 @@ export function useConcederAcesso(token: string | null) {
     };
   }, []);
 
-  async function conceder(entrada: ConcederAcessoEntrada): Promise<{ identidadeId: string }> {
+  async function conceder(entrada: E): Promise<{ identidadeId: string }> {
     if (semCredencial(token)) throw new Error("sem token de autenticacao");
     if (enviandoRef.current) throw new Error("envio em andamento");
     enviandoRef.current = true;
@@ -112,7 +146,7 @@ export function useConcederAcesso(token: string | null) {
     try {
       // O token do ator (admin_ente) viaja em CADA um dos 3 passos via `apiFetch` — não só no primeiro.
       const chamar: ChamarApi = (url, init) => apiFetch(url, { ...init, token: token ?? undefined });
-      const resultado = await concederAcesso(entrada, chamar);
+      const resultado = await fluxo(entrada, chamar);
       if (vivoRef.current) setEstado("ocioso");
       return resultado;
     } catch (e) {

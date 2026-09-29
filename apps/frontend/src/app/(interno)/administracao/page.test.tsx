@@ -170,4 +170,23 @@ describe("Área do administrador da Casa (/administracao)", () => {
     expect(within(sonia).queryByRole("button", { name: /conceder acesso/i })).toBeNull();
     expect(screen.getByRole("button", { name: "Conceder acesso a Helena Past" })).toBeTruthy();
   });
+  it("dá ao controle interno o acesso à trilha: identidade e então vínculo de SERVIDOR com o papel auditor", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    fireEvent.click(await screen.findByRole("button", { name: "Dar acesso ao controle interno" }));
+    const form = await screen.findByRole("form", { name: "Dar acesso ao controle interno" });
+    fireEvent.change(within(form).getByLabelText(/nome completo/i), { target: { value: "Renata Costa" } });
+    fireEvent.change(within(form).getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+    fireEvent.change(within(form).getByLabelText(/e-mail institucional/i), { target: { value: "renata@camara.local" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Acesso à trilha concedido a Renata Costa/));
+    const mutacoes = f.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(mutacoes.map(([url]) => url)).toEqual(["/api/identidade/identidades", "/api/identidade/acessos"]);
+    expect(JSON.parse(String((mutacoes[1][1] as RequestInit).body))).toEqual({
+      "identidade-id": "id-9", tipo: "servidor", papeis: ["auditor"], email: "renata@camara.local",
+    });
+    const outras = screen.getByRole("region", { name: "Outras áreas da administração" });
+    expect(within(outras).getByRole("link", { name: "Trilha de auditoria" })).toBeTruthy();
+  });
 });
