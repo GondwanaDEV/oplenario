@@ -37,7 +37,11 @@
   (consumo [this ente-id mes]
     "Faixa B / B.9: o consumo de IA da Casa no mes `mes` ('AAAA-MM') x o orcamento que o satelite esta' aplicando, o
     estado da cota e, por capacidade, execucoes, custo e revisao humana. So' contagens e valores. Lanca
-    `:ia/indisponivel`."))
+    `:ia/indisponivel`.")
+  (observabilidade [this horas]
+    "Onda E (`observabilidade-ia`): a saude da IA em TODAS as Casas nas ultimas `horas` (1-168) — volume, latencia
+    p50/p95, o que nao rodou e por que, custo, por capacidade e por fornecedor/modelo, e a serie por hora. Sem ente e
+    sem texto: so' o console do operador le. Lanca `:ia/indisponivel`."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
@@ -82,7 +86,10 @@
         (indisponivel! "copiloto sem resposta")))
   (consumo [_ ente-id mes]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/consumo?mes=" mes))
-        (indisponivel! "consumo sem resposta"))))
+        (indisponivel! "consumo sem resposta")))
+  (observabilidade [_ horas]
+    (or (ler-json url segredo cliente (str "/v1/observabilidade?horas=" (long horas)))
+        (indisponivel! "observabilidade sem resposta"))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

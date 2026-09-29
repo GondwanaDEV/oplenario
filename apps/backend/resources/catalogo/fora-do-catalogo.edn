@@ -101,6 +101,8 @@
                                   :motivo "reenvia o convite ao 1o administrador enquanto a Casa espera o handoff"}
  :admin-sistema/reprovisionar-realm {:categoria :supratenant
                                      :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}
+ :admin-sistema/observabilidade-ia {:categoria :supratenant
+                                    :motivo "a saude da IA em todas as Casas (volume, latencia, custo), so' contagens, para a Operacao"}
  ;; ---------- Onda E: o livro de atas no portal ----------
  :sessoes/livro-atas-publico {:categoria :so-tela
                               :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}

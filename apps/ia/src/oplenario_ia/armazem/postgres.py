@@ -169,6 +169,11 @@ MIGRACOES: list[str] = [
       chave       text NOT NULL
     );
     """,
+    # Onda E — a observabilidade do operador lê TODAS as Casas numa janela de horas: o índice por (ente, instante)
+    # não serve a essa varredura
+    """
+    CREATE INDEX IF NOT EXISTS idx_registro_evento_instante ON ia.registro_evento (instante) WHERE tipo = 'execucao';
+    """,
 ]
 
 

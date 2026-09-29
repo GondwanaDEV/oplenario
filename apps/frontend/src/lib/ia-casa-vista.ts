@@ -14,6 +14,11 @@ const NOMES: Record<string, string> = {
   "requerimento.justificar": "Copiloto do requerimento",
 };
 
+/** O nome que a Casa conhece para uma operação do satélite (a operação crua quando não há nome). */
+export function nomeDaOperacao(operacao: string): string {
+  return NOMES[operacao] ?? operacao;
+}
+
 /** O que a IA faz sozinha: pausa primeiro quando o orçamento acaba. */
 const SEGUNDO_PLANO = new Set(["Resumo cidadão", "Conferência das proposições"]);
 

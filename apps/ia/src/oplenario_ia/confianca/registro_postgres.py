@@ -59,6 +59,14 @@ class RegistroPostgres:
             (ente_id, desde, ate),
         )
 
+    def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
+        # só execuções: é o que a observabilidade agrega (revisão e reporte ficam no painel de cada Casa)
+        return self._ler(
+            "SELECT corpo FROM ia.registro_evento WHERE tipo = 'execucao' AND instante >= %s AND instante < %s"
+            " ORDER BY id",
+            (desde, ate),
+        )
+
     def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
         with self._conectar() as c:
             r = c.execute(
