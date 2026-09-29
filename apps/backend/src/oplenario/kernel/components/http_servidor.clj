@@ -10,12 +10,13 @@
             [oplenario.http :as oplenario-http]
             [oplenario.interceptors :as interceptors]))
 
-(defrecord ServidorHttp [config rotas-fn idp repo-identidade repo-sessoes repo-legislativo canal-store objeto-store servidor]
+(defrecord ServidorHttp [config rotas-fn globais-fn idp repo-identidade repo-sessoes repo-legislativo canal-store objeto-store servidor]
   component/Lifecycle
   (start [this]
     (if servidor
       this
-      (assoc this :servidor (-> (oplenario-http/servico config (rotas-fn this) interceptors/globais)
+      (assoc this :servidor (-> (oplenario-http/servico config (rotas-fn this)
+                                                         (interceptors/globais-com (if globais-fn (globais-fn this) [])))
                                 http/create-server
                                 http/start))))
   (stop [this]
@@ -28,6 +29,9 @@
 
 (defn servidor-http
   "Cria o Component do servidor (sem subir ainda). `rotas-fn` = (fn [componente] -> rotas Pedestal); o
-  componente carrega os deps (via `using` no system-map) que a rotas-fn usa p/ montar os interceptors."
-  [config rotas-fn]
-  (map->ServidorHttp {:config config :rotas-fn rotas-fn}))
+  componente carrega os deps (via `using` no system-map) que a rotas-fn usa p/ montar os interceptors.
+  `globais-fn` (opcional) = (fn [componente] -> interceptors) que o host poe entre os globais, POR FORA do de erro
+  (ex.: a trilha de auditoria, ADR-0017, que precisa ver a resposta final)."
+  ([config rotas-fn] (servidor-http config rotas-fn nil))
+  ([config rotas-fn globais-fn]
+   (map->ServidorHttp {:config config :rotas-fn rotas-fn :globais-fn globais-fn})))

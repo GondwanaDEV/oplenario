@@ -41,6 +41,8 @@
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [mm (keywordizar wire-in)]
     (validar! wire/ConcederAcesso mm "corpo de conceder acesso invalido")
+    (when-not (every? (get wire/papeis-por-tipo (:tipo mm) #{}) (:papeis mm))
+      (invalido! "papel incompativel com o tipo do vinculo" {:campo :papeis}))
     {:identidade-id (->uuid! (:identidade-id mm) :identidade-id)
      :tipo (:tipo mm)
      :papeis (:papeis mm)

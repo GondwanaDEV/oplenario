@@ -280,6 +280,13 @@
   + erro (envolve toda a cadeia). W3: rota nova herda isto automaticamente — nao depende de lembrar por rota."
   [cabecalhos-seguranca erro])
 
+(defn globais-com
+  "Os `globais` com `extras` ENTRE os cabecalhos e o de erro: o extra ve a resposta FINAL (o erro ja' virou
+  403/400/500) e o ator que a autenticacao resolveu, e os cabecalhos de seguranca continuam por fora de tudo. E' onde
+  o host poe a trilha de auditoria (ADR-0017)."
+  [extras]
+  (vec (concat [cabecalhos-seguranca] extras [erro])))
+
 (defn autenticacao-agente
   "Interceptor de AUTENTICACAO de AGENTE (ADR-0010): so' a credencial delegada (bearer opaco emitido pelo core a
   cada execucao) e' aceita — nem cookie de sessao, nem token do IdP. O ator e' resolvido A CADA chamada

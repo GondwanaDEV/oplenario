@@ -50,3 +50,18 @@
                     ator {"identidade-id" (str (random-uuid)) "tipo" "vereador"
                           "papeis" ["vereador"] "email" "sem-arroba"})))
       "e-mail malformado -> 400 (o convite nunca chegaria; falhar cedo e' honesto)"))
+
+(deftest auditor-e-um-servidor-que-so-le-a-trilha
+  (let [ident (random-uuid)
+        m (adapters-in/conceder-acesso->dominio
+           ator {"identidade-id" (str ident) "tipo" "servidor" "papeis" ["auditor"] "email" "controle@camara.local"})]
+    (is (= ["auditor"] (:papeis m)))
+    (is (= "servidor" (:tipo m))))
+  (is (= :validacao/invalido
+         (tipo-do #(adapters-in/conceder-acesso->dominio
+                    ator {"identidade-id" (str (random-uuid)) "tipo" "servidor" "papeis" ["vereador"] "email" "h@c.local"})))
+      "papel de vereador num vinculo de servidor: incoerente -> 400")
+  (is (= :validacao/invalido
+         (tipo-do #(adapters-in/conceder-acesso->dominio
+                    ator {"identidade-id" (str (random-uuid)) "tipo" "vereador" "papeis" ["auditor"] "email" "h@c.local"})))
+      "o vereador nao se faz auditor pela mesma concessao"))
