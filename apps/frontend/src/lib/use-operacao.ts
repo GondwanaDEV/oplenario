@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import type { ObservabilidadeIA } from "./observabilidade-ia-vista";
 
 export type EstadoCasa = "provisionar" | "ativo" | "suspenso" | "encerrado";
 
@@ -82,6 +83,10 @@ export function useOperador(token: string | null) {
 
 export function useCasas(token: string | null) {
   return useLeitura<ListaDeCasas>("/api/operacao/casas", token);
+}
+
+export function useObservabilidadeIA(horas: number, token: string | null) {
+  return useLeitura<ObservabilidadeIA>(`/api/operacao/ia?horas=${horas}`, token);
 }
 
 export function useFichaDaCasa(ente: string, token: string | null) {

@@ -77,6 +77,14 @@ Para definir (valores comerciais do plano, na moeda da tabela de preços da IA):
 java -jar oplenario.jar ia-orcamento <ente-id> <mensal> <teto-duro> [moeda=USD]
 ```
 
+### Observabilidade da plataforma (Onda E)
+
+O operador vê a saúde da IA de todas as Casas em `/operacao/ia` (console, 24 h ou 7 dias): execuções, tempo de
+resposta p50/p95, custo, o que não rodou e por quê, por capacidade e por fornecedor/modelo. A fonte é o registro da
+Camada de Confiança (`ia.registro_evento`, só execuções do modelo de linguagem — transcrição e busca não entram), lido
+pelo satélite em `GET /v1/observabilidade?horas=` (1–168, segredo de serviço). Com a IA fora a tela diz
+"não respondeu agora" — o core devolve `disponivel: false`, nunca 500. O fornecedor fake registra latência 0.
+
 ## 6. Quando a busca responde `sem-ia`
 
 Na ordem em que já aconteceu:

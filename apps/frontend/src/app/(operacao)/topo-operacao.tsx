@@ -4,8 +4,10 @@
 // e quem está operando. O nome vem do backend (GET /operacao/eu), nunca de um literal; sem sessão (a tela de
 // entrar) a barra mostra só a marca.
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { comToken } from "@/lib/nav";
 import { useTema } from "@/lib/tema";
 import { useOperador } from "@/lib/use-operacao";
 
@@ -41,6 +43,20 @@ export function TopoOperacao() {
         </div>
       </div>
     </header>
+  );
+}
+
+/** As áreas do console (sem sessão, na tela de entrar, não aparece). */
+export function NavOperacao() {
+  const { token } = useAuth();
+  const rota = usePathname() ?? "";
+  if (rota.startsWith("/operacao/entrar")) return null;
+  const naIA = rota === "/operacao/ia" || rota.startsWith("/operacao/ia/");
+  return (
+    <nav className="op-nav" aria-label="Console">
+      <Link href={comToken("/operacao", token)} aria-current={naIA ? undefined : "page"}>Câmaras</Link>
+      <Link href={comToken("/operacao/ia", token)} aria-current={naIA ? "page" : undefined}>Observabilidade da IA</Link>
+    </nav>
   );
 }
 

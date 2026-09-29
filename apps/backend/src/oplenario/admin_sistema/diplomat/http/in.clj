@@ -8,6 +8,7 @@
   (:require [clojure.string :as str]
             [oplenario.admin-sistema.adapters.in.ente :as in-ente]
             [oplenario.admin-sistema.adapters.out.ente :as out-ente]
+            [oplenario.admin-sistema.adapters.out.ia :as out-ia]
             [oplenario.admin-sistema.autenticacao :as auten]
             [oplenario.admin-sistema.components.idp-admin :as idp-op]
             [oplenario.admin-sistema.components.repositorio :as repo]
@@ -95,10 +96,36 @@
                                                 (controllers/reprovisionar-realm! repo-op deps (:ator req)
                                                                                   (ente-do-path req)))))))
 
+;; ---- observabilidade da IA (Onda E, §22.8) ----
+
+(def ^:private janelas-ia
+  "As janelas que a tela oferece (o satelite aceita 1-168; o console so' pede estas)."
+  #{24 168})
+
+(defn- horas-param [s]
+  (let [h (if (str/blank? s) 24 (parse-long s))]
+    (when-not (contains? janelas-ia h)
+      (throw (ex-info "horas deve ser 24 ou 168" {:tipo :validacao/invalido :campo :horas})))
+    h))
+
+(defn- observabilidade-ia-handler
+  "GET /operacao/ia?horas=24|168 — a saude da IA em todas as Casas. IA fora (ou nao ligada) nao e' 500: a resposta diz
+  `disponivel: false` e a tela avisa (R-IA-1)."
+  [observabilidade-ia]
+  (fn [req]
+    (let [horas (horas-param (get-in req [:query-params :horas]))
+          o (when observabilidade-ia
+              (try (observabilidade-ia horas)
+                   (catch clojure.lang.ExceptionInfo e
+                     (if (= :ia/indisponivel (:tipo (ex-data e))) nil (throw e)))))]
+      (http/json-resposta 200 (out-ia/observabilidade->wire horas o)))))
+
 (defn rotas
   "`operacao` = o mapa `:operacao` da config, ja' resolvido pelo host. `deps-registro` = os seams que o host injeta
-  para o provisionamento cruzar cadastros/identidade/IdP das Casas sem import (§22.10)."
-  [{:keys [idp-operacao repo-admin-sistema relogio operacao deps-registro]}]
+  para o provisionamento cruzar cadastros/identidade/IdP das Casas sem import (§22.10). `observabilidade-ia` =
+  (horas -> mapa do satelite; lanca `:ia/indisponivel`), o seam do host para a IA (admin_sistema nao importa
+  integracao_ia)."
+  [{:keys [idp-operacao repo-admin-sistema relogio operacao deps-registro observabilidade-ia]}]
   (let [auth (it/autenticacao-operador idp-operacao repo-admin-sistema)
         papel (it/exige-papel "operador")]
     #{["/operacao/descoberta" :get [(descoberta-handler operacao)] :route-name :admin-sistema/descoberta]
@@ -114,4 +141,6 @@
       ["/operacao/casas/:ente/convite" :post [auth papel (reenviar-convite-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/reenviar-convite]
       ["/operacao/casas/:ente/realm" :post [auth papel (reprovisionar-realm-handler repo-admin-sistema deps-registro)]
-       :route-name :admin-sistema/reprovisionar-realm]}))
+       :route-name :admin-sistema/reprovisionar-realm]
+      ["/operacao/ia" :get [auth papel (observabilidade-ia-handler observabilidade-ia)]
+       :route-name :admin-sistema/observabilidade-ia]}))

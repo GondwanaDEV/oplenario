@@ -9,7 +9,7 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
-import { TopoOperacao } from "./topo-operacao";
+import { NavOperacao, TopoOperacao } from "./topo-operacao";
 import "./operacao.css";
 
 export default function LayoutOperacao({ children }: { children: React.ReactNode }) {
@@ -27,7 +27,10 @@ function LeitorToken({ children }: { children: React.ReactNode }) {
       <TemaProvider>
         <a className="pular" href="#conteudo">Pular para o conteúdo</a>
         <TopoOperacao />
-        <main id="conteudo" className="envelope">{children}</main>
+        <main id="conteudo" className="envelope">
+          <NavOperacao />
+          {children}
+        </main>
       </TemaProvider>
     </AuthProvider>
   );
