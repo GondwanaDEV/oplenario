@@ -119,7 +119,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 | Veredito | Telas |
 |---|---|
-| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` |
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` · `observabilidade-ia` ✅ |
 | **PARCIAL** (4) | `dados-abertos` ✅ · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
@@ -133,7 +133,11 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
   qual protocolo), da mesma família do layout SIM do TCE-CE. **Não é backlog de engenharia.**
 - `console-operador` (+tenant) — ✅ **entregue em 27/09/2026** (ADR-0016, item 2 acima): lista, provisionar e a ficha
   da Casa com o handoff e a atuação selada. Os blocos de acesso de suporte e flags por Casa esperam fatia própria.
-- `observabilidade-ia` — Track IA, item 1 acima.
+- `observabilidade-ia` — ✅ **entregue em 29/09/2026** no console do operador (`/operacao/ia`, 24 h / 7 dias): o
+  satélite agrega o registro da Camada de Confiança de TODAS as Casas (`GET /v1/observabilidade`) — execuções, p50/p95,
+  custo, o que não rodou e por quê, por capacidade e por fornecedor/modelo, série por hora — e o core expõe só ao
+  operador (`GET /operacao/ia`); IA fora = `disponivel: false`, nunca 500. Sem texto e sem Casa identificada. Cobre o
+  modelo de linguagem; transcrição e busca não passam pelo registro.
 
 `livro-atas` ✅ **entregue em 28/09/2026**, destravada pela ata-IA: `/atas` (interno; a ata de sessão secreta só para a
 secretaria) e `/portal/casa/[ente]/atas` (cidadão; só sessões públicas). A vigente aberta como folha, retificação como

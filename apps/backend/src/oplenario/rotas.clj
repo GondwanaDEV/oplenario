@@ -598,6 +598,8 @@
         (into (admin-sistema-http/rotas
                {:idp-operacao idp-operacao :repo-admin-sistema repo-admin-sistema
                 :relogio relogio-producao :operacao operacao
+                ;; Onda E: a observabilidade da IA de todas as Casas — so' o console do operador le (sem ente, sem texto)
+                :observabilidade-ia (fn [horas] (plataforma-ia/observabilidade ia horas))
                 ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
                 :deps-registro
                 {:idp-casa idp

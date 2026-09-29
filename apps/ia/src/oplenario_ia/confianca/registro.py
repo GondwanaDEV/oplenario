@@ -98,6 +98,10 @@ class ConsultaConsumo(Protocol):
 
     def eventos_entre(self, ente_id: str, desde: datetime, ate: datetime) -> list[Evento]: ...
 
+    def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
+        """Todas as Casas (a observabilidade do operador, sem conteúdo)."""
+        ...
+
 
 def gasto(eventos: list[Evento]) -> Decimal:
     """A soma do custo CONHECIDO das execuções (modelo sem preço não soma — o painel diz que é parcial)."""
@@ -123,6 +127,9 @@ class RegistroMemoria:
     def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
         return gasto([e for e in self._eventos if e.ente_id == ente_id and e.instante >= desde])
 
+    def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
+        return [e.model_copy(deep=True) for e in self._eventos if desde <= e.instante < ate]
+
 
 class RegistroJsonl:
     """Uma linha JSON por evento, arquivo aberto só em modo de acréscimo."""
@@ -147,3 +154,6 @@ class RegistroJsonl:
 
     def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
         return gasto([e for e in self.eventos() if e.ente_id == ente_id and e.instante >= desde])
+
+    def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
+        return [e for e in self.eventos() if desde <= e.instante < ate]

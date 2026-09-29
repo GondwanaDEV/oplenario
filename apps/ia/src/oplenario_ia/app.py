@@ -25,6 +25,7 @@ from oplenario_ia.busca.embeddings import Embedder, criar_embedder
 from oplenario_ia.busca.indice import TIPOS, TIPOS_PADRAO
 from oplenario_ia.confianca.consumo import consumo_do_mes
 from oplenario_ia.confianca.cota import Cota, Fonte
+from oplenario_ia.confianca.observabilidade import janela, observar
 from oplenario_ia.confianca.registro import ConsultaConsumo, RegistroConfianca, RegistroJsonl, RegistroMemoria
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
@@ -290,6 +291,19 @@ def criar_app(
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         return c.model_dump(mode="json", by_alias=True)
+
+    @app.get("/v1/observabilidade", dependencies=[Depends(servico)])
+    def observabilidade(horas: int = 24) -> dict[str, Any]:
+        """Onda E: a saúde da IA em TODAS as Casas nas últimas `horas` (1–168) — volume, tempo de resposta, o que não
+        rodou e por quê, custo, por capacidade e por fornecedor/modelo. Sem conteúdo e sem ente: só o operador da
+        plataforma lê (o core expõe esta rota só no console da Operação)."""
+        try:
+            desde, ate = janela(horas)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        return observar(registro_do_app().eventos_de_todas_entre(desde, ate), desde, ate).model_dump(
+            mode="json", by_alias=True
+        )
 
     @app.post("/v1/entes/{ente_id}/requerimentos/rascunhos", dependencies=[Depends(servico)])
     def rascunho_requerimento(ente_id: str, pedido: PedidoCopiloto) -> dict[str, Any]:
