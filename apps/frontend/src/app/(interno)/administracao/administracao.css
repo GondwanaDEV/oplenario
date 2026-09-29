@@ -15,3 +15,7 @@
 .adm-outras ul { margin: 0; padding-left: 1.1rem; }
 .adm-outras span { color: var(--texto-2); }
 .adm-chip { font-size: var(--t-12); padding: 0.2rem 0.6rem; border-radius: var(--raio-capsula); background: var(--jade-fundo); color: var(--texto); white-space: nowrap; }
+/* ADR-0017: o controle interno (papel auditor) */
+.adm-auditoria { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+.adm-auditoria h2 { font-family: var(--display); font-size: var(--t-16); margin: 0; }
+.adm-auditoria .painel-cad { align-self: stretch; }

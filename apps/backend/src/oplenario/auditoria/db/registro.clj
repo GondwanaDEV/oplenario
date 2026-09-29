@@ -114,7 +114,7 @@
           acc'   (reduce logic/verificar-passo acc pagina)]
       (if (or (:quebra-em acc') (< (count pagina) 5000))
         acc'
-        (recur acc' (:seq (peek pagina)))))))
+        (recur acc' (long (:seq (peek pagina))))))))
 
 (defn selos-diarios
   "Os ultimos `n` selos do dia da Casa, o mais recente primeiro."

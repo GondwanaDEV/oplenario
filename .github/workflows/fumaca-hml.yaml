@@ -192,6 +192,26 @@ jobs:
                   `status=${r.status} datasets=${ds.map(d => d.chave + ':' + d.linhas).join(' ')} csv=${csv.status()} linhas-csv=${corpo.split('\r\n').length - 2}`);
             } catch (e) { rec('/portal/casa/:ente/dados-abertos', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 7) TRILHA DE AUDITORIA (ADR-0017) — a secretaria ve a propria trilha (o login desta fumaca ja' entrou nela),
+            //    a integridade e' so' do auditor (403), e o portal publica os selos do dia (anonimo)
+            try {
+              const r = await api(cSec, '/api/auditoria');
+              const integ = await api(cSec, '/api/auditoria/integridade');
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const pub = await api(anon, `/api/portal/casa/${E}/integridade`);
+              await anon.close();
+              const p = await cSec.newPage();
+              await p.goto(`${B}/auditoria`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.close();
+              const ok = r.status === 200 && r.body?.escopo === 'propria' && r.body?.total >= 1
+                && integ.status === 403 && pub.status === 200 && Array.isArray(pub.body?.['selos-do-dia'])
+                && /Trilha de auditoria/.test(txt) && /sua própria trilha/.test(txt);
+              rec('/auditoria', ok ? 'OK' : 'ERRO',
+                  `status=${r.status} escopo=${r.body?.escopo} total=${r.body?.total} integridade=${integ.status} selos-publicos=${pub.status}:${pub.body?.['selos-do-dia']?.length ?? '-'}`);
+            } catch (e) { rec('/auditoria', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');
