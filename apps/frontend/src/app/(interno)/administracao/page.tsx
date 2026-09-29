@@ -21,6 +21,7 @@ import { comToken } from "@/lib/nav";
 import { GuardAdminEnte } from "../guard-admin-ente";
 import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
+import { ConcederAuditorForm } from "./conceder-auditor-form";
 import { PainelAgente } from "../conferencias/fila-conferencias";
 import { useAgentesInstitucionais } from "@/lib/use-conferencias";
 import "../cadastros/vereadores/cadastro-vereadores.css";
@@ -40,6 +41,9 @@ function Conteudo() {
   // B.8 (ADR-0013): o agente institucional da Casa é LIGADO pelo admin_ente. O painel vivia só em /conferencias, que
   // é da secretaria — o administrador que só tem esse papel não o alcançava.
   const agentes = useAgentesInstitucionais(token);
+  // ADR-0017: o controle interno (papel `auditor`) — quem lê a trilha de auditoria da Casa inteira.
+  const [auditorAberto, setAuditorAberto] = useState(false);
+  const [auditorConcedido, setAuditorConcedido] = useState<string | null>(null);
 
   function abrir(id: string) {
     setConcedido(null);
@@ -122,12 +126,49 @@ function Conteudo() {
 
         <PainelAgente token={token} agentes={agentes} />
 
+        <section className="adm-auditoria" aria-labelledby="adm-auditoria-titulo">
+          <h2 id="adm-auditoria-titulo">Controle interno</h2>
+          <p className="adm-texto">
+            A trilha de auditoria registra cada ato no sistema — quem fez, o quê, quando e de onde — numa cadeia selada que
+            ninguém edita. Quem a lê por inteiro é o controle interno da Casa (procuradoria, controladoria): dê a esse
+            servidor o acesso à trilha. Ele só lê; não opera o sistema.
+          </p>
+          {auditorConcedido && (
+            <p role="status" className="adm-aviso">
+              Acesso à trilha concedido a {auditorConcedido}. O convite foi enviado para o e-mail informado.
+            </p>
+          )}
+          {auditorAberto ? (
+            <div className="painel-cad">
+              <ConcederAuditorForm
+                token={token}
+                onSucesso={(nome) => {
+                  setAuditorAberto(false);
+                  setAuditorConcedido(nome);
+                }}
+                onCancelar={() => setAuditorAberto(false)}
+              />
+            </div>
+          ) : (
+            <button type="button" className="btn btn-contorno btn-mini" onClick={() => {
+              setAuditorConcedido(null);
+              setAuditorAberto(true);
+            }}>
+              Dar acesso ao controle interno
+            </button>
+          )}
+        </section>
+
         <section className="adm-outras" aria-labelledby="adm-outras-titulo">
           <h2 id="adm-outras-titulo">Outras áreas da administração</h2>
           <ul>
             <li>
               <Link href={comToken("/paineis/ia", token)} prefetch={false}>IA da Casa</Link>
               <span> — o consumo da IA no mês e o que a Casa fez com o que ela entregou.</span>
+            </li>
+            <li>
+              <Link href={comToken("/auditoria", token)} prefetch={false}>Trilha de auditoria</Link>
+              <span> — quem concedeu e revogou acessos, e quem entrou no sistema.</span>
             </li>
           </ul>
         </section>

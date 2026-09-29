@@ -17,7 +17,7 @@
 
 (def ^:private rotas-montadas
   ;; `:repo-integracao-ia` qualquer: so' liga o fragmento da fronteira com a IA (as rotas existem em producao)
-  (delay (set (keep nome-da-rota (rotas/montar {:idp (idp-dev/idp-dev) :repo-integracao-ia :lint})))))
+  (delay (set (keep nome-da-rota (rotas/montar {:idp (idp-dev/idp-dev) :repo-integracao-ia :lint :repo-auditoria :lint})))))
 
 (deftest toda-rota-e-do-catalogo-da-lista-base-ou-tem-motivo
   (let [cobertas (set (mapcat :rotas catalogo/entradas))

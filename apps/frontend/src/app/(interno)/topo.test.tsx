@@ -76,7 +76,12 @@ describe("destinosVisiveis — a nav por papel", () => {
   });
 
   it("quem é SÓ administrador da Casa vê só a área dele — nada que o leve a 'Acesso restrito' (ADR-0005)", () => {
-    expect(rotulos(["admin_ente"])).toEqual(["IA da Casa", "Administração"]);
+    expect(rotulos(["admin_ente"])).toEqual(["IA da Casa", "Administração", "Auditoria"]);
+  });
+
+  it("o controle interno (auditor) vê só a trilha de auditoria (ADR-0017)", () => {
+    expect(rotulos(["auditor"])).toEqual(["Auditoria"]);
+    expect(rotulos(["secretario"])).toContain("Auditoria");
   });
 
   it("quem acumula secretaria e administração vê as duas", () => {

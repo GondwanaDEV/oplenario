@@ -11,8 +11,8 @@
   identidades, todas com vinculo: secretaria (`servidor` + papel `secretario`), presidente da Mesa
   (`vereador` + papeis `vereador`/`admin_ente`), vereador comum (`vereador` + papel `vereador`),
   cidadao (`cidadao`, SEM papel — quem trabalha na Casa tem papel, quem so' consulta/peticiona nao),
-  apresentacao (`vereador` + papeis `vereador`/`secretario`/`admin_ente` — os 3 EMPILHADOS no MESMO
-  vinculo, mesmo desenho ja' provado pela presidente/admin_ente; existe so' p/ demo comercial de
+  apresentacao (`vereador` + papeis `vereador`/`secretario`/`admin_ente`/`auditor` — EMPILHADOS no MESMO
+  vinculo (o `auditor`, ADR-0017, so' para a visita mostrar a trilha da Casa inteira), mesmo desenho ja' provado pela presidente/admin_ente; existe so' p/ demo comercial de
   visita unica: 1 login alcanca secretaria+vereador+Mesa sem trocar de sessao, ver docs/22).
 
   IDEMPOTENCIA (Task 0.7 do plano exige 'reusar-se-existir'): `ente`/`municipio` usam ON CONFLICT nos
@@ -147,7 +147,10 @@
         (vinc/criar! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :tipo "vereador"})
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "vereador"})
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "secretario"})
-        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "admin_ente"})))
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "admin_ente"})
+        ;; ADR-0017: na Casa real o `auditor` e' um servidor (a rota de conceder recusa outra combinacao); aqui a
+        ;; persona de demonstracao o empilha para a visita mostrar a trilha da Casa inteira, a cadeia e a exportacao.
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "auditor"})))
     {:secretaria sec-id :presidente pres-id :vereador ver-id :cidadao cid-id :apresentacao apr-id}))
 
 ;; ---------- o bloco cadastral (so' roda na PRIMEIRA chamada — ver `ja-semeada?`) ----------

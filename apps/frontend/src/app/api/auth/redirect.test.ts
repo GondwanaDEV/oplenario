@@ -36,6 +36,7 @@ describe("destinoPorPapeis — cada persona na sua home", () => {
 
   it("admin_ente sem outro papel vai para a área dele, não para a tela da cidadã (ADR-0005)", () => {
     expect(destinoPorPapeis(["admin_ente"])).toBe("/administracao");
+    expect(destinoPorPapeis(["auditor"])).toBe("/auditoria"); // o controle interno pousa na trilha (ADR-0017)
   });
 
   it("quem acumula admin_ente com um papel de trabalho vai para a home desse papel", () => {

@@ -7,6 +7,8 @@
             [oplenario.admin-sistema.components.idp-admin :as idp-admin]
             [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema]
             [oplenario.admin-sistema.diplomat.consumers :as admin-sistema-consumers]
+            [oplenario.auditoria.components.repositorio :as repo-auditoria]
+            [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.compliance.components.repositorio :as repo-compliance]
@@ -138,6 +140,8 @@
    :repo-integracao-ia (component/using (repo-integracao-ia/repositorio) [:datasource])
    ;; Faixa B / B.4 (ADR-0011): as normas de referencia (LOM, Regimento, leis), por dispositivo. So' :datasource.
    :repo-normas     (component/using (repo-normas/repositorio) [:datasource :bus])
+   ;; ADR-0017: a trilha de auditoria da Casa — a corrente selada de cada Casa. So' :datasource.
+   :repo-auditoria  (component/using (repo-auditoria/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
@@ -171,6 +175,20 @@
     (idp-admin/idp-operacao-dev)
     (idp-admin/keycloak-operacao (:operacao config))))
 
+;; ADR-0017: a trilha de auditoria entra entre os interceptors globais (ve a resposta final e o ator). O selo do dia que
+;; fecha e' ancorado na corrente da Operacao (outra esfera, outro papel de banco) — o host cruza os dois modulos.
+(defn- globais-do-host [{repo-op :repo-admin-sistema :keys [repo-auditoria]}]
+  (if repo-auditoria
+    [(auditoria-http/interceptor
+      repo-auditoria
+      {:ancorar! (fn [ente-id {:keys [dia seq selo]}]
+                   (when repo-op
+                     (repo-admin-sistema/registrar-atuacao! repo-op
+                                                            {:operador-id nil :ente-id ente-id
+                                                             :acao "selo-do-dia-da-trilha"
+                                                             :detalhe {:dia (str dia) :seq seq :selo selo}})))})]
+    []))
+
 (defn sistema-serve
   "Sistema do host com o SERVIDOR HTTP (caminho `serve` do main). Separado de `novo-sistema` p/ os testes de
   boot do dominio (sistema_test/motor/repo/marco) NAO subirem o Jetty (sem bind de porta em teste). W1 serve so
@@ -189,7 +207,8 @@
          ;; parecer-tram/transicionar-parecer!) precisa do RegistroFatos injetado (mesmo componente que
          ;; `repo/transicionar-parecer!` ja recebe via chamada direta nos testes de integracao).
          :servidor-http (component/using
-                         (http-servidor/servidor-http config rotas/montar)
+                         (http-servidor/servidor-http config rotas/montar globais-do-host)
                          [:idp :idp-operacao :repo-admin-sistema :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
-                          :canal-store :objeto-store :registro-fatos :repo-integracao-ia :repo-normas])))
+                          :canal-store :objeto-store :registro-fatos :repo-integracao-ia :repo-normas
+                          :repo-auditoria])))

@@ -1,7 +1,8 @@
 # ADR-0017 — A trilha de auditoria da Casa: o que registra, quem vê, quanto tempo, LGPD e o selo
 
-- **Status:** 🟡 **Proposto** (rascunho de 29/09/2026 para decisão do Daouda, eixo a eixo). Nada aqui está decidido
-  até o "Confirmo"; cada eixo traz as opções, o custo de cada uma e uma recomendação.
+- **Status:** ✅ **Aceito** (29/09/2026 — "confirmo as recomendações da ADR-0017" do Daouda, os cinco eixos como
+  recomendados). A fatia 1 está materializada; o que ela fez diferente do texto dos eixos, e por quê, está em
+  **Materialização (fatia 1)** no fim.
 - **Contexto de decisão:** §16.1 do documento-mestre ("trilha de auditoria completa: quem fez, o quê, quando, de
   onde"), princípio 7 (audit log é uma das quatro observabilidades, "retenção regulatória permanente"), Invariante 10,
   `arquitetura/22-5-auth.md` Eixo E ("Auditoria de decisões") e Eixo G (taxonomia em 4 classes, retenção por classe,
@@ -196,5 +197,62 @@ diante. Quem tem escrita no banco consegue recalcular tudo. Por isso a proposta 
 | 4 | LGPD | sem conteúdo; IP completo por 6 meses e truncado na tela; cidadão pseudonimizado; apagamento mantém o selo |
 | 5 | Selo | corrente **por Casa**, selada **na transação**; **selo do dia** na corrente da Operação + no portal; verificador publicado |
 
-Depois do "Confirmo" (com as correções), esta ADR vira **Aceita**, o §22.5 ganha a nota com o que foi materializado,
-e a fatia 1 começa.
+Decidido em 29/09/2026: as cinco recomendações, sem correção.
+
+## Materialização (fatia 1)
+
+**O que existe:**
+
+- **Módulo `auditoria`** (`apps/backend/src/oplenario/auditoria/`, migration `20260929000110-auditoria`):
+  - `auditoria.registro`, particionada por mês, com RLS e append-only por trigger;
+  - a única mudança aceita é o IP virar `NULL`, e o role da aplicação só tem `UPDATE (ip)`;
+  - `auditoria.selo_diario`, também append-only;
+  - `auditoria.garantir_particoes` (SECURITY DEFINER), que cria os meses seguintes. O que cair fora de um mês criado
+    vai para a partição DEFAULT, sem se perder.
+- **O interceptor da trilha** fica entre os globais do host (`it/globais-com`), por fora do interceptor de erro.
+  - Ele vê a resposta final (o 403 inclusive) e o ator que a autenticação resolveu.
+  - Registra quatro classes:
+    - escrita (`permitido`/`negado`/`falhou`);
+    - negação por política (403, em qualquer método);
+    - entrada, marcada pelo mint da sessão;
+    - leitura sensível: ler a trilha de outras pessoas e exportar.
+  - Leitura comum, anônimo e operador não entram. O operador tem a corrente dele (ADR-0016).
+- **Quem vê** (`GET /auditoria`), com o escopo decidido no servidor:
+  - `auditor`: a Casa inteira, a integridade (`GET /auditoria/integridade`), a exportação CSV
+    (`GET /auditoria/exportar.csv`, ela mesma registrada) e a atuação da Operação na Casa;
+  - `admin_ente`: os atos de acesso (`identidade/*`) e os próprios;
+  - qualquer pessoa: a própria trilha.
+- **O papel `auditor`** é concedido pelo `admin_ente` em `/administracao`.
+  - O vínculo é de **servidor**: o backend recusa `auditor` num vínculo de vereador e `vereador` num de servidor.
+  - O auditor pousa em `/auditoria` e só vê essa entrada na navegação.
+- **LGPD:**
+  - nenhum conteúdo, só nomes de campos;
+  - IP completo no banco, truncado na tela e no CSV;
+  - anulado quando o primeiro registro de um dia novo chega e o IP tem mais de 6 meses;
+  - cidadão pseudonimizado por Casa (`#a1b2c3`).
+- **O selo** é `sha256` do selo anterior da mesma Casa mais os campos canônicos, com o IP fora. A escrita é serializada
+  por advisory lock por Casa.
+  - O primeiro registro de um dia novo fecha o anterior: grava o selo do dia, ancora-o na corrente da Operação
+    (`selo-do-dia-da-trilha` na atuação) e ele aparece no portal, em Dados abertos (`GET /portal/casa/:ente/integridade`).
+
+**Onde a fatia 1 difere do texto dos eixos (e por quê):**
+
+1. **O registro não está na transação do ato.**
+   - Cada handler abre a própria transação, e o interceptor não tem como entrar nela sem reescrever os ~150 handlers.
+   - O registro é gravado logo depois do ato, na mesma requisição e antes da resposta sair, numa transação própria.
+   - Falhar aqui não desfaz o ato nem muda a resposta: vira `log/error` "registro NAO gravado", que é alerta de
+     operação.
+   - O custo aceito: um ato pode existir sem registro se o banco cair entre as duas transações. Fechar isso é o
+     outbox transacional (fatia seguinte, se o uso pedir).
+2. **O selo do dia é preguiçoso.** Não há agendador em produção. O dia fecha quando chega o primeiro registro do dia
+   seguinte, e uma Casa sem atos num dia não gera selo daquele dia (não há o que selar). O mesmo gatilho anula os IPs
+   antigos e cria as partições.
+3. **O "resumo do efeito"** nas ~20 ações do design ainda não foi escrito ação por ação. O registro traz o recurso pelo
+   parâmetro de caminho (tipo + id) e o nome da ação do catálogo. O rótulo legível ("PL 118/2026") e os campos
+   alterados entram quando o handler devolve `:auditoria {:rotulo :campos}` na resposta — hoje só o login e a
+   exportação o fazem. É incremental, rota a rota, sem migration.
+4. **Step-up** não existe no sistema ainda. Quando existir, entra como classe `entrada` pelo mesmo caminho do login.
+5. **O verificador** é a rota de integridade do auditor, que recalcula a corrente inteira em páginas de 5000. Um
+   verificador offline (script sobre o CSV exportado) fica para quando um cliente pedir.
+6. **A atuação da Operação** aparece como lista à parte na tela do auditor, com o selo da corrente da Operação, e não
+   misturada aos registros da Casa: são correntes diferentes.

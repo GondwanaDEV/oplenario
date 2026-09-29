@@ -28,3 +28,15 @@
   .dados-abertos .ds .baixar { justify-self: start; }
   .dados-abertos .dicionario dl div { grid-template-columns: 1fr; gap: 0.1rem; }
 }
+
+/* ADR-0017 — a âncora pública da trilha de auditoria (os selos do dia) */
+.integridade { padding: 0 0 2.5rem; }
+.integridade h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; }
+.integridade .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.integridade .estado { color: var(--texto-2); font-size: var(--t-13); margin: 0.8rem 0 0; }
+.integridade .selos { list-style: none; margin: 0.8rem 0 0; padding: 0; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); }
+.integridade .selos li { display: grid; grid-template-columns: 7.5rem 1fr auto; gap: 0.8rem; align-items: center; padding: 0.55rem 1rem; border-top: 1px solid var(--linha); font-size: var(--t-13); }
+.integridade .selos li:first-child { border-top: none; }
+.integridade .dia { font-family: var(--mono); color: var(--texto); font-variant-numeric: tabular-nums; }
+.integridade .n { color: var(--texto-2); }
+.integridade code { font-family: var(--mono); font-size: var(--t-12); color: var(--acento-texto); }
