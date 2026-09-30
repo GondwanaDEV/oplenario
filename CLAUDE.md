@@ -109,8 +109,8 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
-**Falta:** suspender/encerrar Casa (**proposta em [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md), 🟡 esperando o
-"Confirmo"**), acesso de suporte (12.7, `[GAP]` jurídico), flags (12.3), billing (12.2, parqueado).
+**Falta:** suspender/encerrar Casa (**[ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) aceita em 30/09/2026,
+implementação adiada** por uma demanda do stakeholder — retomar pela fatia 1 da ADR), acesso de suporte (12.7, `[GAP]` jurídico), flags (12.3), billing (12.2, parqueado).
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi

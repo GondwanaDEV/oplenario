@@ -1,7 +1,8 @@
 # ADR-0018 — Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados
 
-- **Status:** 🟡 **Proposto** (rascunho de 29/09/2026 para decisão do Daouda, eixo a eixo). Nada aqui está decidido
-  até o "Confirmo"; cada eixo traz as opções e uma recomendação.
+- **Status:** ✅ **Aceito, implementação adiada** (30/09/2026 — "gostei do plano e vamos manter", as recomendações
+  dos cinco eixos como escritas). O código **não** começa agora: uma demanda do stakeholder passou na frente. Ao
+  retomar, a fatia 1 é a da seção "Proposta de primeira fatia".
 - **Contexto de decisão:**
   - `produto/13` 12.1: ciclo `provisionar → ativo → suspenso → encerrado`;
   - 9.6: portabilidade / saída do contrato — o ciclo `encerrado` não tinha feature de saída (G18);
