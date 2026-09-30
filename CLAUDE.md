@@ -127,6 +127,12 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 ✅ = **entregue** na branch `onda-e-cauda`. As 3 fatias entregáveis foram feitas: `/status` (pública),
 `/calendario` (interno, sessões + prazos de compliance) e o incremento de `/notificacoes`.
 
+**Demanda do stakeholder (30/09/2026) — parecer jurídico:** pesquisa em [`docs/29`](docs/29-pesquisa-parecer-juridico-nas-camaras.md)
+(≈110 Regimentos lidos: o parecer jurídico é opinativo e só existe onde o Regimento prevê — Baturité não prevê; o gate
+real da pauta é o parecer da comissão) e proposta em [ADR-0019](docs/adr/0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md),
+🟡 esperando o "Confirmo". Fatia 1 = distribuir/designar relator/abrir parecer de comissão por tela (hoje só semente) +
+papel `juridico`, pedido de parecer e parecer jurídico assinado e imutável.
+
 **Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
 [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma
 recomendação; o código começa depois do "Confirmo".
