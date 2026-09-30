@@ -116,7 +116,11 @@ function categorizarParecer(estado: string): CategoriaSituacao {
   return "tram"; // fail-closed: inclui os estados não-terminais template-driven (ex. "em_elaboracao")
 }
 
-export type ParecerVista = ParecerResumoOut & {
+/** A ficha passa a servir `relator-nome` (ADR-0019, Eixo 6). O contrato gerado ainda não o traz: o campo é opcional aqui, e
+ *  some sozinho quando o contrato for regenerado. */
+export type ParecerResumoComRelator = ParecerResumoOut & { relatorNome?: string | null };
+
+export type ParecerVista = ParecerResumoComRelator & {
   rotuloEstado: string;
   categoria: CategoriaSituacao;
   // A aba imprimia `comissaoId` — um UUID por linha (defeito #11 do ledger, `MATA`). O rótulo vem
@@ -125,7 +129,14 @@ export type ParecerVista = ParecerResumoOut & {
   comissaoRotulo: string;
 };
 
-export function derivarPareceres(pareceres: ParecerResumoOut[]): ParecerVista[] {
+/** Quem relata, em palavras: o nome quando o servidor o resolve; "Relator designado" quando há relator sem nome resolvido (o id
+ *  nunca vai à tela); null quando ainda não há relator (a secretaria pode designar). */
+export function rotularRelator(p: { relatorId?: string | null; relatorNome?: string | null }): string | null {
+  if (p.relatorNome) return p.relatorNome;
+  return p.relatorId ? "Relator designado" : null;
+}
+
+export function derivarPareceres(pareceres: ParecerResumoComRelator[]): ParecerVista[] {
   return pareceres.map((p) => ({
     ...p,
     rotuloEstado: PARECER_ROTULO_POR_ESTADO[p.estado] ?? p.estado,

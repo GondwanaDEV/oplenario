@@ -7,6 +7,7 @@
   (:require [clojure.string :as str]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
+            [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.logic :as logic]
             [oplenario.motor.api :as motor]))
 
@@ -473,6 +474,15 @@
     (let [nomes (resolver-comissoes ente-id (mapv :comissao-id ms))]
       (mapv #(assoc % :comissao-nome (get nomes (:comissao-id %))) ms))))
 
+(defn- nomear-relatores
+  "ADR-0019: decora cada parecer (`:relator-id`) com `:relator-nome`, num lote so'. A chave existe sempre (nil sem relator
+  ou sem cadastro nesta Casa: o FE mostra 'sem relator', nunca inventa)."
+  [nomes-de-vereadores ente-id ms]
+  (if (empty? ms)
+    ms
+    (let [nomes (nomes-de-vereadores ente-id (keep :relator-id ms))]
+      (mapv #(assoc % :relator-nome (get nomes (:relator-id %))) ms))))
+
 (defn buscar-ficha-materia
   "Onda B Slice 3 — ficha completa da materia (proposicao + texto + tramitacao + apensadas + emendas +
   pareceres), mesmo gate grosso das rotas irmas (papel 'secretario', sem policy fina adicional). nil se a
@@ -485,13 +495,15 @@
   ([repo-legislativo resolver-comissoes ente-id id]
    (buscar-ficha-materia repo-legislativo resolver-comissoes (constantly nil) ente-id id))
   ([repo-legislativo resolver-comissoes nome-na-casa ente-id id]
+   (buscar-ficha-materia repo-legislativo resolver-comissoes nome-na-casa (constantly {}) ente-id id))
+  ([repo-legislativo resolver-comissoes nome-na-casa nomes-de-vereadores ente-id id]
    (let [{:keys [proposicao texto recebimentos] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
      (when proposicao
        (-> (dissoc ficha :recebimentos)
            (assoc :texto (:texto-inline texto))
            ;; fatia 2b: o historico da ficha mostra quem recebeu cada movimentacao (mesma anotacao da rota irma)
            (update :tramitacao #(anotar-recebimentos nome-na-casa ente-id % (or recebimentos {})))
-           (update :pareceres #(nomear-comissoes resolver-comissoes ente-id %)))))))
+           (update :pareceres #(nomear-relatores nomes-de-vereadores ente-id (nomear-comissoes resolver-comissoes ente-id %))))))))
 
 ;; ========================= Onda B Slice 5: editor/emissao do parecer =========================
 
@@ -1058,3 +1070,142 @@
                    :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte j))
                    :incerteza (str (:incerteza j)) :modelo (str (:modelo j))})]
           {:preenchimento p :justificativa j :indisponivel (get-in r [:indisponivel :mensagem])})))))
+
+;; ========================= ADR-0019: caminho da comissao + parecer juridico =========================
+
+(def teto-fila-juridico 100)
+
+(defn- invalido! [msg campo] (throw (ex-info msg {:tipo :validacao/invalido :campo campo})))
+
+(defn encaminhar-as-comissoes!
+  "A secretaria encaminha a materia `proposicao-id` a `itens` [{:comissao-id :relator-id?}]: abre um parecer por
+  comissao no rito de parecer da Casa. Comissao inexistente na Casa ou relator que nao e' vereador desta Casa -> 400.
+  nil = materia inexistente (-> 404). Rito de parecer nao configurado -> `:config/sem-rito-de-parecer` (409 nomeado)."
+  [repo-legislativo resolver-comissoes vereador-vinculado? nomes-de-vereadores ator proposicao-id itens]
+  (let [ente-id (:ente-id ator)
+        nomes-comissao (resolver-comissoes ente-id (mapv :comissao-id itens))]
+    (doseq [{:keys [comissao-id relator-id]} itens]
+      (when-not (contains? nomes-comissao comissao-id) (invalido! "comissao inexistente nesta Casa" :comissoes))
+      (when (and relator-id (not (vereador-vinculado? ente-id relator-id)))
+        (invalido! "relator nao e' vereador desta Casa" :relator-id)))
+    (when-let [abertos (try (repo-juridico/abrir-pareceres-de-comissao! repo-legislativo ente-id
+                                                               {:proposicao-id proposicao-id :comissoes itens
+                                                                :created-by (:identidade-id ator)})
+                            (catch clojure.lang.ExceptionInfo e
+                              (if (= :sem-rito-de-parecer (:erro (ex-data e)))
+                                (throw (ex-info "a Casa nao configurou o rito de parecer"
+                                                {:tipo :config/sem-rito-de-parecer}))
+                                (throw e))))]
+      (let [nomes-relator (nomes-de-vereadores ente-id (keep :relator-id abertos))]
+        (mapv #(assoc % :comissao-nome (get nomes-comissao (:comissao-id %))
+                        :relator-nome (get nomes-relator (:relator-id %)))
+              abertos)))))
+
+(defn designar-relator-do-parecer!
+  "Define (ou troca) o relator de um parecer de comissao ainda em curso. nil = parecer inexistente, ja' terminal, ou
+  relator que nao e' vereador desta Casa (-> 404, sem distinguir)."
+  [repo-legislativo vereador-vinculado? nomes-de-vereadores ator parecer-id relator-id]
+  (let [ente-id (:ente-id ator)]
+    (when (vereador-vinculado? ente-id relator-id)
+      (when-let [r (repo-juridico/designar-relator-do-parecer! repo-legislativo ente-id parecer-id relator-id (:identidade-id ator))]
+        (assoc r :relator-nome (get (nomes-de-vereadores ente-id [relator-id]) relator-id))))))
+
+(defn- nomear-quem-pediu
+  "Decora cada pedido com `:pedido-por-nome` (so' de quem tem vinculo nesta Casa; senao nil)."
+  [nome-na-casa ente-id pedidos]
+  (let [nomes (into {} (map (fn [id] [id (nome-na-casa ente-id id)])) (distinct (keep :pedido-por pedidos)))]
+    (mapv #(assoc % :pedido-por-nome (get nomes (:pedido-por %))) pedidos)))
+
+(defn pedir-parecer-juridico!
+  "A secretaria pede o parecer (sobre uma materia, ou consulta avulsa). nil = materia inexistente (-> 404)."
+  [repo-legislativo nome-na-casa ator m]
+  (let [ente-id (:ente-id ator)]
+    (when-let [p (repo-juridico/criar-pedido-juridico! repo-legislativo ente-id
+                                              (assoc m :origem "secretaria" :pedido-por (:identidade-id ator)))]
+      (first (nomear-quem-pediu nome-na-casa ente-id [p])))))
+
+(defn pedir-parecer-juridico-do-relator!
+  "O relator do parecer de comissao pede o parecer juridico sobre a materia que relata. GATE DE POSSE (mesmo contrato de
+  `meu-parecer-editor`): so' o relator do parecer; qualquer outro caso (ator sem cadastro, nao e' o relator, parecer
+  inexistente ou sobre emenda) -> nil (-> 404)."
+  [repo-legislativo resolver-vereador nome-na-casa ator parecer-id {:keys [assunto]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [vereador-id (resolver-vereador ente-id (:identidade-id ator))]
+      (when (repo/relator-do-parecer? repo-legislativo ente-id vereador-id parecer-id)
+        (let [pc (repo/buscar-parecer repo-legislativo ente-id parecer-id)]
+          (when (= "proposicao" (:objeto-tipo pc))
+            (when-let [p (repo-juridico/criar-pedido-juridico! repo-legislativo ente-id
+                                                      {:proposicao-id (:objeto-id pc) :assunto assunto
+                                                       :origem "relator" :pedido-por (:identidade-id ator)})]
+              (first (nomear-quem-pediu nome-na-casa ente-id [p])))))))))
+
+(defn- ocultar-rascunho
+  "O rascunho e' trabalho em curso do advogado: so' quem tem o papel `juridico` le o texto dele. A secretaria ve' o pedido
+  e que o parecer esta' sendo redigido (estado 'rascunho'), sem o texto."
+  [ator p]
+  (if (and (= "rascunho" (get-in p [:parecer :estado])) (not (contains? (:papeis ator) "juridico")))
+    (update p :parecer dissoc :relatorio :fundamentacao :conclusao)
+    p))
+
+(defn pedido-juridico [repo-legislativo nome-na-casa ator id]
+  (let [ente-id (:ente-id ator)]
+    (when-let [p (repo-juridico/pedido-juridico repo-legislativo ente-id id)]
+      (ocultar-rascunho ator (first (nomear-quem-pediu nome-na-casa ente-id [p]))))))
+
+(defn fila-juridica
+  "A fila (secretaria e juridico). O rascunho e' do advogado: a secretaria ve' que esta' em redacao, sem a conclusao."
+  [repo-legislativo nome-na-casa ator estado]
+  (let [ente-id (:ente-id ator)]
+    (mapv #(ocultar-rascunho ator %)
+          (nomear-quem-pediu nome-na-casa ente-id
+                             (repo-juridico/pedidos-juridicos repo-legislativo ente-id estado teto-fila-juridico)))))
+
+(defn- decorado [nome-na-casa ente-id {:keys [pedido] :as r}]
+  (if pedido (assoc r :pedido (first (nomear-quem-pediu nome-na-casa ente-id [pedido]))) r))
+
+(defn cancelar-pedido-juridico!
+  "Cancela um pedido pendente. {:pedido} | {:erro :nao-encontrado} | {:erro :nao-pendente}."
+  [repo-legislativo nome-na-casa ator id]
+  (let [ente-id (:ente-id ator)]
+    (if-let [p (repo-juridico/pedido-juridico repo-legislativo ente-id id)]
+      (if-let [c (when (= "pendente" (:estado p))
+                   (repo-juridico/cancelar-pedido-juridico! repo-legislativo ente-id id (:identidade-id ator)))]
+        {:pedido (ocultar-rascunho ator (first (nomear-quem-pediu nome-na-casa ente-id [(assoc c :parecer (:parecer p))])))}
+        {:erro :nao-pendente})
+      {:erro :nao-encontrado})))
+
+(defn salvar-parecer-juridico!
+  "O advogado grava o RASCUNHO. {:pedido} | {:erro kw} (ver db/parecer-juridico)."
+  [repo-legislativo nome-na-casa ator pedido-id texto]
+  (decorado nome-na-casa (:ente-id ator)
+            (repo-juridico/salvar-parecer-juridico! repo-legislativo (:ente-id ator) pedido-id (:identidade-id ator) texto)))
+
+(defn assinar-parecer-juridico!
+  "O advogado assina. O snapshot (nome, OAB, qualificacao) sai do PERFIL JURIDICO do signatario (`perfil-juridico`, seam
+  do host sobre `identidade`), nunca do corpo. Sem perfil -> {:erro :sem-perfil-juridico}."
+  [repo-legislativo perfil-juridico nome-na-casa ator pedido-id]
+  (let [ente-id (:ente-id ator)]
+    (if-let [{:keys [nome oab qualificacao]} (perfil-juridico ente-id (:identidade-id ator))]
+      (decorado nome-na-casa ente-id
+                (repo-juridico/assinar-parecer-juridico! repo-legislativo ente-id pedido-id
+                                                {:por (:identidade-id ator) :nome nome :oab oab
+                                                 :qualificacao qualificacao}))
+      {:erro :sem-perfil-juridico})))
+
+(defn substituir-parecer-juridico!
+  "O advogado abre o parecer que corrige o assinado. {:pedido} | {:erro kw}."
+  [repo-legislativo nome-na-casa ator pedido-id]
+  (decorado nome-na-casa (:ente-id ator)
+            (repo-juridico/substituir-parecer-juridico! repo-legislativo (:ente-id ator) pedido-id (:identidade-id ator))))
+
+(defn pareceres-juridicos-da-materia [repo-legislativo ente-id proposicao-id]
+  (repo-juridico/pareceres-juridicos-da-materia repo-legislativo ente-id proposicao-id))
+
+(defn pareceres-juridicos-publicos [repo-legislativo ente-id proposicao-id]
+  (repo-juridico/pareceres-juridicos-publicos repo-legislativo ente-id proposicao-id))
+
+(defn comissoes-da-casa
+  "As comissoes (menos a Mesa) que a secretaria escolhe ao encaminhar uma materia. `comissoes-vigentes` e' o seam do host
+  sobre `cadastros` (§22.5.3)."
+  [comissoes-vigentes ente-id]
+  (comissoes-vigentes ente-id))

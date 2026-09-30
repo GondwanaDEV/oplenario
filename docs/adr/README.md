@@ -30,4 +30,5 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0015](0015-cidadao-entra-pelo-govbr.md) | O cidadão entra pelo gov.br: broker no realm da Casa, sessão só de cidadão | Aceito |
 | [0016](0016-operador-da-plataforma-e-registro-de-casas.md) | O operador da plataforma: realm próprio com chave física, e o registro de Casas por handoff | Aceito |
 | [0017](0017-trilha-de-auditoria-da-casa.md) | A trilha de auditoria da Casa: o que registra, quem vê, quanto tempo, LGPD e o selo | ✅ Aceito |
-| [0018](0018-suspender-e-encerrar-casa.md) | Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados | 🟡 Proposto |
+| [0018](0018-suspender-e-encerrar-casa.md) | Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados | ✅ Aceito (implementação adiada) |
+| [0019](0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md) | Parecer jurídico e o caminho da matéria até a pauta (comissão, jurídico, IA como rascunho, publicar a pauta) | ✅ Aceito (fatia 1 implementada) |

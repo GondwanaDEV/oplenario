@@ -77,7 +77,9 @@
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-cadastros-comp/RepoCadastros
     (nomes-de-comissoes [_ _ente-id ids]
-      (into {} (keep (fn [i] (when (= i ccj-id) [i "Comissão de Constituição e Justiça"]))) ids))))
+      (into {} (keep (fn [i] (when (= i ccj-id) [i "Comissão de Constituição e Justiça"]))) ids))
+    ;; ADR-0019: o nome do relator de cada parecer (nenhum vereador conhecido: o nome degrada para nil)
+    (nomes-de-vereadores [_ _ente-id _ids] {})))
 
 (defn- service-fn [papeis repo-l]
   (-> (http/servico (config/carregar)

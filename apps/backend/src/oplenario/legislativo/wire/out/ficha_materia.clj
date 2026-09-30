@@ -58,6 +58,7 @@
    ;; "Pareceres" mostrava um UUID por linha. nil quando o guard ref nao tem dono nesta Casa.
    [:comissao-nome {:optional true} [:maybe :string]]
    [:relator-id {:optional true} [:maybe :string]]
+   [:relator-nome {:optional true} [:maybe :string]]
    [:voto-relator {:optional true} [:maybe :string]]
    [:estado :string]])
 

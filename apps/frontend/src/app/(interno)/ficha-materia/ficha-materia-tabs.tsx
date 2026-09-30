@@ -1,7 +1,7 @@
 "use client";
 
 // FichaMateriaTabs — as abas do corpo da ficha (Onda B Slice 3): Texto vigente, Tramitação, Pareceres,
-// Emendas, Resumo cidadão (Faixa A / A.8) e Anexos. Porte de ficha-materia.html:180-236 (padrão ARIA tabs: role=tablist/tab/tabpanel,
+// Emendas, Resumo cidadão (Faixa A / A.8), Parecer jurídico (ADR-0019) e Anexos. Porte de ficha-materia.html:180-236 (padrão ARIA tabs: role=tablist/tab/tabpanel,
 // roving tabindex, ArrowLeft/ArrowRight com wraparound — mesmo script inline da tela-fonte, portado pra
 // React). Pareceres/Emendas mostram TODOS os estados (decisão da fatia, ver ficha-materia-vista.ts) — só
 // rotulam, nunca filtram. Anexos não tem backend nesta fatia -> <EmBreve> honesto (mesma disciplina de
@@ -13,22 +13,29 @@ import Link from "next/link";
 import { EmBreve } from "@/lib/em-breve";
 import { AcoesTramitacao } from "./acoes-tramitacao";
 import { PainelResumo } from "./painel-resumo";
-import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas } from "@/lib/ficha-materia-vista";
+import { PainelParecerJuridico } from "./painel-parecer-juridico";
+import { DesignarRelator } from "./designar-relator";
+import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas, rotularRelator, type ParecerResumoComRelator } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
 import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
+import "./juridico-ficha.css";
 
 type Aba = { id: string; rotulo: string; contagem?: number; truncado?: boolean };
 
 export function FichaMateriaTabs({
   ficha,
   token = null,
+  papeis = [],
   onTramitou,
 }: {
   ficha: FichaMateriaOut;
   // token dev opcional (Onda B Slice 5) — só pra preservar ?token= no link "Abrir parecer"; recebido via
   // prop (não `useAuth()` aqui) porque esta suíte de teste renderiza o componente SEM <AuthProvider>.
   token?: string | null;
+  // papéis do ator (UX-only, o backend decide): só a secretaria designa relator e pede parecer jurídico (ADR-0019). Por prop
+  // pelo mesmo motivo do `token`: esta suíte renderiza o componente SEM <AuthProvider>.
+  papeis?: string[];
   // chamado após uma tramitação bem-sucedida no painel de atos — a página refaz o GET da ficha para o
   // cabeçalho/histórico refletirem o novo estado (opcional: default é no-op).
   onTramitou?: () => void;
@@ -37,7 +44,8 @@ export function FichaMateriaTabs({
   // isto, o sort()+map() das 3 derivações reroda a cada keypress de navegação das abas (ArrowLeft/Right/
   // Home/End), mesmo quando `ficha` não mudou (achado do review desta fatia).
   const timeline = useMemo(() => derivarTimelineTramitacao(ficha.tramitacao), [ficha.tramitacao]);
-  const pareceres = useMemo(() => derivarPareceres(ficha.pareceres), [ficha.pareceres]);
+  const pareceres = useMemo(() => derivarPareceres(ficha.pareceres as ParecerResumoComRelator[]), [ficha.pareceres]);
+  const ehSecretaria = papeis.includes("secretario");
   const emendas = useMemo(() => derivarEmendas(ficha.emendas), [ficha.emendas]);
 
   // fatia "truncamento-familia": o servidor sinaliza cada lista com um BOOLEANO (`*Truncado` — mesma
@@ -52,6 +60,8 @@ export function FichaMateriaTabs({
     { id: "emendas", rotulo: "Emendas", contagem: emendas.length, truncado: ficha.emendasTruncado },
     // Faixa A / A.8: o resumo em linguagem simples que vai ao portal (a IA redige, a secretaria revisa e publica)
     { id: "resumo", rotulo: "Resumo cidadão" },
+    // ADR-0019: o parecer jurídico assinado sobre a matéria e os pedidos em aberto (opinativo: não decide a matéria)
+    { id: "juridico", rotulo: "Parecer jurídico" },
     { id: "anexos", rotulo: "Anexos" },
   ];
 
@@ -189,11 +199,21 @@ export function FichaMateriaTabs({
                 <li key={p.id}>
                   <span className={`chip chip-${p.categoria}`}>{p.rotuloEstado}</span>
                   <p className="evt">{p.comissaoRotulo}</p>
+                  <span className="jf-relatoria">
+                    {rotularRelator(p)
+                      ? `Relator: ${rotularRelator(p)}`
+                      : "Sem relator designado"}
+                  </span>
                   <span className="quem">
                     {p.votoRelator
                       ? `Voto do relator: ${rotularVoto(p.votoRelator)}`
                       : "Sem voto de relator registrado"}
                   </span>
+                  {ehSecretaria && !p.relatorId && p.categoria === "tram" && (
+                    <div className="jf-designar">
+                      <DesignarRelator parecerId={p.id} comissao={p.comissaoRotulo} token={token} aoDesignar={() => onTramitou?.()} />
+                    </div>
+                  )}
                   <Link className="ir" href={comToken(`/parecer/${p.id}`, token)}>
                     Abrir parecer
                   </Link>
@@ -251,11 +271,23 @@ export function FichaMateriaTabs({
 
       <section
         className="painel"
+        id="p-juridico"
+        role="tabpanel"
+        aria-labelledby="t-juridico"
+        tabIndex={0}
+        hidden={selecionada !== 5}
+      >
+        {/* montado só quando aberto: a leitura do parecer jurídico não sai a cada ficha aberta */}
+        {selecionada === 5 && <PainelParecerJuridico proposicaoId={ficha.proposicao.id} token={token} papeis={papeis} />}
+      </section>
+
+      <section
+        className="painel"
         id="p-anexos"
         role="tabpanel"
         aria-labelledby="t-anexos"
         tabIndex={0}
-        hidden={selecionada !== 5}
+        hidden={selecionada !== 6}
       >
         <EmBreve
           titulo="Anexos"

@@ -44,6 +44,9 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[] }[
   // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
   // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
   { rotulo: "Conferências", href: "/conferencias" },
+  // ADR-0019 — a fila do parecer jurídico: o jurídico da Casa (papel `juridico`) redige e assina; a secretaria pede e
+  // acompanha. É a única tela de trabalho do jurídico. Gated no GuardJuridico + exige-papel no backend.
+  { rotulo: "Jurídico", href: "/juridico", papel: ["juridico", "secretario"] },
   // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
   // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
   { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },
@@ -87,12 +90,12 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[] }[
 ];
 
 /** As entradas da nav que o ator vê. Entrada com `papel` só aparece para quem tem (um d)ele. As SEM papel são as telas
- *  de trabalho da secretaria/Mesa — quem só administra ou só audita a Casa (admin_ente/auditor sem secretario nem
- *  vereador: como nasce o 1º administrador provisionado, ADR-0016, e como é o controle interno, ADR-0017) não as vê,
- *  porque cada uma o levaria a "Acesso restrito". */
+ *  de trabalho da secretaria/Mesa — quem só administra, só audita ou só dá parecer jurídico na Casa
+ *  (admin_ente/auditor/juridico sem secretario nem vereador: como nasce o 1º administrador provisionado, ADR-0016, o
+ *  controle interno, ADR-0017, e o jurídico, ADR-0019) não as vê, porque cada uma o levaria a "Acesso restrito". */
 export function destinosVisiveis(papeis: string[]) {
   const soAdministracao =
-    (papeis.includes("admin_ente") || papeis.includes("auditor")) &&
+    (papeis.includes("admin_ente") || papeis.includes("auditor") || papeis.includes("juridico")) &&
     !papeis.includes("secretario") && !papeis.includes("vereador");
   return DESTINOS_NAV.filter((d) =>
     d.papel ? [d.papel].flat().some((p) => papeis.includes(p)) : !soAdministracao);

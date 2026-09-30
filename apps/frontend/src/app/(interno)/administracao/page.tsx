@@ -22,6 +22,7 @@ import { GuardAdminEnte } from "../guard-admin-ente";
 import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
 import { ConcederAuditorForm } from "./conceder-auditor-form";
+import { ConcederJuridicoForm } from "./conceder-juridico-form";
 import { PainelAgente } from "../conferencias/fila-conferencias";
 import { useAgentesInstitucionais } from "@/lib/use-conferencias";
 import "../cadastros/vereadores/cadastro-vereadores.css";
@@ -44,6 +45,10 @@ function Conteudo() {
   // ADR-0017: o controle interno (papel `auditor`) — quem lê a trilha de auditoria da Casa inteira.
   const [auditorAberto, setAuditorAberto] = useState(false);
   const [auditorConcedido, setAuditorConcedido] = useState<string | null>(null);
+
+  // ADR-0019: o jurídico da Casa (papel `juridico`) — quem redige e assina o parecer jurídico.
+  const [juridicoAberto, setJuridicoAberto] = useState(false);
+  const [juridicoConcedido, setJuridicoConcedido] = useState<string | null>(null);
 
   function abrir(id: string) {
     setConcedido(null);
@@ -155,6 +160,39 @@ function Conteudo() {
               setAuditorAberto(true);
             }}>
               Dar acesso ao controle interno
+            </button>
+          )}
+        </section>
+
+        <section className="adm-auditoria" aria-labelledby="adm-juridico-titulo">
+          <h2 id="adm-juridico-titulo">Jurídico da Casa</h2>
+          <p className="adm-texto">
+            O jurídico redige e assina o parecer sobre as matérias e as consultas que a secretaria pede. O acesso registra a
+            qualificação (efetivo, comissionado ou contratado) e a OAB, porque o parecer diz a que título foi assinado. O
+            parecer é opinativo: não decide a matéria.
+          </p>
+          {juridicoConcedido && (
+            <p role="status" className="adm-aviso">
+              Acesso ao jurídico concedido a {juridicoConcedido}. O convite foi enviado para o e-mail informado.
+            </p>
+          )}
+          {juridicoAberto ? (
+            <div className="painel-cad">
+              <ConcederJuridicoForm
+                token={token}
+                onSucesso={(nome) => {
+                  setJuridicoAberto(false);
+                  setJuridicoConcedido(nome);
+                }}
+                onCancelar={() => setJuridicoAberto(false)}
+              />
+            </div>
+          ) : (
+            <button type="button" className="btn btn-contorno btn-mini" onClick={() => {
+              setJuridicoConcedido(null);
+              setJuridicoAberto(true);
+            }}>
+              Dar acesso ao jurídico
             </button>
           )}
         </section>

@@ -19,6 +19,7 @@
             [oplenario.legislativo.adapters.in.ciencia :as adapters-in-ciencia]
             [oplenario.legislativo.adapters.in.documento :as adapters-in-documento]
             [oplenario.legislativo.adapters.in.documento-modelo :as adapters-in-documento-modelo]
+            [oplenario.legislativo.adapters.in.juridico :as adapters-in-juridico]
             [oplenario.legislativo.adapters.in.parecer :as adapters-in-parecer]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.in.requerimento :as adapters-in-requerimento]
@@ -28,6 +29,7 @@
             [oplenario.legislativo.adapters.out.documento :as adapters-out-documento]
             [oplenario.legislativo.adapters.out.documento-modelo :as adapters-out-documento-modelo]
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
+            [oplenario.legislativo.adapters.out.juridico :as adapters-out-juridico]
             [oplenario.legislativo.adapters.out.meu-painel :as adapters-out-meu-painel]
             [oplenario.legislativo.adapters.in.pos-aprovacao :as adapters-in-pos-aprovacao]
             [oplenario.legislativo.adapters.out.autografo :as adapters-out-autografo]
@@ -467,11 +469,11 @@
   DOIS adapters/out (proposicao p/ o cabecalho + ficha-materia p/ o envelope) — adapters/ nunca chama outro
   adapters/ (ADR-0001 §3). `:texto` ja' chega EXTRAIDO do controller (string/nil — review MENOR
   fe-9-ficha-materia: o diplomat nunca decide nome de campo do model, so' compoe)."
-  [repo-leg resolver-comissoes nome-na-casa]
+  [repo-leg resolver-comissoes nome-na-casa nomes-de-vereadores]
   (fn [req]
     (let [ente-id (:ente-id (:ator req))
           id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
-      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes nome-na-casa ente-id id)]
+      (if-let [{:keys [proposicao texto] :as ficha} (controllers/buscar-ficha-materia repo-leg resolver-comissoes nome-na-casa nomes-de-vereadores ente-id id)]
         (http/json-resposta 200 (adapters-out-ficha/ficha->wire
                                    (adapters-out-proposicao/detalhe->wire proposicao texto)
                                    ficha))
@@ -1042,6 +1044,119 @@
             (http/json-resposta 409 {:erro "Esta nota já foi decidida."})
             (throw e)))))))
 
+;; ========================= ADR-0019: caminho da comissao + parecer juridico =========================
+
+(defn- id-do-path [req] (adapters-in/id-param->uuid (get-in req [:path-params :id])))
+
+(defn- comissoes-handler [comissoes-vigentes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-juridico/comissoes->wire
+                              (controllers/comissoes-da-casa comissoes-vigentes (:ente-id (:ator req)))))))
+
+(defn- encaminhar-comissoes-handler
+  "POST /legislativo/proposicoes/:id/pareceres-de-comissao {comissoes:[{comissao-id, relator-id?}]} — a secretaria abre um
+  parecer por comissao no rito de parecer da Casa."
+  [repo-leg resolver-comissoes vereador-vinculado? nomes-de-vereadores]
+  (fn [req]
+    (let [id (id-do-path req)
+          itens (adapters-in-juridico/comissoes->dominio (:json-params req))]
+      (if-let [abertos (controllers/encaminhar-as-comissoes! repo-leg resolver-comissoes vereador-vinculado?
+                                                              nomes-de-vereadores (:ator req) id itens)]
+        (http/json-resposta 201 (adapters-out-juridico/pareceres-abertos->wire abertos))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- designar-relator-handler
+  "POST /legislativo/pareceres/:id/relator {relator-id}."
+  [repo-leg vereador-vinculado? nomes-de-vereadores]
+  (fn [req]
+    (let [id (id-do-path req)
+          relator-id (adapters-in-juridico/relator->dominio (:json-params req))]
+      (if-let [r (controllers/designar-relator-do-parecer! repo-leg vereador-vinculado? nomes-de-vereadores
+                                                            (:ator req) id relator-id)]
+        (http/json-resposta 200 (adapters-out-juridico/relator->wire r))
+        (http/json-resposta 404 {:erro "parecer ou vereador nao encontrado"})))))
+
+(def ^:private erros-juridico
+  "`{:erro kw}` do parecer juridico -> [status mensagem]. Mensagem em linguagem de quem usa a tela."
+  {:pedido-cancelado     [409 "O pedido foi cancelado."]
+   :ja-assinado          [409 "O parecer já está assinado; para corrigir, emita um novo parecer que o substitua."]
+   :sem-rascunho         [409 "Não há rascunho para assinar."]
+   :sem-assinado         [409 "Não há parecer assinado para substituir, ou já há um substituto em curso."]
+   :nao-pendente         [409 "Só se cancela um pedido pendente."]
+   :incompleto           [400 "Para assinar, preencha o relatório, a fundamentação e a conclusão."]
+   :sem-perfil-juridico  [403 "Seu acesso não tem qualificação e OAB cadastradas; peça ao administrador da Casa."]})
+
+(defn- resposta-juridico
+  "{:pedido} -> 200 (ou `sucesso`); {:erro :nao-encontrado} -> 404; demais erros pela tabela."
+  ([r] (resposta-juridico r 200))
+  ([{:keys [pedido erro]} sucesso]
+   (cond
+     pedido (http/json-resposta sucesso (adapters-out-juridico/pedido->wire pedido))
+     (= :nao-encontrado erro) (http/json-resposta 404 {:erro "pedido de parecer nao encontrado"})
+     :else (let [[status msg] (get erros-juridico erro [500 "erro interno"])]
+             (http/json-resposta status {:erro msg})))))
+
+(defn- pedir-juridico-handler
+  "POST /legislativo/pedidos-parecer-juridico — a secretaria pede o parecer (materia ou consulta avulsa)."
+  [repo-leg nome-na-casa]
+  (fn [req]
+    (let [m (adapters-in-juridico/pedido->dominio (:json-params req))]
+      (if-let [p (controllers/pedir-parecer-juridico! repo-leg nome-na-casa (:ator req) m)]
+        (http/json-resposta 201 (adapters-out-juridico/pedido->wire p))
+        (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
+
+(defn- fila-juridica-handler
+  "GET /legislativo/pedidos-parecer-juridico?estado= — a fila (secretaria e juridico)."
+  [repo-leg nome-na-casa]
+  (fn [req]
+    (let [estado (adapters-in-juridico/estado-da-fila (:query-params req))]
+      (http/json-resposta 200 (adapters-out-juridico/pedidos->wire
+                                (controllers/fila-juridica repo-leg nome-na-casa (:ator req) estado))))))
+
+(defn- pedido-juridico-handler [repo-leg nome-na-casa]
+  (fn [req]
+    (if-let [p (controllers/pedido-juridico repo-leg nome-na-casa (:ator req) (id-do-path req))]
+      (http/json-resposta 200 (adapters-out-juridico/pedido->wire p))
+      (http/json-resposta 404 {:erro "pedido de parecer nao encontrado"}))))
+
+(defn- cancelar-pedido-juridico-handler [repo-leg nome-na-casa]
+  (fn [req]
+    (resposta-juridico (controllers/cancelar-pedido-juridico! repo-leg nome-na-casa (:ator req) (id-do-path req)))))
+
+(defn- salvar-parecer-juridico-handler
+  "PUT /legislativo/pedidos-parecer-juridico/:id/parecer {relatorio, fundamentacao, conclusao?} — o rascunho."
+  [repo-leg nome-na-casa]
+  (fn [req]
+    (let [texto (adapters-in-juridico/texto->dominio (:json-params req))]
+      (resposta-juridico (controllers/salvar-parecer-juridico! repo-leg nome-na-casa (:ator req) (id-do-path req) texto)))))
+
+(defn- assinar-parecer-juridico-handler [repo-leg perfil-juridico nome-na-casa]
+  (fn [req]
+    (resposta-juridico (controllers/assinar-parecer-juridico! repo-leg perfil-juridico nome-na-casa
+                                                               (:ator req) (id-do-path req)))))
+
+(defn- substituir-parecer-juridico-handler [repo-leg nome-na-casa]
+  (fn [req]
+    (resposta-juridico (controllers/substituir-parecer-juridico! repo-leg nome-na-casa (:ator req) (id-do-path req)))))
+
+(defn- meu-pedido-juridico-handler
+  "POST /meu/pareceres/:id/pedido-juridico {assunto?} — o relator pede o parecer juridico da materia que relata."
+  [repo-leg resolver-vereador nome-na-casa]
+  (fn [req]
+    (let [m (adapters-in-juridico/pedido-do-relator->dominio (:json-params req))]
+      (if-let [p (controllers/pedir-parecer-juridico-do-relator! repo-leg resolver-vereador nome-na-casa
+                                                                  (:ator req) (id-do-path req) m)]
+        (http/json-resposta 201 (adapters-out-juridico/pedido->wire p))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
+(defn- pareceres-juridicos-da-materia-handler
+  "GET /legislativo/proposicoes/:id/pareceres-juridicos — os assinados e os pedidos abertos (ficha da materia)."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-juridico/da-materia->wire
+                              (controllers/pareceres-juridicos-da-materia repo-leg (:ente-id (:ator req)) (id-do-path req))))))
+
+
 (defn rotas
   "Fragmento de rotas da votacao ao vivo + proposicoes + editor de parecer + borda /meu do vereador (table
   syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o `repo-legislativo` (Repo-Component do
@@ -1072,16 +1187,26 @@
   movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
-           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento]}]
+           registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
+           comissoes-vigentes nomes-de-vereadores perfil-juridico]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
+        ;; ADR-0019: sem os seams, nenhuma comissao/nome/perfil resolve (fail-closed: nada e' encaminhado nem assinado)
+        comissoes-vigentes (or comissoes-vigentes (constantly []))
+        nomes-de-vereadores (or nomes-de-vereadores (constantly {}))
+        perfil-juridico (or perfil-juridico (constantly nil))
         papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
+        papel-juridico (it/exige-papel "juridico")
+        ;; a fila e o detalhe do pedido: a secretaria acompanha, o juridico trabalha
+        papel-fila-juridica (it/exige-algum-papel #{"secretario" "juridico"})
+        ;; a ficha da materia mostra os pareceres juridicos assinados a quem le a materia
+        papel-leitura-juridica (it/exige-algum-papel #{"secretario" "vereador" "juridico"})
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
         ;; le' proposicoes/tramitacao/ficha (achado docs/20: gate grosso so'-'secretario' dava 403 ao
         ;; vereador nessas telas). ESCRITA/acoes seguem em `papel` (secretario).
-        papel-leitura (it/exige-algum-papel #{"secretario" "vereador"})]
+        papel-leitura (it/exige-algum-papel #{"secretario" "vereador" "juridico"})]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/abrir-votacao]
@@ -1133,7 +1258,7 @@
       ["/legislativo/notas-tecnicas/:id/decisao" :post
        [auth papel it/corpo-json (decidir-nota-tecnica-handler repo-legislativo)]
        :route-name :legislativo/decidir-nota-tecnica]
-      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa)]
+      ["/legislativo/proposicoes/:id/ficha" :get [auth papel-leitura (ficha-materia-handler repo-legislativo resolver-comissoes nome-na-casa nomes-de-vereadores)]
        :route-name :legislativo/ficha-materia]
       ["/legislativo/proposicoes/:id" :patch
        [auth papel it/corpo-json (editar-proposicao-handler repo-legislativo vereador-vinculado?)]
@@ -1193,6 +1318,43 @@
       ["/legislativo/tramitacoes-executivas/:id/apreciacao" :post
        [auth papel it/corpo-json (apreciar-veto-handler repo-legislativo)]
        :route-name :legislativo/apreciar-veto]
+      ;; ADR-0019 fatia 1 — o caminho da comissao (secretaria) e o parecer juridico da Casa (opinativo)
+      ["/legislativo/comissoes" :get [auth papel (comissoes-handler comissoes-vigentes)]
+       :route-name :legislativo/comissoes]
+      ["/legislativo/proposicoes/:id/pareceres-de-comissao" :post
+       [auth papel it/corpo-json
+        (encaminhar-comissoes-handler repo-legislativo resolver-comissoes vereador-vinculado? nomes-de-vereadores)]
+       :route-name :legislativo/encaminhar-comissoes]
+      ["/legislativo/pareceres/:id/relator" :post
+       [auth papel it/corpo-json (designar-relator-handler repo-legislativo vereador-vinculado? nomes-de-vereadores)]
+       :route-name :legislativo/designar-relator]
+      ["/legislativo/pedidos-parecer-juridico" :post
+       [auth papel it/corpo-json (pedir-juridico-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/pedir-parecer-juridico]
+      ["/legislativo/pedidos-parecer-juridico" :get
+       [auth papel-fila-juridica (fila-juridica-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/fila-juridica]
+      ["/legislativo/pedidos-parecer-juridico/:id" :get
+       [auth papel-fila-juridica (pedido-juridico-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/pedido-juridico]
+      ["/legislativo/pedidos-parecer-juridico/:id/cancelamento" :post
+       [auth papel it/corpo-json (cancelar-pedido-juridico-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/cancelar-pedido-juridico]
+      ["/legislativo/pedidos-parecer-juridico/:id/parecer" :put
+       [auth papel-juridico it/corpo-json (salvar-parecer-juridico-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/salvar-parecer-juridico]
+      ["/legislativo/pedidos-parecer-juridico/:id/parecer/assinatura" :post
+       [auth papel-juridico it/corpo-json (assinar-parecer-juridico-handler repo-legislativo perfil-juridico nome-na-casa)]
+       :route-name :legislativo/assinar-parecer-juridico]
+      ["/legislativo/pedidos-parecer-juridico/:id/parecer/substituicao" :post
+       [auth papel-juridico it/corpo-json (substituir-parecer-juridico-handler repo-legislativo nome-na-casa)]
+       :route-name :legislativo/substituir-parecer-juridico]
+      ["/legislativo/proposicoes/:id/pareceres-juridicos" :get
+       [auth papel-leitura-juridica (pareceres-juridicos-da-materia-handler repo-legislativo)]
+       :route-name :legislativo/pareceres-juridicos-da-materia]
+      ["/meu/pareceres/:id/pedido-juridico" :post
+       [auth papel-vereador it/corpo-json (meu-pedido-juridico-handler repo-legislativo resolver-vereador nome-na-casa)]
+       :route-name :legislativo/meu-pedido-juridico]
       ["/meu/painel" :get [auth papel-vereador (meu-painel-handler repo-legislativo resolver-vereador)]
        :route-name :legislativo/meu-painel]
       ["/meu/ciencias" :post
@@ -1254,3 +1416,16 @@
   convencao, mantida por revisao."
   [repo-legislativo ente-id]
   (adapters-out-relator/relatores-pendentes->wire (controllers/relatores-pendentes repo-legislativo ente-id)))
+
+;; ========================= ADR-0019: o portal le os pareceres juridicos =========================
+
+(defn pareceres-juridicos-publicos-wire
+  "Ponto de entrada IN-PROCESS do portal (transparencia) para os pareceres juridicos PUBLICOS da materia — gemeo nao-HTTP,
+  como `relatores-pendentes-wire`. So' o vigente e so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4); materia
+  ainda em curso devolve `{:pareceres []}`. Passa pelo controller e pelo gate adapters/out.
+
+  CONVENCAO DE AUTHZ (a mesma das outras `*-wire`): NAO verifica papel — o ENDPOINT COMPONHEDOR e' publico (portal), e
+  o proprio filtro de `db/publicos-da-materia` e' a regra de o que se publica. Quem chamar de novo DEVE garantir que a
+  materia e' visivel ao publico (o portal so' chama depois de achar a materia na sua projecao)."
+  [repo-legislativo ente-id proposicao-id]
+  (adapters-out-juridico/publicos->wire (controllers/pareceres-juridicos-publicos repo-legislativo ente-id proposicao-id)))

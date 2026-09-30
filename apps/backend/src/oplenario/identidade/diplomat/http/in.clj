@@ -63,16 +63,19 @@
   [repo-identidade idp-comp]
   (fn [req]
     (let [ator (:ator req) ente-id (:ente-id ator)
-          {:keys [identidade-id tipo papeis email]} (adapters-in/conceder-acesso->dominio ator (:json-params req))]
+          {:keys [identidade-id tipo papeis email perfil-juridico]}
+          (adapters-in/conceder-acesso->dominio ator (:json-params req))]
       (try
         (let [;; identidade-id vem do wire, validado contra o schema (adapters-in) mas nao contra o banco
               ;; ainda; `vinculo.identidade_id REFERENCES identidade.identidade(id)` faz `conceder-acesso!`
               ;; (que roda ANTES, logo abaixo) falhar por FK antes que `nome-por-id` pudesse ver um id
               ;; inexistente — por isso `nome` abaixo nunca precisa tratar nil aqui (MINOR-2, review Task 8).
-              r (repo/conceder-acesso! repo-identidade ente-id
-                                       {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
-                                        :tipo tipo :estado "ativo"}
-                                       papeis)
+              vinculo {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
+                       :tipo tipo :estado "ativo"}
+              ;; ADR-0019: com o papel `juridico` o perfil (qualificacao + OAB) entra na MESMA tx dos papeis
+              r (if perfil-juridico
+                  (repo/conceder-acesso! repo-identidade ente-id vinculo papeis perfil-juridico)
+                  (repo/conceder-acesso! repo-identidade ente-id vinculo papeis))
               nome (:nome (repo/nome-por-id repo-identidade identidade-id))]
           (idp/provisionar-realm! idp-comp ente-id)
           (idp/criar-usuario! idp-comp ente-id {:identidade-id identidade-id :nome nome :email email})

@@ -66,6 +66,8 @@ export function pedidoDeRedirect(candidate: string | null, origin: string): stri
  * - `admin_ente` sem os papéis acima -> `/administracao`, a área dele (ADR-0005). É como nasce o 1º
  *   administrador de uma Casa provisionada pelo console do operador (ADR-0016): só com esse papel.
  * - `auditor` sem os papéis acima -> `/auditoria`, a única tela do controle interno (ADR-0017).
+ * - `juridico` sem os papéis acima -> `/juridico`, a fila de pareceres dele (ADR-0019). Vem depois do auditor: quem
+ *   acumula os dois é, antes de tudo, o controle interno.
  * - NENHUM papel de trabalho, confirmado pelo backend -> a cidadã autenticada: `/acompanhamentos`, a
  *   única tela da superfície autenticada dela (o resto do balcão é API pura, sem tela).
  * - `null` = não foi possível saber (o `/eu` falhou) -> `/inicio`, que re-resolve o papel no cliente e se
@@ -78,5 +80,6 @@ export function destinoPorPapeis(papeis: string[] | null): string {
   if (papeis.includes("vereador")) return "/vereador";
   if (papeis.includes("admin_ente")) return "/administracao";
   if (papeis.includes("auditor")) return "/auditoria";
+  if (papeis.includes("juridico")) return "/juridico";
   return "/acompanhamentos";
 }

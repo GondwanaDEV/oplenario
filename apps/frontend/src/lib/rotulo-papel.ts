@@ -14,6 +14,8 @@ const ORDEM_DE_PRECEDENCIA: ReadonlyArray<{ papel: string; rotulo: string }> = [
   { papel: "admin_ente", rotulo: "Administrador(a) do Ente" },
   // ADR-0017: o controle interno / procuradoria — um servidor que só lê a trilha de auditoria.
   { papel: "auditor", rotulo: "Controle interno" },
+  // ADR-0019: o advogado da Casa (procurador, assessor ou contratado) que redige e assina o parecer jurídico.
+  { papel: "juridico", rotulo: "Jurídico" },
   { papel: "vereador", rotulo: "Vereador(a)" },
 ];
 

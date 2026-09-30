@@ -1,0 +1,79 @@
+/* /juridico — o parecer jurídico (ADR-0019). Arquétipo lista/detalhe (o vocabulário de /conferencias e /atas) e a ilha de
+   PAPEL para o texto assinado (a mesma do resumo cidadão, das normas e das notas: clara nos dois temas). Padding só
+   vertical: o gutter lateral é do .envelope. Prefixo jur- (o CSS é page-scoped neste repo). */
+.jur { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1.1rem; align-content: start; min-width: 0; }
+.jur-cabeca { display: grid; gap: 0.4rem; max-width: 52rem; }
+.jur-cabeca h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.015em; line-height: 1.15; color: var(--texto); overflow-wrap: anywhere; }
+.jur-detalhe .jur-cabeca h1 { font-size: var(--t-21); line-height: 1.3; }
+.jur-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; overflow-wrap: anywhere; }
+.jur-sub a, .jur-voltar, .jur-ok a { color: var(--marca); font-weight: 600; }
+.jur-voltar { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; }
+.jur-opinativo { margin: 0; max-width: 52rem; padding: 0.6rem 0.8rem; border-left: 3px solid var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.jur-erro { margin: 0; color: var(--acento-texto); }
+.jur-erro-campo { margin: 0; font-size: var(--t-12); color: var(--aviso-texto); }
+.jur-vazio { margin: 0; color: var(--texto-2); max-width: 60ch; }
+.jur-ok { margin: 0; padding: 0.7rem 0.9rem; max-width: 52rem; border: 1px solid var(--linha); border-left: 3px solid var(--jade-medio); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.jur-falta { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+.jur-dica { margin: 0; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; max-width: 64ch; }
+.jur-barra { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+/* a fila */
+.jur-abas { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); gap: 0.4rem; }
+.jur-aba { min-height: 44px; padding: 0 0.9rem; white-space: nowrap; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: var(--surface); color: var(--texto-2); font: inherit; font-size: var(--t-13); font-weight: 600; cursor: pointer; }
+.jur-aba[aria-pressed="true"] { border-color: var(--marca); color: var(--texto); background: color-mix(in srgb, var(--marca) 12%, transparent); }
+@media (max-width: 480px) {
+  .jur-abas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+  .jur-aba { padding: 0 0.4rem; font-size: var(--t-12); }
+}
+.jur-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; max-width: 52rem; }
+.jur-item { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: flex-start; justify-content: space-between; padding: 0.9rem 1.1rem; min-width: 0; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); }
+.jur-item-corpo { display: grid; gap: 0.25rem; flex: 1 1 22rem; min-width: 0; }
+.jur-item p { margin: 0; }
+.jur-ref { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.jur-numero { font-family: var(--mono); font-size: var(--t-12); font-weight: 700; letter-spacing: 0.04em; color: var(--texto-2); }
+.jur-ementa { font-weight: 600; overflow-wrap: anywhere; color: var(--texto); }
+.jur-assunto { color: var(--texto); overflow-wrap: anywhere; }
+.jur-linha { font-size: var(--t-13); color: var(--texto-2); }
+.jur-abrir { min-height: 44px; display: inline-flex; align-items: center; }
+.jur-chip { font-size: var(--t-12); font-weight: 700; padding: 0.1rem 0.55rem; border-radius: var(--raio-capsula); border: 1px solid var(--linha); color: var(--texto-2); }
+.jur-chip-pendente { border-color: var(--aviso-texto); color: var(--aviso-texto); }
+.jur-chip-atendido { border-color: var(--marca); color: var(--marca); }
+
+/* formulários */
+.jur-painel { max-width: 52rem; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.7rem; }
+.jur-painel h2, .jur-editor h2 { margin: 0; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.jur-form { display: grid; gap: 0.8rem; }
+.jur-campo { display: grid; gap: 0.3rem; min-width: 0; }
+.jur-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.jur-campo input, .jur-campo select, .jur-campo textarea {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: var(--raio-sm);
+  padding: 0.6rem 0.7rem; width: 100%; min-height: 44px; box-sizing: border-box;
+}
+.jur-campo textarea { resize: vertical; line-height: 1.6; min-height: 6rem; }
+.jur-campo input:focus-visible, .jur-campo select:focus-visible, .jur-campo textarea:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.jur-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.jur-editor { max-width: 52rem; display: grid; gap: 0.8rem; min-width: 0; }
+.jur-confirma { max-width: 52rem; padding: 0.9rem 1rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto); border-radius: 12px; background: var(--surface); display: grid; gap: 0.6rem; }
+.jur-confirma p { margin: 0; color: var(--texto); line-height: 1.5; }
+.jur-substituir, .jur-cancelar { max-width: 52rem; display: grid; gap: 0.6rem; justify-items: start; }
+
+/* o parecer assinado: ilha de papel */
+.jur-papel {
+  margin: 0; max-width: 52rem; line-height: 1.7; font-size: var(--t-16);
+  background: var(--papel); color: var(--papel-texto); border: 1px solid var(--papel-linha); border-radius: var(--raio);
+  box-shadow: var(--sombra-papel); padding: clamp(1rem, 3vw, 1.6rem); min-width: 0;
+}
+.jur-papel-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.6rem; }
+.jur-papel-numero { margin: 0; font-family: var(--mono); font-size: var(--t-13); font-weight: 700; letter-spacing: 0.04em; color: var(--papel-texto-2); }
+.jur-papel h2, .jur-papel h4 { margin: 1rem 0 0.2rem; font-size: var(--t-12); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--papel-texto-2); }
+.jur-papel .jur-dica { color: var(--papel-texto-2); }
+.jur-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.jur-conclusao { margin: 0; font-weight: 700; }
+.jur-selo { font-size: var(--t-12); font-weight: 700; padding: 0.1rem 0.55rem; border-radius: var(--raio-capsula); border: 1px solid currentColor; }
+.jur-selo-assinado { color: var(--papel-texto); }
+.jur-selo-substituido { color: var(--papel-texto-2); border-style: dashed; }
+.jur-selo-rascunho { color: var(--papel-texto-2); border-style: dashed; }
+.jur-assinatura { margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid var(--papel-linha); display: grid; gap: 0.1rem; font-size: var(--t-13); }
+.jur-assinatura b { font-size: var(--t-16); }
+.jur-assinatura span { color: var(--papel-texto-2); }

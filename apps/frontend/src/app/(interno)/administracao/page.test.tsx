@@ -189,4 +189,63 @@ describe("Área do administrador da Casa (/administracao)", () => {
     const outras = screen.getByRole("region", { name: "Outras áreas da administração" });
     expect(within(outras).getByRole("link", { name: "Trilha de auditoria" })).toBeTruthy();
   });
+  it("dá acesso ao jurídico: identidade e então vínculo de SERVIDOR com papel juridico, qualificação e OAB (ADR-0019)", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    expect(await screen.findByRole("heading", { name: "Jurídico da Casa" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Dar acesso ao jurídico" }));
+    const form = await screen.findByRole("form", { name: "Dar acesso ao jurídico" });
+    fireEvent.change(within(form).getByLabelText(/nome completo/i), { target: { value: "Lúcia Prado" } });
+    fireEvent.change(within(form).getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+    fireEvent.change(within(form).getByLabelText(/e-mail institucional/i), { target: { value: "lucia@camara.local" } });
+    fireEvent.change(within(form).getByLabelText(/qualificação/i), { target: { value: "contratado" } });
+    fireEvent.change(within(form).getByLabelText(/^oab/i), { target: { value: "CE 12345" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Acesso ao jurídico concedido a Lúcia Prado/));
+    const mutacoes = f.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST");
+    expect(mutacoes.map(([url]) => url)).toEqual(["/api/identidade/identidades", "/api/identidade/acessos"]);
+    expect(JSON.parse(String((mutacoes[1][1] as RequestInit).body))).toEqual({
+      "identidade-id": "id-9", tipo: "servidor", papeis: ["juridico"], email: "lucia@camara.local",
+      qualificacao: "contratado", oab: "CE 12345",
+    });
+  });
+
+  it("jurídico: sem qualificação e com OAB inválida, nada é enviado e cada campo diz o que falta", async () => {
+    const f = fetchMock();
+    global.fetch = f as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    fireEvent.click(await screen.findByRole("button", { name: "Dar acesso ao jurídico" }));
+    const form = await screen.findByRole("form", { name: "Dar acesso ao jurídico" });
+    fireEvent.change(within(form).getByLabelText(/nome completo/i), { target: { value: "Lúcia Prado" } });
+    fireEvent.change(within(form).getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+    fireEvent.change(within(form).getByLabelText(/e-mail institucional/i), { target: { value: "lucia@camara.local" } });
+    fireEvent.change(within(form).getByLabelText(/^oab/i), { target: { value: "12345" } });
+    fireEvent.submit(form);
+    expect(await within(form).findByText("Escolha a qualificação.")).toBeTruthy();
+    expect(within(form).getByText(/OAB no formato UF e número/)).toBeTruthy();
+    expect(f.mock.calls.some(([url]) => url === "/api/identidade/identidades" || url === "/api/identidade/acessos")).toBe(false);
+  });
+
+  it("jurídico: 400 do backend no acesso aparece como alerta e o form segue aberto", async () => {
+    const base = fetchMock();
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/identidade/acessos") {
+        return { ok: false, status: 400, json: async () => ({ erro: "oab invalida para o vinculo juridico" }) } as Response;
+      }
+      return base(url, init);
+    }) as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    fireEvent.click(await screen.findByRole("button", { name: "Dar acesso ao jurídico" }));
+    const form = await screen.findByRole("form", { name: "Dar acesso ao jurídico" });
+    fireEvent.change(within(form).getByLabelText(/nome completo/i), { target: { value: "Lúcia Prado" } });
+    fireEvent.change(within(form).getByLabelText(/^cpf/i), { target: { value: "529.982.247-25" } });
+    fireEvent.change(within(form).getByLabelText(/e-mail institucional/i), { target: { value: "lucia@camara.local" } });
+    fireEvent.change(within(form).getByLabelText(/qualificação/i), { target: { value: "efetivo" } });
+    fireEvent.change(within(form).getByLabelText(/^oab/i), { target: { value: "CE 12345" } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByText(/oab invalida para o vinculo juridico/)).toBeTruthy());
+    expect(screen.getByRole("form", { name: "Dar acesso ao jurídico" })).toBeTruthy();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
 });

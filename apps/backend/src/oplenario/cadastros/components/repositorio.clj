@@ -103,6 +103,10 @@
   ;; `resolver-comissoes` do host (§22.5.3) — id -> nome em LOTE, p/ o legislativo nomear a comissao do
   ;; parecer sem importar `cadastros` (defeito #11 do ledger de prontidao).
   (nomes-de-comissoes [this ente-id ids])
+  ;; ADR-0019: as comissoes vigentes (sem a Mesa), para a secretaria encaminhar uma materia a parecer.
+  (comissoes-vigentes [this ente-id data])
+  ;; ADR-0019: id -> nome de exibicao em lote (o relator do parecer de comissao).
+  (nomes-de-vereadores [this ente-id ids])
   (mesa-vigente [this ente-id data])
   (criar-cargo! [this ente-id cargo])
   (criar-membro! [this ente-id membro])
@@ -248,6 +252,8 @@
   (criar-comissao! [this ente-id c] (transacao this ente-id #(comissao/inserir! % c)))
   (buscar-comissao [this ente-id id] (transacao this ente-id #(comissao/buscar % id)))
   (nomes-de-comissoes [this ente-id ids] (transacao this ente-id #(comissao/nomes-por-id % ids)))
+  (comissoes-vigentes [this ente-id data] (transacao this ente-id #(comissao/listar-vigentes % data)))
+  (nomes-de-vereadores [this ente-id ids] (transacao this ente-id #(vereador/nomes-por-id % ente-id ids)))
   (mesa-vigente [this ente-id data] (transacao this ente-id #(comissao/mesa-vigente % data)))
   (criar-cargo! [this ente-id c] (transacao this ente-id #(comissao/inserir-cargo! % c)))
   (criar-membro! [this ente-id m] (transacao this ente-id #(comissao/inserir-membro! % m)))

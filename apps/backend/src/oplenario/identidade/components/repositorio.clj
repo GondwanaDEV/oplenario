@@ -13,6 +13,7 @@
   (:require [oplenario.identidade.db.concessao-agente :as concessao]
             [oplenario.identidade.db.credencial-agente :as cred]
             [oplenario.identidade.db.identidade :as id]
+            [oplenario.identidade.db.perfil-juridico :as pj]
             [oplenario.identidade.db.sessao :as sess]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.identidade.events.vinculo :as ev-vinculo]
@@ -52,10 +53,18 @@
   (registrar-consentimento! [this ente-id consentimento])
   (revogar-consentimento! [this ente-id id])
   (consentimentos-ativos [this ente-id identidade-id])
-  (conceder-acesso! [this ente-id vinculo papeis]
+  (conceder-acesso!
+    [this ente-id vinculo papeis]
+    [this ente-id vinculo papeis perfil-juridico]
     "Vinculo + papeis numa UNICA tx (§22.5 eixo D). Idempotente. E' o passo que ABRE A PORTA — por isso
     e' o ULTIMO do fluxo de provisionamento (spec §4.2 'acesso por ultimo'): antes dele, resolver-sessao
-    nao acha vinculo ativo e ninguem entra.")
+    nao acha vinculo ativo e ninguem entra. A aridade com `perfil-juridico` ({:qualificacao :oab}, ADR-0019)
+    grava o perfil do papel `juridico` NA MESMA tx dos papeis (upsert: reconceder atualiza); nil = como a curta.")
+  (salvar-perfil-juridico! [this ente-id identidade-id perfil]
+    "ADR-0019: UPSERT do perfil do papel `juridico` ({:qualificacao :oab}) da identidade NESTA Casa.")
+  (perfil-juridico [this ente-id identidade-id]
+    "ADR-0019: {:nome :qualificacao :oab} do servidor juridico da Casa (nome pela leitura estreita `nome-por-id`,
+    nunca CPF) ou nil se a identidade nao tem perfil juridico nesta Casa.")
   (concessao-agente [this ente-id agente]
     "B.8 (ADR-0013): a concessao ATIVA do agente institucional na Casa ({:agente :classes :concedida-por :concedida-em})
     ou nil.")
@@ -101,7 +110,8 @@
   (registrar-consentimento! [this ente-id c] (transacao this ente-id #(vinc/registrar-consentimento! % c)))
   (revogar-consentimento! [this ente-id id] (transacao this ente-id #(vinc/revogar-consentimento! % id)))
   (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ente-id ident)))
-  (conceder-acesso! [this ente-id v papeis]
+  (conceder-acesso! [this ente-id v papeis] (conceder-acesso! this ente-id v papeis nil))
+  (conceder-acesso! [this ente-id v papeis perfil]
     (transacao this ente-id
       (fn [tx]
         (let [vinculo-id (vinc/criar! tx v)]
@@ -116,7 +126,15 @@
           (doseq [p papeis]
             (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id
                                        :identidade-id (:identidade-id v) :papel p}))
+          ;; ADR-0019: o perfil do `juridico` entra na MESMA tx dos papeis (papel sem perfil nao existe)
+          (when perfil
+            (pj/salvar! tx ente-id (:identidade-id v) perfil))
           {:vinculo-id vinculo-id}))))
+  (salvar-perfil-juridico! [this ente-id identidade-id perfil]
+    (transacao this ente-id #(pj/salvar! % ente-id identidade-id perfil)))
+  (perfil-juridico [this ente-id identidade-id]
+    (when-let [perfil (transacao this ente-id #(pj/buscar % ente-id identidade-id))]
+      (assoc perfil :nome (:nome (nome-por-id this identidade-id)))))
   (concessao-agente [this ente-id agente] (transacao this ente-id #(concessao/ativa % ente-id agente)))
   (conceder-agente! [this ente-id c] (transacao this ente-id #(concessao/conceder! % (assoc c :ente-id ente-id))))
   (revogar-agente! [this ente-id agente por] (transacao this ente-id #(concessao/revogar! % ente-id agente por)))

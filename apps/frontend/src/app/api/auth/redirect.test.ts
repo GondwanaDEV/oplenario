@@ -39,6 +39,14 @@ describe("destinoPorPapeis — cada persona na sua home", () => {
     expect(destinoPorPapeis(["auditor"])).toBe("/auditoria"); // o controle interno pousa na trilha (ADR-0017)
   });
 
+  it("o jurídico pousa na fila dele, não na tela da cidadã (ADR-0019) — a ordem é secretario, vereador, admin_ente, auditor, juridico", () => {
+    expect(destinoPorPapeis(["juridico"])).toBe("/juridico");
+    expect(destinoPorPapeis(["auditor", "juridico"])).toBe("/auditoria");
+    expect(destinoPorPapeis(["admin_ente", "juridico"])).toBe("/administracao");
+    expect(destinoPorPapeis(["vereador", "juridico"])).toBe("/vereador");
+    expect(destinoPorPapeis(["secretario", "juridico"])).toBe(DESTINO_POS_LOGIN);
+  });
+
   it("quem acumula admin_ente com um papel de trabalho vai para a home desse papel", () => {
     expect(destinoPorPapeis(["vereador", "admin_ente"])).toBe("/vereador");
     expect(destinoPorPapeis(["secretario", "admin_ente"])).toBe(DESTINO_POS_LOGIN);
