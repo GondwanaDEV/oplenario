@@ -13,6 +13,10 @@ export interface AssinaturaJuridicaOut {
   oab: string;
   qualificacao: QualificacaoJuridica | string;
   em: string;
+  /** O carimbo do texto assinado (ADR-0019 fatia 4): o algoritmo (hoje "STUB-ICP-v0", que NÃO é ICP-Brasil real) e o
+   *  SHA-256 dos bytes canônicos (`sha256:<hex>`). null só no parecer assinado antes de o carimbo existir. */
+  algoritmo?: string | null;
+  sha256?: string | null;
 }
 
 /** O parecer do advogado. `numero`/`ano` só existem depois de assinado. Na LISTA da fila, `relatorio` e

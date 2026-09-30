@@ -11,8 +11,10 @@
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.components.repositorio-juridico :as juridico]
+            [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
             [oplenario.migracao :as migracao]
             [oplenario.motor.components.registro-fatos :as rf])
   (:import (java.time LocalDate)))
@@ -32,7 +34,8 @@
         (try (t) (finally (component/stop reg) (component/stop c)))))))
 
 (def ^:private texto {:relatorio "Trata-se de projeto de lei." :fundamentacao "Art. 30, I, da CF." :conclusao "favoravel"})
-(def ^:private assinante {:por (random-uuid) :nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"})
+(def ^:private assinante {:por (random-uuid) :nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"
+                          :assinador (assinador-icp/assinador-stub)})
 
 (defn- protocolar!
   ([ente] (protocolar! ente nil))
@@ -129,6 +132,47 @@
         (is (= [["com_ressalvas" false] ["favoravel" true]]
                (mapv (juxt :conclusao :substituido) todos))
             "o mais novo primeiro; o antigo segue na ficha, marcado substituido")))))
+
+(deftest carimbo-do-parecer-assinado
+  ;; ADR-0019 fatia 4 (C): ao assinar, o AssinadorICP assina os bytes canonicos do texto (nº/ano + signatario + conclusao +
+  ;; relatorio + fundamentacao) e o SHA-256 fica gravado, exposto na ficha e no portal. Imutavel como o resto.
+  (let [ente (random-uuid) autor (random-uuid)
+        tid (rito-com-terminal! ente)
+        pid (protocolar! ente tid)
+        id (:id (pedir! ente {:proposicao-id pid}))]
+    (juridico/salvar-parecer-juridico! *repo* ente id autor texto)
+    (let [pj (get-in (juridico/assinar-parecer-juridico! *repo* ente id assinante) [:pedido :parecer])
+          canonico (parecer-juridico/conteudo-canonico
+                     {:numero (:numero pj) :ano (:ano pj) :nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"
+                      :conclusao "favoravel" :relatorio (:relatorio texto) :fundamentacao (:fundamentacao texto)})
+          linha (jdbc/execute-one! *ds* ["SELECT assinatura_algoritmo, assinatura_b64, conteudo_sha256
+                                          FROM legislativo.parecer_juridico WHERE id = ?" (:id pj)])]
+      (testing "o hash e' o SHA-256 dos bytes canonicos e a ficha o traz, com o algoritmo (o stub se declara)"
+        (is (re-matches #"sha256:[0-9a-f]{64}" (:conteudo-sha256 pj)))
+        (is (= (parecer-juridico/sha256-do-conteudo canonico) (:conteudo-sha256 pj)))
+        (is (= "STUB-ICP-v0" (:assinatura-algoritmo pj))))
+      (testing "a assinatura destacada e o carimbo ficam no banco; a ficha da materia tambem os traz"
+        (is (= ["STUB-ICP-v0" (:conteudo-sha256 pj)]
+               [(:parecer_juridico/assinatura_algoritmo linha) (:parecer_juridico/conteudo_sha256 linha)]))
+        (is (seq (:parecer_juridico/assinatura_b64 linha)))
+        (is (= (:conteudo-sha256 pj)
+               (:conteudo-sha256 (first (:pareceres (juridico/pareceres-juridicos-da-materia *repo* ente pid)))))))
+      (testing "o texto mexido muda o hash (a forma canonica e' sensivel a cada campo)"
+        (is (not= (:conteudo-sha256 pj)
+                  (parecer-juridico/sha256-do-conteudo (parecer-juridico/conteudo-canonico
+                                                         {:numero (:numero pj) :ano (:ano pj) :nome "Paulo Bezerra"
+                                                          :oab "CE 12345" :qualificacao "efetivo" :conclusao "contrario"
+                                                          :relatorio (:relatorio texto)
+                                                          :fundamentacao (:fundamentacao texto)})))))
+      (testing "o banco recusa assinado SEM carimbo, e o carimbo tambem e' imutavel"
+        (is (thrown-with-msg? Exception #"imutabilidade"
+              (jdbc/execute! *ds* ["UPDATE legislativo.parecer_juridico SET conteudo_sha256 = ? WHERE id = ?"
+                                   (str "sha256:" (apply str (repeat 64 "0"))) (:id pj)])))))
+    (testing "sem assinador, assinar falha alto (nunca assina sem carimbo)"
+      (let [id2 (:id (pedir! ente {}))]
+        (juridico/salvar-parecer-juridico! *repo* ente id2 autor texto)
+        (is (thrown-with-msg? clojure.lang.ExceptionInfo #"assinador ausente"
+              (juridico/assinar-parecer-juridico! *repo* ente id2 (dissoc assinante :assinador))))))))
 
 (deftest numeracao-sem-buraco-sob-concorrencia
   (let [ente (random-uuid) autor (random-uuid)

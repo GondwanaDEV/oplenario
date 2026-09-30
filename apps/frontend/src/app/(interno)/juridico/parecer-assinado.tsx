@@ -13,6 +13,12 @@ export function BlocoAssinatura({ assinatura }: { assinatura: AssinaturaJuridica
       <b>{b.nome}</b>
       <span>{b.registro}</span>
       <span>{b.quando}</span>
+      {b.carimbo && (
+        <span className="jur-carimbo" title={b.carimbo.aviso ?? undefined}>
+          {b.carimbo.rotulo}: <code>{b.carimbo.digest}</code>
+        </span>
+      )}
+      {b.carimbo?.aviso && <span className="jur-carimbo-aviso">{b.carimbo.aviso}</span>}
     </footer>
   );
 }

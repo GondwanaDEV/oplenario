@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   ABAS_FILA,
+  AVISO_CARIMBO_STUB,
   CONCLUSOES,
   blocoDeAssinatura,
+  carimboDoParecer,
   camposDoParecer,
   camposIguais,
   corpoDoPedido,
@@ -138,6 +140,20 @@ describe("parecer", () => {
     expect(b.nome).toBe("Lúcia Prado");
     expect(b.registro).toBe("OAB/CE 12345 · Procurador(a) efetivo(a)");
     expect(b.quando).toBe("Assinado em 30/09/2026, 14:05");
+    expect(b.carimbo).toBeNull(); // assinado antes do carimbo existir: nada de hash inventado
+  });
+
+  it("carimbo: o SHA-256 verbatim, sem o prefixo; o stub avisa que não é ICP-Brasil", () => {
+    const hex = "ab12".repeat(16);
+    const base = { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "efetivo", em: "2026-09-30T14:05:00" };
+    const stub = blocoDeAssinatura({ ...base, algoritmo: "STUB-ICP-v0", sha256: `sha256:${hex}` }).carimbo!;
+    expect(stub.rotulo).toBe("SHA-256 do texto assinado");
+    expect(stub.digest).toBe(hex);
+    expect(stub.aviso).toBe(AVISO_CARIMBO_STUB);
+    // outro algoritmo (a AC real, no futuro) não carrega o aviso do stub
+    expect(carimboDoParecer({ algoritmo: "CAdES-BES", sha256: `sha256:${hex}` })!.aviso).toBeNull();
+    expect(carimboDoParecer({ algoritmo: "STUB-ICP-v0", sha256: null })).toBeNull();
+    expect(carimboDoParecer({})).toBeNull();
   });
 });
 

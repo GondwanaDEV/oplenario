@@ -64,7 +64,9 @@
 (def ^:private assinado
   {:id (random-uuid) :pedido-id (random-uuid) :estado "assinado" :numero 3 :ano 2026 :relatorio "R" :fundamentacao "F"
    :conclusao "favoravel" :assinado-em (Instant/parse "2026-09-30T12:00:00Z") :assinatura-nome "Paulo" :assinatura-oab "CE 1"
-   :assinatura-qualificacao "efetivo" :substituido false :substitui-id nil})
+   :assinatura-qualificacao "efetivo" :assinatura-algoritmo "STUB-ICP-v0"
+   :conteudo-sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+   :substituido false :substitui-id nil})
 
 (deftest saida-do-pedido
   (let [pedido {:id (random-uuid) :proposicao-id (random-uuid) :assunto "A" :prazo (LocalDate/parse "2026-10-01")
@@ -75,8 +77,13 @@
     (is (= "PL 007/2026" (get-in w [:proposicao :ref])))
     (is (= "2026-10-01" (:prazo w)))
     (is (= "Marina" (:pedido-por w)) "o nome, nunca o id de quem pediu")
-    (is (= {:nome "Paulo" :oab "CE 1" :qualificacao "efetivo" :em "2026-09-30T12:00:00Z"}
+    (is (= {:nome "Paulo" :oab "CE 1" :qualificacao "efetivo" :em "2026-09-30T12:00:00Z"
+            :algoritmo "STUB-ICP-v0"
+            :sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
            (get-in w [:parecer :assinatura])))
+    (testing "parecer assinado antes do carimbo existir: a assinatura sai sem algoritmo nem hash (nunca inventa)"
+      (let [w (out/pedido->wire (assoc pedido :parecer (assoc assinado :assinatura-algoritmo nil :conteudo-sha256 nil)))]
+        (is (= [nil nil] ((juxt #(get-in % [:parecer :assinatura :algoritmo]) #(get-in % [:parecer :assinatura :sha256])) w)))))
     (testing "consulta avulsa: sem materia"
       (is (nil? (:proposicao (out/pedido->wire (assoc pedido :proposicao-id nil))))))
     (testing "a fila nao leva o texto"
@@ -96,6 +103,8 @@
     (is (string? (get-in d [:pareceres 0 :pedido-id]))))
   (let [p (out/publicos->wire [assinado])]
     (is (= ["favoravel" "Paulo"] ((juxt #(get-in % [:pareceres 0 :conclusao]) #(get-in % [:pareceres 0 :assinatura :nome])) p)))
+    (is (= "STUB-ICP-v0" (get-in p [:pareceres 0 :assinatura :algoritmo])) "o portal mostra o carimbo")
+    (is (re-matches #"sha256:[0-9a-f]{64}" (get-in p [:pareceres 0 :assinatura :sha256])))
     (is (not (contains? (get-in p [:pareceres 0]) :pedido-id)) "o portal nao expoe o pedido"))
   (is (= {:pareceres []} (out/publicos->wire []))))
 

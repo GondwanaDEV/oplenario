@@ -19,7 +19,8 @@
 (defn- assinatura [p]
   (when (= "assinado" (:estado p))
     {:nome (:assinatura-nome p) :oab (:assinatura-oab p) :qualificacao (:assinatura-qualificacao p)
-     :em (->str (:assinado-em p))}))
+     :em (->str (:assinado-em p))
+     :algoritmo (:assinatura-algoritmo p) :sha256 (:conteudo-sha256 p)}))
 
 (defn- parecer [p com-texto?]
   (cond-> {:id (->str (:id p)) :numero (:numero p) :ano (:ano p) :estado (:estado p)

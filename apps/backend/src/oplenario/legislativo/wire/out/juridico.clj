@@ -6,8 +6,11 @@
 (def conclusoes [:enum "favoravel" "contrario" "com_ressalvas" "orientacao"])
 
 (def AssinaturaOut
+  "Quem assinou (gravado no ato) e o CARIMBO do texto: `algoritmo` (hoje STUB-ICP-v0, que NAO e' ICP-Brasil real) e
+  `sha256` dos bytes canonicos assinados. Ambos nil so' no parecer assinado antes de o carimbo existir."
   [:map {:closed true}
-   [:nome :string] [:oab :string] [:qualificacao [:enum "efetivo" "comissionado" "contratado"]] [:em :string]])
+   [:nome :string] [:oab :string] [:qualificacao [:enum "efetivo" "comissionado" "contratado"]] [:em :string]
+   [:algoritmo [:maybe :string]] [:sha256 [:maybe :string]]])
 
 (def ParecerJuridicoOut
   "`relatorio`/`fundamentacao` faltam na fila (so' o resumo). `numero`/`ano` so' existem depois de assinado."

@@ -1132,8 +1132,8 @@
 
 (defn- assinar-parecer-juridico-handler [repo-leg perfil-juridico nome-na-casa]
   (fn [req]
-    (resposta-juridico (controllers/assinar-parecer-juridico! repo-leg perfil-juridico nome-na-casa
-                                                               (:ator req) (id-do-path req)))))
+    (resposta-juridico (controllers/assinar-parecer-juridico! repo-leg (assinador-icp/assinador-stub) perfil-juridico
+                                                               nome-na-casa (:ator req) (id-do-path req)))))
 
 (defn- substituir-parecer-juridico-handler [repo-leg nome-na-casa]
   (fn [req]

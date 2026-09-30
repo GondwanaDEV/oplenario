@@ -139,7 +139,25 @@ export function situacaoDoPedido(p: Pick<PedidoJuridicoOut, "estado" | "parecer"
 
 // ---- assinatura ----
 
-export type BlocoDeAssinatura = { nome: string; registro: string; quando: string };
+/** O carimbo do texto assinado: o SHA-256 dos bytes canônicos (o dígito VERBATIM, é o que se compara) e o que o
+ *  algoritmo é de fato. `aviso` só existe quando o algoritmo é o STUB, para não passar por assinatura ICP-Brasil. */
+export type CarimboDoParecer = { rotulo: string; digest: string; aviso: string | null };
+
+export const AVISO_CARIMBO_STUB =
+  "Carimbo de integridade da plataforma (STUB-ICP-v0): prova que o texto não mudou, mas ainda não é assinatura ICP-Brasil.";
+
+/** O carimbo, ou null quando o parecer foi assinado antes de ele existir (não se inventa hash que não foi gravado). */
+export function carimboDoParecer(a: Pick<AssinaturaJuridicaOut, "algoritmo" | "sha256">): CarimboDoParecer | null {
+  if (!a.sha256) return null;
+  const digest = a.sha256.replace(/^sha256:/, "");
+  return {
+    rotulo: "SHA-256 do texto assinado",
+    digest,
+    aviso: a.algoritmo === "STUB-ICP-v0" ? AVISO_CARIMBO_STUB : null,
+  };
+}
+
+export type BlocoDeAssinatura = { nome: string; registro: string; quando: string; carimbo: CarimboDoParecer | null };
 
 /** O bloco que fecha o parecer: quem assinou, com que título e quando. O registro vem do snapshot do ato. */
 export function blocoDeAssinatura(a: AssinaturaJuridicaOut): BlocoDeAssinatura {
@@ -148,6 +166,7 @@ export function blocoDeAssinatura(a: AssinaturaJuridicaOut): BlocoDeAssinatura {
     nome: a.nome,
     registro: [formatarOab(a.oab), qual].filter(Boolean).join(" · "),
     quando: `Assinado em ${quando(a.em)}`,
+    carimbo: carimboDoParecer(a),
   };
 }
 

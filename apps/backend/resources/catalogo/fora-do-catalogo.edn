@@ -122,30 +122,23 @@
                       :motivo "exportar a trilha e' ato do auditor registrado na propria trilha; nao e' ferramenta"}
  :auditoria/selos-publicos {:categoria :so-tela
                             :motivo "os selos do dia publicados no portal: a ancora publica da corrente, sem registro nenhum"}
- ;; ---------- ADR-0019 fatia 1: o caminho da comissao e o parecer juridico (o agente propoe na fatia 2) ----------
- :legislativo/comissoes {:categoria :so-tela
-                         :motivo "a lista de comissoes que a secretaria escolhe ao encaminhar a materia, na tela"}
- :legislativo/encaminhar-comissoes {:categoria :so-tela
-                                    :motivo "encaminhar a materia as comissoes e' ato da secretaria, na tela; a proposta de ato do agente entra na fatia 2 (ADR-0019)"}
- :legislativo/designar-relator {:categoria :so-tela
-                                :motivo "designar o relator e' ato da Mesa/secretaria, na tela; a proposta de ato do agente entra na fatia 2 (ADR-0019)"}
- :legislativo/pedir-parecer-juridico {:categoria :so-tela
-                                      :motivo "pedir o parecer juridico e' ato da secretaria em nome da Presidencia; a proposta do agente entra na fatia 2 (ADR-0019)"}
+ ;; ---------- ADR-0019 fatia 1 + 2: o caminho da comissao e o parecer juridico ----------
+;; Viraram ACAO do catalogo (o agente propoe, a pessoa confirma em /propostas): comissoes (comissoes_da_casa),
+;; encaminhar-comissoes, designar-relator, pedir-parecer-juridico e pareceres-juridicos-da-materia. Ficam aqui so' as
+;; que nao podem ou nao precisam ser ferramenta:
  :legislativo/fila-juridica {:categoria :so-tela
                              :motivo "a fila de trabalho do advogado da Casa; o agente le o parecer pela ficha da materia"}
  :legislativo/pedido-juridico {:categoria :so-tela
                                :motivo "o detalhe do pedido, onde o advogado escreve o parecer"}
  :legislativo/cancelar-pedido-juridico {:categoria :so-tela
-                                        :motivo "cancelar o pedido e' ato da secretaria, na tela"}
+                                        :motivo "cancelar o pedido e' ato da secretaria, na tela; nao ha' demanda para o agente cancelar (so' se pede)"}
  :legislativo/salvar-parecer-juridico {:categoria :so-tela
-                                       :motivo "escrever o parecer e' ato do advogado; o rascunho de IA e' da fatia 2 e nunca assina (ADR-0019 Eixo 5)"}
+                                       :motivo "escrever o parecer e' ato do advogado; o rascunho de IA (fatia 2 do satelite) e' do advogado, na tela dele, e nunca assina (ADR-0019 Eixo 5)"}
  :legislativo/assinar-parecer-juridico {:categoria :so-tela
-                                        :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB); o agente nunca assina"}
+                                        :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB e nome do perfil dele): o agente nem propoe; nao e' voto, presenca nem conducao, por isso nao vai em :pessoal"}
  :legislativo/substituir-parecer-juridico {:categoria :so-tela
-                                           :motivo "corrigir o parecer assinado e' ato do advogado, na tela"}
- :legislativo/pareceres-juridicos-da-materia {:categoria :so-tela
-                                              :motivo "a aba de pareceres juridicos da ficha da materia; o agente entra na fatia 2 (ADR-0019)"}
+                                           :motivo "corrigir o parecer assinado e' ato do advogado, na tela; o agente nem propoe (mesmo motivo de assinar)"}
  :legislativo/meu-pedido-juridico {:categoria :so-tela
-                                   :motivo "o relator pede o parecer juridico da materia que relata, na tela; a proposta do agente entra na fatia 2"}
+                                   :motivo "o relator pede o parecer juridico da materia que relata, na tela do vereador; o agente da secretaria tem pedir_parecer_juridico"}
  :transparencia/pareceres-juridicos {:categoria :so-tela
                                      :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}}
