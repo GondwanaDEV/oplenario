@@ -212,6 +212,30 @@ jobs:
                   `status=${r.status} escopo=${r.body?.escopo} total=${r.body?.total} integridade=${integ.status} selos-publicos=${pub.status}:${pub.body?.['selos-do-dia']?.length ?? '-'}`);
             } catch (e) { rec('/auditoria', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 8) PARECER JURIDICO (ADR-0019) — a secretaria le a fila (pendentes + o atendido da semente) e a tela abre; o vereador
+            //    NAO le a fila (403); a lista de comissoes vem; o parecer assinado da materia aprovada aparece no portal (anonimo)
+            try {
+              const fila = await api(cSec, '/api/legislativo/pedidos-parecer-juridico?estado=todos');
+              const pedidos = Array.isArray(fila.body?.pedidos) ? fila.body.pedidos : [];
+              const atendido = pedidos.find(x => x.estado === 'atendido' && x.proposicao);
+              const ver = await api(cVer, '/api/legislativo/pedidos-parecer-juridico');
+              const com = await api(cSec, '/api/legislativo/comissoes');
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const pub = atendido ? await api(anon, `/api/portal/casa/${E}/materias/${atendido.proposicao.id}/pareceres-juridicos`) : { status: 0, body: null };
+              await anon.close();
+              const p = await cSec.newPage();
+              await p.goto(`${B}/juridico`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const txt = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.close();
+              const ok = fila.status === 200 && pedidos.length >= 3 && !!atendido && ver.status === 403
+                && com.status === 200 && (com.body?.comissoes?.length ?? 0) >= 3
+                && pub.status === 200 && pub.body?.pareceres?.length === 1 && pub.body.pareceres[0].conclusao === 'favoravel'
+                && /Parecer jurídico/.test(txt);
+              rec('/juridico', ok ? 'OK' : 'ERRO',
+                  `pedidos=${pedidos.length} atendido=${!!atendido} vereador-na-fila=${ver.status} comissoes=${com.body?.comissoes?.length ?? '-'} portal=${pub.status}:${pub.body?.pareceres?.length ?? '-'}`);
+            } catch (e) { rec('/juridico', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

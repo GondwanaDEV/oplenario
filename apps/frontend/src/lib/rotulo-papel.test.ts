@@ -17,6 +17,12 @@ describe("rotuloPapel", () => {
     expect(rotuloPapel(["admin_ente", "vereador"])).toBe("Administrador(a) do Ente");
   });
 
+  it("juridico -> Jurídico (ADR-0019); a secretaria e a administração seguem à frente", () => {
+    expect(rotuloPapel(["juridico"])).toBe("Jurídico");
+    expect(rotuloPapel(["juridico", "secretario"])).toBe("Secretário(a)");
+    expect(rotuloPapel(["vereador", "juridico"])).toBe("Jurídico");
+  });
+
   it("sem papel nenhum (a cidadã) -> Cidadã(o)", () => {
     expect(rotuloPapel([])).toBe("Cidadã(o)");
   });

@@ -15,7 +15,7 @@
 // mesmo `role="status"`).
 
 import Link from "next/link";
-import { useAuth } from "@/lib/auth";
+import { useAuth, usePapeis } from "@/lib/auth";
 import { useFichaMateria } from "@/lib/use-ficha-materia";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { derivarDadosMateria } from "@/lib/ficha-materia-vista";
@@ -30,6 +30,9 @@ import "./ficha-materia.css";
 
 export function ConteudoFichaMateria({ id }: { id: string }) {
   const { token } = useAuth();
+  // papéis (UX-only, o backend decide): só a secretaria vê "Encaminhar às comissões" e "Designar relator"; o "Pedir parecer
+  // jurídico" também é dela.
+  const { papeis } = usePapeis();
   const { dados: ficha, estado, recarregar } = useFichaMateria(token, id);
 
   if (estado === "carregando") {
@@ -74,14 +77,14 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
         <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} />
 
         <div className="corpo">
-          <FichaMateriaTabs ficha={ficha} token={token} onTramitou={recarregar} />
+          <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} onTramitou={recarregar} />
           <aside className="rail" aria-labelledby="rail-titulo">
             <h2 id="rail-titulo" className="sr-only">
               Dados e ações da matéria
             </h2>
             <DadosMateriaCard dados={dadosMateria} />
             <IdentidadeLexmlCard urnLex={ficha.proposicao.urnLex} />
-            <AcoesCard proposicao={ficha.proposicao} token={token} />
+            <AcoesCard proposicao={ficha.proposicao} token={token} papeis={papeis} onMudou={recarregar} />
           </aside>
         </div>
       </main>

@@ -59,6 +59,10 @@
 ;; Espelha o CHECK da migration 0019. Cresce por adicao (ex.: parecer sobre substitutivo, no futuro). ---
 (def objetos-parecer #{"proposicao" "emenda"})
 
+;; --- ADR-0019: parecer juridico da Casa. Espelham os CHECK da migration 20260930000111. ---
+(def conclusoes-parecer-juridico #{"favoravel" "contrario" "com_ressalvas" "orientacao"})
+(def estados-pedido-juridico #{"pendente" "atendido" "cancelado"})
+
 (def estados-parecer-terminais
   "Os 4 desfechos terminais do parecer (§22.4 eixo F) — PISO FIXO da imutabilidade nível (b). Fonte única:
   espelha os args do trigger `trg_pareceres_imut_estado` (mig 0019). Embora o `estado` seja template-driven,

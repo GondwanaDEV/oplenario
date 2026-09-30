@@ -10,16 +10,19 @@
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
+            [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.artefato-publicacao :as artefato]
             [oplenario.legislativo.db.autografo :as autografo]
             [oplenario.legislativo.db.documento :as documento]
+            [oplenario.legislativo.db.distribuicao :as distribuicao]
             [oplenario.legislativo.db.documento-modelo :as doc-modelo]
             [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.meu-painel :as meu-painel-db]
             [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
+            [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
             [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
@@ -1149,7 +1152,40 @@
   (parecer-elegivel-para-ciencia? [this ente-id vereador-id evento-ref]
     (transacao this ente-id #(meu-painel-db/parecer-elegivel-para-ciencia? % ente-id vereador-id evento-ref)))
   (relator-do-parecer? [this ente-id vereador-id parecer-id]
-    (transacao this ente-id #(meu-painel-db/relator-do-parecer? % ente-id vereador-id parecer-id))))
+    (transacao this ente-id #(meu-painel-db/relator-do-parecer? % ente-id vereador-id parecer-id)))
+
+  ;; ADR-0019 — caminho da comissao + parecer juridico (protocolo proprio: o defprotocol acima ja' esta no limite do
+  ;; tamanho de metodo da JVM)
+  repo-juridico/RepoJuridico
+  (abrir-pareceres-de-comissao! [this ente-id {:keys [proposicao-id comissoes created-by]}]
+    (transacao this ente-id
+      (fn [tx]
+        (when (parecer-juridico/existe-proposicao? tx ente-id proposicao-id)
+          (mapv (fn [{:keys [comissao-id relator-id]}]
+                  (distribuicao/abrir! tx {:ente-id ente-id :proposicao-id proposicao-id :comissao-id comissao-id
+                                           :relator-id relator-id :created-by created-by}))
+                comissoes)))))
+  (designar-relator-do-parecer! [this ente-id parecer-id relator-id por]
+    (transacao this ente-id #(distribuicao/designar-relator! % ente-id parecer-id relator-id por)))
+  (criar-pedido-juridico! [this ente-id m]
+    (transacao this ente-id #(parecer-juridico/criar-pedido! % (assoc m :ente-id ente-id))))
+  (pedido-juridico [this ente-id id] (transacao this ente-id #(parecer-juridico/pedido-completo % ente-id id)))
+  (pedidos-juridicos [this ente-id estado limite]
+    (transacao this ente-id #(parecer-juridico/fila % ente-id estado limite)))
+  (cancelar-pedido-juridico! [this ente-id id por]
+    (transacao this ente-id #(parecer-juridico/cancelar-pedido! % ente-id id por)))
+  (salvar-parecer-juridico! [this ente-id pedido-id autor-id texto]
+    (transacao this ente-id #(parecer-juridico/salvar-do-pedido! % ente-id pedido-id autor-id texto)))
+  (assinar-parecer-juridico! [this ente-id pedido-id assinante]
+    (transacao this ente-id #(parecer-juridico/assinar-do-pedido! % ente-id pedido-id assinante)))
+  (substituir-parecer-juridico! [this ente-id pedido-id autor-id]
+    (transacao this ente-id #(parecer-juridico/substituir-do-pedido! % ente-id pedido-id autor-id)))
+  (pareceres-juridicos-da-materia [this ente-id proposicao-id]
+    (transacao this ente-id
+      (fn [tx] {:pareceres (parecer-juridico/pareceres-assinados-da-materia tx ente-id proposicao-id)
+                :pedidos-abertos (parecer-juridico/pedidos-abertos-da-materia tx ente-id proposicao-id)})))
+  (pareceres-juridicos-publicos [this ente-id proposicao-id]
+    (transacao this ente-id #(parecer-juridico/publicos-da-materia % ente-id proposicao-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

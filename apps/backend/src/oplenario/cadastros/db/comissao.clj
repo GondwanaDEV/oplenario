@@ -45,6 +45,18 @@
               (jdbc/execute! tx
                 (sql/format {:select [:id :nome] :from [:cadastros.comissao] :where [:in :id ids]})))))))
 
+(defn listar-vigentes
+  "As comissoes (menos a Mesa Diretora) vigentes em `data`, por nome — o que a secretaria escolhe ao encaminhar uma
+  materia para parecer (ADR-0019). Devolve [{:id :nome :tipo}]."
+  [tx data]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select [:id :nome :tipo] :from [:cadastros.comissao]
+                   :where [:and [:<> :tipo "mesa"]
+                           [:or [:is :vigencia_inicio nil] [:<= :vigencia_inicio data]]
+                           [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
+                   :order-by [[:nome :asc]]}))))
+
 (defn mesa-vigente
   "A Mesa Diretora vigente em `data` (tipo='mesa', dentro da vigencia). Base de quem_exerce_presidencia (F2)."
   [tx data]

@@ -1,7 +1,7 @@
 # ADR-0019 — Parecer jurídico e o caminho da matéria até a pauta
 
-- **Status:** 🟡 **Proposto** (30/09/2026). A direção e a ordem das fatias foram combinadas com o Daouda ("de
-  acordo"); os eixos abaixo esperam o "Confirmo" antes do código.
+- **Status:** ✅ **Aceita** (30/09/2026). A direção e a ordem das fatias foram combinadas com o Daouda ("de
+  acordo") e a fatia 1 foi implementada no mesmo dia (ver *Materialização*). As fatias 2 a 4 seguem propostas.
 - **Origem:** pedido do stakeholder Rigoni (30/09/2026): "a função do procurador é dar parecer" sobre proposições e
   requerimentos, "para ver se tem embasamento jurídico", antes de a secretaria pautar e o presidente autorizar.
 - **Base:** a pesquisa [`docs/29`](../29-pesquisa-parecer-juridico-nas-camaras.md) (≈110 Regimentos Internos lidos
@@ -178,6 +178,46 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
 3. **Fatia 3: publicar a pauta** (Eixo 7).
 4. **Fatia 4: a etapa obrigatória** (Eixo 8), só com uma Casa cliente que a exija.
 
+## Materialização — fatia 1 (30/09/2026)
+
+**O que existe:**
+
+- **Papel `juridico`** (servidor). O `admin_ente` concede em `/administracao` ("Jurídico da Casa"), com qualificação
+  (`efetivo`, `comissionado`, `contratado`) e OAB, que ficam em `identidade.perfil_juridico` (mig `…112`). Qualificação e
+  OAB são obrigatórias com o papel e recusadas sem ele; a OAB é normalizada (`CE 12345`); um papel por concessão.
+- **Pedido e parecer** (mig `…111`, `legislativo.pedido_parecer_juridico` e `legislativo.parecer_juridico`):
+  - o pedido é sobre uma matéria ou uma **consulta avulsa** (sem matéria); pede a secretaria (em nome da Presidência) ou
+    o relator; prazo opcional; `pendente → atendido | cancelado`;
+  - o parecer nasce `rascunho` e, ao assinar, ganha `numero/ano` sequenciais da Casa (serializados por trava, sem
+    buraco sob concorrência) e o **snapshot** de nome, OAB e qualificação **tirado do perfil, nunca do corpo**;
+  - **assinado é imutável** no banco (trigger: nem UPDATE nem DELETE); corrigir é `substituição`, que abre um rascunho
+    com o texto anterior e reabre o pedido. O antigo segue na ficha, marcado `substituído`;
+  - o rascunho é só do advogado: a secretaria vê que o parecer está sendo redigido, sem o texto.
+- **Caminho da comissão**: `GET /legislativo/comissoes`, `POST …/proposicoes/:id/pareceres-de-comissao` (um parecer por
+  comissão, no rito de parecer da Casa, com relator opcional; repetir devolve o que já existe) e `POST
+  …/pareceres/:id/relator`. Sem rito de parecer configurado, 409 nomeado (`sem-rito-de-parecer`), nunca 500.
+- **Telas:** `/juridico` (fila) e `/juridico/[id]` (redigir, assinar, substituir); na ficha da matéria, "Encaminhar às
+  comissões", "Designar relator" e a aba "Parecer jurídico"; no portal, "Pareceres jurídicos" **só depois da
+  deliberação** e só o vigente.
+- **Demo:** a persona de apresentação acumula `juridico` (com perfil); a semente traz um parecer assinado (matéria
+  aprovada, visível no portal), um pedido pendente com rascunho e uma consulta avulsa.
+- **Trilha (ADR-0017):** as escritas entram pelo interceptor global, como todas. Todas as rotas novas estão em
+  `fora-do-catalogo.edn` como `:so-tela`, com o motivo: o agente propõe pedido e distribuição na fatia 2.
+
+**O que ficou para depois (nada disso foi esquecido):**
+
+- **Pedido sobre emenda:** o pedido é sobre proposição ou consulta avulsa; emenda não, até uma Casa pedir.
+- **Distribuir não move a matéria no rito.** A secretaria abre os pareceres; o gatilho `despachar` continua sendo o ato
+  de tramitação de sempre. Designar o relator grava o relator e **não** dispara a transição do rito de parecer
+  (`aguardando_designacao → com_relator`), que é dado da Casa.
+- **Antecipar o portal para "ao assinar":** configuração por Casa, ainda não existe (hoje só depois da deliberação).
+- **UI do relator pedir o parecer** no app do vereador: a rota `POST /meu/pareceres/:id/pedido-juridico` está pronta e
+  testada; falta o botão.
+- **Assinatura com carimbo:** o parecer tem snapshot, número e imutabilidade, mas não o `STUB-ICP-v0` do resto do
+  legislativo. Entra com a ICP real.
+- **Resumo legível na trilha** por ação (a corrente registra o ato, mas o rótulo é o genérico).
+- **Autorização fina** (só o presidente da comissão designa o relator): quando uma Casa pedir.
+
 ## O que peço para decidir
 
 | Eixo | Pergunta | Recomendação |
@@ -191,7 +231,6 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
 | 7 | A pauta | "publicar a pauta" como ato único, configurável por Casa, com aviso e sem bloqueio |
 | 8 | Etapa obrigatória | fato `tem_parecer_juridico_assinado` + guarda no rito; desligado por padrão; só sob demanda |
 
-Depois do "Confirmo" (com as correções), esta ADR vira **Aceita** e a fatia 1 começa.
 
 ## Para validar com o Rigoni (não bloqueia a fatia 1)
 

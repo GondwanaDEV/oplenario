@@ -521,6 +521,17 @@
                                        :resolver-autor (fn [ente-id identidade-id]
                                                          (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                                        :resolver-comissoes resolver-comissoes-fn
+                                       ;; ADR-0019: as comissoes que a secretaria escolhe, o nome do relator e o perfil
+                                       ;; (qualificacao + OAB) de quem assina o parecer juridico — tres seams sobre
+                                       ;; cadastros/identidade, mesma inversao de dependencia (§22.10).
+                                       :comissoes-vigentes (fn [ente-id]
+                                                             (repo-cadastros-comp/comissoes-vigentes
+                                                               repo-cadastros ente-id
+                                                               (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
+                                       :nomes-de-vereadores (fn [ente-id ids]
+                                                              (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
+                                       :perfil-juridico (fn [ente-id identidade-id]
+                                                          (repo-identidade-comp/perfil-juridico repo-identidade ente-id identidade-id))
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
@@ -579,6 +590,12 @@
                                          ;; ({:ficha :janelas}) — a ficha decide o 404 e a janela recorta o
                                          ;; denominador de presenca. O host nao desembrulha mais nada.
                                          :ficha-e-janelas-publicas ficha-e-janelas-fn
+                                         ;; ADR-0019: os pareceres juridicos publicos da materia (so' depois da
+                                         ;; deliberacao), ja' projetados pelo legislativo — o portal nao importa o modulo.
+                                         :pareceres-juridicos-publicos
+                                         (fn [ente-id proposicao-id]
+                                           (legislativo-http/pareceres-juridicos-publicos-wire
+                                             repo-legislativo ente-id proposicao-id))
                                          ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
                                          ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
                                          ;; mesma inversao de dependencia sobre cadastros (§22.10).

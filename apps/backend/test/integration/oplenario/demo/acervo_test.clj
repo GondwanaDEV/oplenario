@@ -13,7 +13,9 @@
             [clojure.test :refer [deftest is testing]]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.demo.casa-test :refer [with-sistema]]
+            [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
+            [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.logic :as legislativo.logic]))
 
 (deftest acervo-usa-vocabulario-real-e-cobre-o-rito-que-instala
@@ -132,3 +134,30 @@
           "o vereador da demo tem o pedido do presidente esperando resposta")
       (is (= id (acervo/semear-proposta-coletiva! s ente (:presidente identidades) (:vereador identidades)))
           "idempotente: rodar de novo rele, nao convida duas vezes"))))
+
+;; ADR-0019: o parecer juridico da demo. A visita ve' o advogado (persona de apresentacao, com perfil), um parecer
+;; assinado sobre materia JA' DELIBERADA (o portal o mostra), um pedido pendente com rascunho e uma consulta avulsa.
+(deftest o-parecer-juridico-da-demo-existe-e-a-semente-e-idempotente
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades) (:secretaria identidades))
+          repo (:repo-legislativo s)
+          r1 (acervo/semear-parecer-juridico! s ente (:secretaria identidades) (:apresentacao identidades))
+          r2 (acervo/semear-parecer-juridico! s ente (:secretaria identidades) (:apresentacao identidades))
+          pedidos (repo-juridico/pedidos-juridicos repo ente nil 100)]
+      (is (boolean? (:ja-semeado r1)) "1a vez false; o banco de teste e' compartilhado, entao nao cravamos")
+      (is (true? (:ja-semeado r2)) "reexecutar nao duplica")
+      (testing "2 pedidos de materia e 1 consulta avulsa; 1 atendido e 2 pendentes"
+        (is (= 3 (count pedidos)))
+        (is (= 1 (count (remove :proposicao-id pedidos))))
+        (is (= {"atendido" 1 "pendente" 2} (frequencies (map :estado pedidos)))))
+      (testing "o parecer assinado e' de materia aprovada, e o portal o mostra"
+        (let [atendido (first (filter #(= "atendido" (:estado %)) pedidos))
+              publicos (repo-juridico/pareceres-juridicos-publicos repo ente (:proposicao-id atendido))]
+          (is (= ["favoravel" "Paulo Henrique Bezerra" "CE 12345"]
+                 ((juxt :conclusao :assinatura-nome :assinatura-oab) (first publicos))))))
+      (testing "a persona de apresentacao tem o papel juridico e o perfil"
+        (let [ri (:repo-identidade s)]
+          (is (= {:qualificacao "efetivo" :oab "CE 12345"}
+                 (select-keys (repo-identidade/perfil-juridico ri ente (:apresentacao identidades))
+                              [:qualificacao :oab]))))))))

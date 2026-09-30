@@ -36,6 +36,7 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.rotas :as rotas])
   (:import (java.time LocalDate)))
@@ -648,6 +649,55 @@
              :coautores (cond-> [(:id ver)] outro (conj (:id outro)))
              :hoje (java.time.LocalDate/now)})
           id-proposta-coletiva)))))
+
+;; ---------- ADR-0019: o parecer juridico da Casa (2 pedidos + 1 consulta avulsa + 1 parecer assinado) ----------
+
+(defn semear-parecer-juridico!
+  "Semeia o parecer juridico da demo (ADR-0019): sobre uma materia JA' DELIBERADA (aprovada), um pedido ATENDIDO com o
+  parecer assinado (aparece no portal); sobre uma materia em comissoes, um pedido PENDENTE com o rascunho em curso;
+  e uma consulta avulsa da Presidencia, pendente. `identidade-juridica` assina (o perfil e' o da persona de
+  apresentacao, semeado por `casa/semear!`); `identidade-secretaria` pede. Idempotente: o gate e' haver pedido na
+  Casa. Precisa do acervo semeado (`acervo/semear!`)."
+  [sistema ente identidade-secretaria identidade-juridica]
+  (let [repo (:repo-legislativo sistema)
+        ds (get-in sistema [:datasource :ds])
+        [ja? aprovada em-comissoes]
+        (tenancy/com-tenant* ds ente
+          (fn [tx]
+            (let [uma (fn [estado]
+                        (:id (comum/linha->kebab
+                               (jdbc/execute-one! tx
+                                 (sql/format {:select [:id] :from [:legislativo.proposicoes]
+                                              :where [:and [:= :ente_id ente] [:= :estado estado]]
+                                              :order-by [[:sequencial :asc]] :limit 1})))))]
+              [(some? (jdbc/execute-one! tx ["SELECT 1 FROM legislativo.pedido_parecer_juridico LIMIT 1"]))
+               (uma "aprovada") (uma "em_comissoes")])))]
+    (when-not ja?
+      (when-not (and aprovada em-comissoes)
+        (throw (ex-info "acervo/semear-parecer-juridico!: faltam materias aprovada/em_comissoes — rode acervo/semear! primeiro"
+                        {:aprovada aprovada :em-comissoes em-comissoes})))
+      ;; 1. atendido: o parecer assinado sobre a materia aprovada
+      (let [p (repo-juridico/criar-pedido-juridico! repo ente
+                {:proposicao-id aprovada :assunto "Análise jurídica da matéria" :origem "secretaria"
+                 :pedido-por identidade-secretaria :em-nome-de "Presidência"})]
+        (repo-juridico/salvar-parecer-juridico! repo ente (:id p) identidade-juridica
+          {:relatorio "Trata-se de projeto de lei de iniciativa parlamentar, submetido a esta Procuradoria para análise de juridicidade, constitucionalidade e técnica legislativa."
+           :fundamentacao "A matéria trata de assunto de interesse local (art. 30, I, da Constituição Federal) e não invade a iniciativa reservada ao Chefe do Executivo, pois não cria cargos, não altera a estrutura administrativa nem cria despesa obrigatória sem a devida previsão. A redação observa a Lei Complementar nº 95/1998."
+           :conclusao "favoravel"})
+        (repo-juridico/assinar-parecer-juridico! repo ente (:id p)
+          {:por identidade-juridica :nome "Paulo Henrique Bezerra" :oab "CE 12345" :qualificacao "efetivo"}))
+      ;; 2. pendente, com rascunho em curso: a materia que esta nas comissoes
+      (let [p (repo-juridico/criar-pedido-juridico! repo ente
+                {:proposicao-id em-comissoes :assunto "Análise jurídica da matéria" :origem "secretaria"
+                 :pedido-por identidade-secretaria :prazo (.plusDays (LocalDate/now) 7)})]
+        (repo-juridico/salvar-parecer-juridico! repo ente (:id p) identidade-juridica
+          {:relatorio "Trata-se de projeto de lei que dispõe sobre a criação de conselho municipal." :fundamentacao ""
+           :conclusao nil}))
+      ;; 3. a consulta avulsa da Presidencia (sem materia)
+      (repo-juridico/criar-pedido-juridico! repo ente
+        {:proposicao-id nil :assunto "Consulta da Presidência: prazo regimental para a leitura de expediente em sessão extraordinária"
+         :origem "secretaria" :pedido-por identidade-secretaria :em-nome-de "Presidência"}))
+    {:ja-semeado ja?}))
 
 (defn semear!
   "Semeia (ou rele, se ja' semeada) o ACERVO LEGISLATIVO da Casa `ente`. `sistema` e' um sistema

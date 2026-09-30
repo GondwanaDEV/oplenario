@@ -108,6 +108,38 @@ export async function concederAuditor(
   return { identidadeId };
 }
 
+// ADR-0019 — o JURÍDICO da Casa: um servidor com o papel `juridico`, que redige e assina o parecer jurídico. Mesmos 2
+// passos e a mesma garantia "acesso por último" do auditor; o vínculo de servidor carrega, além do papel, a
+// QUALIFICAÇÃO (efetivo, comissionado ou contratado) e a OAB — o parecer precisa dizer a que título foi assinado. O
+// backend exige os dois com `juridico` e os recusa sem ele.
+export type ConcederJuridicoEntrada = {
+  cpf: string;
+  nome: string;
+  email: string;
+  qualificacao: string;
+  oab: string;
+};
+
+export async function concederJuridico(
+  entrada: ConcederJuridicoEntrada,
+  chamar: ChamarApi = fetch,
+): Promise<{ identidadeId: string }> {
+  const passo1 = (await postar(chamar, "/api/identidade/identidades", "POST", {
+    cpf: entrada.cpf,
+    nome: entrada.nome,
+  })) as { "identidade-id": string };
+  const identidadeId = passo1["identidade-id"];
+  await postar(chamar, "/api/identidade/acessos", "POST", {
+    "identidade-id": identidadeId,
+    tipo: "servidor",
+    papeis: ["juridico"],
+    email: entrada.email,
+    qualificacao: entrada.qualificacao,
+    oab: entrada.oab,
+  });
+  return { identidadeId };
+}
+
 type Estado = "ocioso" | "enviando" | "erro";
 
 export function useConcederAcesso(token: string | null) {
@@ -116,6 +148,10 @@ export function useConcederAcesso(token: string | null) {
 
 export function useConcederAuditor(token: string | null) {
   return useFluxoDeAcesso<ConcederAuditorEntrada>(token, concederAuditor);
+}
+
+export function useConcederJuridico(token: string | null) {
+  return useFluxoDeAcesso<ConcederJuridicoEntrada>(token, concederJuridico);
 }
 
 function useFluxoDeAcesso<E>(

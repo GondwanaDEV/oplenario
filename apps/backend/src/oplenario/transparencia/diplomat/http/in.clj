@@ -70,6 +70,18 @@
         (http/json-resposta 200 (adapters-out-materia/ficha->wire detalhe (:norma detalhe)))
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
+(defn- pareceres-juridicos-handler
+  "GET /portal/casa/:ente/materias/:proposicao_id/pareceres-juridicos — os pareceres juridicos da materia (ADR-0019 Eixo 4).
+  So' de materia que o portal publica (404 senao) e, pelo proprio seam, so' depois da deliberacao; antes, lista vazia.
+  `pareceres-juridicos-publicos` e' o seam do host sobre o legislativo (§22.10): ja' devolve o wire."
+  [repo-transparencia resolver-ente-publico pareceres-juridicos-publicos]
+  (fn [req]
+    (let [ente-id       (resolver-ente-publico (get-in req [:path-params :ente]))
+          proposicao-id (adapters-in/proposicao-param->uuid (get-in req [:path-params :proposicao_id]))]
+      (if (controllers/ficha-materia repo-transparencia ente-id proposicao-id)
+        (http/json-resposta 200 (pareceres-juridicos-publicos ente-id proposicao-id))
+        (http/json-resposta 404 {:erro "materia nao encontrada"})))))
+
 (defn- listar-normas-handler
   "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
   OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1.
@@ -201,7 +213,7 @@
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
   [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas
-           nomes-dos-vereadores]}]
+           nomes-dos-vereadores pareceres-juridicos-publicos]}]
   #{["/portal/casa/:ente" :get
      [(info-ente-handler info-ente resolver-ente-publico)]
      :route-name :transparencia/info-ente]
@@ -211,6 +223,10 @@
     ["/portal/casa/:ente/materias/:proposicao_id" :get
      [(ficha-materia-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/ficha-materia]
+    ["/portal/casa/:ente/materias/:proposicao_id/pareceres-juridicos" :get
+     [(pareceres-juridicos-handler repo-transparencia resolver-ente-publico
+                                   (or pareceres-juridicos-publicos (fn [_ _] {:pareceres []})))]
+     :route-name :transparencia/pareceres-juridicos]
     ["/portal/casa/:ente/legislacao" :get
      [(listar-normas-handler repo-transparencia resolver-ente-publico info-ente)]
      :route-name :transparencia/listar-normas]

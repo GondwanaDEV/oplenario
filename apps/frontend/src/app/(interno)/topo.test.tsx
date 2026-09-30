@@ -84,6 +84,13 @@ describe("destinosVisiveis — a nav por papel", () => {
     expect(rotulos(["secretario"])).toContain("Auditoria");
   });
 
+  it("o jurídico (juridico) vê só a fila de pareceres — nada das telas da secretaria (ADR-0019)", () => {
+    expect(rotulos(["juridico"])).toEqual(["Jurídico"]);
+    expect(rotulos(["secretario"])).toContain("Jurídico");
+    expect(rotulos(["admin_ente"])).not.toContain("Jurídico");
+    expect(rotulos(["vereador"])).not.toContain("Jurídico");
+  });
+
   it("quem acumula secretaria e administração vê as duas", () => {
     const r = rotulos(["secretario", "admin_ente"]);
     expect(r).toContain("Proposições");

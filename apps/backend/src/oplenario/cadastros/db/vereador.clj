@@ -27,6 +27,20 @@
                    :from [:cadastros.vereador]
                    :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
+(defn nomes-por-id
+  "ids -> {id nome-de-exibicao} (o parlamentar, ou o civil quando nao ha'), numa consulta so'. Vazio nao vai ao banco.
+  Id sem vereador NESTA Casa nao aparece no mapa."
+  [tx ente-id ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (empty? ids)
+      {}
+      (into {}
+            (map (fn [{:keys [id nome nome-parlamentar]}] [id (or (not-empty nome-parlamentar) nome)]))
+            (comum/linhas->kebab
+              (jdbc/execute! tx
+                (sql/format {:select [:id :nome :nome_parlamentar] :from [:cadastros.vereador]
+                             :where [:and [:= :ente_id ente-id] [:in :id ids]]})))))))
+
 (defn por-identidade
   "O vereador vinculado a uma identidade (CPF) neste ente — base da autorizacao por relacao (F2)."
   [tx ente-id identidade-id]

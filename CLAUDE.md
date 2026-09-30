@@ -127,11 +127,14 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 ✅ = **entregue** na branch `onda-e-cauda`. As 3 fatias entregáveis foram feitas: `/status` (pública),
 `/calendario` (interno, sessões + prazos de compliance) e o incremento de `/notificacoes`.
 
-**Demanda do stakeholder (30/09/2026) — parecer jurídico:** pesquisa em [`docs/29`](docs/29-pesquisa-parecer-juridico-nas-camaras.md)
+**Demanda do stakeholder (30/09/2026) — parecer jurídico ENTREGUE (fatia 1):** pesquisa em [`docs/29`](docs/29-pesquisa-parecer-juridico-nas-camaras.md)
 (≈110 Regimentos lidos: o parecer jurídico é opinativo e só existe onde o Regimento prevê — Baturité não prevê; o gate
-real da pauta é o parecer da comissão) e proposta em [ADR-0019](docs/adr/0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md),
-🟡 esperando o "Confirmo". Fatia 1 = distribuir/designar relator/abrir parecer de comissão por tela (hoje só semente) +
-papel `juridico`, pedido de parecer e parecer jurídico assinado e imutável.
+real da pauta é o parecer da comissão) e [ADR-0019](docs/adr/0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md),
+aceita. Entregue: papel `juridico` (com qualificação e OAB, concedido em `/administracao`), pedido de parecer (matéria ou
+consulta avulsa), fila `/juridico`, parecer assinado e **imutável** (correção = substituição), portal só depois da
+deliberação, e o caminho da comissão por tela (encaminhar às comissões, designar relator). Faltam as fatias 2 (IA como
+rascunho do advogado + copiloto do relator), 3 (publicar a pauta) e 4 (etapa obrigatória, só sob demanda) — e as
+perguntas ao Rigoni no fim da ADR.
 
 **Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
 [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma
