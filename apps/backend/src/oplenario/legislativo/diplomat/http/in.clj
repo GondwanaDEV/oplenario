@@ -1111,7 +1111,7 @@
   (fn [req]
     (let [estado (adapters-in-juridico/estado-da-fila (:query-params req))]
       (http/json-resposta 200 (adapters-out-juridico/pedidos->wire
-                                (controllers/fila-juridica repo-leg nome-na-casa (:ente-id (:ator req)) estado))))))
+                                (controllers/fila-juridica repo-leg nome-na-casa (:ator req) estado))))))
 
 (defn- pedido-juridico-handler [repo-leg nome-na-casa]
   (fn [req]
@@ -1206,7 +1206,7 @@
         ;; LEITURA do acervo aberta a secretario OU vereador: o vereador legisla sobre a materia, entao
         ;; le' proposicoes/tramitacao/ficha (achado docs/20: gate grosso so'-'secretario' dava 403 ao
         ;; vereador nessas telas). ESCRITA/acoes seguem em `papel` (secretario).
-        papel-leitura (it/exige-algum-papel #{"secretario" "vereador"})]
+        papel-leitura (it/exige-algum-papel #{"secretario" "vereador" "juridico"})]
     #{["/sessoes/:id/votacoes" :post
        [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
        :route-name :legislativo/abrir-votacao]

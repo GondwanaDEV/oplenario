@@ -209,7 +209,7 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
 - **Pedido sobre emenda:** o pedido é sobre proposição ou consulta avulsa; emenda não, até uma Casa pedir.
 - **Distribuir não move a matéria no rito.** A secretaria abre os pareceres; o gatilho `despachar` continua sendo o ato
   de tramitação de sempre. Designar o relator grava o relator e **não** dispara a transição do rito de parecer
-  (`aguardando_designacao → com_relator`), que é dado da Casa.
+  (`aguardando_designacao → com_relator`), que é dado da Casa; o parecer com relator sai da fila de relatores pendentes da Mesa.
 - **Antecipar o portal para "ao assinar":** configuração por Casa, ainda não existe (hoje só depois da deliberação).
 - **UI do relator pedir o parecer** no app do vereador: a rota `POST /meu/pareceres/:id/pedido-juridico` está pronta e
   testada; falta o botão.

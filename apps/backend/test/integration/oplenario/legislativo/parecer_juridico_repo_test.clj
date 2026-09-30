@@ -223,3 +223,25 @@
           (is (= outro (:relator-id (repo/buscar-parecer *repo* ente (:id pc))))))))
     (testing "parecer inexistente -> nil"
       (is (nil? (juridico/designar-relator-do-parecer! *repo* ente (random-uuid) relator por))))))
+
+(deftest encaminhamentos-simultaneos-nao-duplicam-o-parecer-da-comissao
+  (let [ente (random-uuid) pid (protocolar! ente) ccj (random-uuid) por (random-uuid)]
+    (rito-de-parecer! ente)
+    (let [rs (mapv deref (mapv (fn [_] (future (juridico/abrir-pareceres-de-comissao! *repo* ente
+                                                 {:proposicao-id pid :created-by por :comissoes [{:comissao-id ccj}]})))
+                               (range 5)))]
+      (is (= 1 (count (filter #(false? (:ja-existia (first %))) rs))) "so' um encaminhamento abre; os demais reusam")
+      (is (= 1 (count (repo/pareceres-do-objeto *repo* ente "proposicao" pid)))))))
+
+(deftest assinar-e-cancelar-simultaneos-nao-deixam-parecer-assinado-em-pedido-cancelado
+  (let [ente (random-uuid) autor (random-uuid)]
+    (dotimes [_ 5]
+      (let [p (pedir! ente {})]
+        (juridico/salvar-parecer-juridico! *repo* ente (:id p) autor texto)
+        (let [a (future (juridico/assinar-parecer-juridico! *repo* ente (:id p) assinante))
+              c (future (juridico/cancelar-pedido-juridico! *repo* ente (:id p) autor))]
+          @a @c
+          (let [ped (juridico/pedido-juridico *repo* ente (:id p))
+                assinado? (= "assinado" (get-in ped [:parecer :estado]))]
+            (is (= assinado? (= "atendido" (:estado ped))) "estado do pedido e do parecer sempre coerentes")
+            (is (not (and assinado? (= "cancelado" (:estado ped)))))))))))

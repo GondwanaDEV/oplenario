@@ -1139,21 +1139,26 @@
                                                        :origem "relator" :pedido-por (:identidade-id ator)})]
               (first (nomear-quem-pediu nome-na-casa ente-id [p])))))))))
 
-(defn fila-juridica [repo-legislativo nome-na-casa ente-id estado]
-  (nomear-quem-pediu nome-na-casa ente-id (repo-juridico/pedidos-juridicos repo-legislativo ente-id estado teto-fila-juridico)))
-
 (defn- ocultar-rascunho
   "O rascunho e' trabalho em curso do advogado: so' quem tem o papel `juridico` le o texto dele. A secretaria ve' o pedido
   e que o parecer esta' sendo redigido (estado 'rascunho'), sem o texto."
   [ator p]
   (if (and (= "rascunho" (get-in p [:parecer :estado])) (not (contains? (:papeis ator) "juridico")))
-    (update p :parecer dissoc :relatorio :fundamentacao)
+    (update p :parecer dissoc :relatorio :fundamentacao :conclusao)
     p))
 
 (defn pedido-juridico [repo-legislativo nome-na-casa ator id]
   (let [ente-id (:ente-id ator)]
     (when-let [p (repo-juridico/pedido-juridico repo-legislativo ente-id id)]
       (ocultar-rascunho ator (first (nomear-quem-pediu nome-na-casa ente-id [p]))))))
+
+(defn fila-juridica
+  "A fila (secretaria e juridico). O rascunho e' do advogado: a secretaria ve' que esta' em redacao, sem a conclusao."
+  [repo-legislativo nome-na-casa ator estado]
+  (let [ente-id (:ente-id ator)]
+    (mapv #(ocultar-rascunho ator %)
+          (nomear-quem-pediu nome-na-casa ente-id
+                             (repo-juridico/pedidos-juridicos repo-legislativo ente-id estado teto-fila-juridico)))))
 
 (defn- decorado [nome-na-casa ente-id {:keys [pedido] :as r}]
   (if pedido (assoc r :pedido (first (nomear-quem-pediu nome-na-casa ente-id [pedido]))) r))

@@ -5,6 +5,7 @@
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.ids :as ids]
             [oplenario.kernel.outbox :as outbox]
@@ -1161,6 +1162,9 @@
     (transacao this ente-id
       (fn [tx]
         (when (parecer-juridico/existe-proposicao? tx ente-id proposicao-id)
+          ;; dois encaminhamentos simultaneos da mesma materia (duplo clique, duas secretarias) nao abrem parecer em dobro
+          (jdbc/execute-one! tx ["SELECT pg_advisory_xact_lock(hashtextextended(?, 7162600020))"
+                                 (str "distribuicao:" ente-id ":" proposicao-id)])
           (mapv (fn [{:keys [comissao-id relator-id]}]
                   (distribuicao/abrir! tx {:ente-id ente-id :proposicao-id proposicao-id :comissao-id comissao-id
                                            :relator-id relator-id :created-by created-by}))

@@ -60,9 +60,16 @@
         (jdbc/execute! tx (sql/format (-> (apply consulta-pedidos ente-id (when estado [[:= :pd.estado estado]]))
                                           (assoc :order-by [[:pd.criado_em :asc] [:pd.id :asc]] :limit limite))))))
 
+;; O pedido e' a unidade de serializacao: salvar, assinar, substituir e cancelar leem o estado e agem; sem a trava, assinar
+;; concorrente com cancelar deixaria parecer assinado em pedido cancelado, e dois primeiros `salvar` estourariam o indice.
+(defn- travar-pedido! [tx ente-id pedido-id]
+  (jdbc/execute-one! tx (sql/format {:select [:id] :from [:legislativo.pedido_parecer_juridico]
+                                     :where [:and [:= :ente_id ente-id] [:= :id pedido-id]] :for :update})))
+
 (defn cancelar-pedido!
   "Cancela um pedido PENDENTE. Ja' atendido ou cancelado (ou de outra Casa) -> nil."
   [tx ente-id id por]
+  (travar-pedido! tx ente-id id)
   (when (jdbc/execute-one! tx
           (sql/format {:update :legislativo.pedido_parecer_juridico
                        :set {:estado "cancelado" :cancelado_por por :cancelado_em [:now] :atualizado_em [:now]}
@@ -242,6 +249,7 @@
   "Grava o RASCUNHO do parecer do pedido. Erros: :nao-encontrado; :pedido-cancelado; :ja-assinado (o vigente esta
   assinado: corrigir e' a substituicao)."
   [tx ente-id pedido-id autor-id texto]
+  (travar-pedido! tx ente-id pedido-id)
   (if-let [p (buscar-pedido tx ente-id pedido-id)]
     (case (:estado p)
       "cancelado" {:erro :pedido-cancelado}
@@ -254,6 +262,7 @@
   "Assina o rascunho do pedido. Erros: :nao-encontrado; :pedido-cancelado; :ja-assinado; :sem-rascunho;
   :incompleto (falta relatorio, fundamentacao ou conclusao)."
   [tx ente-id pedido-id assinante]
+  (travar-pedido! tx ente-id pedido-id)
   (if-let [p (buscar-pedido tx ente-id pedido-id)]
     (let [corrente (parecer-corrente tx ente-id pedido-id)]
       (cond
@@ -271,6 +280,7 @@
   "Abre o parecer que substitui o assinado. Erros: :nao-encontrado; :pedido-cancelado; :sem-assinado (nao ha' o que
   substituir, ou ja' ha' um substituto em curso)."
   [tx ente-id pedido-id autor-id]
+  (travar-pedido! tx ente-id pedido-id)
   (if-let [p (buscar-pedido tx ente-id pedido-id)]
     (if (= "cancelado" (:estado p))
       {:erro :pedido-cancelado}

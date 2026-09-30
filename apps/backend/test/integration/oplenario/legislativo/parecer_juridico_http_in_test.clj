@@ -134,13 +134,20 @@
       (is (= 403 (:status (chamar sec :put (str base "/parecer") texto))))
       (is (= 403 (:status (chamar ver :put (str base "/parecer") texto)))))
     (testing "o rascunho aceita texto incompleto; a secretaria ve' que esta' sendo redigido, sem o texto"
-      (let [r (chamar jur :put (str base "/parecer") {:relatorio "so' o relatorio" :fundamentacao ""})]
+      (let [r (chamar jur :put (str base "/parecer") {:relatorio "so' o relatorio" :fundamentacao "" :conclusao "contrario"})]
         (is (= 200 (:status r)))
         (is (= ["rascunho" "so' o relatorio"] ((juxt #(get-in % [:parecer :estado]) #(get-in % [:parecer :relatorio])) (:corpo r)))))
       (let [{:keys [corpo]} (chamar sec :get base)]
         (is (= "rascunho" (get-in corpo [:parecer :estado])))
-        (is (not (contains? (:parecer corpo) :relatorio)) "texto do rascunho e' so' do juridico"))
-      (is (= "so' o relatorio" (get-in (chamar jur :get base) [:corpo :parecer :relatorio]))))
+        (is (not (contains? (:parecer corpo) :relatorio)) "texto do rascunho e' so' do juridico")
+        (is (nil? (get-in corpo [:parecer :conclusao])) "nem a conclusao do rascunho"))
+      (is (nil? (get-in (chamar sec :get "/legislativo/pedidos-parecer-juridico?estado=todos")
+                        [:corpo :pedidos 0 :parecer :conclusao]))
+          "a fila tambem nao vaza a conclusao do rascunho")
+      (is (= 200 (:status (chamar jur :get (str "/legislativo/proposicoes/" pid "/ficha"))))
+          "o advogado le a ficha da materia que esta' parecendo")
+      (is (= ["so' o relatorio" "contrario"]
+             ((juxt #(get-in % [:corpo :parecer :relatorio]) #(get-in % [:corpo :parecer :conclusao])) (chamar jur :get base)))))
     (testing "assinar exige o texto completo (400) e um perfil juridico (403)"
       (is (= 400 (:status (chamar jur :post (str base "/parecer/assinatura") {}))))
       (chamar jur :put (str base "/parecer") texto)
