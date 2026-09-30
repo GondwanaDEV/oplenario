@@ -42,6 +42,8 @@
                                                                      (vector %))) ids))
             :vereador-vinculado? (fn [_ id] (= id relator))
             :nomes-de-vereadores (fn [_ ids] (into {} (keep #(when (= % relator) [% "Ver. Ana Prado"])) ids))
+            :colegas-da-casa (fn [_] [{:id relator :nome "Ana Prado" :partido "PSB"}
+                                      {:id (random-uuid) :nome "Beto Lima" :partido nil}])
             :comissoes-vigentes (fn [_] [{:id ccj :nome "Comissão de Justiça"} {:id fin :nome "Comissão de Finanças"}])
             :relogio relogio
             :registrar-chamada (catalogo/registrador ri)
@@ -64,6 +66,8 @@
 (defn- contar [ente tabela]
   (:n (jdbc/execute-one! (:ds *c*) [(str "SELECT count(*)::int AS n FROM " tabela " WHERE ente_id = ?") ente]
                          {:builder-fn next.jdbc.result-set/as-unqualified-maps})))
+
+(defn- nomes-do [c] (set (map :nome (catalogo/ferramentas (secretaria c)))))
 
 (defn- tipo-do-erro [f] (try (f) nil (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e)))))
 
@@ -159,6 +163,22 @@
       (is (nil? (catalogo/executar! deps (secretaria c) "designar_relator"
                                     {"parecer-id" (str (random-uuid)) "relator-id" (str relator)}))))))
 
+(deftest o-agente-acha-o-vereador-para-propor-o-relator
+  (let [{:keys [deps relator] :as c} (cenario)]
+    (testing "so' id, nome de exibicao e partido; secretaria e vereador leem"
+      (doseq [ator [(secretaria c) (agente c "vereador" :vereador)]]
+        (let [r (catalogo/executar! deps ator "vereadores_da_casa" {})]
+          (is (= ["Ana Prado" "Beto Lima"] (mapv :nome (:vereadores r))))
+          (is (= [(str relator) "PSB"] ((juxt #(get-in % [:vereadores 0 :id]) #(get-in % [:vereadores 0 :partido])) r)))
+          (is (= #{:id :nome :partido} (set (keys (first (:vereadores r)))))))))
+    (testing "sem o seam do host, lista vazia (nunca inventa)"
+      (is (= {:vereadores []} (catalogo/executar! (dissoc deps :colegas-da-casa) (secretaria c) "vereadores_da_casa" {}))))
+    (testing "o id lido serve para propor o relator (o elo com designar_relator)"
+      (is (every? (nomes-do c) ["vereadores_da_casa" "designar_relator"])))
+    (testing "o papel e' conferido"
+      (is (= :autorizacao/negado
+             (tipo-do-erro #(catalogo/executar! deps (agente c "juridico" :secretaria) "vereadores_da_casa" {})))))))
+
 (deftest o-agente-le-o-que-o-juridico-ja-opinou-e-nao-assina
   (let [{:keys [ente deps repo] :as c} (cenario)
         pid (materia! c)
@@ -191,10 +211,10 @@
         da-secretaria (nomes (secretaria c))]
     (testing "a secretaria tem o caminho da materia; o vereador so' le o parecer"
       (is (every? da-secretaria ["pedir_parecer_juridico" "encaminhar_as_comissoes" "designar_relator"
-                                 "comissoes_da_casa" "pareceres_juridicos_da_materia"]))
-      (is (= #{"pareceres_juridicos_da_materia"}
+                                 "comissoes_da_casa" "vereadores_da_casa" "pareceres_juridicos_da_materia"]))
+      (is (= #{"pareceres_juridicos_da_materia" "vereadores_da_casa"}
              (clojure.set/intersection (nomes (agente c "vereador" :vereador))
-                                       #{"pareceres_juridicos_da_materia" "pedir_parecer_juridico"
+                                       #{"pareceres_juridicos_da_materia" "vereadores_da_casa" "pedir_parecer_juridico"
                                          "encaminhar_as_comissoes" "designar_relator"}))))
     (testing "assinar, salvar e substituir parecer juridico NAO sao ferramentas (ato pessoal do advogado)"
       (is (not-any? #(re-find #"assinar|salvar|substituir" %) (map :nome catalogo/entradas))))

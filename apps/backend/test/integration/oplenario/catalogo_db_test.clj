@@ -193,7 +193,7 @@
     ;; a credencial de `agente-de` so' concede leitura: as tres de ATO da secretaria (pedir parecer juridico, encaminhar
     ;; as comissoes, designar relator) nem aparecem — ver `juridico_catalogo_test`
     (is (= ["ata_da_sessao" "buscar_dispositivos" "comissoes_da_casa" "ler_dispositivo" "pareceres_juridicos_da_materia"
-            "pauta_da_sessao" "situacao_da_materia" "tramitacao_da_materia"]
+            "pauta_da_sessao" "situacao_da_materia" "tramitacao_da_materia" "vereadores_da_casa"]
            (map :nome (catalogo/ferramentas secretaria))))
     (is (empty? (catalogo/ferramentas (agente-de ente "admin_ente" :secretaria)))
         "o conjunto do publico nao da' a ninguem o que o papel dele nao alcanca")

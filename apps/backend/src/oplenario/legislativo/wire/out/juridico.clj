@@ -66,6 +66,11 @@
 
 ;; ---- caminho da comissao ----
 
+(def VereadoresDaCasaOut
+  "Os vereadores com mandato vigente (id, nome de exibicao, partido) — o que o agente precisa para propor um relator."
+  [:map {:closed true}
+   [:vereadores [:sequential [:map {:closed true} [:id :string] [:nome :string] [:partido [:maybe :string]]]]]])
+
 (def ComissoesOut
   [:map {:closed true} [:comissoes [:sequential [:map {:closed true} [:id :string] [:nome :string]]]]])
 

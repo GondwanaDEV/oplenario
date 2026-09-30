@@ -696,6 +696,10 @@
                        ;; MESMOS seams de cadastros que a tela recebe (o agente propoe; a secretaria confirma)
                        :resolver-comissoes resolver-comissoes-fn
                        :vereador-vinculado? vereador-vinculado?
+                       ;; `vereadores_da_casa`: o mesmo seam do convite de subscricao (mandato vigente hoje)
+                       :colegas-da-casa (fn [ente-id]
+                                          (colegas-da-casa repo-cadastros ente-id
+                                                           (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
                        :comissoes-vigentes (fn [ente-id]
                                              (repo-cadastros-comp/comissoes-vigentes
                                                repo-cadastros ente-id

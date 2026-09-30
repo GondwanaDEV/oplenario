@@ -242,6 +242,18 @@
 
 (def ^:private entradas-juridico
   [(catalogo/entrada
+    {:nome "vereadores_da_casa"
+     :descricao (str "Lista os vereadores com mandato vigente na Casa: id, nome de exibicao e partido. Use para achar "
+                     "o vereador-id de quem sera relator antes de propor designar_relator ou encaminhar_as_comissoes "
+                     "(ex.: 'a vereadora Ana Prado'). Nao traz CPF nem contato.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador"}
+     :entrada [:map {:closed true}]
+     :saida wire-jur/VereadoresDaCasaOut
+     :rotas #{}
+     :executar (fn [{:keys [colegas-da-casa]} ator _]
+                 (adapters-out-juridico/vereadores->wire ((or colegas-da-casa (constantly [])) (:ente-id ator))))})
+   (catalogo/entrada
     {:nome "comissoes_da_casa"
      :descricao (str "Lista as comissoes vigentes da Casa (sem a Mesa), com o id de cada uma. Use antes de propor "
                      "encaminhar_as_comissoes, para saber o comissao-id de 'Comissao de Justica e Redacao' e das demais.")
