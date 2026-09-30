@@ -1,5 +1,5 @@
 (ns oplenario.legislativo.wire.out.nota-tecnica
-  "Contrato de SAIDA da nota tecnica de conferencia (Faixa B / B.8, ADR-0013) na borda interna (papel 'secretario').
+  "Contrato de SAIDA da nota tecnica de conferencia (Faixa B / B.8, ADR-0013) na borda interna (papeis 'secretario' e 'juridico', ADR-0019).
   Malli fechado; fonte do tipo TS gerado (oplenario.codegen.gerar-legislativo). Quem decidiu nao sai como id de pessoa.")
 
 (def estados [:enum "pendente" "aproveitada" "descartada"])
@@ -27,8 +27,9 @@
    [:decidida-em [:maybe :string]]])
 
 (def NotasTecnicasOut
-  "GET /legislativo/notas-tecnicas — a fila da secretaria."
-  [:map {:closed true} [:itens [:sequential NotaTecnicaResumoOut]]])
+  "GET /legislativo/notas-tecnicas — a fila da secretaria e do juridico. `casa-com-juridico` diz se a Casa tem juridico
+  ativo (ADR-0019 Eixo 5): entao a nota pendente tambem esta' na fila dele, e quem a usar primeiro a tira das duas."
+  [:map {:closed true} [:itens [:sequential NotaTecnicaResumoOut]] [:casa-com-juridico :boolean]])
 
 (def NotaTecnicaOut
   "GET /legislativo/notas-tecnicas/:id — o rascunho inteiro para a revisao. `texto` traz as marcas de citacao (a tela

@@ -95,3 +95,11 @@
   (let [rid (get (objeto! json) "relator-id")]
     (when (nil? rid) (invalido! "relator-id e' obrigatorio" :relator-id))
     (->uuid rid "relator-id")))
+
+(defn parametros->dominio
+  "{\"publicar-ao-assinar\" bool} -> {:publicar-ao-assinar bool}. So' booleano de verdade: texto ou numero e' 400
+  (um \"false\" tratado como verdadeiro publicaria pareceres antes da hora)."
+  [json]
+  (let [v (get (objeto! json) "publicar-ao-assinar")]
+    (when-not (boolean? v) (invalido! "publicar-ao-assinar deve ser true ou false" :publicar-ao-assinar))
+    {:publicar-ao-assinar v}))

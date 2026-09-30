@@ -75,6 +75,19 @@
               (sql/format {:select [:papel] :from [:identidade.usuario_papel]
                            :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]})))))
 
+(defn casa-tem-papel-ativo?
+  "Existe alguem na Casa com o `papel` E um vinculo ATIVO de pessoa da Casa (nao o de cidadao)? E' a leitura de 'a Casa
+  tem juridico ativo' (ADR-0019 Eixo 5): papel concedido a um vinculo suspenso ou encerrado nao conta."
+  [tx ente-id papel]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [1]
+                        :from [[:identidade.usuario_papel :up]]
+                        :join [[:identidade.vinculo :v] [:and [:= :v.ente_id :up.ente_id]
+                                                          [:= :v.identidade_id :up.identidade_id]]]
+                        :where [:and [:= :up.ente_id ente-id] [:= :up.papel papel]
+                                [:= :v.estado "ativo"] [:<> :v.tipo "cidadao"]]
+                        :limit 1}))))
+
 ;; ---- consentimento (LGPD, §22.5.2 eixo G) ----
 (defn registrar-consentimento! [tx {:keys [id ente-id identidade-id finalidade base-legal versao-termo]}]
   (jdbc/execute-one! tx

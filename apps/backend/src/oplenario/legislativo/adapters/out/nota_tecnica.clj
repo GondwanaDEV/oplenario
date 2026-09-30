@@ -20,8 +20,11 @@
    :ano (:ano n) :ementa (:ementa n) :estado (:estado n) :incerteza (:incerteza n)
    :criada-em (->str (:criada-em n)) :decidida-em (->str (:decidida-em n))})
 
-(defn notas->wire [notas]
-  (validado wire/NotasTecnicasOut {:itens (mapv resumo notas)}))
+(defn notas->wire
+  "A fila. `casa-com-juridico` (padrao false) vem do seam do host: a Casa tem juridico ativo (ADR-0019 Eixo 5)."
+  ([notas] (notas->wire notas false))
+  ([notas casa-com-juridico]
+   (validado wire/NotasTecnicasOut {:itens (mapv resumo notas) :casa-com-juridico (boolean casa-com-juridico)})))
 
 (defn nota->wire [n]
   (validado wire/NotaTecnicaOut

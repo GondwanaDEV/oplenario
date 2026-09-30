@@ -1,6 +1,6 @@
 (ns oplenario.legislativo.wire.out.juridico
   "Contrato de SAIDA do caminho da comissao e do parecer juridico (ADR-0019 fatia 1). Malli fechado. Papeis: 'secretario'
-  e 'juridico' (fila e detalhe), 'secretario'/'vereador'/'juridico' (ficha), anonimo (portal, so' depois da deliberacao).
+  e 'juridico' (fila e detalhe), 'secretario'/'vereador'/'juridico' (ficha), anonimo (portal, so' depois da deliberacao, ou ao assinar se a Casa antecipou).
   O id de quem assinou nao sai: a assinatura carrega nome, OAB e qualificacao, gravados no ato.")
 
 (def conclusoes [:enum "favoravel" "contrario" "com_ressalvas" "orientacao"])
@@ -21,7 +21,10 @@
    [:conclusao [:maybe conclusoes]]
    [:assinatura [:maybe AssinaturaOut]]
    [:substitui-id {:optional true} [:maybe :string]]
-   [:substituido :boolean]])
+   [:substituido :boolean]
+   ;; ADR-0019 fatia 2a: de onde o rascunho partiu ('nota_tecnica' = nota tecnica da IA; nil = escrito do zero). So'
+   ;; informativo e so' na borda interna: o portal nao mostra a origem, e o parecer e' sempre de quem o assinou.
+   [:origem-rascunho {:optional true} [:maybe [:enum "nota_tecnica"]]]])
 
 (def MateriaDoPedidoOut
   [:map {:closed true} [:id :string] [:ref :string] [:ementa :string]])
@@ -35,7 +38,7 @@
    [:estado [:enum "pendente" "atendido" "cancelado"]]
    [:pedido-por [:maybe :string]]
    [:em-nome-de [:maybe :string]]
-   [:origem [:enum "secretaria" "relator"]]
+   [:origem [:enum "secretaria" "relator" "nota_tecnica"]]
    [:criado-em :string]
    [:parecer [:maybe ParecerJuridicoOut]]])
 
@@ -62,6 +65,10 @@
   [:map {:closed true} [:pareceres [:sequential ParecerPublicoOut]]])
 
 ;; ---- caminho da comissao ----
+
+(def ParametrosParecerJuridicoOut
+  "GET/PUT /legislativo/parametros-parecer-juridico (`admin_ente`): quando o portal mostra o parecer assinado."
+  [:map {:closed true} [:publicar-ao-assinar :boolean]])
 
 (def ComissoesOut
   [:map {:closed true} [:comissoes [:sequential [:map {:closed true} [:id :string] [:nome :string]]]]])

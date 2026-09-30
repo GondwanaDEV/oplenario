@@ -8,6 +8,7 @@
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
+            [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.logic :as logic]
             [oplenario.motor.api :as motor]))
 
@@ -1209,3 +1210,30 @@
   sobre `cadastros` (§22.5.3)."
   [comissoes-vigentes ente-id]
   (comissoes-vigentes ente-id))
+
+;; ========================= ADR-0019 fatia 2a: a nota tecnica da IA como rascunho + antecipar o portal =========================
+
+(defn usar-nota-como-rascunho!
+  "O advogado usa a nota tecnica `nota-id` como rascunho do parecer: numa tx, abre/reaproveita o pedido da materia, cria o
+  rascunho (texto da nota sem as marcas de citacao, SEM conclusao) e marca a nota como aproveitada. O texto da IA nunca e'
+  parecer: o advogado o revisa, assume e assina. `casa-tem-juridico?` e' o seam do host sobre `identidade`; Casa sem
+  juridico ativo -> `{:erro :sem-juridico-ativo}` (defensivo: o gate de papel ja' exige `juridico`).
+  {:pedido} | {:erro :nao-encontrado | :nota-decidida | :ja-ha-rascunho | :sem-juridico-ativo}."
+  [repo-legislativo casa-tem-juridico? nome-na-casa ator nota-id]
+  (let [ente-id (:ente-id ator)]
+    (if-not (casa-tem-juridico? ente-id)
+      {:erro :sem-juridico-ativo}
+      (decorado nome-na-casa ente-id
+                (repo-nota-juridica/usar-nota-como-rascunho! repo-legislativo ente-id nota-id (:identidade-id ator))))))
+
+(defn parametros-parecer-juridico
+  "O que o `admin_ente` le: {:publicar-ao-assinar bool} (padrao false: o portal so' mostra depois da deliberacao)."
+  [repo-legislativo ente-id]
+  (repo-nota-juridica/parametros-parecer-juridico repo-legislativo ente-id))
+
+(defn salvar-parametros-parecer-juridico!
+  "O `admin_ente` liga/desliga a publicacao do parecer no portal ja' ao assinar. Devolve os parametros gravados."
+  [repo-legislativo ator {:keys [publicar-ao-assinar]}]
+  (repo-nota-juridica/salvar-parametros-parecer-juridico! repo-legislativo (:ente-id ator)
+                                                          {:publicar-ao-assinar publicar-ao-assinar
+                                                           :por (:identidade-id ator)}))

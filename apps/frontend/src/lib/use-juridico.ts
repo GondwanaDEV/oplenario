@@ -10,7 +10,7 @@ import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import { semCredencial } from "./modo";
 import { corpoDoPedido, corpoDoRascunho, mensagemDeErroJuridico, type AcaoJuridica, type CamposDoParecer, type EntradaPedido } from "./juridico-vista";
-import type { EstadoPedido, PedidoJuridicoOut, PedidosJuridicosOut } from "./contrato-juridico.gen";
+import type { EstadoPedido, ParametrosParecerJuridicoOut, PedidoJuridicoOut, PedidosJuridicosOut } from "./contrato-juridico.gen";
 
 export type Resultado<T> = { ok: true; dado: T } | { ok: false; status: number; mensagem: string };
 
@@ -122,4 +122,36 @@ export function assinarParecer(token: string | null, id: string) {
 
 export function substituirParecer(token: string | null, id: string) {
   return pedirJuridico<PedidoJuridicoOut>(token, `${BASE}/${encodeURIComponent(id)}/parecer/substituicao`, "substituir", { method: "POST", corpo: {} }, pedidoValido);
+}
+
+// ---- ADR-0019 fatia 2a ----
+
+/** "Usar como rascunho" (papel `juridico`): a nota técnica da IA abre o pedido e o rascunho do parecer numa transação só.
+ *  Devolve o pedido já com o rascunho; a tela leva o advogado a `/juridico/[id]`. */
+export function usarNotaComoRascunho(token: string | null, notaId: string) {
+  return pedirJuridico<PedidoJuridicoOut>(
+    token,
+    `/api/legislativo/notas-tecnicas/${encodeURIComponent(notaId)}/rascunho-juridico`,
+    "usar-nota",
+    { method: "POST", corpo: {} },
+    pedidoValido,
+  );
+}
+
+const PARAMETROS = "/api/legislativo/parametros-parecer-juridico";
+const parametrosValidos = (d: unknown) => typeof (d as ParametrosParecerJuridicoOut)?.publicarAoAssinar === "boolean";
+
+/** O parâmetro da Casa (`admin_ente`): o parecer vai ao portal ao assinar, ou só depois da deliberação. */
+export function useParametrosParecerJuridico(token: string | null) {
+  return useCarregarJuridico<ParametrosParecerJuridicoOut>(token, PARAMETROS, "parametros", parametrosValidos);
+}
+
+export function salvarParametrosParecerJuridico(token: string | null, publicarAoAssinar: boolean) {
+  return pedirJuridico<ParametrosParecerJuridicoOut>(
+    token,
+    PARAMETROS,
+    "salvar-parametros",
+    { method: "PUT", corpo: { "publicar-ao-assinar": publicarAoAssinar } },
+    parametrosValidos,
+  );
 }

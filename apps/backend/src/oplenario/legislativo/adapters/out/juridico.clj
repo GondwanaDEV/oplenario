@@ -24,7 +24,8 @@
 (defn- parecer [p com-texto?]
   (cond-> {:id (->str (:id p)) :numero (:numero p) :ano (:ano p) :estado (:estado p)
            :conclusao (:conclusao p) :assinatura (assinatura p)
-           :substitui-id (->str (:substitui-id p)) :substituido (boolean (:substituido p))}
+           :substitui-id (->str (:substitui-id p)) :substituido (boolean (:substituido p))
+           :origem-rascunho (:origem-rascunho p)}
     ;; o texto so' sai quando o dominio o trouxe: o rascunho de outrem chega SEM ele (controller/ocultar-rascunho)
     (and com-texto? (contains? p :relatorio)) (assoc :relatorio (:relatorio p) :fundamentacao (:fundamentacao p))))
 
@@ -66,6 +67,9 @@
                                        :relatorio (:relatorio p) :fundamentacao (:fundamentacao p)
                                        :assinatura (assinatura p)})
                               pareceres)}))
+
+(defn parametros->wire [{:keys [publicar-ao-assinar]}]
+  (validado wire/ParametrosParecerJuridicoOut {:publicar-ao-assinar (boolean publicar-ao-assinar)}))
 
 (defn comissoes->wire [cs]
   (validado wire/ComissoesOut {:comissoes (mapv (fn [c] {:id (->str (:id c)) :nome (:nome c)}) cs)}))

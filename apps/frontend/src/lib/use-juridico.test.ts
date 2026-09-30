@@ -5,8 +5,11 @@ import {
   cancelarPedido,
   criarPedido,
   pedirJuridico,
+  salvarParametrosParecerJuridico,
   salvarRascunho,
   substituirParecer,
+  usarNotaComoRascunho,
+  useParametrosParecerJuridico,
   usePedidoJuridico,
   usePedidosJuridicos,
 } from "./use-juridico";
@@ -161,5 +164,49 @@ describe("hooks de leitura", () => {
     await waitFor(() => expect(result.current.estado.fase).toBe("erro"));
     const e = result.current.estado;
     expect(e.fase === "erro" && e.mensagem).toMatch(/Não encontramos este pedido/);
+  });
+});
+
+describe("ADR-0019 fatia 2a — usar a nota como rascunho e o parâmetro do portal", () => {
+  it("usarNotaComoRascunho: POST na rota da nota, devolve o pedido com o rascunho", async () => {
+    const c = mockar(() => ({ status: 201, corpo: { ...PEDIDO, origem: "nota_tecnica", parecer: { id: "pj1", estado: "rascunho", "origem-rascunho": "nota_tecnica", substituido: false } } }));
+    const r = await usarNotaComoRascunho("tk", "nota 1");
+    expect(c[0]).toMatchObject({ url: "/api/legislativo/notas-tecnicas/nota%201/rascunho-juridico", method: "POST", auth: "Bearer tk" });
+    expect(r.ok && r.dado.origem).toBe("nota_tecnica");
+    expect(r.ok && r.dado.parecer?.origemRascunho).toBe("nota_tecnica");
+  });
+
+  it.each([
+    [404, /Não encontramos esta nota técnica/],
+    [409, /Abra o pedido na fila/],
+    [403, /Só o jurídico da Casa/],
+  ])("usarNotaComoRascunho: %i vira a frase da tela", async (status, frase) => {
+    mockar(() => ({ status, corpo: { erro: "interno" } }));
+    const r = await usarNotaComoRascunho("tk", "n1");
+    expect(!r.ok && r.status).toBe(status);
+    expect(!r.ok && r.mensagem).toMatch(frase);
+  });
+
+  it("sem sessão nem chama o servidor", async () => {
+    const c = mockar(() => ({ status: 201, corpo: PEDIDO }));
+    const r = await usarNotaComoRascunho(null, "n1");
+    expect(c).toHaveLength(0);
+    expect(!r.ok && r.status).toBe(401);
+  });
+
+  it("o parâmetro: lê e salva com a chave do fio", async () => {
+    const c = mockar((x) => ({ status: 200, corpo: { "publicar-ao-assinar": x.method === "PUT" } }));
+    const { result } = renderHook(() => useParametrosParecerJuridico("tk"));
+    await waitFor(() => expect(result.current.estado.fase).toBe("pronto"));
+    expect(c[0]).toMatchObject({ url: "/api/legislativo/parametros-parecer-juridico", method: "GET" });
+    const r = await salvarParametrosParecerJuridico("tk", true);
+    expect(c[1]).toMatchObject({ url: "/api/legislativo/parametros-parecer-juridico", method: "PUT", body: { "publicar-ao-assinar": true } });
+    expect(r.ok && r.dado.publicarAoAssinar).toBe(true);
+  });
+
+  it("o parâmetro: resposta sem o campo é erro, não 'desligado' de mentira", async () => {
+    mockar(() => ({ status: 200, corpo: {} }));
+    const r = await salvarParametrosParecerJuridico("tk", false);
+    expect(r.ok).toBe(false);
   });
 });

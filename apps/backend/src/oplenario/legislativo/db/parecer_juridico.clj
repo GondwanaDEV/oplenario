@@ -6,7 +6,8 @@
   (:require [clojure.string :as str]
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum])
+            [oplenario.kernel.db-util :as comum]
+            [oplenario.legislativo.db.parametro-parecer :as parametro])
   (:import (java.sql Date Timestamp)
            (java.time Instant LocalDate)))
 
@@ -94,7 +95,7 @@
 (def ^:private colunas-parecer
   [:pj.id :pj.pedido_id :pj.proposicao_id :pj.estado :pj.relatorio :pj.fundamentacao :pj.conclusao :pj.substitui_id
    :pj.numero :pj.ano :pj.assinado_em :pj.assinatura_nome :pj.assinatura_oab :pj.assinatura_qualificacao
-   :pj.criado_em substituido])
+   :pj.criado_em :pj.origem_rascunho substituido])
 
 (defn- consulta-pareceres [ente-id & onde]
   {:select colunas-parecer
@@ -224,9 +225,11 @@
                         :where [:and [:= :p.ente_id ente-id] [:= :p.id proposicao-id] [:= :e.terminal true]]}))))
 
 (defn publicos-da-materia
-  "O que o portal mostra: so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4), e so' o parecer vigente."
+  "O que o portal mostra: so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4) — ou ja' ao assinar, quando a Casa
+  antecipou (`parametro-parecer`) — e so' o parecer vigente. Consulta avulsa (sem materia) nunca chega aqui: o portal
+  le' por materia."
   [tx ente-id proposicao-id]
-  (if (materia-deliberada? tx ente-id proposicao-id)
+  (if (or (parametro/publicar-ao-assinar? tx ente-id) (materia-deliberada? tx ente-id proposicao-id))
     (filterv (complement :substituido) (pareceres-assinados-da-materia tx ente-id proposicao-id))
     []))
 
