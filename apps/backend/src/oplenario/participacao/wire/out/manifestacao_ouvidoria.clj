@@ -13,7 +13,10 @@
   Sem PII, sem id interno — nem para manifestacoes NAO-anonimas (simetria: o recibo nunca vaza o manifestante)."
   [:map {:closed true}
    [:protocolo :string]
-   [:recibo-em :string]])
+   [:recibo-em :string]
+   ;; ADR-0018 (Eixo 2): a Casa esta' com o sistema restrito — o pedido foi recebido e o prazo corre; o recibo diz
+   ;; desde quando (so' a data; o motivo nao e' publico). Ausente numa Casa ativa.
+   [:acesso-restrito-desde {:optional true} :string]])
 
 (def ManifestacaoOut
   "Detalhe da manifestacao para o proprio MANIFESTANTE autenticado (GET /portal/ouvidoria/manifestacoes/:id

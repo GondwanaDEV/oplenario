@@ -112,3 +112,6 @@
 .superficie-publica a.btn-primaria, .superficie-publica a.btn-primaria:hover { color: var(--acao-texto); text-decoration: none; }
 .superficie-publica a.btn-contorno, .superficie-publica a.btn-contorno:hover { color: var(--texto); text-decoration: none; }
 .pf-hero .eyebrow, .pf-recibo .eyebrow { color: var(--acento-texto); }
+
+/* ADR-0018 — o recibo numa Casa com o sistema restrito: aviso âmbar (texto AA nos dois temas), não erro */
+.pf-restrito { color: var(--aviso-texto); font-weight: 600; border-left: 3px solid var(--amarelo-traco); padding-left: 0.7rem; }

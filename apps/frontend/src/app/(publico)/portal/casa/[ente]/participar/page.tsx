@@ -9,6 +9,7 @@ import { RodapeInstitucional } from "../../../../rodape-institucional";
 import { ParticiparCartao } from "../../../../participar-cartao";
 import { derivarVistaParticipar, hrefEntrarComGovbr } from "@/lib/participar-vista";
 import type { RespostaDescoberta } from "@/lib/entrar-vista";
+import { buscarNomeCasa } from "@/lib/portal-api";
 
 const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
 
@@ -31,7 +32,9 @@ export default async function PaginaParticipar({
 }) {
   const { ente } = await params;
   const { redirect, erro } = await searchParams;
-  const vista = derivarVistaParticipar(await buscarDescoberta(ente), erro);
+  // ADR-0018: a faixa de acesso restrito vem do perfil público da Casa (o mesmo que a capa lê)
+  const [descoberta, casa] = await Promise.all([buscarDescoberta(ente), buscarNomeCasa(ente)]);
+  const vista = derivarVistaParticipar(descoberta, erro);
 
   if (vista.estado === "nao-encontrada" || vista.estado === "erro") {
     return (
@@ -57,7 +60,7 @@ export default async function PaginaParticipar({
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} />
+      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} acessoRestritoDesde={casa?.acessoRestritoDesde} />
       <main id="conteudo" className="envelope pt-wrap">
         <ParticiparCartao vista={vista} ente={ente} hrefEntrar={hrefEntrarComGovbr(ente, redirect)} />
       </main>

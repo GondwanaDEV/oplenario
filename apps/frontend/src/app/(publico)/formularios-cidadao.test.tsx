@@ -37,6 +37,31 @@ describe("formulários do cidadão", () => {
     expect(screen.getByRole("link", { name: /meus protocolos/i }).getAttribute("href")).toBe("/meus-protocolos");
   });
 
+  it("Casa com o sistema restrito (ADR-0018): o recibo diz, e o pedido vale", async () => {
+    respondeCom(201, { protocolo: "ESIC-2026-000008", "recibo-em": "2026-09-30T12:00:00Z",
+      "acesso-restrito-desde": "2026-09-29T13:00:00Z" });
+    render(<FormEsic ente={ENTE} sessao={cidada} />);
+    fireEvent.change(screen.getByLabelText(/assunto/i), { target: { value: "Contratos de 2025" } });
+    fireEvent.change(screen.getByLabelText(/o que você quer saber/i), { target: { value: "A lista dos contratos." } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar pedido/i }));
+    });
+    await waitFor(() => expect(screen.getByText("ESIC-2026-000008")).toBeTruthy());
+    expect(screen.getByText(/acesso restrito desde 29\/09\. Seu pedido foi recebido normalmente e o prazo legal/)).toBeTruthy();
+  });
+
+  it("Casa ativa: o recibo não fala de restrição", async () => {
+    respondeCom(201, { protocolo: "ESIC-2026-000009", "recibo-em": "2026-09-30T12:00:00Z" });
+    render(<FormEsic ente={ENTE} sessao={cidada} />);
+    fireEvent.change(screen.getByLabelText(/assunto/i), { target: { value: "Contratos de 2025" } });
+    fireEvent.change(screen.getByLabelText(/o que você quer saber/i), { target: { value: "A lista dos contratos." } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar pedido/i }));
+    });
+    await waitFor(() => expect(screen.getByText("ESIC-2026-000009")).toBeTruthy());
+    expect(screen.queryByText(/acesso restrito/)).toBeNull();
+  });
+
   it("e-SIC: campo vazio não vai ao backend e diz o que falta", async () => {
     respondeCom(201, {});
     render(<FormEsic ente={ENTE} sessao={cidada} />);

@@ -20,9 +20,11 @@ export function dataHora(iso: string): string {
 }
 
 export function atividade(c: Casa, agora: Date = new Date()): string {
+  if (c.estado === "ativo" && c.suspensaoAgendada) return "suspensão agendada para o fim da sessão";
   if (c.estado === "ativo") return c.ativadaEm ? `ativa ${haQuanto(c.ativadaEm, agora)}` : "ativa";
   if (c.estado === "provisionar") {
     return c.conviteEnviadoEm ? `convite enviado ${haQuanto(c.conviteEnviadoEm, agora)}` : "convite não saiu";
   }
+  if (c.estado === "suspenso") return c.restricao ? `acesso restrito ${haQuanto(c.restricao.desde, agora)}` : "acesso restrito";
   return "";
 }

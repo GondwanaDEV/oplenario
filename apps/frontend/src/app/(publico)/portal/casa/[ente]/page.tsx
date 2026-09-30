@@ -48,7 +48,12 @@ export default async function PaginaPortalCidadao({
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} paginaAtual="inicio" />
+      <BarraInstitucional
+        ente={ente}
+        nomeCasa={nomeCasa}
+        paginaAtual="inicio"
+        acessoRestritoDesde={casa.estado === "ok" ? casa.acessoRestritoDesde : null}
+      />
       <main id="conteudo">
         <Capa />
         <div className="envelope">

@@ -195,6 +195,68 @@ def test_orcamento_mais_antigo_nao_volta_atras() -> None:
     assert arm.orcamento(ENTE) == PLANO
 
 
+def test_casa_suspensa_zera_a_cota_e_a_reativada_volta_a_so_medir() -> None:
+    """ADR-0018: a suspensão da Casa manda 0/0 (nem o que a pessoa pede roda); a reativação de uma Casa que antes só
+    media manda o orçamento SEM VALOR — ela volta a só medir, e um 0/0 atrasado não a trava de novo."""
+
+    def evento(seq: int, payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "seq": seq,
+            "ente-id": ENTE,
+            "tipo": "OrcamentoIADefinido",
+            "versao": 1,
+            "chave": f"OrcamentoIADefinido:v1:{ENTE}:{seq}",
+            "criado-em": payload["definido-em"],
+            "payload": payload,
+        }
+
+    core = CoreComTexto()
+    core.eventos.append(
+        evento(1, {"mensal": "0", "teto-duro": "0", "moeda": "USD", "definido-em": "2026-09-26T20:00:00Z"})
+    )
+    arm, rel = ArmazemMemoria(), Relogio()
+    reg = RegistroMemoria()
+    cota = Cota(Fonte(arm, reg), agora=rel)
+    t = Trabalhador(
+        ClienteCore("http://core", "seg", cliente=httpx.Client(transport=httpx.MockTransport(core))),
+        arm,
+        TranscritorFake(FRASES),
+        DiarizadorFake(VOZES),
+        nucleo=Nucleo(PortaFake({RESUMO: resumo_fake.redigir}), reg, cota=cota),
+        embedder=EmbedderFake(),
+        agora=rel,
+    )
+    t.ciclo()
+    assert cota.estado(ENTE) == "esgotada", "suspensa: a cota fica zerada"
+    assert not cota.liberada(ENTE, "busca.responder")
+    core.eventos.append(
+        evento(2, {"mensal": None, "teto-duro": None, "moeda": "USD", "definido-em": "2026-09-27T20:00:00Z"})
+    )
+    t.ciclo()
+    assert arm.orcamento(ENTE) is None
+    assert cota.estado(ENTE) == "sem_orcamento", "reativada: volta a só medir"
+    arm.definir_orcamento(
+        ENTE,
+        Orcamento(mensal=Decimal("0"), teto_duro=Decimal("0"), moeda="USD"),
+        datetime(2026, 9, 26, 21, 0, tzinfo=UTC),
+        "atrasado",
+    )
+    assert arm.orcamento(ENTE) is None, "um 0/0 atrasado não volta atrás"
+
+
+def test_orcamento_sem_valor_vem_com_os_dois_nulos() -> None:
+    from oplenario_ia.fronteira.contrato import OrcamentoIADefinidoV1
+
+    ok = OrcamentoIADefinidoV1.model_validate(
+        {"mensal": None, "teto-duro": None, "moeda": "USD", "definido-em": "2026-09-27T20:00:00Z"}
+    )
+    assert ok.mensal is None and ok.teto_duro is None
+    with pytest.raises(ValueError):
+        OrcamentoIADefinidoV1.model_validate(
+            {"mensal": "10", "teto-duro": None, "moeda": "USD", "definido-em": "2026-09-27T20:00:00Z"}
+        )
+
+
 # ---------- o consumo do mês ----------
 
 

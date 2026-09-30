@@ -22,6 +22,7 @@ import {
   type Resultado,
 } from "@/lib/formularios-cidadao";
 import { formatarData, formatarHora } from "@/lib/formatar-data";
+import { avisoNoRecibo } from "@/lib/faixa-acesso-restrito";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
 import type { EstadoSessaoCidada } from "@/lib/use-sessao-cidada";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
@@ -29,7 +30,8 @@ import "./participacao.css";
 import "./participar.css";
 
 type Sessao = { estado: EstadoSessaoCidada; token: string | null };
-type Recibo = { protocolo: string; reciboEm: string };
+// `acessoRestritoDesde` (ADR-0018): a Casa está com o sistema restrito — o pedido foi recebido e o prazo corre.
+type Recibo = { protocolo: string; reciboEm: string; acessoRestritoDesde?: string | null };
 
 const IconeEscudo = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -109,6 +111,7 @@ function ReciboProtocolo({
         Recebido em {formatarData(recibo.reciboEm)} às {formatarHora(recibo.reciboEm)}. Este recibo é a prova do seu
         pedido e o <b>marco em que o prazo começa a contar</b>.
       </p>
+      {recibo.acessoRestritoDesde && <p className="pf-ajuda pf-restrito">{avisoNoRecibo(recibo.acessoRestritoDesde)}</p>}
       {anonima ? (
         <p className="pf-ajuda">
           <b>Guarde este número:</b> sem identificação, é só por ele que você acompanha a resposta.

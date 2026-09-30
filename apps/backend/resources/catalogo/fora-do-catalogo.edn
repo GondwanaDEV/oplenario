@@ -103,6 +103,17 @@
                                      :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}
  :admin-sistema/observabilidade-ia {:categoria :supratenant
                                     :motivo "a saude da IA em todas as Casas (volume, latencia, custo), so' contagens, para a Operacao"}
+ ;; ---------- ADR-0018 (fatia 1): suspender, reativar, iniciar o encerramento ----------
+ :admin-sistema/pedir-suspensao {:categoria :supratenant
+                                 :motivo "a Operacao pede a suspensao de uma Casa (motivo fechado + justificativa); outro operador aprova"}
+ :admin-sistema/iniciar-encerramento {:categoria :supratenant
+                                      :motivo "a Operacao pede o encerramento de uma Casa (fim de contrato ou oficio); dois operadores"}
+ :admin-sistema/reativar-casa {:categoria :supratenant
+                               :motivo "um operador devolve a Casa suspensa a ativa, com motivo, selado na atuacao"}
+ :admin-sistema/aprovar-pedido {:categoria :supratenant
+                                :motivo "o 2o operador aprova o pedido de suspensao/encerramento (two-person rule, ADR-0018)"}
+ :admin-sistema/recusar-pedido {:categoria :supratenant
+                                :motivo "o 2o operador recusa (ou quem pediu retira) o pedido de suspensao/encerramento"}
  ;; ---------- Onda E: o livro de atas no portal ----------
  :sessoes/livro-atas-publico {:categoria :so-tela
                               :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}

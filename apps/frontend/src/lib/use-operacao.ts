@@ -21,9 +21,33 @@ export type Casa = {
   criadaEm: string | null;
   conviteEnviadoEm: string | null;
   ativadaEm: string | null;
+  /** ADR-0018: a restrição vigente (só numa Casa suspensa). */
+  restricao?: { motivo: string; desde: string } | null;
+  /** ADR-0018: a suspensão aprovada que espera a sessão plenária em curso encerrar. */
+  suspensaoAgendada?: boolean;
 };
 
-export type ListaDeCasas = { casas: Casa[]; resumo: { total: number; ativas: number; aguardandoAdmin: number } };
+/** ADR-0018: o pedido de suspensão/encerramento que espera o 2º operador. */
+export type Pedido = {
+  id: string;
+  enteId: string;
+  casaNome: string | null;
+  acao: "suspender" | "encerrar";
+  motivo: string;
+  justificativa: string;
+  estado: "aguardando" | "aprovado" | "recusado" | "expirado" | "retirado";
+  pedidoPorId: string;
+  pedidoPor: string | null;
+  pedidoEm: string;
+  confirmarAte: string | null;
+  efetivadoEm: string | null;
+};
+
+export type ListaDeCasas = {
+  casas: Casa[];
+  resumo: { total: number; ativas: number; aguardandoAdmin: number; suspensas?: number };
+  pendentes?: Pedido[];
+};
 
 export type Atuacao = {
   id: string;
@@ -37,6 +61,7 @@ export type Atuacao = {
 export type FichaDaCasa = {
   casa: Casa;
   primeiroAdmin: { nome: string | null; email: string | null } | null;
+  pedidoAberto?: Pedido | null;
   atuacao: Atuacao[];
 };
 
@@ -159,6 +184,67 @@ export function reaplicarLogin(ente: string, token: string | null) {
   return enviar<Casa>(`/api/operacao/casas/${encodeURIComponent(ente)}/realm`, token);
 }
 
+// ---- ADR-0018: suspender, reativar, iniciar o encerramento ----
+
+export type Transicao = { casa: Casa; pedido: Pedido | null; efeito: "imediato" | "agendado" | "ja-efetivado" | null };
+
+export const MOTIVOS_SUSPENSAO = [
+  { valor: "inadimplencia", rotulo: "Inadimplência" },
+  { valor: "pedido_da_casa", rotulo: "Pedido da própria Câmara" },
+  { valor: "ordem_judicial", rotulo: "Ordem judicial" },
+  { valor: "incidente_de_seguranca", rotulo: "Incidente de segurança" },
+] as const;
+
+export const ORIGENS_ENCERRAMENTO = [
+  { valor: "fim_de_contrato", rotulo: "Fim do contrato" },
+  { valor: "pedido_da_casa", rotulo: "Pedido da Câmara (ofício)" },
+] as const;
+
+const ROTULOS_MOTIVO: Record<string, string> = {
+  inadimplencia: "Inadimplência",
+  pedido_da_casa: "Pedido da própria Câmara",
+  ordem_judicial: "Ordem judicial",
+  incidente_de_seguranca: "Incidente de segurança",
+  encerramento_em_curso: "Encerramento em curso",
+  fim_de_contrato: "Fim do contrato",
+};
+
+export function rotuloMotivo(motivo: string): string {
+  return ROTULOS_MOTIVO[motivo] ?? motivo;
+}
+
+/** A justificativa tem de dizer algo: o servidor recusa menos de 10 caracteres (e o que for além de 2000). */
+export function conferirJustificativa(texto: string): string | null {
+  const t = texto.trim();
+  if (t.length < 10) return "Escreva a justificativa — ela fica na atuação selada e a Câmara a lê.";
+  if (t.length > 2000) return "A justificativa passa de 2.000 caracteres.";
+  return null;
+}
+
+const base = (ente: string) => `/api/operacao/casas/${encodeURIComponent(ente)}`;
+
+export function pedirSuspensao(ente: string, motivo: string, justificativa: string, token: string | null) {
+  return enviar<Transicao>(`${base(ente)}/suspensao`, token, { motivo, justificativa: justificativa.trim() });
+}
+
+export function iniciarEncerramento(ente: string, origem: string, justificativa: string, token: string | null) {
+  return enviar<Transicao>(`${base(ente)}/encerramento`, token, { origem, justificativa: justificativa.trim() });
+}
+
+export function reativarCasa(ente: string, justificativa: string, token: string | null) {
+  return enviar<Transicao>(`${base(ente)}/reativacao`, token, { justificativa: justificativa.trim() });
+}
+
+export function aprovarPedido(pedido: string, token: string | null) {
+  return enviar<Transicao>(`/api/operacao/pedidos/${encodeURIComponent(pedido)}/aprovacao`, token, {});
+}
+
+/** Outro operador recusa; quem pediu retira (o servidor decide qual pela sessão). */
+export function recusarPedido(pedido: string, justificativa: string, token: string | null) {
+  const j = justificativa.trim();
+  return enviar<Transicao>(`/api/operacao/pedidos/${encodeURIComponent(pedido)}/recusa`, token, j ? { justificativa: j } : {});
+}
+
 // ---- conferência no navegador (espelha o backend; o servidor confere de novo) ----
 
 export function cpfValido(entrada: string): boolean {
@@ -206,6 +292,17 @@ const ACOES: Record<string, string> = {
   "convite-reenviado": "Convite reenviado ao 1º administrador",
   "casa-ativada": "A Casa assumiu: o 1º administrador entrou",
   "realm-reprovisionado": "Configuração de login reaplicada",
+  "suspensao-pedida": "Suspensão pedida",
+  "suspensao-aprovada": "Suspensão aprovada pelo 2º operador",
+  "suspensao-recusada": "Suspensão recusada pelo 2º operador",
+  "suspensao-agendada": "Suspensão agendada para o fim da sessão em curso",
+  "suspensao-agendada-cancelada": "Suspensão agendada cancelada",
+  "encerramento-pedido": "Encerramento pedido",
+  "encerramento-aprovado": "Encerramento aprovado pelo 2º operador",
+  "encerramento-recusado": "Encerramento recusado pelo 2º operador",
+  "pedido-retirado": "Pedido retirado por quem pediu",
+  "casa-suspensa": "Câmara com acesso restrito",
+  "casa-reativada": "Câmara reativada",
 };
 
 export function rotuloAcao(acao: string): string {
