@@ -8,7 +8,7 @@ import { renderHook, act } from "@testing-library/react";
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock("./api-fetch", () => ({ apiFetch: fetchMock }));
 
-import { concederAcesso, useConcederAcesso } from "./use-conceder-acesso";
+import { concederAcesso, concederJuridico, useConcederAcesso, useConcederJuridico } from "./use-conceder-acesso";
 
 function ok(body: unknown) {
   return { ok: true, status: 201, json: async () => body } as Response;
@@ -138,5 +138,50 @@ describe("useConcederAcesso", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2); // nunca chegou no passo 3 (acessos)
     expect(result.current.estado).toBe("erro");
     expect(result.current.erro).toMatch(/identidade ja vinculada/);
+  });
+});
+
+describe("concederJuridico — identidade, e só então o vínculo de servidor com qualificação e OAB (ADR-0019)", () => {
+  afterEach(() => { fetchMock.mockReset(); });
+
+  const entrada = {
+    cpf: "52998224725", nome: "Dra. Lúcia Prado", email: "lucia@camara.local", qualificacao: "contratado", oab: "CE 12345",
+  };
+
+  it("chama a identidade e depois o acesso, com papeis [juridico], qualificacao e oab no corpo", async () => {
+    const chamadas: Array<[string, Record<string, unknown>]> = [];
+    const fetchFake = vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push([url, init?.body ? JSON.parse(init.body as string) : {}]);
+      return { ok: true, json: async () => ({ "identidade-id": "id-7" }) } as Response;
+    });
+    const r = await concederJuridico(entrada, fetchFake);
+    expect(r).toEqual({ identidadeId: "id-7" });
+    expect(chamadas.map(([u]) => u)).toEqual(["/api/identidade/identidades", "/api/identidade/acessos"]);
+    expect(chamadas[1][1]).toEqual({
+      "identidade-id": "id-7", tipo: "servidor", papeis: ["juridico"], email: "lucia@camara.local",
+      qualificacao: "contratado", oab: "CE 12345",
+    });
+  });
+
+  it("se a identidade falha, o acesso nunca é concedido", async () => {
+    const chamadas: string[] = [];
+    const fetchFake = vi.fn(async (url: string) => {
+      chamadas.push(url);
+      return { ok: false, status: 400, json: async () => ({ erro: "cpf invalido" }) } as Response;
+    });
+    await expect(concederJuridico(entrada, fetchFake)).rejects.toThrow(/cpf invalido/);
+    expect(chamadas).toEqual(["/api/identidade/identidades"]);
+  });
+
+  it("useConcederJuridico: o 400 do servidor no acesso vira o erro da tela", async () => {
+    fetchMock
+      .mockResolvedValueOnce(ok({ "identidade-id": "id-7" }))
+      .mockResolvedValueOnce(erro(400, { erro: "oab invalida" }));
+    const { result } = renderHook(() => useConcederJuridico("tok-admin"));
+    await act(async () => {
+      await expect(result.current.conceder(entrada)).rejects.toThrow(/oab invalida/);
+    });
+    expect(result.current.estado).toBe("erro");
+    expect(result.current.erro).toMatch(/oab invalida/);
   });
 });

@@ -6,7 +6,8 @@
   O CPF e' validado AQUI, de verdade: db/identidade.clj:17 valida por {:pre}, e assertion SOME com -da —
   em prod a unica barreira poderia evaporar sem sinal (nao ha CHECK no banco). A assertion fica como rede
   interna; esta e' a barreira real."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.identidade.models.identidade :as mod]
             [oplenario.identidade.wire.in.acesso :as wire]))
@@ -37,13 +38,50 @@
     (when-not (mod/valido-cpf? (:cpf mm)) (invalido! "cpf invalido" {:campos [:cpf]}))
     {:id (random-uuid) :cpf (:cpf mm) :nome (:nome mm)}))
 
-(defn conceder-acesso->dominio [_ator wire-in]
+(def ^:private oab-re
+  "UF (2 letras) + numero (1..7 digitos) + sufixo opcional (letra: suplementar); separadores livres entre eles."
+  #"^([A-Z]{2})\s?-?\s?(\d{1,7})([A-Z]?)$")
+
+(defn- normalizar-oab!
+  "trim + espacos colapsados + maiusculas, e a forma canonica `UF NUMERO[SUFIXO]` (ex.: \"ce-12345\" -> \"CE 12345\")."
+  [oab]
+  (let [bruta (-> (str oab) str/trim (str/replace #"\s+" " ") str/upper-case)
+        [_ uf numero sufixo] (re-matches oab-re bruta)]
+    (when-not uf (invalido! "oab invalida" {:campos [:oab]}))
+    (str uf " " numero sufixo)))
+
+(defn- perfil-juridico! [mm]
+  (let [juridico? (some #{"juridico"} (:papeis mm))]
+    (cond
+      juridico?
+      (do
+        ;; um vinculo servidor nao mistura `auditor` e `juridico` na mesma concessao (ADR-0019 Eixo 1)
+        (when-not (= 1 (count (:papeis mm)))
+          (invalido! "o papel juridico e' concedido sozinho" {:campo :papeis}))
+        (when-not (and (:qualificacao mm) (:oab mm))
+          (invalido! "o papel juridico exige qualificacao e oab"
+                     {:campos (vec (cond-> [] (nil? (:qualificacao mm)) (conj :qualificacao)
+                                              (nil? (:oab mm)) (conj :oab)))}))
+        {:qualificacao (:qualificacao mm)
+         :oab (normalizar-oab! (:oab mm))})
+
+      (or (contains? mm :qualificacao) (contains? mm :oab))
+      (invalido! "qualificacao e oab so' valem para o papel juridico" {:campos [:qualificacao :oab]})
+
+      :else nil)))
+
+(defn conceder-acesso->dominio
+  "Corpo de conceder acesso -> dominio. Com o papel `juridico` (ADR-0019) devolve tambem `:perfil-juridico
+  {:qualificacao <string> :oab <normalizada>}`; sem ele, nao ha' a chave."
+  [_ator wire-in]
   (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
   (let [mm (keywordizar wire-in)]
     (validar! wire/ConcederAcesso mm "corpo de conceder acesso invalido")
     (when-not (every? (get wire/papeis-por-tipo (:tipo mm) #{}) (:papeis mm))
       (invalido! "papel incompativel com o tipo do vinculo" {:campo :papeis}))
-    {:identidade-id (->uuid! (:identidade-id mm) :identidade-id)
-     :tipo (:tipo mm)
-     :papeis (:papeis mm)
-     :email (:email mm)}))
+    (let [perfil (perfil-juridico! mm)]
+      (cond-> {:identidade-id (->uuid! (:identidade-id mm) :identidade-id)
+               :tipo (:tipo mm)
+               :papeis (:papeis mm)
+               :email (:email mm)}
+        perfil (assoc :perfil-juridico perfil)))))

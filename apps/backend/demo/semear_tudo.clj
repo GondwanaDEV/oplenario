@@ -47,6 +47,8 @@
                                        :n-vereadores (count (:vereadores casa-r))}))
         (let [acervo-r (acervo/semear! sys ente (:vereador identidades) (:secretaria identidades))]
           (println "==> acervo:" (pr-str acervo-r))
+          (println "==> parecer juridico:"
+                   (pr-str (acervo/semear-parecer-juridico! sys ente (:secretaria identidades) (:apresentacao identidades))))
           (println "==> requerimento coletivo:"
                    (pr-str (acervo/semear-proposta-coletiva! sys ente (:presidente identidades) (:vereador identidades))))
           (let [sessoes-r (sessoes/semear! sys ente (:secretaria identidades))]

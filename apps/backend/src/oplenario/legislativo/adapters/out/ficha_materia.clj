@@ -48,7 +48,7 @@
    ;; `:comissao-nome` chega do CONTROLLER (host `resolver-comissoes`, §22.5.3) — nunca lido do banco
    ;; aqui: `legislativo` nao alcanca o schema de `cadastros` (defeito #11 do ledger de prontidao).
    :comissao-nome (:comissao-nome linha)
-   :relator-id (->str (:relator-id linha)) :voto-relator (:voto-relator linha) :estado (:estado linha)})
+   :relator-id (->str (:relator-id linha)) :relator-nome (:relator-nome linha) :voto-relator (:voto-relator linha) :estado (:estado linha)})
 
 (defn ficha->wire
   "`proposicao-out` = ProposicaoDetalheOut JA PROJETADO (o diplomat chamou `adapters.out.proposicao/

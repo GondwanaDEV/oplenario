@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { FichaMateriaTabs } from "./ficha-materia-tabs";
 import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
 
@@ -167,5 +167,160 @@ describe("FichaMateriaTabs", () => {
     fireEvent.click(screen.getByRole("tab", { name: /tramitação/i }));
     const aviso = container.querySelector(".aviso-corte");
     expect(aviso?.textContent ?? "").toMatch(/Mostrando as 1 transições mais recentes/);
+  });
+
+  // ---------- ADR-0019: quem relata, designar relator e a aba do parecer jurídico ----------
+
+  it("aba Pareceres: mostra o relator pelo NOME (nunca o id) e, sem relator, diz isso", () => {
+    const comNome = { ...ficha.pareceres[0], relatorNome: "Helena Matos" };
+    const semRelator = { id: "p2", comissaoId: "c2", comissaoNome: "Comissão de Finanças", relatorId: null, votoRelator: null, estado: "em_elaboracao" };
+    render(<FichaMateriaTabs ficha={{ ...ficha, pareceres: [comNome, semRelator] }} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    expect(screen.getByText("Relator: Helena Matos")).toBeTruthy();
+    expect(screen.getByText("Sem relator designado")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("r1");
+  });
+
+  it("aba Pareceres: 'Designar relator' só para a secretaria e só onde falta relator num parecer em curso", () => {
+    const semRelator = { id: "p2", comissaoId: "c2", comissaoNome: "Comissão de Finanças", relatorId: null, votoRelator: null, estado: "em_elaboracao" };
+    const encerradoSemRelator = { id: "p3", comissaoId: "c3", comissaoNome: "Comissão de Obras", relatorId: null, votoRelator: null, estado: "prazo_vencido" };
+    const f = { ...ficha, pareceres: [ficha.pareceres[0], semRelator, encerradoSemRelator] };
+    render(<FichaMateriaTabs ficha={f} papeis={["vereador"]} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    expect(screen.queryByRole("button", { name: /designar relator/i })).toBeNull();
+    cleanup();
+    render(<FichaMateriaTabs ficha={f} papeis={["secretario"]} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    expect(screen.getAllByRole("button", { name: /designar relator/i })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Designar relator para Comissão de Finanças" })).toBeTruthy();
+  });
+
+  it("Designar relator: escolhe o vereador, chama POST .../relator e a ficha recarrega", async () => {
+    const chamadas: Array<[string, RequestInit | undefined]> = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push([url, init]);
+      if (url === "/api/cadastros/vereadores")
+        return { ok: true, status: 200, json: async () => ({ vereadores: [{ id: "v1", nome: "Helena Past", "nome-parlamentar": null, "com-acesso": true }] }) } as Response;
+      if (init?.method === "POST" && url === "/api/legislativo/pareceres/p2/relator")
+        return { ok: true, status: 200, json: async () => ({ id: "p2", "relator-id": "v1", "relator-nome": "Helena Past" }) } as Response;
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+    const semRelator = { id: "p2", comissaoId: "c2", comissaoNome: "Comissão de Finanças", relatorId: null, votoRelator: null, estado: "em_elaboracao" };
+    const onTramitou = vi.fn();
+    render(<FichaMateriaTabs ficha={{ ...ficha, pareceres: [semRelator] }} token="tk" papeis={["secretario"]} onTramitou={onTramitou} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Designar relator para Comissão de Finanças" }));
+    const seletor = await screen.findByLabelText("Relator de Comissão de Finanças");
+    fireEvent.change(seletor, { target: { value: "v1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Designar" }));
+    await waitFor(() => expect(onTramitou).toHaveBeenCalledTimes(1));
+    const post = chamadas.find(([u]) => u.endsWith("/relator"))!;
+    expect(JSON.parse(String(post[1]!.body))).toEqual({ "relator-id": "v1" });
+  });
+
+  it("Designar relator: 404 do servidor vira alerta e o formulário segue aberto", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === "/api/cadastros/vereadores")
+        return { ok: true, status: 200, json: async () => ({ vereadores: [{ id: "v1", nome: "Helena Past", "com-acesso": true }] }) } as Response;
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+    const semRelator = { id: "p2", comissaoId: "c2", comissaoNome: "Comissão de Finanças", relatorId: null, votoRelator: null, estado: "em_elaboracao" };
+    render(<FichaMateriaTabs ficha={{ ...ficha, pareceres: [semRelator] }} token="tk" papeis={["secretario"]} />);
+    fireEvent.click(screen.getByRole("tab", { name: /pareceres/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Designar relator para Comissão de Finanças" }));
+    fireEvent.change(await screen.findByLabelText("Relator de Comissão de Finanças"), { target: { value: "v1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Designar" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Não encontramos o parecer ou o vereador/);
+  });
+
+  describe("aba Parecer jurídico", () => {
+    const assinado = (extra = {}) => ({
+      id: "pj1", "pedido-id": "ped1", numero: 3, ano: 2026, estado: "assinado", relatorio: "Analisei a matéria.",
+      fundamentacao: "Art. 30 da CF.", conclusao: "com_ressalvas",
+      assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:00:00Z" },
+      "substitui-id": null, substituido: false, ...extra,
+    });
+    const rota = (corpo: unknown, status = 200) => {
+      const f = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/legislativo/proposicoes/1/pareceres-juridicos" && !init?.method)
+          return { ok: status < 300, status, json: async () => corpo } as Response;
+        return { ok: false, status: 404, json: async () => ({}) } as Response;
+      });
+      global.fetch = f as unknown as typeof fetch;
+      return f;
+    };
+
+    it("só busca quando a aba é aberta; lista o assinado (com o selo, a conclusão e a assinatura) e o pedido aberto", async () => {
+      const f = rota({
+        pareceres: [assinado(), assinado({ id: "pj0", numero: 2, substituido: true })],
+        "pedidos-abertos": [{ id: "ped2", assunto: "Análise da emenda", prazo: "2026-10-15", "criado-em": "2026-09-29T10:00:00Z" }],
+      });
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["secretario"]} />);
+      const buscouParecer = () => f.mock.calls.some(([u]) => String(u).endsWith("/pareceres-juridicos"));
+      expect(buscouParecer()).toBe(false);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      expect(await screen.findByText("Parecer jurídico nº 3/2026")).toBeTruthy();
+      expect(buscouParecer()).toBe(true);
+      expect(screen.getByText(/opinativo/)).toBeTruthy();
+      expect(screen.getByText("Substituído")).toBeTruthy();
+      expect(screen.getByText("Análise da emenda")).toBeTruthy();
+      expect(screen.getByText(/prazo 15\/10\/2026/)).toBeTruthy();
+      expect(screen.getAllByText("Com ressalvas").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Lúcia Prado").length).toBe(2); // um por parecer assinado (o substituído também fica)
+      expect(screen.getAllByText(/OAB\/CE 12345 · Advogado\(a\) contratado\(a\)/).length).toBeGreaterThan(0);
+      const link = screen.getByRole("link", { name: "Abrir na fila do jurídico" });
+      expect(link.getAttribute("href")).toBe("/juridico/ped2?token=tk");
+    });
+
+    it("sem parecer nem pedido: diz que não há — e a secretaria pode pedir, o pedido leva o proposicao-id", async () => {
+      const f = rota({ pareceres: [], "pedidos-abertos": [] });
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["secretario"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      expect(await screen.findByText(/Nenhum parecer jurídico assinado nem pedido em aberto/)).toBeTruthy();
+      f.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (init?.method === "POST" && url === "/api/legislativo/pedidos-parecer-juridico")
+          return { ok: true, status: 201, json: async () => ({ id: "ped9", estado: "pendente", assunto: "Análise jurídica da matéria" }) } as Response;
+        return { ok: true, status: 200, json: async () => ({ pareceres: [], "pedidos-abertos": [] }) } as Response;
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Pedir parecer jurídico" }));
+      fireEvent.click(screen.getByRole("button", { name: "Abrir o pedido" }));
+      expect((await screen.findByRole("status")).textContent).toMatch(/Pedido aberto: Análise jurídica da matéria/);
+      const post = f.mock.calls.find(([, i]) => i?.method === "POST")!;
+      expect(JSON.parse(String(post[1]!.body))).toEqual({ "proposicao-id": "1" });
+    });
+
+    it("vereador lê, mas não vê o botão de pedir nem o link para a fila do jurídico", async () => {
+      rota({ pareceres: [assinado()], "pedidos-abertos": [{ id: "ped2", assunto: "Análise", prazo: null, "criado-em": "2026-09-29T10:00:00Z" }] });
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["vereador"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      expect(await screen.findByText("Parecer jurídico nº 3/2026")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pedir parecer jurídico" })).toBeNull();
+      expect(screen.queryByRole("link", { name: /fila do jurídico|Abrir o pedido/ })).toBeNull();
+    });
+
+    it("403 (papel sem acesso) diz quem vê — não é erro nem lista vazia", async () => {
+      rota({ erro: "papel" }, 403);
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["admin_ente"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      expect(await screen.findByText(/visível à secretaria, aos vereadores e ao jurídico/)).toBeTruthy();
+    });
+
+    it("falha do servidor vira alerta honesto, nunca 'nenhum parecer'", async () => {
+      rota({}, 500);
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["secretario"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível concluir agora/);
+      expect(screen.queryByText(/Nenhum parecer jurídico/)).toBeNull();
+    });
+
+    it("o texto do parecer fica dentro do <details> do assinado", async () => {
+      rota({ pareceres: [assinado()], "pedidos-abertos": [] });
+      render(<FichaMateriaTabs ficha={ficha} token="tk" papeis={["secretario"]} />);
+      fireEvent.click(screen.getByRole("tab", { name: "Parecer jurídico" }));
+      const resumo = await screen.findByText("Parecer jurídico nº 3/2026");
+      const det = resumo.closest("details")!;
+      expect(within(det).getByText("Analisei a matéria.")).toBeTruthy();
+      expect(within(det).getByText("Art. 30 da CF.")).toBeTruthy();
+    });
   });
 });

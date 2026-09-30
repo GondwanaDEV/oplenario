@@ -38,6 +38,7 @@
             [oplenario.cadastros.db.referencia :as referencia]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.identidade.db.identidade :as id]
+            [oplenario.identidade.db.perfil-juridico :as perfil-juridico]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy])
@@ -150,7 +151,11 @@
         (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "admin_ente"})
         ;; ADR-0017: na Casa real o `auditor` e' um servidor (a rota de conceder recusa outra combinacao); aqui a
         ;; persona de demonstracao o empilha para a visita mostrar a trilha da Casa inteira, a cadeia e a exportacao.
-        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "auditor"})))
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "auditor"})
+        ;; ADR-0019: idem o `juridico` — na Casa real e' o advogado (servidor) que assina o parecer; a persona de
+        ;; demonstracao o empilha, com a qualificacao e a OAB que o parecer assinado carrega no ato.
+        (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id ente-id :identidade-id apr-id :papel "juridico"})
+        (perfil-juridico/salvar! tx ente-id apr-id {:qualificacao "efetivo" :oab "CE 12345"})))
     {:secretaria sec-id :presidente pres-id :vereador ver-id :cidadao cid-id :apresentacao apr-id}))
 
 ;; ---------- o bloco cadastral (so' roda na PRIMEIRA chamada — ver `ja-semeada?`) ----------

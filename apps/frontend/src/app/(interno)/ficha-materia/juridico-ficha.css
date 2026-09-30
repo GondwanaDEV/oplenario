@@ -1,0 +1,35 @@
+/* Ficha da matéria — o caminho da comissão e o parecer jurídico (ADR-0019). Prefixo jf- (o CSS é page-scoped neste repo).
+   O diálogo é modal (scrim + caixa); o resto vive dentro dos painéis e do rail já existentes. */
+.jf-scrim { position: fixed; inset: 0; z-index: 40; background: rgba(8,16,12,.55); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.jf-dialogo { width: min(34rem, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; display: grid; gap: 0.8rem; padding: 1.2rem 1.3rem; background: var(--surface-solida); color: var(--texto); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
+.jf-dialogo h3 { margin: 0; font-family: var(--display); font-size: var(--t-21); color: var(--texto); }
+.jf-dica { margin: 0; font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; }
+.jf-erro { margin: 0; font-size: var(--t-13); color: var(--acento-texto); }
+.jf-ok { margin: 0; padding: 0.6rem 0.8rem; border: 1px solid var(--linha); border-left: 3px solid var(--jade-medio); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.jf-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+.jf-lista { border: 0; margin: 0; padding: 0; display: grid; gap: 0.5rem; min-width: 0; }
+.jf-lista legend { padding: 0; margin-bottom: 0.4rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
+.jf-comissao { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.4rem 0.7rem; display: grid; gap: 0.4rem; }
+.jf-check { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; font-weight: 600; color: var(--texto); }
+.jf-check input { width: 1.1rem; height: 1.1rem; flex: none; }
+.jf-relator, .jf-relator-form { display: grid; gap: 0.3rem; padding-bottom: 0.4rem; }
+.jf-relator label, .jf-relator-form label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.jf-relator select, .jf-relator-form select { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 78%, transparent); border-radius: var(--raio-sm); padding: 0.55rem 0.7rem; min-height: 44px; width: 100%; box-sizing: border-box; }
+.jf-relator-form { margin-top: 0.4rem; }
+
+/* a aba "Parecer jurídico" */
+.jf-juridico { display: grid; gap: 1rem; }
+.jf-opinativo { margin: 0; padding: 0.6rem 0.8rem; border-left: 3px solid var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.jf-sub { margin: 0 0 0.5rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); font-weight: 600; }
+.jf-itens { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; }
+.jf-itens > li { display: grid; gap: 0.3rem; padding: 0.8rem 1rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); min-width: 0; }
+.jf-itens > li > span { font-size: var(--t-13); color: var(--texto-2); }
+.jf-itens a { color: var(--marca); font-weight: 600; font-size: var(--t-13); }
+.jf-detalhe summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; min-height: 44px; }
+.jf-detalhe .jur-papel { margin-top: 0.6rem; }
+.jf-selo { font-size: var(--t-12); font-weight: 700; padding: 0.05rem 0.5rem; border-radius: var(--raio-capsula); border: 1px solid var(--marca); color: var(--marca); }
+.jf-selo-substituido, .jf-selo-rascunho { border-style: dashed; border-color: var(--linha); color: var(--texto-2); }
+
+/* o parecer de comissão na aba Pareceres: quem relata */
+.tempo .jf-relatoria { display: block; font-size: var(--t-13); color: var(--texto-2); }
+.tempo .jf-designar { margin-top: 0.3rem; }

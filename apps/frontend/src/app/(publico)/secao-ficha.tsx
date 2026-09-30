@@ -19,6 +19,7 @@ import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario } from "./participar-materia";
+import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
 import "./participacao.css";
 
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
@@ -163,6 +164,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           )}
         </div>
       </section>
+
+      {/* ADR-0019: só aparece se a Casa já deliberou a matéria e há parecer jurídico assinado; a seção some sozinha se não */}
+      <PareceresJuridicosPublicos ente={ente} proposicaoId={proposicaoId} />
 
       <section className="secao" aria-label="Participação cidadã">
         <h2>O que a população está dizendo</h2>

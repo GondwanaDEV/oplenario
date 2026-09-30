@@ -156,6 +156,8 @@
                     :left-join [[:legislativo.proposicoes :p]
                                 [:and [:= :p.id :pc.objeto_id] [:= :p.ente_id :pc.ente_id]]]
                     :where [:and [:= :pc.ente_id ente-id] [:= :pc.objeto_tipo [:inline "proposicao"]]
-                            [:= :pc.estado [:inline "aguardando_designacao"]]]
+                            [:= :pc.estado [:inline "aguardando_designacao"]]
+                            ;; ja' com relator (designado pela tela da ficha, que nao move o estado do rito): nao pende mais
+                            [:is :pc.relator_id nil]]
                     :order-by [[:pc.criado_em :asc]]
                     :limit teto})))))
