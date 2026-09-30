@@ -25,6 +25,7 @@
             [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
+            [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.mcp :as mcp]
             [oplenario.normas.components.repositorio :as repo-normas-comp]
@@ -90,6 +91,19 @@
   `resolver-vereador`)."
   [repo-cadastros ente-id ids]
   (repo-cadastros-comp/nomes-de-comissoes repo-cadastros ente-id ids))
+
+(defn cargo-na-mesa
+  "ADR-0019 fatia 3: identidade -> o CARGO dela na Mesa Diretora vigente em `data`, NESTA Casa (\"presidente\",
+  \"1_secretario\"...), ou nil — host wiring (§22.5.3, excecao nomeada, mesma forma de `resolver-vereador`). E' o que a
+  regra da pauta da Casa (quem publica: Presidente, 1o Secretario ou Mesa) consulta no ATO. Parte do vereador da
+  identidade (`vereador-por-identidade`) e do `roster-da-casa` na data — o MESMO dado que a chamada e o telao mostram
+  (`cargo-mesa`, lido de `cadastros.comissao_cargo` da Mesa vigente). So' mandato VIGENTE: o licenciado nao exerce o
+  cargo. `sessoes` recebe esta fn pronta e nunca importa `cadastros` (§22.10)."
+  [repo-cadastros ente-id identidade-id data]
+  (when-let [vid (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id))]
+    (some (fn [l] (when (and (= vid (:vereador-id l)) (= "vigente" (:estado-mandato l)))
+                    (not-empty (:cargo-mesa l))))
+          (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))))
 
 (defn nome-na-casa
   "identidade-id -> nome, SO' de quem tem vinculo NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma
@@ -355,6 +369,14 @@
         ;; dependencia de `consultar-sessao`. Consumido pelo `pauta-handler` (que degrada se isto falhar).
         resumir-proposicoes-fn (fn [ente-id ids]
                                  (repo-legislativo-comp/resumos-de-proposicoes repo-legislativo ente-id ids))
+        ;; ADR-0019 fatia 3 (publicar a pauta): a situacao de parecer das materias da pauta (legislativo) e o cargo
+        ;; de quem publica na Mesa de HOJE (cadastros) — os dois seams da regra e dos avisos, mesma inversao de
+        ;; dependencia de `resumir-proposicoes-fn` (sessoes nunca importa legislativo nem cadastros, §22.10).
+        situacao-de-parecer-fn (fn [ente-id ids]
+                                 (repo-situacao-comp/situacao-de-parecer-das-materias repo-legislativo ente-id ids))
+        cargo-na-mesa-fn (fn [ente-id identidade-id]
+                           (cargo-na-mesa repo-cadastros ente-id identidade-id
+                                          (tempo/hoje relogio-producao tempo/zona-civil-padrao)))
         ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
         ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
         ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
@@ -498,6 +520,9 @@
                                    ;; /assiduidade` (Etapa 6 fatia 3).
                                    :roster-da-casa-em-datas roster-da-casa-em-datas-fn
                                    :resumir-proposicoes resumir-proposicoes-fn
+                                   ;; ADR-0019 fatia 3: os seams de publicar a pauta (avisos e regra de cargo)
+                                   :situacao-de-parecer situacao-de-parecer-fn
+                                   :cargo-na-mesa cargo-na-mesa-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
@@ -681,6 +706,8 @@
                 (let [deps-catalogo
                       {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                        :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       ;; ADR-0019 fatia 3: publicar_pauta (proposta do agente) usa os MESMOS seams da tela
+                       :situacao-de-parecer situacao-de-parecer-fn :cargo-na-mesa cargo-na-mesa-fn
                        :registrar-chamada (catalogo/registrador repo-integracao-ia)
                        ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
                        :repo-normas repo-normas

@@ -34,6 +34,7 @@
             [clojure.test :refer [deftest is testing]]
             [oplenario.demo.casa-test :refer [with-sistema]]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.components.repositorio-publicacao :as repo-pub]
             [sessoes :as sessoes-demo]))
 
 (deftest tres-sessoes-em-estados-distintos
@@ -72,6 +73,15 @@
       (testing "a agendada tem pauta montada e nenhuma presença"
         (is (pos? (sessoes-demo/itens-de-pauta s ente agendada)))
         (is (zero? (sessoes-demo/quorum s ente agendada))))
+      (testing "ADR-0019 fatia 3: a Casa publica pela secretaria e a pauta da agendada sai publicada (v1)"
+        (is (= "secretaria" (:quem-publica (repo-pub/regra-da-pauta (:repo-sessoes s) ente))))
+        (let [versoes (:versoes (repo-pub/publicacao-da-pauta (:repo-sessoes s) ente agendada))]
+          (is (= [[1 "publicacao_inicial" "secretaria"]]
+                 (mapv (juxt :numero-versao :tipo-versao :publicada-a-titulo) versoes)))
+          (is (= (:secretaria identidades) (:created-by (first versoes)))))
+        (sessoes-demo/semear! s ente (:secretaria identidades))
+        (is (= 1 (count (:versoes (repo-pub/publicacao-da-pauta (:repo-sessoes s) ente agendada))))
+            "re-rodar o seed não publica de novo"))
       (testing "nenhuma presença de pessoa fora do cadastro"
         ;; O DEFEITO ORIGINAL (Task 0.3, fundida aqui): 14 presenças de pessoas que o cadastro não conhece
         ;; — o telão do plenário mostraria UUID sem nome. Checa as DUAS sessões com presença real

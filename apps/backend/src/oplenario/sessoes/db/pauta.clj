@@ -3,7 +3,8 @@
   1:1 com a sessao (UNIQUE). Cada mutacao de item (adicionar/reordenar/remover) compoe, na MESMA tx, o ato no
   pauta_item + um registro APPEND-ONLY em pauta_alteracao. Remocao = ativo=false (NUNCA DELETE, Inv.10).
   HoneySQL schema-qualified; ente_id em toda query."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as str]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
             [oplenario.sessoes.logic :as logic]))
@@ -17,7 +18,16 @@
   [:id :ente_id :pauta_sessao_id :pauta_item_id :tipo :justificativa :registrado_em])
 
 (def ^:private cols-versao
-  [:id :ente_id :pauta_sessao_id :numero_versao :tipo_versao :publica :snapshot :justificativa :publicado_em])
+  ;; ADR-0019 fatia 3: `publicada_a_titulo`/`avisos`/`created_by` (mig 20260930000120) — a que titulo a pauta foi
+  ;; publicada, os avisos que a tela mostrou e quem publicou. NULOS nas versoes de antes do ato de publicar.
+  [:id :ente_id :pauta_sessao_id :numero_versao :tipo_versao :publica :snapshot :justificativa :publicado_em
+   :publicada_a_titulo :avisos :created_by])
+
+(defn- snake-das-chaves
+  "Chaves kebab -> snake_case (texto) e uuid -> string, para o JSONB append-only guardar a forma canonica do banco
+  (mesma convencao do snapshot)."
+  [m]
+  (into {} (map (fn [[k v]] [(str/replace (name k) "-" "_") (if (uuid? v) (str v) v)])) m))
 
 (defn- item->snapshot
   "Projeta um item ativo para o formato canonico do snapshot. Chaves SNAKE_CASE (consistente com o resto do
@@ -180,7 +190,8 @@
   chaves snake_case (canonicas do banco); aqui re-kebabizamos cada item p/ a interface de dominio."
   [linha]
   (some-> (comum/linha->kebab linha)
-          (update :snapshot #(mapv comum/linha->kebab (comum/jsonb->kw %)))))
+          (update :snapshot #(mapv comum/linha->kebab (comum/jsonb->kw %)))
+          (update :avisos #(some->> % comum/jsonb->kw (mapv comum/linha->kebab)))))
 
 (defn- proxima-versao
   "numero_versao = max+1 da pauta. A UNIQUE(ente_id,pauta_sessao_id,numero_versao) torna a corrida uma
@@ -197,7 +208,7 @@
   (max+1) e insere. `tipo-versao` ∈ publicacao_inicial|republicacao|execucao_final (fail-closed);
   'republicacao' exige `justificativa` (defesa-em-profundidade — o CHECK da mig 0028 espelha). Devolve
   {:id :numero-versao}."
-  [tx {:keys [ente-id pauta-sessao-id tipo-versao publica justificativa created-by]}]
+  [tx {:keys [ente-id pauta-sessao-id tipo-versao publica justificativa created-by a-titulo avisos]}]
   (logic/validar-tipo-versao tipo-versao)
   (logic/validar-republicacao tipo-versao justificativa)
   (let [id       (random-uuid)
@@ -205,11 +216,24 @@
         itens    (mapv item->snapshot (listar-itens tx ente-id pauta-sessao-id))]
     (jdbc/execute-one! tx
       (sql/format {:insert-into :sessoes.pauta_sessao_versao
-                   :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :numero_versao prox-num
-                             :tipo_versao tipo-versao :publica (boolean publica)
-                             :snapshot (comum/->jsonb itens) :justificativa justificativa
-                             :created_by created-by :efetivado_em [:now]}]}))
+                   :values [(cond-> {:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :numero_versao prox-num
+                                     :tipo_versao tipo-versao :publica (boolean publica)
+                                     :snapshot (comum/->jsonb itens) :justificativa justificativa
+                                     :created_by created-by :efetivado_em [:now]}
+                              ;; ADR-0019 fatia 3: so' o ATO de publicar grava estes dois (mig 20260930000120);
+                              ;; os chamadores antigos seguem sem eles (e sem depender da coluna).
+                              a-titulo (assoc :publicada_a_titulo a-titulo)
+                              avisos   (assoc :avisos (comum/->jsonb (mapv snake-das-chaves avisos))))]}))
     {:id id :numero-versao prox-num}))
+
+(defn travar-publicacao!
+  "ADR-0019 fatia 3: serializa as publicacoes da MESMA sessao nesta tx (trava consultiva de transacao — a
+  `pauta_sessao` e' INSERT-only, sem GRANT de UPDATE para um `FOR UPDATE`). Dois cliques em 'Publicar' ou duas pessoas
+  da Mesa ao mesmo tempo: o segundo espera o primeiro e decide sobre a versao que ele gravou, em vez de colidir na
+  UNIQUE do numero."
+  [tx ente-id sessao-id]
+  (jdbc/execute-one! tx ["SELECT pg_advisory_xact_lock(hashtextextended(?, 7162600030))"
+                         (str "publicar-pauta:" ente-id ":" sessao-id)]))
 
 (defn buscar-versao
   "Busca uma versao da pauta pelo `id`; nil se inexistente ou de outro tenant (RLS). Snapshot ja hidratado."
@@ -236,3 +260,33 @@
      (sql/format {:select cols-versao :from [:sessoes.pauta_sessao_versao]
                   :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id] [:= :publica true]]
                   :order-by [[:numero_versao :desc]] :limit 1}))))
+
+;; ---------- ADR-0019 fatia 3 — a PAUTA OFICIAL no portal ----------
+
+(def teto-pautas-no-portal
+  "Quantas sessoes a lista publica de pautas devolve (as mais recentes). Rota anonima e sem cache: teto explicito."
+  60)
+
+(defn pautas-publicas
+  "As sessoes do PORTAL com a situacao da pauta oficial: so' de transmissao publica e nao secretas (a mesma regra do
+  livro de atas, `logic/ata-no-portal?`), e so' as que interessam ao cidadao — as que ainda vao acontecer ou estao em
+  curso (agendada/aberta/suspensa: 'a pauta ainda nao foi publicada' e' informacao) e as que tem pauta publicada. Cada
+  linha traz a ULTIMA versao publica (numero, instante, quantos itens), ou nada. Mais recente primeiro, com teto."
+  [tx ente-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format
+      {:select [:s.id :s.tipo_sessao :s.numero_sequencial :s.estado :s.agendada_para :s.aberta_em :s.encerrada_em
+                [:v.numero_versao :versao] [:v.publicado_em :publicada_em] [:v.itens :itens]]
+       :from [[:sessoes.sessao :s]]
+       :left-join [[:sessoes.pauta_sessao :p] [:and [:= :p.ente_id :s.ente_id] [:= :p.sessao_id :s.id]]
+                   [[:lateral {:select [:numero_versao :publicado_em [[:jsonb_array_length :snapshot] :itens]]
+                               :from [:sessoes.pauta_sessao_versao]
+                               :where [:and [:= :ente_id :p.ente_id] [:= :pauta_sessao_id :p.id] [:= :publica true]]
+                               :order-by [[:numero_versao :desc]] :limit 1}] :v]
+                   true]
+       :where [:and [:= :s.ente_id ente-id] [:= :s.transmite_publica true] [:<> :s.tipo_sessao [:inline "secreta"]]
+               [:or [:in :s.estado [[:inline "agendada"] [:inline "aberta"] [:inline "suspensa"]]]
+                [:is-not :v.numero_versao nil]]]
+       :order-by [[[:coalesce :s.aberta_em :s.agendada_para] :desc-nulls-last] [:s.id :asc]]
+       :limit teto-pautas-no-portal}))))

@@ -58,4 +58,14 @@
    [:publica :boolean]
    [:snapshot [:sequential [:map-of :keyword :any]]]
    [:justificativa {:optional true} [:maybe :string]]
-   [:publicado-em km/Instante]])
+   [:publicado-em km/Instante]
+   ;; ADR-0019 fatia 3 (mig 20260930000120): o ATO de publicar grava a que titulo e os avisos; quem publicou.
+   [:publicada-a-titulo {:optional true} [:maybe (enum-de logic/quem-publica-pauta)]]
+   [:avisos {:optional true} [:maybe [:sequential [:map-of :keyword :any]]]]
+   [:created-by {:optional true} [:maybe :uuid]]])
+
+;; ADR-0019 fatia 3 — a regra da pauta da Casa (sem linha = `logic/regra-pauta-padrao`).
+(def RegraPauta
+  [:map
+   [:quem-publica (enum-de logic/quem-publica-pauta)]
+   [:antecedencia-minima-horas [:maybe [:int {:min 1 :max logic/teto-antecedencia-horas}]]]])

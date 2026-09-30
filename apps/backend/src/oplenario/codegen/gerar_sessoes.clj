@@ -50,6 +50,8 @@
    ["PautaItemOut" out/PautaItemOut]
    ;; docs/23 Fatia 4b: EmApreciacaoOut ANTES de PautaOut (campo :em-apreciacao aninhado).
    ["EmApreciacaoOut" out/EmApreciacaoOut]
+   ;; ADR-0019 fatia 3: a publicacao (pauta oficial) ANTES de PautaOut (campo :publicacao aninhado).
+   ["PublicacaoResumoOut" out/PublicacaoResumoOut]
    ["PautaOut" out/PautaOut]
    ["ItemAnunciadoOut" out/ItemAnunciadoOut]
    ["GravacaoReciboOut" out/GravacaoReciboOut]
@@ -125,7 +127,21 @@
    ["AssiduidadeOut" out/AssiduidadeOut]
    ;; Tela "Tempos da tribuna" — TempoRegimentalOut ANTES de TemposRegimentaisOut (campo :itens aninhado).
    ["TempoRegimentalOut" out/TempoRegimentalOut]
-   ["TemposRegimentaisOut" out/TemposRegimentaisOut]])
+   ["TemposRegimentaisOut" out/TemposRegimentaisOut]
+   ;; ADR-0019 fatia 3 — PUBLICAR A PAUTA e a pauta OFICIAL do portal. Folhas ANTES dos agregados.
+   ["AvisoPautaOut" out/AvisoPautaOut]
+   ["RegraPautaOut" out/RegraPautaOut]
+   ["AntecedenciaPautaOut" out/AntecedenciaPautaOut]
+   ["VersaoPautaOut" out/VersaoPautaOut]
+   ["PublicacaoPautaOut" out/PublicacaoPautaOut]
+   ["PautaPublicadaOut" out/PautaPublicadaOut]
+   ["PautaOficialResumoOut" out/PautaOficialResumoOut]
+   ["SessaoPautaPublicaOut" out/SessaoPautaPublicaOut]
+   ["PautasPublicasOut" out/PautasPublicasOut]
+   ["ItemPautaOficialOut" out/ItemPautaOficialOut]
+   ["VersaoPautaPublicaOut" out/VersaoPautaPublicaOut]
+   ["PautaOficialVigenteOut" out/PautaOficialVigenteOut]
+   ["PautaOficialOut" out/PautaOficialOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

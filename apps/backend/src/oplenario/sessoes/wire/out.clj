@@ -252,15 +252,25 @@
    [:item-id :string]
    [:anunciado-em :string]])
 
+(def PublicacaoResumoOut
+  "ADR-0019 fatia 3: a ULTIMA publicacao da pauta (a pauta OFICIAL), no cabecalho da pauta viva — numero da versao,
+  quando foi publicada e se a pauta viva mudou desde entao. Ausente = a pauta ainda nao foi publicada."
+  [:map {:closed true}
+   [:versao :int]
+   [:publicada-em :string]
+   [:alterada-desde :boolean]])
+
 (def PautaOut
   "Pauta viva da sessao (resposta de GET /sessoes/:id/pauta) — o sessao-id + os itens ativos em ordem.
   Pauta opcional: sessao sem pauta criada projeta `itens` vazio. `em-apreciacao` (docs/23 Fatia 4b) so'
   aparece quando a Mesa ja' anunciou um item que segue na pauta — e' o estado inicial da TV (o replay do SSE
-  so' retem 5 min)."
+  so' retem 5 min). `publicacao` (ADR-0019 fatia 3) = a ultima versao publicada (a oficial); ausente = nao publicada
+  (ou a leitura da publicacao nao respondeu — enriquecimento, nunca derruba a pauta)."
   [:map {:closed true}
    [:sessao-id :string]
    [:itens [:sequential PautaItemOut]]
-   [:em-apreciacao {:optional true} EmApreciacaoOut]])
+   [:em-apreciacao {:optional true} EmApreciacaoOut]
+   [:publicacao {:optional true} PublicacaoResumoOut]])
 
 (def ItemAnunciadoOut
   "Recibo do anuncio de item (resposta de POST /sessoes/:id/pauta/itens/:item-id/anuncio, docs/23 Fatia 4b):
@@ -976,3 +986,143 @@
   configurou: as falas correm sem limite (o cronometro so' conta)."
   [:map {:closed true}
    [:itens [:sequential TempoRegimentalOut]]])
+
+;; ---------- ADR-0019 fatia 3 (Eixo 7): PUBLICAR A PAUTA ----------
+
+(def AvisoPautaOut
+  "Um aviso da publicacao da pauta — AVISO, nunca bloqueio. Por materia (`sem-parecer-comissao`,
+  `pedido-juridico-pendente`: `item-id`/`proposicao-id` e o resumo da materia quando o legislativo respondeu) ou da
+  pauta (`antecedencia-nao-cumprida`: o minimo da Casa e as horas reais ate' o inicio)."
+  [:map {:closed true}
+   [:tipo (km/enum-de logic/tipos-aviso-de-pauta)]
+   [:item-id {:optional true} :string]
+   [:proposicao-id {:optional true} :string]
+   [:proposicao {:optional true} ProposicaoResumoPautaOut]
+   [:pareceres-em-andamento {:optional true} :int]
+   [:pedidos-pendentes {:optional true} :int]
+   [:minimo-horas {:optional true} :int]
+   [:horas-reais {:optional true} :int]])
+
+(def RegraPautaOut
+  "A regra da pauta da Casa (GET/PUT /regra-da-pauta): quem publica e a antecedencia minima (nil = sem regra).
+  `configurada` false = a Casa nunca configurou e vale o padrao (a secretaria publica)."
+  [:map {:closed true}
+   [:quem-publica (km/enum-de logic/quem-publica-pauta)]
+   [:antecedencia-minima-horas [:maybe :int]]
+   [:configurada :boolean]
+   [:atualizado-em {:optional true} [:maybe :string]]])
+
+(def AntecedenciaPautaOut
+  "A antecedencia da publicacao frente a regra da Casa: o minimo, as horas reais que faltam para o inicio da sessao
+  (negativo = ja' comecou) e se foi cumprida."
+  [:map {:closed true}
+   [:minimo-horas :int]
+   [:horas-reais :int]
+   [:cumprida :boolean]])
+
+(def VersaoPautaOut
+  "Uma versao PUBLICADA da pauta (o historico da tela interna): numero, tipo, quando, quantos itens, a justificativa
+  da republicacao, a que titulo foi publicada e o nome de quem publicou (so' de quem tem vinculo nesta Casa)."
+  [:map {:closed true}
+   [:versao :int]
+   [:tipo-versao (km/enum-de logic/tipos-versao-pauta)]
+   [:publicada-em :string]
+   [:itens :int]
+   [:justificativa {:optional true} [:maybe :string]]
+   [:a-titulo {:optional true} [:maybe (km/enum-de logic/quem-publica-pauta)]]
+   [:publicada-por-nome {:optional true} [:maybe :string]]])
+
+(def PublicacaoPautaOut
+  "A tela de publicar a pauta (GET /sessoes/:id/pauta/publicacao): a regra da Casa, se QUEM ESTA' VENDO pode publicar
+  (e o motivo quando nao pode), a ultima versao e o historico, se a pauta viva mudou desde a publicacao, os avisos por
+  materia e o de antecedencia, calculados AGORA. `republicacao` = a proxima publicacao sera' republicacao (exige
+  justificativa). `avisos-indisponiveis` = o legislativo nao respondeu e os avisos por materia nao foram conferidos
+  (a publicacao segue possivel: aviso nunca bloqueia)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:regra RegraPautaOut]
+   [:pode-publicar :boolean]
+   [:motivo {:optional true} [:maybe :string]]
+   [:republicacao :boolean]
+   [:itens-na-pauta :int]
+   [:ultima {:optional true} [:maybe VersaoPautaOut]]
+   [:versoes [:sequential VersaoPautaOut]]
+   [:alterada-desde-a-publicacao :boolean]
+   [:avisos [:sequential AvisoPautaOut]]
+   [:avisos-indisponiveis :boolean]
+   [:antecedencia {:optional true} [:maybe AntecedenciaPautaOut]]])
+
+(def PautaPublicadaOut
+  "Recibo de POST /sessoes/:id/pauta/publicacao (201): a versao congelada e os avisos que valiam no ato. `aviso` =
+  `antecedencia-nao-cumprida` quando a publicacao foi aceita FORA da antecedencia minima da Casa (com o minimo e o real
+  em `antecedencia`)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:versao :int]
+   [:tipo-versao (km/enum-de logic/tipos-versao-pauta)]
+   [:publicada-em :string]
+   [:itens :int]
+   [:avisos [:sequential AvisoPautaOut]]
+   [:aviso {:optional true} [:enum "antecedencia-nao-cumprida"]]
+   [:antecedencia {:optional true} [:maybe AntecedenciaPautaOut]]])
+
+;; ---- o portal (anonimo): a pauta OFICIAL ----
+
+(def PautaOficialResumoOut
+  "A pauta oficial de uma sessao, resumida para a lista do portal."
+  [:map {:closed true}
+   [:versao :int]
+   [:publicada-em :string]
+   [:itens :int]])
+
+(def SessaoPautaPublicaOut
+  "Uma sessao na lista publica de pautas: o que situa a sessao e a pauta oficial (ausente = ainda nao publicada)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:tipo-sessao (km/enum-de logic/tipos-sessao)]
+   [:numero-sequencial :int]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:agendada-para {:optional true} [:maybe :string]]
+   [:aberta-em {:optional true} [:maybe :string]]
+   [:pauta-oficial {:optional true} [:maybe PautaOficialResumoOut]]])
+
+(def PautasPublicasOut
+  "GET /portal/casa/:ente/pautas: as sessoes publicas com a situacao da pauta oficial, a mais recente primeiro."
+  [:map {:closed true}
+   [:sessoes [:sequential SessaoPautaPublicaOut]]])
+
+(def ItemPautaOficialOut
+  "Um item da pauta OFICIAL (o snapshot congelado): sem `lock-version` nem nada da pauta viva."
+  [:map {:closed true}
+   [:id :string]
+   [:fase (km/enum-de logic/fases-pauta)]
+   [:tipo-item (km/enum-de logic/tipos-item-pauta)]
+   [:proposicao-id {:optional true} :string]
+   [:proposicao {:optional true} ProposicaoResumoPautaOut]
+   [:texto-descricao {:optional true} :string]
+   [:ordem :int]])
+
+(def VersaoPautaPublicaOut
+  "Uma versao publicada, no historico do portal (sem quem publicou: o nome de servidor fica na tela interna)."
+  [:map {:closed true}
+   [:versao :int]
+   [:tipo-versao (km/enum-de logic/tipos-versao-pauta)]
+   [:publicada-em :string]
+   [:justificativa {:optional true} [:maybe :string]]])
+
+(def PautaOficialVigenteOut
+  "A versao VIGENTE da pauta oficial, com os itens."
+  [:map {:closed true}
+   [:versao :int]
+   [:tipo-versao (km/enum-de logic/tipos-versao-pauta)]
+   [:publicada-em :string]
+   [:justificativa {:optional true} [:maybe :string]]
+   [:itens [:sequential ItemPautaOficialOut]]])
+
+(def PautaOficialOut
+  "GET /portal/casa/:ente/pautas/:sessao-id: a sessao, a pauta oficial vigente (ausente = ainda nao publicada) e o
+  historico de versoes publicadas (a mais recente primeiro)."
+  [:map {:closed true}
+   [:sessao SessaoPautaPublicaOut]
+   [:vigente {:optional true} [:maybe PautaOficialVigenteOut]]
+   [:versoes [:sequential VersaoPautaPublicaOut]]])
