@@ -109,8 +109,22 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
-**Falta:** suspender/encerrar Casa (**[ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) aceita em 30/09/2026,
-implementação adiada** por uma demanda do stakeholder — retomar pela fatia 1 da ADR), acesso de suporte (12.7, `[GAP]` jurídico), flags (12.3), billing (12.2, parqueado).
+**Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
+- O que existe:
+  - dois operadores para suspender; o incidente começa com um e volta sozinho se o 2º não confirmar em 24 h;
+  - a suspensão com sessão em curso fica agendada;
+  - escrita fora da allowlist → **423 "acesso restrito"**. A allowlist fica em `restricao_da_casa.clj` e cobre os
+    protocolos do cidadão, as respostas dos servidores, a remessa ao TCE e o encarregado LGPD;
+  - a cota de IA fica zerada enquanto a Casa está suspensa;
+  - faixa sem motivo em todas as superfícies;
+  - "Acesso da Câmara" na ficha do console.
+- Iniciar o encerramento para em `suspenso/encerramento_em_curso`.
+- **Falta:**
+  - a fatia 2 da ADR-0018: exportação completa + apagamento → `encerrado`;
+  - o e-mail de aviso (SMTP);
+  - acesso de suporte (12.7, `[GAP]` jurídico);
+  - flags (12.3);
+  - billing (12.2, parqueado).
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
@@ -132,9 +146,21 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 real da pauta é o parecer da comissão) e [ADR-0019](docs/adr/0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md),
 aceita. Entregue: papel `juridico` (com qualificação e OAB, concedido em `/administracao`), pedido de parecer (matéria ou
 consulta avulsa), fila `/juridico`, parecer assinado e **imutável** (correção = substituição), portal só depois da
-deliberação, e o caminho da comissão por tela (encaminhar às comissões, designar relator). Faltam as fatias 2 (IA como
-rascunho do advogado + copiloto do relator), 3 (publicar a pauta) e 4 (etapa obrigatória, só sob demanda) — e as
-perguntas ao Rigoni no fim da ADR.
+deliberação, e o caminho da comissão por tela (encaminhar às comissões, designar relator). **Fatias 2, 3 e 4 ENTREGUES
+(30/09/2026):**
+- **Fatia 2a — nota da IA vira rascunho do advogado:** a nota técnica chega à fila `/juridico` quando a Casa tem
+  jurídico ativo; "Usar como rascunho" abre um parecer do advogado. `publicar_ao_assinar` antecipa o portal, por Casa.
+- **Fatia 2b — copiloto do relator:** capacidade `relator.analisar` no satélite, painel nos dois editores de parecer
+  com citação conferida. O relator pede o parecer jurídico em `/parecer/[id]/redigir`.
+- **Fatia 2 — o agente propõe:** pedir parecer, encaminhar às comissões e designar relator. Assinar continua só pela
+  tela.
+- **Fatia 3 — publicar a pauta:** regra da Casa (quem publica, antecedência), versão congelada com avisos sem bloquear,
+  republicação justificada, portal `/portal/casa/[ente]/pautas`, selo na TV, `publicar_pauta` no catálogo.
+- **Fatia 4 — etapa obrigatória:** fato `tem_parecer_juridico_assinado`, desligado por padrão, mais o carimbo
+  `STUB-ICP-v0` do parecer.
+- **Falta, de propósito:** pedido sobre emenda, autorização fina do relator e verificação de vigência do dispositivo
+  citado. Ver *Materialização* na ADR.
+- **Esperam o Daouda:** as perguntas ao Rigoni no fim da ADR.
 
 **Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
 [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma

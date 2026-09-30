@@ -265,7 +265,41 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
   - Algoritmo, assinatura e SHA-256 ficam gravados.
   - Aparecem na ficha, no pedido e no portal, com o aviso de que o `STUB-ICP-v0` não é ICP-Brasil.
 
-**Fatia 3 — publicar a pauta:** ver o bloco abaixo.
+**Fatia 3 — publicar a pauta** (mig `…120`):
+
+- **A regra da Casa** (`sessoes.regra_pauta`, com RLS) define quem publica: `secretaria`, `presidente`,
+  `primeiro_secretario` ou `mesa`, além da antecedência mínima em horas.
+  - O `admin_ente` configura em "Regras da pauta", em `/administracao` (`GET/PUT /regra-da-pauta`).
+  - A regra é **exclusiva**: com `presidente`, a secretaria prepara a pauta, mas não publica.
+  - O cargo vem da Mesa vigente (seam `cargo-na-mesa` no host, sobre o roster da Casa). O licenciado não publica. Um
+    cargo com grafia desconhecida não conta (*fail-closed*).
+- **"Publicar a pauta"** (`POST /sessoes/:id/pauta/publicacao`) é um ato único, feito numa transação travada por
+  sessão.
+  - Congela a versão numerada; a tabela é append-only.
+  - A versão guarda a regra do momento (`publicada_a_titulo`) e os avisos que existiam ao publicar.
+  - A primeira publicação é a inicial. As seguintes são **republicação** e exigem justificativa.
+  - Recusa (409): pauta vazia, pauta sem mudança, pauta que mudou entre a conferência e o ato, e republicação sem
+    justificativa. Dois cliques geram uma versão só.
+- **Aviso, não bloqueio:**
+  - a matéria sem parecer de comissão emitido (seam `situacao-de-parecer`, sobre o legislativo) ou com pedido jurídico
+    pendente aparece listada;
+  - antecedência abaixo do mínimo, medida em minutos, gera o aviso `antecedencia-nao-cumprida`.
+- **Onde aparece:**
+  - o painel de publicar fica acima da pauta, em `/pauta-convocacao`, e na home do vereador para quem pode publicar;
+  - o **portal** mostra a versão congelada em `/portal/casa/[ente]/pautas`. Sessão secreta não aparece;
+  - a **TV** segue listando a pauta viva, com o selo "Pauta oficial · vN publicada em …" ou "alterada em plenário desde
+    então".
+- **Agente:** `publicar_pauta` entrou no catálogo como ato com confirmação. A proposta lista os avisos, e a recusa vira
+  409 legível.
+- **Trilha:** a publicação e a regra entram com resumo legível, por exemplo "publicou a pauta v2 (republicação) pela
+  Mesa com 1 aviso(s)".
+- **Demo:** a Casa demo tem a regra `secretaria` e a v1 publicada da sessão agendada.
+
+**Riscos conhecidos da fatia 3:**
+
+- O roster guarda um cargo na Mesa por vereador.
+- Um evento SSE de publicação ainda não existe: a TV só vê o selo novo quando rebusca a pauta.
+- `pauta-mudou` compara o conjunto de matérias, não a ordem delas.
 
 **Ainda de fora, de propósito:**
 
