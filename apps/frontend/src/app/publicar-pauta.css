@@ -1,0 +1,22 @@
+/* "Publicar a pauta" (ADR-0019 fatia 3) — tokens do sistema; âmbar de aviso em --aviso-texto (GUIDELINES §5.1). */
+.pp { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.2rem; margin: 1rem 0 0; }
+.pp .pp-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.4rem 1rem; }
+.pp h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; }
+.pp-selo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--texto-2); border: 1px solid var(--linha); border-radius: var(--raio-capsula); padding: 0.2rem 0.6rem; }
+.pp-selo-ok { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 45%, transparent); background: var(--jade-fundo); }
+.pp-alterada { margin: 0.7rem 0 0; padding: 0.5rem 0.7rem; border-left: 3px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--aviso-texto); font-size: var(--t-13); border-radius: var(--raio-sm); }
+.pp-regra { margin: 0.6rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.pp-avisos { margin: 0.8rem 0 0; }
+.pp-avisos-tit { margin: 0 0 0.3rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .04em; color: var(--aviso-texto); }
+.pp-avisos ul { margin: 0; padding-left: 1.1rem; font-size: var(--t-13); color: var(--texto); }
+.pp-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin: 0.9rem 0 0; }
+.pp-motivo { margin: 0; font-size: var(--t-13); color: var(--texto-2); flex: 1 1 16rem; }
+.pp-confirmar { margin: 0.9rem 0 0; padding: 0.8rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); font-size: var(--t-13); }
+.pp-confirmar p { margin: 0; }
+.pp-confirmar .campo { margin: 0.6rem 0 0; display: grid; gap: 0.3rem; }
+.pp-confirmar textarea { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); }
+.pp-resultado { margin: 0.6rem 0 0; font-size: var(--t-13); min-height: 1em; }
+.pp-ok { color: var(--jade); }
+.pp-erro { color: var(--telha); }
+.pp-historico { margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.pp-historico ol { margin: 0.4rem 0 0; padding-left: 1.1rem; }

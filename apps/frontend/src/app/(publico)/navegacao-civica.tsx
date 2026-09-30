@@ -27,6 +27,11 @@ const CARTOES = [
     motivo: "Assistir ao vivo e rever com legendas chega numa fatia futura (rota pública de sessões ainda não existe).",
   },
   {
+    titulo: "Pautas das sessões",
+    motivo: "A pauta oficial de cada sessão, como a Mesa a publicou — com a data e a versão de cada publicação.",
+    rota: "pautas",
+  },
+  {
     titulo: "Atas das sessões",
     motivo: "O registro oficial de cada sessão pública, com as retificações — nenhuma versão é apagada.",
     rota: "atas",

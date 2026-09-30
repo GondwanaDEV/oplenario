@@ -13,6 +13,7 @@
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
+            [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.artefato-publicacao :as artefato]
@@ -27,6 +28,7 @@
             [oplenario.legislativo.db.parametro-parecer :as parametro-parecer]
             [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
             [oplenario.legislativo.db.parecer-nota :as parecer-nota]
+            [oplenario.legislativo.db.situacao-materia :as situacao-materia]
             [oplenario.legislativo.db.parecer-texto-versao :as parecer-texto]
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
@@ -1201,7 +1203,14 @@
   (parametros-parecer-juridico [this ente-id]
     (transacao this ente-id #(parametro-parecer/parametros % ente-id)))
   (salvar-parametros-parecer-juridico! [this ente-id m]
-    (transacao this ente-id #(parametro-parecer/salvar! % ente-id m))))
+    (transacao this ente-id #(parametro-parecer/salvar! % ente-id m)))
+
+  ;; ADR-0019 fatia 3: a situacao de parecer das materias da pauta (lida por `sessoes` pelo seam do host)
+  repo-situacao/RepoSituacaoMateria
+  (situacao-de-parecer-das-materias [this ente-id ids]
+    (if (empty? ids)
+      {}
+      (transacao this ente-id #(situacao-materia/situacao-de-parecer % ente-id ids)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

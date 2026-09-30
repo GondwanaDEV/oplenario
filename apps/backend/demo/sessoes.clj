@@ -63,7 +63,9 @@
             [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.repositorio :as repo-leg]
+            [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.components.repositorio-publicacao :as repo-pub]
             [oplenario.sessoes.db.tribuna :as db-tribuna]
             [oplenario.sessoes.logic :as slogic])
   (:import (java.nio.charset StandardCharsets)
@@ -361,6 +363,26 @@
         {:sessao-id id-encerrada :texto texto :origem-redacao "redigida_externamente"
          :conteudo-sha256 (sha256 texto) :publicada-por publicada-por}))))
 
+;; ---------- ADR-0019 fatia 3: a pauta da AGENDADA sai PUBLICADA ----------
+
+(defn- semear-publicacao-da-pauta!
+  "A Casa demo publica pela SECRETARIA (a regra padrao, gravada explicita — so' se o admin ainda nao configurou: re-rodar
+  o seed nunca desfaz o que a apresentacao mudou em /administracao) e a pauta da AGENDADA sai publicada (v1), com os
+  avisos que a tela mostraria — o portal e a TV abrem com a pauta oficial. Fora do gate das sessoes, como a ata: uma demo
+  semeada antes desta fatia ganha a publicacao ao re-rodar. Idempotente: so' publica se a sessao ainda nao tem versao
+  publica."
+  [repo-s repo-l ente-id publicada-por]
+  (when-not (repo-pub/regra-da-pauta repo-s ente-id)
+    (repo-pub/definir-regra-da-pauta! repo-s ente-id {:quem-publica "secretaria" :antecedencia-minima-horas nil
+                                                       :atualizada-por publicada-por}))
+  (let [{:keys [itens versoes]} (repo-pub/publicacao-da-pauta repo-s ente-id id-agendada)]
+    (when (and (seq itens) (not-any? :publica versoes))
+      (let [situacao (repo-situacao/situacao-de-parecer-das-materias repo-l ente-id
+                                                                     (into #{} (keep :proposicao-id) itens))]
+        (repo-pub/publicar-pauta! repo-s ente-id
+          {:sessao-id id-agendada :a-titulo "secretaria" :created-by publicada-por
+           :avisos-de (fn [its] (slogic/avisos-das-materias its situacao))})))))
+
 ;; ---------- a funcao publica ----------
 
 (defn semear!
@@ -393,6 +415,7 @@
     ;; fora do gate: uma demo ja' semeada antes da mig 0081 tambem ganha os tempos ao re-rodar o seed
     (semear-tempos-regimentais! ds ente)
     (semear-ata-da-encerrada! repo-s ds ente publicada-por)
+    (semear-publicacao-da-pauta! repo-s repo-l ente publicada-por)
     {:encerrada id-encerrada :aberta id-aberta :agendada id-agendada})))
 
 ;; ---------- leituras p/ o teste e p/ a Fase 1/2 do plano (sonda + caminhada) ----------

@@ -155,4 +155,15 @@
  :legislativo/meu-copiloto-analise-parecer {:categoria :so-tela
                                             :motivo "o relator pede, no editor, o rascunho da analise a IA (nada grava); a IA nao chama a IA"}
  :legislativo/meu-salvar-rascunho-parecer {:categoria :so-tela
-                                           :motivo "o relator salva o texto do proprio parecer no editor; texto de parecer e' de quem assina, o agente nao redige"}}
+                                           :motivo "o relator salva o texto do proprio parecer no editor; texto de parecer e' de quem assina, o agente nao redige"}
+ ;; ---------- ADR-0019 fatia 3: publicar a pauta (o ATO e' entrada do catalogo, publicar_pauta; o resto e' tela) ----------
+ :sessoes/publicacao-da-pauta {:categoria :so-tela
+                               :motivo "a tela de publicar (regra, avisos, historico); o agente le a pauta por pauta_da_sessao e propoe publicar_pauta"}
+ :sessoes/regra-da-pauta {:categoria :so-tela
+                          :motivo "a configuracao da Casa (quem publica, antecedencia) lida na administracao e na tela da pauta"}
+ :sessoes/definir-regra-da-pauta {:categoria :so-tela
+                                  :motivo "configurar quem publica a pauta e' do admin_ente, na tela; o agente nunca muda regra da Casa"}
+ :sessoes/pautas-publicas {:categoria :so-tela
+                           :motivo "a lista de pautas oficiais no portal do cidadao (anonimo)"}
+ :sessoes/pauta-oficial-publica {:categoria :so-tela
+                                 :motivo "a pauta oficial de uma sessao no portal do cidadao (anonimo)"}}

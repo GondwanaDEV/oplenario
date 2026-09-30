@@ -70,6 +70,12 @@
   `promover!` recusa promover texto de parecer já terminal — erro inspecionável antes de bater no trigger)."
   #{"aprovado" "rejeitado" "prejudicado" "prazo_vencido"})
 
+(def estados-parecer-emitidos
+  "ADR-0019 fatia 3: os desfechos em que a COMISSAO SE MANIFESTOU — os terminais menos `prazo_vencido`, que e' justamente
+  a comissao NAO ter emitido parecer no prazo (e e' o caso em que os Regimentos deixam a materia ir a plenario assim
+  mesmo). A tela de publicar a pauta avisa 'sem parecer da comissao' quando a materia nao tem nenhum destes."
+  (disj estados-parecer-terminais "prazo_vencido"))
+
 ;; --- eixo F (F3.6b): proveniencia da versao de texto do PARECER. Espelha o CHECK da migration 0020
 ;; (mesma estrategia do eixo B, vocabulario proprio do parecer). estado_versao reusa `estados-versao`. ---
 (def origens-parecer-versao #{"redacao" "substitutivo" "importacao_legado"})
