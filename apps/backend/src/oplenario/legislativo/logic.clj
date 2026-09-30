@@ -436,4 +436,13 @@
         linhas (map #(str/trimr (str/replace % #"[ \t]{2,}" " ")) (str/split sem #"\n" -1))]
     (str/trim (str/replace (str/join "\n" linhas) #" +([.,;:])" "$1"))))
 
+(def ^:private ponto-a-confirmar
+  "O mesmo `PONTO_A_CONFIRMAR` do satelite (`ata/redacao.py`): [confirmar: o que a pessoa precisa verificar]."
+  #"(?i)\[\s*confirmar\s*:\s*([^\]]+?)\s*\]")
+
+(defn pontos-a-confirmar
+  "Os `[confirmar: ...]` de um rascunho da IA, na ordem — o que a pessoa precisa resolver antes de usar o texto."
+  [texto]
+  (mapv second (re-seq ponto-a-confirmar (or texto ""))))
+
 (def desfechos-nota-tecnica #{"aproveitada" "descartada"})

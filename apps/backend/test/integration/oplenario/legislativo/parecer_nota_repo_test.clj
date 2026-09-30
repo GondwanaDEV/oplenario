@@ -5,6 +5,7 @@
   marcas de citacao e SEM conclusao, a origem que sobrevive a assinatura sem mexer na imutabilidade, a corrida de dois
   advogados, a RLS entre Casas e o portal antecipado x nao antecipado (a consulta avulsa nunca vai)."
   (:require [clojure.string :as str]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
@@ -30,7 +31,8 @@
       (binding [*ds* (:ds c) *repo* (repo/->RepoLegislativoPg c (outbox/bus))]
         (try (t) (finally (component/stop reg) (component/stop c)))))))
 
-(def ^:private assinante {:por (random-uuid) :nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"})
+(def ^:private assinante {:por (random-uuid) :nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"
+                          :assinador (assinador-icp/assinador-stub)})
 
 (defn- protocolar! [ente]
   (:id (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"

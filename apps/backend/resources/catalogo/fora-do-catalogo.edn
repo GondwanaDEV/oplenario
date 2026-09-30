@@ -148,4 +148,11 @@
  :legislativo/parametros-parecer-juridico {:categoria :so-tela
                                            :motivo "parametro da Casa (quando o portal mostra o parecer): so' o admin_ente decide, na tela de administracao"}
  :legislativo/salvar-parametros-parecer-juridico {:categoria :so-tela
-                                                  :motivo "antecipar o parecer ao portal e' decisao institucional do admin_ente, nao acao do agente"}}
+                                                  :motivo "antecipar o parecer ao portal e' decisao institucional do admin_ente, nao acao do agente"}
+ ;; ---------- ADR-0019 fatia 2 (Eixo 5): o copiloto do relator ----------
+ :legislativo/copiloto-analise-parecer {:categoria :so-tela
+                                        :motivo "a tela do editor pede a IA um rascunho da analise do parecer (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-copiloto-analise-parecer {:categoria :so-tela
+                                            :motivo "o relator pede, no editor, o rascunho da analise a IA (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-salvar-rascunho-parecer {:categoria :so-tela
+                                           :motivo "o relator salva o texto do proprio parecer no editor; texto de parecer e' de quem assina, o agente nao redige"}}

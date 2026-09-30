@@ -3,6 +3,7 @@ import {
   deslocarMes,
   dinheiro,
   linhaDeRevisao,
+  nomeDaOperacao,
   percentual,
   porCapacidade,
   rotuloDoMes,
@@ -60,5 +61,9 @@ describe("ia-casa-vista", () => {
       "75% aproveitado (1 aprovado como veio, 2 editados, 1 descartado)");
     expect(linhaDeRevisao({ nome: "x", segundoPlano: false, execucoes: 1, naoRodaram: 0, custo: 0, revisados: 0,
       aprovados: 0, editados: 0, descartados: 0, errosReportados: 0 })).toBeNull();
+  });
+
+  it("o copiloto do relator (ADR-0019 fatia 2) tem nome na Casa e no console do operador", () => {
+    expect(nomeDaOperacao("relator.analisar")).toBe("Copiloto do relator");
   });
 });

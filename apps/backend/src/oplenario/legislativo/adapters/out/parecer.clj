@@ -70,3 +70,16 @@
                :assinado-por (->str (:assinado-por texto-vigente))
                :assinado-em (->str (:assinado-em texto-vigente))}
               "editor de parecer")))
+
+;; ---------- ADR-0019, Eixo 5 (fatia 2): o copiloto do relator ----------
+
+(defn copiloto->wire
+  "{:analise :normas :indisponivel} (ja' conferido pelo controller) -> CopilotoAnaliseOut."
+  [{:keys [analise normas indisponivel]}]
+  (validado wire/CopilotoAnaliseOut
+            {:analise (some-> analise
+                              (select-keys [:texto :citacoes :paragrafos-sem-fonte :pontos-a-confirmar :incerteza :modelo])
+                              (update :citacoes #(mapv (fn [c] (select-keys c [:fonte-id :rotulo :trecho :status])) %)))
+             :normas normas
+             :indisponivel indisponivel}
+            "rascunho do copiloto do relator"))

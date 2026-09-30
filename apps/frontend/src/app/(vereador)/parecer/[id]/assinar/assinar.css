@@ -74,3 +74,6 @@
 .sheet .acoes { display: grid; gap: 0.5rem; margin-top: 0.3rem; }
 .sheet .acoes .btn { width: 100%; min-height: 52px; font-size: var(--t-16); }
 .sheet .legal { font-size: var(--t-12); color: var(--texto-2); line-height: 1.45; margin-top: 0.9rem; }
+
+/* ADR-0019 fatia 2: o atalho para o editor do relator (texto, rascunho da análise pela IA, pedido jurídico) */
+.assinar-redigir { margin: 0.9rem 0 0; font-size: var(--t-13); color: var(--texto-2); }

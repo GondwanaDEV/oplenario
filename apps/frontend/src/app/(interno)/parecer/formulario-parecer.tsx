@@ -20,8 +20,12 @@
 // contrário de formulario-proposicao.css, que reusa o NOME da classe só como flex-row local; aqui é a
 // barra real de 3 ações do mockup). `position:fixed` tira o elemento da participação em grid (CSS spec),
 // então renderizar `.comando` como filho de `.balcao` (grid do caller) não quebra o layout de 2 colunas.
+//
+// ADR-0019 fatia 2: `acessorioAnalise` (opcional) é renderizado logo abaixo do campo Análise quando ele é editável — é
+// onde entra o copiloto do relator. Recebe o texto atual do campo e `aplicar`, que o substitui (o formulário continua
+// dono do campo; nada é salvo até "Salvar rascunho").
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { VOTO_OPCOES, rotularVoto, type VotoValor } from "@/lib/parecer-vista";
 import "./formulario-parecer.css";
 
@@ -42,6 +46,7 @@ export function FormularioParecer({
   erro,
   bloqueado,
   mensagemStatus,
+  acessorioAnalise,
 }: {
   valorInicial: ValoresParecer;
   aoSalvarRascunho: (valores: ValoresParecer) => void;
@@ -51,6 +56,7 @@ export function FormularioParecer({
   erro: string | null;
   bloqueado: boolean;
   mensagemStatus: string | null;
+  acessorioAnalise?: (campo: { analise: string; aplicar: (texto: string) => void }) => ReactNode;
 }) {
   const [valores, setValores] = useState<ValoresParecer>(valorInicial);
   const [preVisualizando, setPreVisualizando] = useState(false);
@@ -151,6 +157,11 @@ export function FormularioParecer({
                   onChange={(e) => setValores((v) => ({ ...v, analise: e.target.value }))}
                 />
               </div>
+              {!bloqueado &&
+                acessorioAnalise?.({
+                  analise: valores.analise,
+                  aplicar: (texto) => setValores((v) => ({ ...v, analise: texto })),
+                })}
             </div>
 
             <div className="secao">

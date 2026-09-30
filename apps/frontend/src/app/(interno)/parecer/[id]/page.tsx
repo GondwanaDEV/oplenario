@@ -20,6 +20,8 @@ import { rotularComissao } from "@/lib/comissao-vista";
 import { TopoInterno } from "../../topo";
 import { FormularioParecer, type ValoresParecer } from "../formulario-parecer";
 import { RailParecer } from "../rail-parecer";
+import { CopilotoAnalise } from "@/app/copiloto-analise";
+import { pedirAnalise } from "@/lib/use-copiloto-analise";
 import "../parecer.css";
 
 export default function PaginaParecer({ params }: { params: Promise<{ id: string }> }) {
@@ -118,6 +120,17 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
             erro={erro}
             bloqueado={bloqueado}
             mensagemStatus={mensagemStatus}
+            acessorioAnalise={
+              dados.objetoTipo === "proposicao"
+                ? ({ analise, aplicar }) => (
+                    <CopilotoAnalise
+                      pedir={() => pedirAnalise(token, "legislativo", id)}
+                      analiseAtual={analise}
+                      aoUsar={aplicar}
+                    />
+                  )
+                : undefined
+            }
           />
           <RailParecer parecer={dados} token={token} />
         </div>
