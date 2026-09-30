@@ -82,6 +82,15 @@ describe("buscarNomeCasa", () => {
     expect(r).toEqual({ nomeOficial: "Câmara Municipal de Fortaleza", nomeCurto: "Câmara de Fortaleza" });
   });
 
+  it("Casa suspensa (ADR-0018): leva a data da restrição para a faixa das páginas de formulário", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ "nome-oficial": "Câmara Municipal de Fortaleza", "acesso-restrito-desde": "2026-09-29T13:00:00Z" }),
+    })) as unknown as typeof fetch;
+    expect((await buscarNomeCasa("ente-real"))?.acessoRestritoDesde).toBe("2026-09-29T13:00:00Z");
+  });
+
   it("404 (ente sem perfil) -> null", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
     expect(await buscarNomeCasa("inexistente")).toBeNull();

@@ -26,7 +26,9 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.kernel.outbox :as outbox]
             [oplenario.migracao :as migracao]
+            [oplenario.participacao.components.repositorio :as repo-part]
             [oplenario.restricao-da-casa :as restricao-casa]
             [oplenario.rotas :as rotas])
   (:import (java.time Instant)))
@@ -64,6 +66,7 @@
                  :repo-identidade (fake-identidade)
                  :idp-operacao (idp-admin/idp-operacao-dev)
                  :repo-admin-sistema (repo-op)
+                 :repo-participacao (repo-part/->RepoParticipacaoPg {:ds *ds*} (outbox/bus))
                  :repo-integracao-ia :lint
                  :repo-auditoria :lint
                  :info-ente (constantly {:nome-oficial "Câmara Municipal de Baturité"})
@@ -118,6 +121,23 @@
                               (como ente servidora))
                    :body "{}"))
 
+(def ^:private allowlist-esperada
+  "A allowlist do Eixo 2, escrita aqui de novo DE PROPOSITO: mexer nela exige mexer neste teste (revisao em PR)."
+  #{:participacao/protocolar-esic :participacao/interpor-recurso :participacao/protocolar-manifestacao
+    :participacao/solicitar-titular :participacao/comentar :participacao/denunciar-comentario
+    :transparencia/seguir :transparencia/deixar-de-seguir
+    :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
+    :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
+    :participacao/moderar-comentario :paineis/marcar-notificacao-lida
+    ;; o compliance segue (a remessa ao TCE) e a Casa nomeia o encarregado LGPD
+    :compliance/validar-remessa :compliance/submeter-remessa :compliance/resposta-remessa
+    :participacao/definir-encarregado})
+
+(deftest a-allowlist-e-a-revisada
+  (is (= allowlist-esperada restricao-casa/allowlist))
+  (is (not (restricao-casa/escrita-permitida? :post :identidade/conceder-acesso))
+      "conceder acesso fica bloqueado: a Casa suspensa nao ganha gente nova no sistema"))
+
 (deftest casa-suspensa-nao-escreve-fora-da-allowlist
   (let [svc (servico) suspensa (casa! true) ativa (casa! false)
         escritas (escritas-da-casa)
@@ -125,7 +145,7 @@
         permitidas (filter #(restricao-casa/escrita-permitida? (:metodo %) (:nome %)) escritas)]
     (is (> (count bloqueadas) 60) "sanidade: o legislativo, as sessoes, os cadastros... estao montados")
     (is (some :agente? bloqueadas) "o agente (MCP) tambem e' da Casa")
-    (is (every? (set (map :nome permitidas)) (disj restricao-casa/allowlist))
+    (is (= allowlist-esperada (set (map :nome permitidas)))
         "toda rota da allowlist existe e passa pelo interceptor de Casa (sem entrada fantasma)")
     (testing "fora da allowlist: 423 com o motivo PUBLICO, nunca o comercial"
       (doseq [r bloqueadas]
@@ -172,3 +192,18 @@
                                                          json/keyword-keys-object-mapper)))))
     (testing "Casa fora do registro (demo, testes de outras verticais): sem restricao"
       (is (nil? (:acesso-restrito (eu (random-uuid) servidora)))))))
+
+(deftest o-recibo-do-protocolo-diz-que-a-casa-esta-restrita
+  (let [svc (servico) suspensa (casa! true) ativa (casa! false)
+        protocolar (fn [ente] (pt/response-for svc :post "/portal/esic/pedidos" :headers (como ente cidada)
+                                               :body (json/write-value-as-string {:assunto "Contratos 2026"
+                                                                                  :descricao "Solicito a lista de contratos."})))
+        ler #(json/read-value (:body %) json/keyword-keys-object-mapper)
+        r (protocolar suspensa)]
+    (is (= 201 (:status r)) "o pedido do cidadao segue na Casa suspensa")
+    (is (some? (:protocolo (ler r))))
+    (is (some? (:acesso-restrito-desde (ler r))) "o recibo diz que a Casa esta' com o sistema restrito")
+    (is (not (re-find #"incidente" (:body r))) "sem o motivo")
+    (let [r2 (protocolar ativa)]
+      (is (= 201 (:status r2)))
+      (is (not (contains? (ler r2) :acesso-restrito-desde))))))

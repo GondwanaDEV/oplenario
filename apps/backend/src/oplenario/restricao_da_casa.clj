@@ -6,7 +6,8 @@
   - LEITURA passa sempre — o portal e' transparencia ativa da Casa (LAI art. 8) e o servidor le e exporta;
   - ESCRITA fora da allowlist recebe 423 Locked com o motivo PUBLICO (\"acesso restrito\"), nunca o comercial;
   - a allowlist e' o que a Casa nao pode deixar de fazer por nossa causa: os protocolos do cidadao (e-SIC, ouvidoria,
-    LGPD, comentarios) e os servidores RESPONDENDO a eles (prazo legal correndo, LAI 20+10, Lei 13.460).
+    LGPD, comentarios), os servidores RESPONDENDO a eles (prazo legal correndo, LAI 20+10, Lei 13.460) e a remessa ao
+    TCE (o compliance segue).
 
   Leitura = metodo GET/HEAD/OPTIONS, ou rota que no catalogo de acoes (ADR-0009) so' aparece como `:leitura`. Escrita
   nova nasce BLOQUEADA (fail-closed): so' entra na allowlist por nome, aqui, revisada em PR — e o teste de vazamento
@@ -29,7 +30,16 @@
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
-    :paineis/marcar-notificacao-lida})
+    :paineis/marcar-notificacao-lida
+    ;; o motor de compliance SEGUE (Eixo 2: prazo que vence em silencio e' o pior incidente, CLAUDE.md §5): a Casa
+    ;; suspensa ainda valida, envia a remessa ao TCE e registra o recibo — perder a janela do TCE seria culpa nossa
+    :compliance/validar-remessa :compliance/submeter-remessa :compliance/resposta-remessa
+    ;; o encarregado de dados (LGPD art. 41) e' quem responde o titular: a Casa precisa poder nomea-lo
+    :participacao/definir-encarregado})
+
+;; FICA BLOQUEADO, de proposito: conceder acesso (`:identidade/conceder-acesso`, convites, papeis). Suspensa, a Casa nao
+;; ganha gente nova no sistema — quem ja' tem acesso responde os protocolos; acesso novo espera a reativacao, que e' o
+;; que torna a suspensao uma restricao de verdade e nao um aviso.
 
 (def motivo-publico "acesso restrito")
 

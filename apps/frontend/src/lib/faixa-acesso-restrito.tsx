@@ -42,6 +42,11 @@ export function textoDaFaixa({ desde, motivo }: AcessoRestrito): string {
   return motivo ? `${base} — motivo: ${rotuloMotivoRestricao(motivo)}` : base;
 }
 
+/** A frase do recibo do protocolo do cidadão numa Casa suspensa (Eixo 2): o pedido vale e o prazo corre. */
+export function avisoNoRecibo(desde: string): string {
+  return `O sistema desta Câmara está com acesso restrito desde ${diaMes(desde)}. Seu pedido foi recebido normalmente e o prazo legal de resposta está correndo.`;
+}
+
 export function FaixaAcessoRestrito({ restricao, interno }: { restricao: AcessoRestrito | null; interno?: boolean }) {
   if (!restricao) return null;
   return (

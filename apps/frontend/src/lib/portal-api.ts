@@ -70,9 +70,15 @@ export async function resolverCasa(ente: string): Promise<ResolucaoCasa> {
 // Contrato preservado VERBATIM (null p/ qualquer não-ok) — as telas internas (matéria, vereador) degradam
 // pro slug de propósito: elas já têm o seu próprio "não encontrado" para o objeto que exibem, e o nome da
 // Casa ali é moldura, não o assunto. Só a CAPA precisa do veredito, e usa `resolverCasa`.
+// `acessoRestritoDesde` (ADR-0018) segue junto quando a Casa está suspensa: as páginas de formulário mostram a faixa.
 export async function buscarNomeCasa(
   ente: string,
-): Promise<{ nomeOficial: string; nomeCurto?: string } | null> {
+): Promise<{ nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string } | null> {
   const r = await resolverCasa(ente);
-  return r.estado === "ok" ? { nomeOficial: r.nomeOficial, nomeCurto: r.nomeCurto } : null;
+  if (r.estado !== "ok") return null;
+  return {
+    nomeOficial: r.nomeOficial,
+    nomeCurto: r.nomeCurto,
+    ...(r.acessoRestritoDesde ? { acessoRestritoDesde: r.acessoRestritoDesde } : {}),
+  };
 }

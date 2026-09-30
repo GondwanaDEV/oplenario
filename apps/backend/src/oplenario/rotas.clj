@@ -603,6 +603,8 @@
                                      :identidade-existe? identidade-existe?}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
+                                        ;; ADR-0018: o recibo dos protocolos diz que a Casa esta' com o sistema restrito
+                                        :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                         :relogio relogio-producao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid

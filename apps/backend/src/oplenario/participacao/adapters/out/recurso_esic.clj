@@ -19,11 +19,14 @@
 
 (defn recibo->wire
   "Recibo de interposicao {:protocolo :recibo-em} -> RecursoReciboOut (resposta 201). Sem PII, sem id interno."
-  [r]
-  (validar! wire/RecursoReciboOut
-            {:protocolo (:protocolo r)
-             :recibo-em (->str (:recibo-em r))}
-            "RecursoReciboOut"))
+  ([r] (recibo->wire r nil))
+  ([r acesso-restrito-desde]
+   ;; ADR-0018: numa Casa com o sistema restrito, o recibo diz desde quando (o pedido segue valendo)
+   (validar! wire/RecursoReciboOut
+             (cond-> {:protocolo (:protocolo r)
+                      :recibo-em (->str (:recibo-em r))}
+               acesso-restrito-desde (assoc :acesso-restrito-desde (->str acesso-restrito-desde)))
+             "RecursoReciboOut")))
 
 (defn decisao->wire
   "Recibo de decisao {:decidido-em} -> DecisaoReciboOut (resposta 200). So o carimbo do desfecho."
