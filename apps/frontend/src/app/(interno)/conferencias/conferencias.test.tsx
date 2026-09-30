@@ -81,6 +81,27 @@ describe("conferências", () => {
     expect(screen.queryByRole("button", { name: /Desligar|Ligar/ })).toBeNull();
   });
 
+  it("Casa com jurídico ativo: a fila avisa que a nota também está na fila dele; sem jurídico, nada muda", async () => {
+    mockar({
+      "GET /api/legislativo/notas-tecnicas": { corpo: { itens: [resumo], "casa-com-juridico": true } },
+      "GET /api/identidade/agentes-institucionais": { corpo: agente(true) },
+      "GET /api/meu/identidade": { corpo: { nome: "Rita", papeis: ["secretario"] } },
+    });
+    montar(<PaginaConferencias />, SECRETARIA);
+    expect((await screen.findByText(/Esta Casa tem jurídico ativo/)).textContent).toMatch(/Quem a usar primeiro tira a nota das duas filas/);
+    // a secretaria segue vendo a nota e decidindo como sempre
+    expect(screen.getByText("Informações sobre a reforma da praça do Centro")).toBeTruthy();
+    cleanup();
+    mockar({
+      "GET /api/legislativo/notas-tecnicas": { corpo: { itens: [resumo], "casa-com-juridico": false } },
+      "GET /api/identidade/agentes-institucionais": { corpo: agente(true) },
+      "GET /api/meu/identidade": { corpo: { nome: "Rita", papeis: ["secretario"] } },
+    });
+    montar(<PaginaConferencias />, SECRETARIA);
+    await screen.findByText("Informações sobre a reforma da praça do Centro");
+    expect(screen.queryByText(/Esta Casa tem jurídico ativo/)).toBeNull();
+  });
+
   it("o administrador liga a conferência; a fila vazia explica que está desligada", async () => {
     const f = mockar({
       "GET /api/legislativo/notas-tecnicas": { corpo: { itens: [] } },

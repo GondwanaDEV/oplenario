@@ -11,7 +11,11 @@ import {
   corpoDoRascunho,
   faltaParaAssinar,
   formatarOab,
+  AVISO_CONSULTA_AVULSA,
+  AVISO_TEXTO_DE_IA,
+  frasePortal,
   frasesFaltaParaAssinar,
+  linhaDeOrigemDoParecer,
   linhaDoPedido,
   mensagemDeErroJuridico,
   modoDoDetalhe,
@@ -277,5 +281,73 @@ describe("mensagens de erro (401/403/404/409/400)", () => {
 
   it("5xx: frase neutra, sem vazar detalhe", () => {
     expect(mensagemDeErroJuridico(500, "listar", "stack trace")).not.toMatch(/stack/);
+  });
+});
+
+describe("ADR-0019 fatia 2a — a origem do rascunho (nota técnica da IA)", () => {
+  const assinatura = { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:05:00" };
+
+  it("assinado a partir da nota: diz que foi revisado e assinado por quem assinou", () => {
+    expect(linhaDeOrigemDoParecer(parecer({ estado: "assinado", origemRascunho: "nota_tecnica", assinatura })))
+      .toBe("Rascunho iniciado a partir de nota técnica da IA, revisado e assinado por Lúcia Prado.");
+  });
+
+  it("rascunho a partir da nota: lembra que o advogado revisa, decide a conclusão e assina", () => {
+    const l = linhaDeOrigemDoParecer(parecer({ estado: "rascunho", origemRascunho: "nota_tecnica" }));
+    expect(l).toMatch(/nota técnica da IA/);
+    expect(l).toMatch(/escolha a conclusão e assine só o que assumir/);
+  });
+
+  it("sem origem (escrito do zero) não há linha", () => {
+    expect(linhaDeOrigemDoParecer(parecer({ estado: "assinado", assinatura }))).toBeNull();
+    expect(linhaDeOrigemDoParecer(parecer({ origemRascunho: null }))).toBeNull();
+  });
+
+  it("o texto da IA nunca é chamado de parecer: nenhuma frase da origem chama a nota de 'parecer' da IA", () => {
+    const frases = [
+      linhaDeOrigemDoParecer(parecer({ estado: "assinado", origemRascunho: "nota_tecnica", assinatura })),
+      linhaDeOrigemDoParecer(parecer({ estado: "rascunho", origemRascunho: "nota_tecnica" })),
+      AVISO_TEXTO_DE_IA,
+    ].join(" ");
+    expect(frases).not.toMatch(/parecer (da|de) IA|parecer da inteligência/i);
+    expect(AVISO_TEXTO_DE_IA).toMatch(/Texto de IA não é parecer/);
+  });
+
+  it("o pedido aberto a partir da nota diz isso, com quem clicou", () => {
+    expect(linhaDoPedido(pedido({ origem: "nota_tecnica", pedidoPor: "Lúcia Prado" })))
+      .toBe("Aberto por Lúcia Prado a partir da nota técnica da IA em 29/09/2026");
+    expect(linhaDoPedido(pedido({ origem: "nota_tecnica", pedidoPor: null }))).toMatch(/^Aberto a partir da nota técnica da IA/);
+  });
+
+  it("na fila: rascunho vindo da nota tem frase própria; substituição segue a sua", () => {
+    expect(situacaoDoPedido(pedido({ parecer: parecer({ origemRascunho: "nota_tecnica" }) })))
+      .toBe("Rascunho a partir da nota técnica da IA, a revisar");
+    expect(situacaoDoPedido(pedido({ parecer: parecer({ substituiId: "x", origemRascunho: null }) })))
+      .toBe("Novo parecer em rascunho (substitui o anterior)");
+    expect(situacaoDoPedido(pedido({ parecer: parecer() }))).toBe("Rascunho em andamento");
+  });
+
+  it("erros de 'usar como rascunho': 404 fala da nota; 409 manda abrir o pedido; 403 diz quem pode", () => {
+    expect(mensagemDeErroJuridico(404, "usar-nota")).toMatch(/nota técnica/);
+    expect(mensagemDeErroJuridico(409, "usar-nota")).toMatch(/Abra o pedido na fila/);
+    expect(mensagemDeErroJuridico(403, "usar-nota")).toMatch(/Só o jurídico da Casa/);
+    expect(mensagemDeErroJuridico(404, "abrir")).toMatch(/Não encontramos este pedido/);
+  });
+});
+
+describe("ADR-0019 fatia 2a — o parecer no portal (administração)", () => {
+  it("diz o que cada escolha faz", () => {
+    expect(frasePortal(false)).toMatch(/só aparece no portal depois que a matéria é deliberada/);
+    expect(frasePortal(true)).toMatch(/assim que o jurídico o assina/);
+  });
+
+  it("a consulta avulsa nunca vai ao portal", () => {
+    expect(AVISO_CONSULTA_AVULSA).toMatch(/nunca vai ao portal/);
+  });
+
+  it("erros da configuração: 403 diz que é do administrador", () => {
+    expect(mensagemDeErroJuridico(403, "parametros")).toMatch(/administrador da Casa/);
+    expect(mensagemDeErroJuridico(403, "salvar-parametros")).toMatch(/administrador da Casa/);
+    expect(mensagemDeErroJuridico(400, "salvar-parametros")).toMatch(/Confira os campos/);
   });
 });

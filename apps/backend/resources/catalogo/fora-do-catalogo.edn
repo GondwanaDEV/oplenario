@@ -141,4 +141,11 @@
  :legislativo/meu-pedido-juridico {:categoria :so-tela
                                    :motivo "o relator pede o parecer juridico da materia que relata, na tela do vereador; o agente da secretaria tem pedir_parecer_juridico"}
  :transparencia/pareceres-juridicos {:categoria :so-tela
-                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}}
+                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}
+ ;; ---------- ADR-0019 fatia 2a: a nota tecnica da IA como rascunho do advogado + antecipar o portal ----------
+ :legislativo/usar-nota-como-rascunho {:categoria :so-tela
+                                       :motivo "usar a nota tecnica da IA como rascunho e' ato do advogado: ele a le', assume e assina; a IA nao abre parecer em nome de ninguem (ADR-0019 Eixo 5)"}
+ :legislativo/parametros-parecer-juridico {:categoria :so-tela
+                                           :motivo "parametro da Casa (quando o portal mostra o parecer): so' o admin_ente decide, na tela de administracao"}
+ :legislativo/salvar-parametros-parecer-juridico {:categoria :so-tela
+                                                  :motivo "antecipar o parecer ao portal e' decisao institucional do admin_ente, nao acao do agente"}}

@@ -22,6 +22,7 @@ import { usePedidosJuridicos } from "@/lib/use-juridico";
 import type { EstadoPedido, PedidoJuridicoOut } from "@/lib/contrato-juridico.gen";
 import { GuardJuridico } from "../guard-juridico";
 import { TopoInterno } from "../topo";
+import { NotasDaIA } from "./notas-da-ia";
 import { NovoPedidoForm } from "./novo-pedido-form";
 import "./juridico.css";
 
@@ -59,6 +60,7 @@ function Conteudo() {
   const { papeis } = usePapeis();
   const ehJuridico = papeis.includes("juridico");
   const ehSecretaria = papeis.includes("secretario");
+  const [secao, setSecao] = useState<"pedidos" | "notas">("pedidos");
   const [aba, setAba] = useState<EstadoPedido>("pendente");
   const { estado, recarregar } = usePedidosJuridicos(token, aba);
   const [novoAberto, setNovoAberto] = useState(false);
@@ -79,57 +81,74 @@ function Conteudo() {
           <p className="jur-opinativo" role="note">{AVISO_OPINATIVO}</p>
         </header>
 
-        {ehSecretaria && (
-          <div className="jur-barra">
-            {!novoAberto && (
-              <button type="button" className="btn btn-primaria" onClick={() => { setAviso(null); setNovoAberto(true); }}>
-                Novo pedido de parecer
-              </button>
-            )}
-          </div>
-        )}
-
-        {aviso && (
-          <p role="status" className="jur-ok">
-            Pedido aberto: {aviso.assunto}. <Link href={comToken(`/juridico/${aviso.id}`, token)}>Abrir o pedido</Link>
-          </p>
-        )}
-
-        {ehSecretaria && novoAberto && (
-          <section className="jur-painel" aria-labelledby="jur-novo-titulo">
-            <h2 id="jur-novo-titulo">Novo pedido de parecer (consulta avulsa)</h2>
-            <NovoPedidoForm
-              token={token}
-              onCancelar={() => setNovoAberto(false)}
-              onCriado={(p) => {
-                setNovoAberto(false);
-                setAviso({ id: p.id, assunto: p.assunto });
-                setAba("pendente");
-                recarregar();
-              }}
-            />
-          </section>
-        )}
-
-        <nav className="jur-abas" aria-label="Filtrar os pedidos">
-          {ABAS_FILA.map((a) => (
-            <button key={a.estado} type="button" className="jur-aba" aria-pressed={aba === a.estado} onClick={() => setAba(a.estado)}>
-              {a.rotulo}
-              {a.estado === aba && estado.fase === "pronto" ? ` (${itens.length})` : ""}
+        {ehJuridico && (
+          <nav className="jur-abas jur-secoes" aria-label="Seções da fila do jurídico">
+            <button type="button" className="jur-aba" aria-pressed={secao === "pedidos"} onClick={() => setSecao("pedidos")}>
+              Pedidos de parecer
             </button>
-          ))}
-        </nav>
+            <button type="button" className="jur-aba" aria-pressed={secao === "notas"} onClick={() => setSecao("notas")}>
+              Notas técnicas da IA
+            </button>
+          </nav>
+        )}
 
-        {estado.fase === "carregando" && <p role="status">Carregando os pedidos…</p>}
-        {estado.fase === "erro" && <p className="jur-erro" role="alert">{estado.mensagem}</p>}
-        {estado.fase === "pronto" &&
-          (itens.length === 0 ? (
-            <p className="jur-vazio">{vazioDaFila(aba, ehSecretaria)}</p>
-          ) : (
-            <ul className="jur-lista" aria-label="Pedidos de parecer">
-              {itens.map((p) => <Linha key={p.id} p={p} token={token} ehJuridico={ehJuridico} />)}
-            </ul>
-          ))}
+        {ehJuridico && secao === "notas" ? (
+          <NotasDaIA token={token} />
+        ) : (
+          <>
+          {ehSecretaria && (
+            <div className="jur-barra">
+              {!novoAberto && (
+                <button type="button" className="btn btn-primaria" onClick={() => { setAviso(null); setNovoAberto(true); }}>
+                  Novo pedido de parecer
+                </button>
+              )}
+            </div>
+          )}
+
+          {aviso && (
+            <p role="status" className="jur-ok">
+              Pedido aberto: {aviso.assunto}. <Link href={comToken(`/juridico/${aviso.id}`, token)}>Abrir o pedido</Link>
+            </p>
+          )}
+
+          {ehSecretaria && novoAberto && (
+            <section className="jur-painel" aria-labelledby="jur-novo-titulo">
+              <h2 id="jur-novo-titulo">Novo pedido de parecer (consulta avulsa)</h2>
+              <NovoPedidoForm
+                token={token}
+                onCancelar={() => setNovoAberto(false)}
+                onCriado={(p) => {
+                  setNovoAberto(false);
+                  setAviso({ id: p.id, assunto: p.assunto });
+                  setAba("pendente");
+                  recarregar();
+                }}
+              />
+            </section>
+          )}
+
+          <nav className="jur-abas" aria-label="Filtrar os pedidos">
+            {ABAS_FILA.map((a) => (
+              <button key={a.estado} type="button" className="jur-aba" aria-pressed={aba === a.estado} onClick={() => setAba(a.estado)}>
+                {a.rotulo}
+                {a.estado === aba && estado.fase === "pronto" ? ` (${itens.length})` : ""}
+              </button>
+            ))}
+          </nav>
+
+          {estado.fase === "carregando" && <p role="status">Carregando os pedidos…</p>}
+          {estado.fase === "erro" && <p className="jur-erro" role="alert">{estado.mensagem}</p>}
+          {estado.fase === "pronto" &&
+            (itens.length === 0 ? (
+              <p className="jur-vazio">{vazioDaFila(aba, ehSecretaria)}</p>
+            ) : (
+              <ul className="jur-lista" aria-label="Pedidos de parecer">
+                {itens.map((p) => <Linha key={p.id} p={p} token={token} ehJuridico={ehJuridico} />)}
+              </ul>
+            ))}
+          </>
+        )}
       </main>
     </>
   );

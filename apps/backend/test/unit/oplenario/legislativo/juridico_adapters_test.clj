@@ -116,3 +116,37 @@
       (is (= [false nil] ((juxt #(get-in % [:pareceres 0 :ja-existia]) #(get-in % [:pareceres 0 :relator-id])) w))))
     (is (= {:id (str id) :relator-id (str id) :relator-nome "Ana"}
            (out/relator->wire {:id id :relator-id id :relator-nome "Ana"})))))
+
+;; ---------------- ADR-0019 fatia 2a: nota tecnica como rascunho + antecipar o portal ----------------
+
+(deftest parametros->dominio-so-aceita-booleano
+  (is (= {:publicar-ao-assinar true} (in/parametros->dominio {"publicar-ao-assinar" true})))
+  (is (= {:publicar-ao-assinar false} (in/parametros->dominio {"publicar-ao-assinar" false})))
+  (testing "fail-closed: texto, numero, nulo, ausente e corpo que nao e' objeto"
+    (doseq [ruim [{"publicar-ao-assinar" "false"} {"publicar-ao-assinar" "true"} {"publicar-ao-assinar" 1}
+                  {"publicar-ao-assinar" nil} {} "texto" nil]]
+      (is (invalido? in/parametros->dominio ruim) (pr-str ruim)))))
+
+(deftest saida-da-origem-do-rascunho-e-do-parametro
+  (let [rascunho (assoc assinado :estado "rascunho" :numero nil :ano nil :origem-rascunho "nota_tecnica")
+        pedido {:id (random-uuid) :proposicao-id (random-uuid) :assunto "Análise jurídica da matéria" :prazo nil
+                :estado "pendente" :pedido-por-nome "Paulo" :em-nome-de nil :origem "nota_tecnica"
+                :criado-em (Instant/parse "2026-09-30T10:00:00Z") :materia-tipo "projeto_lei" :materia-sequencial 7
+                :materia-ano 2026 :materia-ementa "Ementa" :parecer rascunho}
+        w (out/pedido->wire pedido)]
+    (is (= ["nota_tecnica" "nota_tecnica"] [(:origem w) (get-in w [:parecer :origem-rascunho])])
+        "o pedido e o rascunho dizem de onde vieram")
+    (testing "escrito do zero: origem nil"
+      (is (nil? (get-in (out/pedido->wire (assoc pedido :origem "secretaria" :parecer (dissoc rascunho :origem-rascunho)))
+                        [:parecer :origem-rascunho]))))
+    (testing "a ficha carrega a origem do assinado"
+      (is (= ["nota_tecnica"]
+             (mapv :origem-rascunho (:pareceres (out/da-materia->wire {:pareceres [(assoc assinado :origem-rascunho "nota_tecnica")]
+                                                                       :pedidos-abertos []}))))))
+    (testing "o portal NAO mostra a origem"
+      (is (not-any? #{:origem-rascunho}
+                    (keys (first (:pareceres (out/publicos->wire [(assoc assinado :origem-rascunho "nota_tecnica")])))))))
+    (testing "origem fora do vocabulario e' bug de servidor (contrato fechado)"
+      (is (thrown? clojure.lang.ExceptionInfo (out/pedido->wire (assoc-in pedido [:parecer :origem-rascunho] "ia")))))
+    (is (= {:publicar-ao-assinar true} (out/parametros->wire {:publicar-ao-assinar true})))
+    (is (= {:publicar-ao-assinar false} (out/parametros->wire {})))))

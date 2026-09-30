@@ -103,6 +103,8 @@ export function linhaDoPedido(p: Pick<PedidoJuridicoOut, "pedidoPor" | "emNomeDe
   const partes: string[] = [];
   if (p.origem === "relator") {
     partes.push(p.pedidoPor ? `Pedido pelo relator ${p.pedidoPor}` : "Pedido pelo relator da comissão");
+  } else if (p.origem === "nota_tecnica") {
+    partes.push(p.pedidoPor ? `Aberto por ${p.pedidoPor} a partir da nota técnica da IA` : "Aberto a partir da nota técnica da IA");
   } else if (p.pedidoPor) {
     partes.push(p.emNomeDe ? `Pedido por ${p.pedidoPor}, em nome de ${p.emNomeDe}` : `Pedido por ${p.pedidoPor}`);
   } else if (p.emNomeDe) {
@@ -127,12 +129,32 @@ export function numeroDoParecer(p: Pick<ParecerJuridicoOut, "numero" | "ano">): 
   return p.numero != null && p.ano != null ? `Parecer jurídico nº ${p.numero}/${p.ano}` : null;
 }
 
+// ---- origem do rascunho (ADR-0019 fatia 2a, Eixo 5) ----
+
+/** Sobre a nota da IA: o texto de máquina nunca é chamado de parecer, e quem assina responde por ele. */
+export const AVISO_TEXTO_DE_IA =
+  "Texto de IA não é parecer: o que você assina é o que você revisou e assumiu.";
+
+/** O que a ficha e o pedido dizem da origem do parecer. Só para pareceres que partiram da nota técnica da IA; o portal
+ *  não mostra origem. Assinado: quem revisou e assinou. Rascunho: o lembrete a quem redige. */
+export function linhaDeOrigemDoParecer(
+  p: Pick<ParecerJuridicoOut, "estado" | "origemRascunho" | "assinatura">,
+): string | null {
+  if (p.origemRascunho !== "nota_tecnica") return null;
+  if (p.estado === "assinado" && p.assinatura)
+    return `Rascunho iniciado a partir de nota técnica da IA, revisado e assinado por ${p.assinatura.nome}.`;
+  return "Rascunho iniciado a partir da nota técnica da IA. Revise cada ponto, escolha a conclusão e assine só o que assumir.";
+}
+
 /** A linha de estado de um pedido na fila: o que aconteceu com o parecer, sem texto do parecer. */
 export function situacaoDoPedido(p: Pick<PedidoJuridicoOut, "estado" | "parecer">): string {
   if (p.estado === "cancelado") return "Pedido cancelado";
   const par = p.parecer;
   if (!par) return p.estado === "atendido" ? "Atendido" : "Aguardando o parecer";
-  if (par.estado === "rascunho") return par.substituiId ? "Novo parecer em rascunho (substitui o anterior)" : "Rascunho em andamento";
+  if (par.estado === "rascunho") {
+    if (par.substituiId) return "Novo parecer em rascunho (substitui o anterior)";
+    return par.origemRascunho === "nota_tecnica" ? "Rascunho a partir da nota técnica da IA, a revisar" : "Rascunho em andamento";
+  }
   const num = numeroDoParecer(par);
   return `${num ?? "Parecer assinado"} · ${rotuloConclusao(par.conclusao)}`;
 }
@@ -280,7 +302,10 @@ export type AcaoJuridica =
   | "salvar"
   | "assinar"
   | "substituir"
-  | "listar-materia";
+  | "listar-materia"
+  | "usar-nota"
+  | "parametros"
+  | "salvar-parametros";
 
 const CONFLITO: Record<AcaoJuridica, string> = {
   listar: "Conflito ao ler os pedidos.",
@@ -292,6 +317,10 @@ const CONFLITO: Record<AcaoJuridica, string> = {
   assinar: "Este parecer já foi assinado. Recarregue a página para ver a versão atual.",
   substituir: "Não há parecer assinado vigente para substituir, ou já existe um rascunho em andamento.",
   "listar-materia": "Conflito ao ler os pareceres da matéria.",
+  "usar-nota":
+    "Esta nota já foi usada ou decidida, ou a matéria já tem um rascunho de parecer em curso. Abra o pedido na fila e continue de onde parou.",
+  parametros: "Conflito ao ler a configuração do parecer no portal.",
+  "salvar-parametros": "Conflito ao salvar a configuração do parecer no portal.",
 };
 
 const PROIBIDO: Partial<Record<AcaoJuridica, string>> = {
@@ -301,6 +330,9 @@ const PROIBIDO: Partial<Record<AcaoJuridica, string>> = {
   substituir: "Só o jurídico da Casa emite parecer.",
   cancelar: "Só a secretaria cancela um pedido.",
   pedir: "Só a secretaria pede parecer.",
+  "usar-nota": "Só o jurídico da Casa usa a nota técnica como rascunho de parecer.",
+  parametros: "Só o administrador da Casa vê e altera esta configuração.",
+  "salvar-parametros": "Só o administrador da Casa vê e altera esta configuração.",
 };
 
 /** A frase da tela para uma resposta que não foi ok. `erroDoServidor` só entra no 400 (corpo inválido), onde ele é o
@@ -310,7 +342,10 @@ export function mensagemDeErroJuridico(status: number, acao: AcaoJuridica, erroD
   if (status === 401) return "Sua sessão expirou. Entre de novo.";
   if (status === 403)
     return PROIBIDO[acao] ?? "Seu acesso não permite ver ou fazer isso. O jurídico e a secretaria usam esta área.";
-  if (status === 404) return "Não encontramos este pedido — ele pode não existir nesta Casa.";
+  if (status === 404)
+    return acao === "usar-nota"
+      ? "Não encontramos esta nota técnica — ela pode não existir nesta Casa."
+      : "Não encontramos este pedido — ele pode não existir nesta Casa.";
   if (status === 409) return CONFLITO[acao];
   if (status === 400) {
     if (acao === "assinar") return erroDoServidor ?? "Falta preencher o relatório, a fundamentação ou a conclusão.";
@@ -318,3 +353,20 @@ export function mensagemDeErroJuridico(status: number, acao: AcaoJuridica, erroD
   }
   return "Não foi possível concluir agora. Tente de novo em instantes.";
 }
+
+// ---- parecer no portal (administração, Eixo 4) ----
+
+export const ROTULO_PORTAL = {
+  titulo: "Parecer jurídico no portal",
+  depois: "Só depois da deliberação da matéria (padrão)",
+  ao_assinar: "Assim que o jurídico assinar",
+};
+
+/** A frase que diz ao administrador o que o parâmetro faz hoje. */
+export function frasePortal(publicarAoAssinar: boolean): string {
+  return publicarAoAssinar
+    ? "O parecer assinado, o vigente, aparece no portal assim que o jurídico o assina, mesmo com a matéria ainda em tramitação."
+    : "O parecer assinado, o vigente, só aparece no portal depois que a matéria é deliberada (votada ou arquivada), como a LAI permite.";
+}
+
+export const AVISO_CONSULTA_AVULSA = "A consulta avulsa nunca vai ao portal: responde-se por e-SIC.";

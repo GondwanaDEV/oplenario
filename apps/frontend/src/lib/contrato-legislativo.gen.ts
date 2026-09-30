@@ -522,6 +522,7 @@ export interface NotaTecnicaResumoOut {
 
 export interface NotasTecnicasOut {
   itens: NotaTecnicaResumoOut[];
+  casaComJuridico: boolean;
 }
 
 export interface NotaTecnicaOut {

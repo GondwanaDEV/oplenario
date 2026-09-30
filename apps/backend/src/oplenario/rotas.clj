@@ -532,6 +532,10 @@
                                                               (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
                                        :perfil-juridico (fn [ente-id identidade-id]
                                                           (repo-identidade-comp/perfil-juridico repo-identidade ente-id identidade-id))
+                                       ;; ADR-0019 fatia 2a: "Casa com juridico ativo" (>= 1 vinculo ativo com o papel `juridico`) —
+                                       ;; a nota tecnica da IA so' vai a fila do juridico quando ha' quem a use.
+                                       :casa-tem-juridico? (fn [ente-id]
+                                                             (repo-identidade-comp/casa-tem-papel-ativo? repo-identidade ente-id "juridico"))
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
