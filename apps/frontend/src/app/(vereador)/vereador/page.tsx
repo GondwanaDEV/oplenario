@@ -26,6 +26,7 @@ import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
 import { derivarTramitacao } from "@/lib/tramitacao-vista";
 import { comToken } from "@/lib/nav";
+import { PublicarPauta } from "@/app/publicar-pauta";
 import type {
   CienciaPendenteOut,
   ParecerResumoMeuPainelOut,
@@ -91,6 +92,12 @@ export default function PaginaHomeVereador() {
           <ProximaSessaoResumo estadoSessoes={estadoSessoes} sessao={vista.proximaSessao} />
         </div>
       </section>
+
+      {/* ADR-0019 fatia 3: quando a regra da Casa manda o Presidente, o 1º Secretário ou a Mesa publicar a pauta, é aqui
+          que ele publica a da próxima sessão. Só aparece para quem pode (o servidor decide pelo cargo). */}
+      {vista.proximaSessao && vista.proximaSessao.estado === "agendada" && (
+        <PublicarPauta token={token} sessaoId={vista.proximaSessao.id} soQuemPode />
+      )}
 
       {vista.ciencias.length > 0 && (
         <section aria-live="polite" aria-label="Para sua ciência">

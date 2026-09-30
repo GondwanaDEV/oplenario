@@ -43,6 +43,9 @@ export interface PautaOut {
   /** docs/23 Fatia 4b: o último item ANUNCIADO pela Mesa, quando segue na pauta — o estado inicial da TV (o
    * replay do SSE só retém 5 min). Ausente quando nada foi anunciado. */
   "em-apreciacao"?: { "item-id": string; "anunciado-em": string };
+  /** ADR-0019 fatia 3: a pauta OFICIAL — a última versão publicada e se a pauta viva mudou desde então. Ausente =
+   * a pauta ainda não foi publicada. */
+  publicacao?: { versao: number; "publicada-em": string; "alterada-desde": boolean };
 }
 
 // ---- payloads dos 7 eventos do canal plenário (= o :dados de cada evento, JSON kebab-case) ----

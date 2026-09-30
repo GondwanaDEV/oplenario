@@ -78,6 +78,7 @@
 .tv .pauta li.atual { background: rgba(207,166,92,.12); border-color: var(--amarelo); }
 .tv .pauta li.atual .ord, .tv .pauta li.atual .fase { color: var(--tv-destaque); }
 .pauta-vazia, .tribuna-livre { font-size: clamp(1rem, 1.4vw, 2.3rem); color: var(--palco-texto-2); margin: 0; line-height: 1.35; }
+.pauta-oficial { font-family: var(--mono); font-size: clamp(0.8rem, 1vw, 1.6rem); letter-spacing: .03em; color: var(--palco-texto-2); margin: 0 0 0.6em; }
 
 /* 1 · abertura */
 .f-abertura { grid-template-columns: 1fr 1.25fr; gap: 3vw; align-items: stretch; }

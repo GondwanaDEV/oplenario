@@ -22,6 +22,7 @@ import {
   encerrouAoVivo,
   faseDaTv,
   itensDaPautaTv,
+  pautaOficialTv,
   relogioDaTv,
   seloDaTv,
   subRelogioDaTv,
@@ -285,11 +286,15 @@ function Miolo({
             <h1>{tituloDaSessao(sessao)}</h1>
             <p>A sessão vai começar. Acompanhe aqui a pauta, a tribuna e as votações ao vivo.</p>
           </div>
-          <Pauta itens={itens} rotulo={itens.length > 0 ? `Pauta do dia · ${itens.length} ${itens.length === 1 ? "item" : "itens"}` : "Pauta do dia"} />
+          <Pauta
+            itens={itens}
+            rotulo={itens.length > 0 ? `Pauta do dia · ${itens.length} ${itens.length === 1 ? "item" : "itens"}` : "Pauta do dia"}
+            oficial={pautaOficialTv(pauta)}
+          />
         </section>
       );
     case "em-apreciacao":
-      return apreciacao ? <EmApreciacao apreciacao={apreciacao} estado={estado} agora={agora} /> : <EmCurso estado={estado} itens={itens} agora={agora} />;
+      return apreciacao ? <EmApreciacao apreciacao={apreciacao} estado={estado} agora={agora} /> : <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} />;
     case "votacao":
       return <Votacao estado={estado} />;
     case "resultado":
@@ -307,16 +312,17 @@ function Miolo({
       );
     case "em-curso":
     default:
-      return <EmCurso estado={estado} itens={itens} agora={agora} />;
+      return <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} />;
   }
 }
 
-function Pauta({ itens, rotulo }: { itens: ItemPautaTv[]; rotulo: string }) {
+function Pauta({ itens, rotulo, oficial }: { itens: ItemPautaTv[]; rotulo: string; oficial: string | null }) {
   return (
     <div className="cartao cartao-pauta">
       <p className="rot">{rotulo}</p>
+      {oficial && <p className="pauta-oficial">{oficial}</p>}
       {itens.length === 0 ? (
-        <p className="pauta-vazia">A pauta desta sessão ainda não foi publicada.</p>
+        <p className="pauta-vazia">Nenhum item na pauta desta sessão ainda.</p>
       ) : (
         <ol className="pauta">
           {itens.map((it) => (
@@ -386,14 +392,14 @@ function CartaoQuorum({ estado }: { estado: EstadoPlenario }) {
   );
 }
 
-function EmCurso({ estado, itens, agora }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number }) {
+function EmCurso({ estado, itens, agora, oficial }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number; oficial: string | null }) {
   return (
     <section className="tv-miolo f-em-curso" aria-label="Sessão em curso">
       <div className="tv-coluna">
         <CartaoTribuna estado={estado} agora={agora} />
         <CartaoQuorum estado={estado} />
       </div>
-      <Pauta itens={itens} rotulo="Pauta do dia" />
+      <Pauta itens={itens} rotulo="Pauta do dia" oficial={oficial} />
     </section>
   );
 }

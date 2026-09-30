@@ -23,6 +23,7 @@ import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
 import { ConcederAuditorForm } from "./conceder-auditor-form";
 import { ConcederJuridicoForm } from "./conceder-juridico-form";
+import { RegrasDaPauta } from "./regras-da-pauta";
 import { PainelAgente } from "../conferencias/fila-conferencias";
 import { useAgentesInstitucionais } from "@/lib/use-conferencias";
 import "../cadastros/vereadores/cadastro-vereadores.css";
@@ -196,6 +197,8 @@ function Conteudo() {
             </button>
           )}
         </section>
+
+        <RegrasDaPauta token={token} />
 
         <section className="adm-outras" aria-labelledby="adm-outras-titulo">
           <h2 id="adm-outras-titulo">Outras áreas da administração</h2>

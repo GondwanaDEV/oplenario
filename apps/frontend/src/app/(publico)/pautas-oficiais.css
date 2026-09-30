@@ -1,0 +1,17 @@
+/* A pauta oficial no portal (ADR-0019 fatia 3). Tokens do sistema. */
+.pautas-oficiais { padding-block: 2rem 3rem; }
+.pautas-oficiais .pg-cab h1 { font-family: var(--display); margin: 0.2rem 0 0.4rem; }
+.pautas-oficiais .sub { color: var(--texto-2); max-width: 62ch; margin: 0; }
+.pautas-oficiais .secao-tit { font-family: var(--display); font-size: var(--t-16); margin: 1.6rem 0 0.6rem; }
+.pautas-oficiais .estado { color: var(--texto-2); }
+.po-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.po-lista li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem 1rem; padding: 0.7rem 0.9rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); }
+.po-lista li.atual { border-color: var(--jade); }
+.po-selo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.po-selo-ok { color: var(--jade); }
+.po-aberta { margin: 1.4rem 0 0; padding: 1.2rem 1.3rem; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface); }
+.po-aberta h2 { font-family: var(--display); margin: 0; }
+.po-data { margin: 0.2rem 0 0.6rem; color: var(--texto-2); }
+.po-itens { margin: 0.8rem 0 0; padding-left: 1.3rem; display: grid; gap: 0.5rem; }
+.po-fase { display: block; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .04em; color: var(--texto-2); }
+.po-historico { margin: 0.9rem 0 0; color: var(--texto-2); font-size: var(--t-13); }
