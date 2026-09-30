@@ -59,6 +59,12 @@ export function PareceresJuridicosPublicos({ ente, proposicaoId }: { ente: strin
                   <b>{ass.nome}</b>
                   <span>{ass.registro}</span>
                   <span>{ass.quando}</span>
+                  {ass.carimbo && (
+                    <span className="pj-carimbo" title={ass.carimbo.aviso ?? undefined}>
+                      {ass.carimbo.rotulo}: <code>{ass.carimbo.digest}</code>
+                    </span>
+                  )}
+                  {ass.carimbo?.aviso && <span className="pj-carimbo-aviso">{ass.carimbo.aviso}</span>}
                 </footer>
               </article>
             </li>

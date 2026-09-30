@@ -692,6 +692,20 @@
                        :resolver-autor (fn [ente-id identidade-id]
                                          (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                        :resolver-municipio resolver-municipio
+                       ;; ADR-0019 fatia 2: o caminho da materia (comissoes, relator, pedido de parecer juridico) — os
+                       ;; MESMOS seams de cadastros que a tela recebe (o agente propoe; a secretaria confirma)
+                       :resolver-comissoes resolver-comissoes-fn
+                       :vereador-vinculado? vereador-vinculado?
+                       ;; `vereadores_da_casa`: o mesmo seam do convite de subscricao (mandato vigente hoje)
+                       :colegas-da-casa (fn [ente-id]
+                                          (colegas-da-casa repo-cadastros ente-id
+                                                           (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
+                       :comissoes-vigentes (fn [ente-id]
+                                             (repo-cadastros-comp/comissoes-vigentes
+                                               repo-cadastros ente-id
+                                               (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
+                       :nomes-de-vereadores (fn [ente-id ids]
+                                              (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
                        :relogio relogio-producao
                        :propor (propostas/propositor repo-integracao-ia relogio-producao)
                        :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]

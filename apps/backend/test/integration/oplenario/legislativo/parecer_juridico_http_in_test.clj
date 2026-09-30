@@ -159,7 +159,10 @@
         (is (= 200 status))
         (is (= "atendido" (:estado corpo)))
         (is (= ["assinado" 1 "favoravel"] ((juxt :estado :numero :conclusao) pj)))
-        (is (= {:nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"} (select-keys (:assinatura pj) [:nome :oab :qualificacao])))))
+        (is (= {:nome "Paulo Bezerra" :oab "CE 12345" :qualificacao "efetivo"} (select-keys (:assinatura pj) [:nome :oab :qualificacao])))
+        ;; ADR-0019 fatia 4 (C): o carimbo — o stub se declara, e o hash sai na resposta da assinatura
+        (is (= "STUB-ICP-v0" (get-in pj [:assinatura :algoritmo])))
+        (is (re-matches #"sha256:[0-9a-f]{64}" (get-in pj [:assinatura :sha256])))))
     (testing "assinado: 409 para editar/reassinar; a secretaria le' o texto assinado"
       (is (= 409 (:status (chamar jur :put (str base "/parecer") texto))))
       (is (= 409 (:status (chamar jur :post (str base "/parecer/assinatura") {}))))
@@ -168,7 +171,9 @@
       (doseq [quem [sec ver jur]]
         (let [{:keys [status corpo]} (chamar quem :get (str "/legislativo/proposicoes/" pid "/pareceres-juridicos"))]
           (is (= 200 status))
-          (is (= ["favoravel" false] ((juxt :conclusao :substituido) (first (:pareceres corpo))))))))
+          (is (= ["favoravel" false] ((juxt :conclusao :substituido) (first (:pareceres corpo)))))
+          (is (re-matches #"sha256:[0-9a-f]{64}" (get-in corpo [:pareceres 0 :assinatura :sha256]))
+              "a ficha da materia mostra o hash do texto assinado"))))
     (testing "substituir: so' o juridico; o pedido volta a pendente com o texto copiado"
       (is (= 403 (:status (chamar sec :post (str base "/parecer/substituicao") {}))))
       (let [{:keys [status corpo]} (chamar jur :post (str base "/parecer/substituicao") {})]

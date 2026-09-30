@@ -42,6 +42,7 @@
   responde sobre o MUNDO e nega com 409 (dominio normal); politica responde sobre o ATOR e nega com 403.
   Colapsar os dois faria a Casa dizer 'este ato nao e' possivel' quando a verdade e' 'voce nao pode pedi-lo'."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
             [oplenario.legislativo.db.votacao :as votacao]))
 
 (set! *warn-on-reflection* true)
@@ -64,7 +65,29 @@
   [tx proposicao-id]
   (votacao/aprovada-em-votacao? tx (tenancy/ente-da-sessao tx) proposicao-id))
 
+;; ---------- ADR-0019 Eixo 8: a etapa juridica OBRIGATORIA (desligada por padrao) ----------
+
+(defn tem-parecer-juridico-assinado?
+  "A materia `proposicao-id` tem parecer juridico ASSINADO (e vigente)? Booleano. O fato pergunta 'assinado', NUNCA
+  'favoravel': o parecer juridico e' opinativo (docs/29) e o parecer contrario assinado tambem cumpre a etapa.
+
+  DESLIGADA POR PADRAO. Nenhum rito entregue usa este fato: a Casa so' passa a exigir o parecer se PUSER a guarda no
+  proprio rito — e o rito e' dado (Inv.4), nao codigo. Como a Casa liga (sem deploy, pela configuracao do rito):
+    1. declara o estado `em_analise_juridica` no template de rito (`template_estado`);
+    2. declara a transicao que SAI dele — ex.: de `em_analise_juridica` para `em_comissoes`, gatilho `encaminhar` —
+       com a guarda `tem_parecer_juridico_assinado(proposicao.id)`;
+    3. o rito antes dele aponta para `em_analise_juridica` (a secretaria pede o parecer em `/juridico`).
+  A materia so' sai do estado quando o advogado assina; se o Regimento nao previr parecer, a Casa simplesmente nao poe
+  a guarda (a demo e a Baturité seguem tramitando como antes). A checagem de tipo do `motor/verificador` ve' a guarda
+  como `Booleano` ao salvar a transicao. O fato e' o ATO (o parecer assinado), nao o rotulo.
+
+  Sem `data`, pelo mesmo motivo de `aprovada-em-votacao?`: parecer assinado e' imutavel (so' se substitui), e 'tinha
+  parecer em DD/MM' nao e' pergunta que o rito faca."
+  [tx proposicao-id]
+  (parecer-juridico/tem-parecer-assinado? tx (tenancy/ente-da-sessao tx) proposicao-id))
+
 ;; nome canonico (= assinatura em motor/catalogo FUNCOES-RELACAO) -> fn de relacao. O host funde este
 ;; mapa no RegistroFatos (`sistema/fundir-relacoes`, que FALHA em colisao de nome entre modulos).
 (def relacoes
-  {"aprovada_em_votacao" aprovada-em-votacao?})
+  {"aprovada_em_votacao" aprovada-em-votacao?
+   "tem_parecer_juridico_assinado" tem-parecer-juridico-assinado?})

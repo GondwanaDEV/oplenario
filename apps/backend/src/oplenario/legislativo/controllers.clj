@@ -1182,14 +1182,15 @@
 
 (defn assinar-parecer-juridico!
   "O advogado assina. O snapshot (nome, OAB, qualificacao) sai do PERFIL JURIDICO do signatario (`perfil-juridico`, seam
-  do host sobre `identidade`), nunca do corpo. Sem perfil -> {:erro :sem-perfil-juridico}."
-  [repo-legislativo perfil-juridico nome-na-casa ator pedido-id]
+  do host sobre `identidade`), nunca do corpo. `assinador` (AssinadorICP, hoje o STUB-ICP-v0) carimba os bytes canonicos
+  do texto. Sem perfil -> {:erro :sem-perfil-juridico}."
+  [repo-legislativo assinador perfil-juridico nome-na-casa ator pedido-id]
   (let [ente-id (:ente-id ator)]
     (if-let [{:keys [nome oab qualificacao]} (perfil-juridico ente-id (:identidade-id ator))]
       (decorado nome-na-casa ente-id
                 (repo-juridico/assinar-parecer-juridico! repo-legislativo ente-id pedido-id
                                                 {:por (:identidade-id ator) :nome nome :oab oab
-                                                 :qualificacao qualificacao}))
+                                                 :qualificacao qualificacao :assinador assinador}))
       {:erro :sem-perfil-juridico})))
 
 (defn substituir-parecer-juridico!

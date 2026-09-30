@@ -38,7 +38,7 @@ const pedido = (extra: Record<string, unknown> = {}) => ({
 });
 const assinado = (extra: Record<string, unknown> = {}) => ({
   id: "pj1", numero: 3, ano: 2026, estado: "assinado", relatorio: "Analisei a matéria.", fundamentacao: "Art. 30, I, da CF.",
-  conclusao: "com_ressalvas", assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:05:00" },
+  conclusao: "com_ressalvas", assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:05:00", algoritmo: "STUB-ICP-v0", sha256: `sha256:${"cd34".repeat(16)}` },
   "substitui-id": null, substituido: false, ...extra,
 });
 const rascunho = (extra: Record<string, unknown> = {}) => ({
@@ -203,6 +203,8 @@ describe("detalhe /juridico/:id — o jurídico escreve e assina", () => {
     expect(within(ass).getByText("Lúcia Prado")).toBeTruthy();
     expect(within(ass).getByText("OAB/CE 12345 · Advogado(a) contratado(a)")).toBeTruthy();
     expect(within(ass).getByText("Assinado em 30/09/2026, 14:05")).toBeTruthy();
+    expect(within(ass).getByText("cd34".repeat(16))).toBeTruthy(); // o carimbo: o hash do texto assinado
+    expect(within(ass).getByText(/ainda não é assinatura ICP-Brasil/)).toBeTruthy();
     expect(screen.queryByLabelText("Relatório")).toBeNull(); // assinado é imutável: sem editor
     expect(screen.getByRole("button", { name: "Emitir novo parecer (substitui este)" })).toBeTruthy();
   });

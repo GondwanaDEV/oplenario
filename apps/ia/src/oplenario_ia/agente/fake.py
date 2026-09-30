@@ -43,6 +43,10 @@ _DESTINATARIO = re.compile(
     re.IGNORECASE,
 )
 _ASSUNTO = re.compile(r"\bsobre\s+(.+?)[.?!]*$", re.IGNORECASE)
+_PARECER_JURIDICO = re.compile(
+    r"\b(pe[çc]a|pedir|solicite|solicitar|abra|abrir|encaminhe|encaminhar)\b.*\bparecer\b.*\bjur[íi]dic", re.IGNORECASE
+)
+_ID_DA_MATERIA = re.compile(r"^id: (\S+)$", re.MULTILINE)
 _ITEM = re.compile(r"^itens\.(\d+)\.(id|nome|campos\.\d+): (.+)$", re.MULTILINE)
 _FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"(?: versao="([^"]*)")?>\n(.*?)\n</fonte>', re.DOTALL)
 _PREFERIDAS = ("ementa:", "estado-atual:", "estado:", "itens.1.proposicao.ementa:", "itens.1.texto-descricao:")
@@ -111,7 +115,36 @@ def _planejar_requerimento(pedido: PedidoInferencia, pergunta: str, disponiveis:
     return json.dumps({"acao": "ferramenta", "nome": "protocolar_requerimento", "argumentos": argumentos})
 
 
+def _planejar_parecer_juridico(pedido: PedidoInferencia, pergunta: str, disponiveis: set[str]) -> str | None:
+    """ADR-0019: "peça o parecer jurídico do PL 12/2026" — lê a matéria (para o id), depois PROPÕE o pedido (o ato não
+    executa: a secretaria confirma na tela). Sem a matéria na pergunta, não planeja (consulta avulsa é da pessoa)."""
+    materia = _MATERIA.search(pergunta)
+    if not (materia and _PARECER_JURIDICO.search(pergunta)):
+        return None
+    if not {"situacao_da_materia", "pedir_parecer_juridico"} <= disponiveis:
+        return None
+    if _fonte(pedido, "pedir_parecer_juridico") or any(c.startswith("A ferramenta ") for c in pedido.conteudo):
+        return json.dumps({"acao": "responder"})
+    lida = _fonte(pedido, "situacao_da_materia")
+    if lida is None:
+        argumentos = {
+            "tipo": SIGLAS[materia.group(1).upper()],
+            "sequencial": int(materia.group(2)),
+            "ano": int(materia.group(3)),
+        }
+        return json.dumps({"acao": "ferramenta", "nome": "situacao_da_materia", "argumentos": argumentos})
+    achado = _ID_DA_MATERIA.search(lida[1])
+    if achado is None:
+        return json.dumps({"acao": "responder"})
+    return json.dumps(
+        {"acao": "ferramenta", "nome": "pedir_parecer_juridico", "argumentos": {"proposicao-id": achado.group(1)}}
+    )
+
+
 def planejar(pedido: PedidoInferencia) -> str:
+    parecer = _planejar_parecer_juridico(pedido, _pergunta(pedido), _disponiveis(pedido))
+    if parecer is not None:
+        return parecer
     requerimento = _planejar_requerimento(pedido, _pergunta(pedido), _disponiveis(pedido))
     if requerimento is not None:
         return requerimento

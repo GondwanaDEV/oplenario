@@ -19,7 +19,8 @@
 (defn- assinatura [p]
   (when (= "assinado" (:estado p))
     {:nome (:assinatura-nome p) :oab (:assinatura-oab p) :qualificacao (:assinatura-qualificacao p)
-     :em (->str (:assinado-em p))}))
+     :em (->str (:assinado-em p))
+     :algoritmo (:assinatura-algoritmo p) :sha256 (:conteudo-sha256 p)}))
 
 (defn- parecer [p com-texto?]
   (cond-> {:id (->str (:id p)) :numero (:numero p) :ano (:ano p) :estado (:estado p)
@@ -69,6 +70,12 @@
 
 (defn comissoes->wire [cs]
   (validado wire/ComissoesOut {:comissoes (mapv (fn [c] {:id (->str (:id c)) :nome (:nome c)}) cs)}))
+
+(defn vereadores->wire
+  "Vereadores com mandato vigente: id, nome de exibicao e partido (nada mais do cadastro sai)."
+  [vs]
+  (validado wire/VereadoresDaCasaOut
+            {:vereadores (mapv (fn [v] {:id (->str (:id v)) :nome (:nome v) :partido (:partido v)}) vs)}))
 
 (defn pareceres-abertos->wire [ps]
   (validado wire/PareceresAbertosOut
