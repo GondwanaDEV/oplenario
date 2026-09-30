@@ -8,6 +8,15 @@
 
 (def ^:private nome-consumidor "integracao-ia-promocao")
 
+(def ^:private nome-consumidor-cota "integracao-ia-cota-da-casa")
+
+(def tipo-casa-suspensa "admin_sistema.casa.suspensa")
+(def tipo-casa-reativada "admin_sistema.casa.reativada")
+
 (defn registrar [registro]
-  (reduce (fn [r tipo] (outbox/registrar r nome-consumidor tipo repo/promover-em-tx!))
-          registro (sort (keys logic/promocoes))))
+  (-> (reduce (fn [r tipo] (outbox/registrar r nome-consumidor tipo repo/promover-em-tx!))
+              registro (sort (keys logic/promocoes)))
+      ;; ADR-0018: a Casa suspensa tem a cota de IA zerada; reativada, volta ao que valia (tipos STRING, sem importar
+      ;; admin_sistema)
+      (outbox/registrar nome-consumidor-cota tipo-casa-suspensa repo/pausar-por-suspensao-em-tx!)
+      (outbox/registrar nome-consumidor-cota tipo-casa-reativada repo/retomar-apos-reativacao-em-tx!)))

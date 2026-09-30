@@ -23,7 +23,8 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
+import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import { TemaProvider } from "@/lib/tema";
 
 export default function LayoutInterno({ children }: { children: React.ReactNode }) {
@@ -38,7 +39,16 @@ function LeitorToken({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   return (
     <AuthProvider tokenQuery={searchParams.get("token")}>
-      <TemaProvider>{children}</TemaProvider>
+      <TemaProvider>
+        <Faixa />
+        {children}
+      </TemaProvider>
     </AuthProvider>
   );
+}
+
+// ADR-0018: a Casa suspensa avisa no topo de toda tela interna (o servidor recusa a escrita com 423 de qualquer forma).
+function Faixa() {
+  const { token } = useAuth();
+  return <FaixaAcessoRestritoDaSessao token={token} />;
 }

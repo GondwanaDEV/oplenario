@@ -1,0 +1,174 @@
+(ns oplenario.admin-sistema.vazamento-estado-test
+  "INTEGRACAO (PG real, cadeia real de `rotas/montar`) — o teste de vazamento na 3a dimensao: o ESTADO da Casa
+  (ADR-0018, Eixo 3). As outras duas: cross-tenant (`kernel.tenancy-test`) e cross-esfera (`console-login-test`).
+
+  Uma Casa SUSPENSA nao escreve fora da allowlist: TODA rota de escrita montada que passa pelo interceptor de Casa (a
+  pessoa ou o agente) e nao esta' na allowlist recebe 423 com o motivo publico — inclusive a rota que ainda nao existe
+  hoje (a rota nova nasce bloqueada: o teste percorre as rotas montadas, nao uma lista). Leitura passa; os protocolos
+  do cidadao e as respostas a eles seguem; a mesma escrita numa Casa ATIVA nao leva 423 (controle). A trilha de
+  auditoria registra a recusa, com o ator. A faixa \"acesso restrito\": o interno ve o motivo, a cidada e o portal nao."
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
+            [com.stuartsierra.component :as component]
+            [io.pedestal.http :as ph]
+            [io.pedestal.http.route :as route]
+            [io.pedestal.test :as pt]
+            [jsonista.core :as json]
+            [next.jdbc :as jdbc]
+            [oplenario.admin-sistema.components.idp-admin :as idp-admin]
+            [oplenario.admin-sistema.components.repositorio :as repo]
+            [oplenario.auditoria.components.repositorio :as repo-aud]
+            [oplenario.auditoria.diplomat.http.in :as auditoria-http]
+            [oplenario.config :as config]
+            [oplenario.http :as http]
+            [oplenario.identidade.components.repositorio :as repo-id]
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.migracao :as migracao]
+            [oplenario.restricao-da-casa :as restricao-casa]
+            [oplenario.rotas :as rotas])
+  (:import (java.time Instant)))
+
+(def ^:dynamic *ds* nil)
+
+(use-fixtures :once
+  (fn [t]
+    (let [c (component/start (datasource/datasource (config/carregar)))]
+      (migracao/migrar! (:ds c))
+      (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
+
+(defn- repo-op [] (assoc (repo/repositorio) :datasource {:ds *ds*}))
+
+(def servidora (random-uuid))
+(def cidada (random-uuid))
+
+(defn- fake-identidade
+  "A pessoa da Casa (servidora com os papeis de quem escreve) e a cidada; `cred-<ente>` e' a credencial delegada de um
+  agente da servidora naquela Casa."
+  []
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-id/RepoIdentidade
+    (snapshot-ator [_ _ iid]
+      (cond (= iid servidora) {:vinculo-ativo {:id (random-uuid) :tipo "servidor"}
+                               :papeis #{"secretario" "admin_ente" "vereador" "juridico" "auditor"}}
+            (= iid cidada) {:vinculo-ativo {:id (random-uuid) :tipo "cidadao"} :papeis #{}}))
+    (resolver-credencial-agente [_ seg]
+      (when (str/starts-with? (str seg) "cred-")
+        {:execucao-id (random-uuid) :ente-id (parse-uuid (subs seg 5)) :identidade-id servidora
+         :agente "assistente" :publico "secretaria" :classes ["leitura"]}))))
+
+(defn- rotas-montadas []
+  (rotas/montar {:idp (idp-dev/idp-dev)
+                 :repo-identidade (fake-identidade)
+                 :idp-operacao (idp-admin/idp-operacao-dev)
+                 :repo-admin-sistema (repo-op)
+                 :repo-integracao-ia :lint
+                 :repo-auditoria :lint
+                 :info-ente (constantly {:nome-oficial "Câmara Municipal de Baturité"})
+                 :cache-estado-da-casa-ms 0
+                 :operacao {:realm "operacao" :client-id "oplenario-console" :sessao {:absoluta-h 8 :ociosa-min 15}}}))
+
+(defn- rp-aud [] (repo-aud/map->RepoAuditoriaPg {:datasource {:ds *ds*}}))
+
+(defn- servico []
+  (-> (http/servico (config/carregar) (rotas-montadas)
+                    (it/globais-com [(auditoria-http/interceptor (rp-aud) {})]))
+      ph/create-server ::ph/service-fn))
+
+(defn- casa!
+  "Uma Casa no registro, ativa; `suspensa?` = suspensa por incidente (um operador basta)."
+  [suspensa?]
+  (let [o (repo/criar-operador! (repo-op) {:id (random-uuid) :email (str "op-" (random-uuid) "@oplenario.dev") :nome "Op"})
+        ente (random-uuid)]
+    (repo/registrar-casa! (repo-op) {:ente-id ente :nome "Câmara" :uf "CE" :municipio-ibge "2302008"
+                                     :municipio-nome "Baturité"}
+                          {:operador-id (:id o)})
+    (jdbc/with-transaction [tx *ds*] (repo/ativar-casa-em-tx! tx ente {}))
+    (when suspensa?
+      (repo/pedir-restricao! (repo-op) {:ente-id ente :acao "suspender" :motivo "incidente_de_seguranca"
+                                        :justificativa "Credenciais vazadas em 30/09." :pedido-por (:id o)}
+                             (Instant/now)))
+    ente))
+
+(defn- como [ente iid]
+  {"authorization" (str "Bearer " (json/write-value-as-string {:sub "u" :ente-id (str ente) :identidade-id (str iid)}))
+   "Content-Type" "application/json"})
+
+(defn- nomes-dos-interceptors [r] (set (keep :name (:interceptors r))))
+
+(def ^:private autenticacao-da-casa #{::it/autenticacao ::it/autenticacao-agente})
+
+(defn- escritas-da-casa
+  "Toda rota de ESCRITA montada que passa pelo interceptor de Casa (a pessoa ou o agente)."
+  []
+  (->> (route/expand-routes (rotas-montadas))
+       (filter #(and (not (#{:get :head :options} (:method %)))
+                     (some autenticacao-da-casa (nomes-dos-interceptors %))))
+       (map (fn [r] {:nome (:route-name r) :metodo (:method r) :caminho (:path r)
+                     :agente? (contains? (nomes-dos-interceptors r) ::it/autenticacao-agente)}))))
+
+(defn- caminho-concreto [p] (str/replace p #":[^/]+" (fn [_] (str (random-uuid)))))
+
+(defn- escrever! [svc ente {:keys [metodo caminho agente?]}]
+  (pt/response-for svc metodo (caminho-concreto caminho)
+                   :headers (if agente?
+                              {"authorization" (str "Bearer cred-" ente) "Content-Type" "application/json"}
+                              (como ente servidora))
+                   :body "{}"))
+
+(deftest casa-suspensa-nao-escreve-fora-da-allowlist
+  (let [svc (servico) suspensa (casa! true) ativa (casa! false)
+        escritas (escritas-da-casa)
+        bloqueadas (remove #(restricao-casa/escrita-permitida? (:metodo %) (:nome %)) escritas)
+        permitidas (filter #(restricao-casa/escrita-permitida? (:metodo %) (:nome %)) escritas)]
+    (is (> (count bloqueadas) 60) "sanidade: o legislativo, as sessoes, os cadastros... estao montados")
+    (is (some :agente? bloqueadas) "o agente (MCP) tambem e' da Casa")
+    (is (every? (set (map :nome permitidas)) (disj restricao-casa/allowlist))
+        "toda rota da allowlist existe e passa pelo interceptor de Casa (sem entrada fantasma)")
+    (testing "fora da allowlist: 423 com o motivo PUBLICO, nunca o comercial"
+      (doseq [r bloqueadas]
+        (let [resp (escrever! svc suspensa r)]
+          (is (= 423 (:status resp)) (str (:nome r) " " (:caminho r)))
+          (when (= 423 (:status resp))
+            (is (= "acesso restrito" (:erro (json/read-value (:body resp) json/keyword-keys-object-mapper))))
+            (is (not (re-find #"incidente" (:body resp))) "o motivo nao sai no fio")))))
+    (testing "a allowlist segue (protocolos do cidadao e as respostas a eles)"
+      (doseq [r permitidas]
+        (is (not= 423 (:status (escrever! svc suspensa r))) (str (:nome r)))))
+    (testing "controle: a mesma escrita numa Casa ATIVA nao leva 423"
+      (doseq [r (take 12 bloqueadas)]
+        (is (not= 423 (:status (escrever! svc ativa r))) (str (:nome r)))))
+    (testing "leitura passa na Casa suspensa"
+      (is (= 200 (:status (pt/response-for svc :get "/eu" :headers (como suspensa servidora))))))
+    (testing "a trilha registra a recusa, com o ator (o 423 nao quebra a auditoria)"
+      (let [regs (tenancy/com-tenant* *ds* suspensa
+                   #(jdbc/execute! % ["SELECT acao, status_http, rotulo, identidade_id FROM auditoria.registro
+                                       WHERE ente_id = ? AND status_http = 423" suspensa]))]
+        (is (seq regs))
+        (is (every? #(= "recusado: Casa com acesso restrito" (:registro/rotulo %)) regs))
+        (is (some #(= servidora (:registro/identidade_id %)) regs))))))
+
+(deftest a-faixa-de-acesso-restrito
+  (let [svc (servico) suspensa (casa! true) ativa (casa! false)
+        eu (fn [ente iid] (json/read-value (:body (pt/response-for svc :get "/eu" :headers (como ente iid)))
+                                           json/keyword-keys-object-mapper))]
+    (testing "o interno ve desde quando e o motivo"
+      (let [b (eu suspensa servidora)]
+        (is (= "incidente_de_seguranca" (get-in b [:acesso-restrito :motivo])))
+        (is (some? (get-in b [:acesso-restrito :desde])))))
+    (testing "a cidada (e o portal) so' \"acesso restrito\" — o motivo nao e' publico"
+      (let [b (eu suspensa cidada)]
+        (is (some? (get-in b [:acesso-restrito :desde])))
+        (is (not (contains? (:acesso-restrito b) :motivo))))
+      (let [p (json/read-value (:body (pt/response-for svc :get (str "/portal/casa/" suspensa)))
+                               json/keyword-keys-object-mapper)]
+        (is (some? (:acesso-restrito-desde p)) "o portal segue no ar, com a faixa")
+        (is (not (re-find #"incidente" (pr-str p))))))
+    (testing "Casa ativa: sem faixa"
+      (is (nil? (:acesso-restrito (eu ativa servidora))))
+      (is (nil? (:acesso-restrito-desde (json/read-value (:body (pt/response-for svc :get (str "/portal/casa/" ativa)))
+                                                         json/keyword-keys-object-mapper)))))
+    (testing "Casa fora do registro (demo, testes de outras verticais): sem restricao"
+      (is (nil? (:acesso-restrito (eu (random-uuid) servidora)))))))

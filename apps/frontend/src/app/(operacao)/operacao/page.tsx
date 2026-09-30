@@ -8,8 +8,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
-import { type Casa, rotuloEstadoCasa, useCasas } from "@/lib/use-operacao";
-import { atividade } from "./quando";
+import { type Casa, type Pedido, rotuloEstadoCasa, rotuloMotivo, useCasas } from "@/lib/use-operacao";
+import { atividade, haQuanto } from "./quando";
 
 export default function CamarasNaPlataforma() {
   const { token } = useAuth();
@@ -50,8 +50,11 @@ export default function CamarasNaPlataforma() {
       <div className="op-metricas" aria-live="polite">
         <div className="op-mt"><span className="t">Câmaras ativas</span><b>{dados?.resumo.ativas ?? "—"}</b></div>
         <div className="op-mt"><span className="t">Aguardando o 1º administrador</span><b>{dados?.resumo.aguardandoAdmin ?? "—"}</b></div>
+        <div className="op-mt"><span className="t">Com acesso restrito</span><b>{dados?.resumo.suspensas ?? "—"}</b></div>
         <div className="op-mt"><span className="t">No registro</span><b>{dados?.resumo.total ?? "—"}</b></div>
       </div>
+
+      {(dados?.pendentes?.length ?? 0) > 0 && <FilaDoSegundoOperador pedidos={dados!.pendentes!} token={token} />}
 
       <div className="op-barra">
         <label className="op-filtro">
@@ -60,6 +63,7 @@ export default function CamarasNaPlataforma() {
             <option value="todos">todos</option>
             <option value="ativo">Ativa</option>
             <option value="provisionar">Aguardando 1º admin</option>
+            <option value="suspenso">Suspensa</option>
           </select>
         </label>
         <label className="op-filtro">
@@ -127,5 +131,27 @@ function Linha({ casa, token }: { casa: Casa; token: string | null }) {
       <td className="op-ativ">{atividade(casa)}</td>
       <td><Link className="op-link" href={href} aria-label={`Abrir ${casa.nome}`}>Abrir</Link></td>
     </tr>
+  );
+}
+
+/** ADR-0018: os pedidos de suspensão/encerramento que esperam o 2º operador, de todas as câmaras (mais antigo primeiro). */
+function FilaDoSegundoOperador({ pedidos, token }: { pedidos: Pedido[]; token: string | null }) {
+  return (
+    <section className="op-fila" aria-labelledby="titulo-fila">
+      <h2 id="titulo-fila">Aguardando o 2º operador</h2>
+      <ul>
+        {pedidos.map((p) => (
+          <li key={p.id}>
+            <b>{p.casaNome ?? "Câmara"}</b>
+            <span>
+              {p.acao === "encerrar" ? "Encerramento" : "Suspensão"} · {rotuloMotivo(p.motivo)} · pedido por{" "}
+              {p.pedidoPor ?? "—"} {haQuanto(p.pedidoEm)}
+            </span>
+            <Link className="op-link" href={comToken(`/operacao/casas/${p.enteId}`, token)}
+              aria-label={`Decidir o pedido de ${p.casaNome ?? "câmara"}`}>Decidir</Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

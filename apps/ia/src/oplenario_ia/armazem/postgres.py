@@ -174,6 +174,13 @@ MIGRACOES: list[str] = [
     """
     CREATE INDEX IF NOT EXISTS idx_registro_evento_instante ON ia.registro_evento (instante) WHERE tipo = 'execucao';
     """,
+    # ADR-0018 — a reativação de uma Casa suspensa que antes só media manda o orçamento SEM VALOR (volta a só medir)
+    """
+    ALTER TABLE ia.orcamento ALTER COLUMN mensal DROP NOT NULL;
+    ALTER TABLE ia.orcamento ALTER COLUMN teto_duro DROP NOT NULL;
+    ALTER TABLE ia.orcamento DROP CONSTRAINT IF EXISTS orcamento_valores_juntos;
+    ALTER TABLE ia.orcamento ADD CONSTRAINT orcamento_valores_juntos CHECK ((mensal IS NULL) = (teto_duro IS NULL));
+    """,
 ]
 
 
@@ -325,8 +332,12 @@ class ArmazemPostgres:
                 (ate, motivo[:2000], trabalho_id),
             )
 
-    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
-        # a definição mais recente vale; um evento atrasado (definido antes) não volta o orçamento para trás
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento | None, definido_em: datetime, chave: str) -> None:
+        # a definição mais recente vale; um evento atrasado (definido antes) não volta o orçamento para trás. Sem valor
+        # (ADR-0018) a linha fica com mensal/teto nulos: a Casa só mede, e a data segura a ordem do mesmo jeito
+        mensal, teto, moeda = (
+            (None, None, "USD") if orcamento is None else (orcamento.mensal, orcamento.teto_duro, orcamento.moeda)
+        )
         with self._conectar() as c:
             c.execute(
                 "INSERT INTO ia.orcamento (ente_id, mensal, teto_duro, moeda, definido_em, chave)"
@@ -334,13 +345,15 @@ class ArmazemPostgres:
                 " ON CONFLICT (ente_id) DO UPDATE SET mensal = excluded.mensal, teto_duro = excluded.teto_duro,"
                 " moeda = excluded.moeda, definido_em = excluded.definido_em, chave = excluded.chave"
                 " WHERE ia.orcamento.definido_em <= excluded.definido_em",
-                (ente_id, orcamento.mensal, orcamento.teto_duro, orcamento.moeda, definido_em, chave),
+                (ente_id, mensal, teto, moeda, definido_em, chave),
             )
 
     def orcamento(self, ente_id: str) -> Orcamento | None:
         with self._conectar() as c:
             r = c.execute("SELECT mensal, teto_duro, moeda FROM ia.orcamento WHERE ente_id = %s", (ente_id,)).fetchone()
-            return Orcamento(mensal=r["mensal"], teto_duro=r["teto_duro"], moeda=r["moeda"]) if r else None
+            if r is None or r["mensal"] is None:
+                return None
+            return Orcamento(mensal=r["mensal"], teto_duro=r["teto_duro"], moeda=r["moeda"])
 
     def desistir(self, trabalho_id: int, erro: str, seguintes: list[NovoTrabalho] | None = None) -> None:
         with self._conectar() as c, c.transaction():

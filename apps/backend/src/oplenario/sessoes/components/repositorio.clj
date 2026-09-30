@@ -762,3 +762,9 @@
   molde de `identidade-do-vereador-em-tx` (fn de topo sobre tx, injetada pelo host)."
   [tx ente-id m]
   (transcricao/registrar! tx (assoc m :ente-id ente-id)))
+
+(defn sessao-em-curso?
+  "ADR-0018 (Eixo 2): ha' sessao plenaria em curso nesta Casa agora? O host injeta isto no `admin_sistema` (a
+  suspensao aprovada espera o encerramento). Fn de topo, fora do protocolo (so' leitura, uma tx do tenant)."
+  [repo ente-id]
+  (tenancy/com-tenant* (:ds (:datasource repo)) ente-id #(sessao/alguma-em-curso? % ente-id)))

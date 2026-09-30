@@ -22,6 +22,28 @@ describe("BarraInstitucional", () => {
     );
   });
 
+  it("Casa suspensa (ADR-0018): a faixa de acesso restrito, sem motivo; o portal segue", () => {
+    render(
+      <TemaProvider>
+        <BarraInstitucional ente="camara-fortaleza" nomeCasa="Câmara Municipal de Fortaleza"
+          acessoRestritoDesde="2026-09-29T13:00:00Z" />
+      </TemaProvider>,
+    );
+    const faixa = screen.getByRole("status");
+    expect(faixa.textContent).toMatch(/Sistema da Câmara com acesso restrito desde 29\/09/);
+    expect(faixa.textContent).not.toMatch(/motivo/);
+    expect(faixa.textContent).toMatch(/pedidos de informação, de ouvidoria e de dados pessoais continuam/);
+  });
+
+  it("Casa ativa: sem faixa", () => {
+    render(
+      <TemaProvider>
+        <BarraInstitucional ente="camara-fortaleza" nomeCasa="Câmara Municipal de Fortaleza" />
+      </TemaProvider>,
+    );
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("nav mobile: hambúrguer abre/fecha o MESMO <ul> via aria-expanded/aria-controls (review A2.0, item 1)", () => {
     render(
       <TemaProvider>

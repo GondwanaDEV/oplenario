@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def _kebab(nome: str) -> str:
@@ -82,12 +82,21 @@ class NormaVigenteV1(Fio):
 
 class OrcamentoIADefinidoV1(Fio):
     """`OrcamentoIADefinido` v1 (B.9, ADR-0014): o orçamento mensal de IA da Casa e o teto duro, na moeda da tabela
-    de preços, definidos pelo operador conforme o plano. O mais recente vale."""
+    de preços, definidos pelo operador conforme o plano. O mais recente vale.
 
-    mensal: Decimal
-    teto_duro: Decimal
+    Sem valor (mensal e teto nulos, os dois juntos — ADR-0018): a Casa volta a só medir. É o que a reativação de uma
+    Casa suspensa manda quando, antes da suspensão, ela não tinha orçamento (a suspensão zera a cota com 0/0)."""
+
+    mensal: Decimal | None = None
+    teto_duro: Decimal | None = None
     moeda: str
     definido_em: datetime
+
+    @model_validator(mode="after")
+    def _valores_juntos(self) -> OrcamentoIADefinidoV1:
+        if (self.mensal is None) != (self.teto_duro is None):
+            raise ValueError("mensal e teto duro vêm juntos (ou os dois nulos: a Casa só mede)")
+        return self
 
 
 class DispositivoNorma(Fio):

@@ -131,6 +131,20 @@ describe("resolverCasa (veredito de existência da Casa)", () => {
     });
   });
 
+  it("Casa suspensa (ADR-0018): traz a data da restrição para a faixa — e só ela", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ "nome-oficial": "Câmara Municipal de Fortaleza", "acesso-restrito-desde": "2026-09-29T13:00:00Z" }),
+    })) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-real")).toEqual({
+      estado: "ok",
+      nomeOficial: "Câmara Municipal de Fortaleza",
+      nomeCurto: undefined,
+      acessoRestritoDesde: "2026-09-29T13:00:00Z",
+    });
+  });
+
   it("404 (uuid bem-formado, sem Casa) -> inexistente", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
     expect(await resolverCasa("10000000-0000-0000-0000-000000000001")).toEqual({ estado: "inexistente" });

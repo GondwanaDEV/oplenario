@@ -6,6 +6,7 @@
   (:require [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
             [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
+            [oplenario.restricao-da-casa :as restricao-casa]
             [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
@@ -272,11 +273,26 @@
            ;; ADR-0016: o console do operador (supratenant)
            idp-operacao repo-admin-sistema operacao
            ;; ADR-0017: a trilha de auditoria da Casa
-           repo-auditoria]
+           repo-auditoria
+           ;; ADR-0018: o cache do seam `estado-da-casa` (30 s; os testes passam 0)
+           cache-estado-da-casa-ms]
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
-  (let [auth (it/autenticacao idp repo-identidade)
+  (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
+        ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
+        ;; sessao em curso (sessoes) decide se a suspensao aprovada entra agora ou espera o encerramento — o host cruza
+        ;; os dois modulos (§22.10). Sem o registro montado (testes de outras verticais), nao ha' restricao.
+        sessao-em-curso? (fn [ente-id] (boolean (when repo-sessoes (repo-sessoes-comp/sessao-em-curso? repo-sessoes ente-id))))
+        estado-casa (restricao-casa/com-cache
+                     (if repo-admin-sistema
+                       (admin-sistema-http/estado-da-casa repo-admin-sistema {:sessao-em-curso? sessao-em-curso?}
+                                                          (or relogio (tempo/relogio-sistema)))
+                       (constantly nil))
+                     (or cache-estado-da-casa-ms 30000))
+        estado-da-casa (:estado-da-casa estado-casa)
+        restricao (restricao-casa/restricao estado-da-casa)
+        auth (it/autenticacao idp repo-identidade restricao)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
         ;; = seam da rota PUBLICA (sem ator): mapeia o :ente do path -> ente-id (V1 = UUID coagido fail-closed);
@@ -487,7 +503,13 @@
         ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
         ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
-          ["/eu"                :get [auth http/eu] :route-name :eu]
+          ;; ADR-0018: /eu leva a faixa de acesso restrito (o interno ve o motivo; a cidada, so' "acesso restrito")
+          ["/eu"                :get [auth (fn [req]
+                                             (let [ator (:ator req)
+                                                   v (restricao-casa/visao (some-> (:ente-id ator) estado-da-casa)
+                                                                           (not= "cidadao" (:tipo-vinculo ator)))]
+                                               (http/json-resposta 200 (cond-> {:ator ator} v (assoc :acesso-restrito v)))))]
+           :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
@@ -586,6 +608,8 @@
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
                                          :info-ente info-ente
+                                         ;; ADR-0018: a faixa do portal — so' desde quando (o motivo nao e' publico)
+                                         :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                          ;; I-5 fatia 6: a borda passou a CONSUMIR o mapa inteiro
                                          ;; ({:ficha :janelas}) — a ficha decide o 404 e a janela recorta o
                                          ;; denominador de presenca. O host nao desembrulha mais nada.
@@ -636,6 +660,9 @@
                 ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
                 :deps-registro
                 {:idp-casa idp
+                 ;; ADR-0018: a sessao em curso adia a suspensao; transicionar invalida o cache desta instancia
+                 :sessao-em-curso? sessao-em-curso?
+                 :ao-mudar-estado (:invalidar! estado-casa)
                  :garantir-perfil-da-casa!
                  (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
                    (repo-cadastros-comp/garantir-municipio! repo-cadastros {:codigo-ibge municipio-ibge
@@ -695,7 +722,7 @@
                        :relogio relogio-producao
                        :propor (propostas/propositor repo-integracao-ia relogio-producao)
                        :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]
-                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo})
+                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo :restricao restricao})
                         (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
                                           :deps-catalogo deps-catalogo})))
                 #{})))))

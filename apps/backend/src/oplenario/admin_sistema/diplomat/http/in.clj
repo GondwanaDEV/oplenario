@@ -67,14 +67,21 @@
     (try (f req)
          (catch clojure.lang.ExceptionInfo e
            (case (:tipo (ex-data e))
-             :admin-sistema/nao-encontrada (http/json-resposta 404 {:erro "Casa nao encontrada"})
+             :admin-sistema/nao-encontrada (http/json-resposta 404 {:erro (ex-message e)})
              :admin-sistema/conflito (http/json-resposta 409 {:erro (ex-message e)})
+             (throw e)))
+         (catch org.postgresql.util.PSQLException e
+           ;; a corrida que o banco segura (dois pedidos abertos na mesma Casa; a mesma pessoa nas duas pontas)
+           (if (#{"23505" "23514"} (.getSQLState e))
+             (http/json-resposta 409 {:erro "o pedido mudou enquanto voce decidia — recarregue a Casa"})
              (throw e))))))
 
 (defn- ente-do-path [req] (in-ente/ente-param->uuid (get-in req [:path-params :ente])))
 
-(defn- listar-handler [repo-op]
-  (fn [_] (http/json-resposta 200 (out-ente/lista->wire (repo/listar-casas repo-op)))))
+(defn- agora [relogio] (tempo/agora relogio))
+
+(defn- listar-handler [repo-op deps relogio]
+  (fn [_] (http/json-resposta 200 (out-ente/lista->wire (controllers/listar-casas repo-op deps (agora relogio))))))
 
 (defn- provisionar-handler [repo-op deps]
   (fn [req]
@@ -82,9 +89,10 @@
       (http/json-resposta 201 (out-ente/provisionada->wire
                                (controllers/provisionar-casa! repo-op deps (:ator req) casa))))))
 
-(defn- ficha-handler [repo-op deps]
+(defn- ficha-handler [repo-op deps relogio]
   (com-erros (fn [req] (http/json-resposta 200 (out-ente/ficha->wire
-                                                (controllers/ficha-da-casa repo-op deps (ente-do-path req)))))))
+                                                (controllers/ficha-da-casa repo-op deps (ente-do-path req)
+                                                                           (agora relogio)))))))
 
 (defn- reenviar-convite-handler [repo-op deps]
   (com-erros (fn [req] (http/json-resposta 200 (out-ente/casa->wire
@@ -95,6 +103,35 @@
   (com-erros (fn [req] (http/json-resposta 200 (out-ente/casa->wire
                                                 (controllers/reprovisionar-realm! repo-op deps (:ator req)
                                                                                   (ente-do-path req)))))))
+
+;; ---- ADR-0018 (fatia 1): suspender, reativar, iniciar o encerramento ----
+
+(defn- pedido-do-path [req] (in-ente/ente-param->uuid (get-in req [:path-params :pedido])))
+
+(defn- transicao [f]
+  (com-erros (fn [req] (http/json-resposta 200 (out-ente/transicao->wire (f req))))))
+
+(defn- pedir-suspensao-handler [repo-op deps relogio]
+  (transicao (fn [req] (controllers/pedir-suspensao! repo-op deps (:ator req) (ente-do-path req)
+                                                     (in-ente/pedir-suspensao->dominio (:json-params req))
+                                                     (agora relogio)))))
+
+(defn- iniciar-encerramento-handler [repo-op deps relogio]
+  (transicao (fn [req] (controllers/iniciar-encerramento! repo-op deps (:ator req) (ente-do-path req)
+                                                          (in-ente/iniciar-encerramento->dominio (:json-params req))
+                                                          (agora relogio)))))
+
+(defn- aprovar-handler [repo-op deps]
+  (transicao (fn [req] (controllers/aprovar-pedido! repo-op deps (:ator req) (pedido-do-path req)
+                                                    (in-ente/decisao->justificativa (:json-params req))))))
+
+(defn- recusar-handler [repo-op deps]
+  (transicao (fn [req] (controllers/recusar-pedido! repo-op deps (:ator req) (pedido-do-path req)
+                                                    (in-ente/decisao->justificativa (:json-params req))))))
+
+(defn- reativar-handler [repo-op deps]
+  (transicao (fn [req] (controllers/reativar! repo-op deps (:ator req) (ente-do-path req)
+                                              (in-ente/reativar->justificativa (:json-params req))))))
 
 ;; ---- observabilidade da IA (Onda E, §22.8) ----
 
@@ -120,6 +157,12 @@
                      (if (= :ia/indisponivel (:tipo (ex-data e))) nil (throw e)))))]
       (http/json-resposta 200 (out-ia/observabilidade->wire horas o)))))
 
+(defn estado-da-casa
+  "O seam `estado-da-casa` que o host usa no interceptor de Casa (ADR-0018, Eixo 3): (fn [ente-id] -> {:estado :motivo
+  :desde} | nil). Efetiva o preguicoso (incidente vencido, suspensao agendada cuja sessao acabou) ao ler."
+  [repo-op deps relogio]
+  (fn [ente-id] (controllers/estado-da-casa repo-op deps ente-id (tempo/agora relogio))))
+
 (defn rotas
   "`operacao` = o mapa `:operacao` da config, ja' resolvido pelo host. `deps-registro` = os seams que o host injeta
   para o provisionamento cruzar cadastros/identidade/IdP das Casas sem import (§22.10). `observabilidade-ia` =
@@ -133,11 +176,25 @@
        :route-name :admin-sistema/mint-sessao]
       ["/operacao/sessoes" :delete [(logout-handler repo-admin-sistema)] :route-name :admin-sistema/logout-sessao]
       ["/operacao/eu" :get [auth eu-handler] :route-name :admin-sistema/eu]
-      ["/operacao/casas" :get [auth papel (listar-handler repo-admin-sistema)] :route-name :admin-sistema/listar-casas]
+      ["/operacao/casas" :get [auth papel (listar-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/listar-casas]
       ["/operacao/casas" :post [auth papel it/corpo-json (provisionar-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/provisionar-casa]
-      ["/operacao/casas/:ente" :get [auth papel (ficha-handler repo-admin-sistema deps-registro)]
+      ["/operacao/casas/:ente" :get [auth papel (ficha-handler repo-admin-sistema deps-registro relogio)]
        :route-name :admin-sistema/ficha-da-casa]
+      ;; ADR-0018: a sessao do console ja' exige a chave fisica (ADR-0016), entao cada operador aqui passou por ela
+      ["/operacao/casas/:ente/suspensao" :post
+       [auth papel it/corpo-json (pedir-suspensao-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/pedir-suspensao]
+      ["/operacao/casas/:ente/encerramento" :post
+       [auth papel it/corpo-json (iniciar-encerramento-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/iniciar-encerramento]
+      ["/operacao/casas/:ente/reativacao" :post [auth papel it/corpo-json (reativar-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/reativar-casa]
+      ["/operacao/pedidos/:pedido/aprovacao" :post [auth papel it/corpo-json (aprovar-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/aprovar-pedido]
+      ["/operacao/pedidos/:pedido/recusa" :post [auth papel it/corpo-json (recusar-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/recusar-pedido]
       ["/operacao/casas/:ente/convite" :post [auth papel (reenviar-convite-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/reenviar-convite]
       ["/operacao/casas/:ente/realm" :post [auth papel (reprovisionar-realm-handler repo-admin-sistema deps-registro)]
