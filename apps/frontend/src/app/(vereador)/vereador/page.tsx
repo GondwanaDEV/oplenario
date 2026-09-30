@@ -455,6 +455,9 @@ function CartaoParecer({ parecer, token }: { parecer: ParecerResumoMeuPainelOut;
         {/* Rota REAL (Task 11): o grupo (vereador) não entra na URL -> /parecer/:id/assinar. `comToken`
             preserva o ?token= de dev entre navegações internas — mesmo padrão do tabbar (layout.tsx) e do
             router.push de volta em parecer/[id]/assinar/page.tsx; sem ele o clique perderia o token dev. */}
+        <Link className="btn btn-contorno btn-mini" href={comToken(`/parecer/${parecer.id}/redigir`, token)}>
+          Redigir
+        </Link>
         <Link className="btn btn-primaria btn-mini" href={comToken(`/parecer/${parecer.id}/assinar`, token)}>
           Revisar e assinar
         </Link>

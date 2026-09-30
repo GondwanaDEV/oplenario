@@ -11,6 +11,8 @@ from oplenario_ia.conferencia.roteiro import OPERACAO as CONFERENCIA_REDIGIR
 from oplenario_ia.config import Config
 from oplenario_ia.inferencia.fake import PortaFake
 from oplenario_ia.inferencia.porta import PortaInferencia
+from oplenario_ia.parecer import fake as parecer_fake
+from oplenario_ia.parecer.analise import OPERACAO as RELATOR_ANALISAR
 from oplenario_ia.requerimento import fake as requerimento_fake
 from oplenario_ia.requerimento.copiloto import OPERACAO_JUSTIFICAR, OPERACAO_PREENCHER
 from oplenario_ia.resumo import fake as resumo_fake
@@ -30,6 +32,7 @@ def criar_porta(config: Config) -> PortaInferencia:
                 OPERACAO_PREENCHER: requerimento_fake.preencher,
                 OPERACAO_JUSTIFICAR: requerimento_fake.justificar,
                 CONFERENCIA_REDIGIR: conferencia_fake.redigir,
+                RELATOR_ANALISAR: parecer_fake.analisar,
             }
         )
     if config.vendor == "anthropic":

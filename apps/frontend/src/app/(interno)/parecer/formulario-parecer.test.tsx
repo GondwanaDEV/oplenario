@@ -212,4 +212,48 @@ describe("FormularioParecer", () => {
     );
     expect(screen.getByText((_, node) => node?.textContent === "voto: Sem voto registrado · Rascunho salvo")).toBeTruthy();
   });
+
+  // ADR-0019 fatia 2: o copiloto do relator entra abaixo do campo Análise, pelo slot `acessorioAnalise`.
+  it("acessorioAnalise recebe a análise atual e `aplicar` troca o campo (sem salvar nada)", () => {
+    const aoSalvarRascunho = vi.fn();
+    render(
+      <FormularioParecer
+        valorInicial={{ relatorio: "R", analise: "A", votoRelator: "" }}
+        aoSalvarRascunho={aoSalvarRascunho}
+        aoEmitir={vi.fn()}
+        enviandoRascunho={false}
+        enviandoEmissao={false}
+        erro={null}
+        bloqueado={false}
+        mensagemStatus={null}
+        acessorioAnalise={({ analise, aplicar }) => (
+          <button type="button" onClick={() => aplicar(`${analise} + rascunho da IA`)}>
+            usar rascunho
+          </button>
+        )}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "usar rascunho" }));
+    expect((screen.getByLabelText(/análise/i) as HTMLTextAreaElement).value).toBe("A + rascunho da IA");
+    expect(aoSalvarRascunho).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Salvar rascunho" }));
+    expect(aoSalvarRascunho).toHaveBeenCalledWith({ relatorio: "R", analise: "A + rascunho da IA", votoRelator: "" });
+  });
+
+  it("parecer bloqueado (desfecho terminal): o acessório da Análise não aparece", () => {
+    render(
+      <FormularioParecer
+        valorInicial={valorInicial}
+        aoSalvarRascunho={vi.fn()}
+        aoEmitir={vi.fn()}
+        enviandoRascunho={false}
+        enviandoEmissao={false}
+        erro={null}
+        bloqueado={true}
+        mensagemStatus={null}
+        acessorioAnalise={() => <button type="button">usar rascunho</button>}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "usar rascunho" })).toBeNull();
+  });
 });

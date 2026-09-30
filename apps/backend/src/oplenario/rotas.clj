@@ -257,6 +257,14 @@
     {:ficha   (select-keys composta [:vereador :mandato :legislatura :comissoes])
      :janelas (janelas-de-exercicio (:mandatos composta) (:licencas composta))}))
 
+(defn- normas-da-casa-publicadas?
+  "ADR-0019 fatia 2: a Casa ja' publicou (conferiu e tornou vigente) alguma norma PROPRIA — a LOM ou o Regimento? As de
+  referencia (federal/estadual, sem Casa) nao contam: o copiloto do relator precisa das normas da Casa. Sem o Repo de
+  normas (testes de outras verticais), nao."
+  [repo-normas ente-id]
+  (boolean (when repo-normas
+             (some #(and (= ente-id (:ente-id %)) (:vigente %)) (repo-normas-comp/listar-normas repo-normas ente-id)))))
+
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
@@ -273,6 +281,7 @@
            idp-operacao repo-admin-sistema operacao
            ;; ADR-0017: a trilha de auditoria da Casa
            repo-auditoria]
+    plataforma-ia-override :plataforma-ia
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
@@ -482,7 +491,8 @@
         integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
         ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
         ;; responde indisponivel (R-IA-1), nunca 500.
-        ia (plataforma-ia/plataforma-ia integracao-ia)
+        ;; `plataforma-ia` nos deps (teste) substitui o cliente HTTP do satelite (ex.: um fake do copiloto do relator)
+        ia (or plataforma-ia-override (plataforma-ia/plataforma-ia integracao-ia))
         ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
         ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
         ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
@@ -553,6 +563,10 @@
                                        :ler-rascunho-resumo ler-rascunho-resumo-fn
                                        ;; Faixa B / B.7: o copiloto do requerimento — o rascunho da IA para o formulario
                                        :copiloto-requerimento (fn [ente-id pedido] (plataforma-ia/rascunhar-requerimento ia ente-id pedido))
+                                       ;; ADR-0019 fatia 2: o copiloto do relator — o rascunho da analise do parecer de
+                                       ;; comissao (satelite) e se a Casa ja' publicou LOM/Regimento (normas), pelo host
+                                       :copiloto-analise (fn [ente-id pedido] (plataforma-ia/rascunhar-analise-parecer ia ente-id pedido))
+                                       :normas-publicadas? (fn [ente-id] (normas-da-casa-publicadas? repo-normas ente-id))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).

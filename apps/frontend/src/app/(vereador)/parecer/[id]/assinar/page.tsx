@@ -16,12 +16,13 @@
 // persistente (topo+tabbar) — por isso o cabeçalho do mockup vira um "← Voltar" + título em fluxo.
 
 import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useMeuParecer } from "@/lib/use-meu-parecer";
 import { useMeuEmitirParecer } from "@/lib/use-meu-emitir-parecer";
 import { deriveEstadoAssinatura } from "@/lib/assinatura-vista";
-import { rotularVoto, VOTO_OPCOES, type VotoValor } from "@/lib/parecer-vista";
+import { parecerEhTerminal, rotularVoto, VOTO_OPCOES, type VotoValor } from "@/lib/parecer-vista";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { comToken } from "@/lib/nav";
 import "./assinar.css";
@@ -86,7 +87,12 @@ export default function PaginaAssinarParecer() {
       </div>
 
       {situacao === "sem-texto" ? (
-        <p className="vazio">Ainda sem texto pronto para assinar.</p>
+        <p className="vazio">
+          Ainda sem texto pronto para assinar.{" "}
+          {!parecerEhTerminal(dados.estado) && (
+            <Link href={comToken(`/parecer/${id}/redigir`, token)}>Redigir o parecer</Link>
+          )}
+        </p>
       ) : (
         <>
           <section className="papel" aria-label="Documento a assinar">
@@ -131,6 +137,13 @@ export default function PaginaAssinarParecer() {
                 ))}
               </div>
             </section>
+          )}
+
+          {!parecerEhTerminal(dados.estado) && (
+            <p className="assinar-redigir">
+              <Link href={comToken(`/parecer/${id}/redigir`, token)}>Editar o texto do parecer</Link> — com o rascunho
+              da análise pela IA e o pedido de parecer jurídico.
+            </p>
           )}
 
           <div className="sumario">

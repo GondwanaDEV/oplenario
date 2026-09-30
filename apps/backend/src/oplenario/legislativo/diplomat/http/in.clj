@@ -638,6 +638,41 @@
             (http/json-resposta 503 {:erro mensagem-copiloto-fora})
             (throw e)))))))
 
+;; ========================= ADR-0019, Eixo 5 (fatia 2): o copiloto do relator =========================
+
+(def ^:private mensagem-copiloto-relator-fora
+  "O assistente está indisponível agora. Redija a análise pelo editor — nada do parecer depende dele.")
+
+(defn- copiloto-analise-handler
+  "POST /legislativo/pareceres/:id/copiloto (secretaria) e /meu/pareceres/:id/copiloto (relator): o rascunho da IA
+  para o campo Analise do editor, ja' conferido. Nada e' gravado. `analisar` = (fn [ator id] -> resultado|nil); nil ->
+  404 (parecer inexistente, nao e' do relator ou nao e' sobre proposicao, sem distinguir); IA fora ou seam ausente
+  (integracao desligada) -> 503 com a mensagem R-IA-1."
+  [copiloto analisar]
+  (fn [req]
+    (if-not copiloto
+      (http/json-resposta 503 {:erro mensagem-copiloto-relator-fora})
+      (try
+        (if-let [r (analisar (:ator req) (adapters-in/id-param->uuid (get-in req [:path-params :id])))]
+          (http/json-resposta 200 (adapters-out-parecer/copiloto->wire r))
+          (http/json-resposta 404 {:erro "parecer nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro mensagem-copiloto-relator-fora})
+            (throw e)))))))
+
+(defn- meu-salvar-rascunho-parecer-handler
+  "PATCH /meu/pareceres/:id — o relator salva o texto (Relatorio + Analise) como nova versao 'rascunho', pelo MESMO
+  adapter da rota da secretaria. Posse no controller: nao e' o relator -> 404 sem distinguir. Devolve o editor."
+  [repo-leg resolver-vereador resolver-comissoes]
+  (fn [req]
+    (let [ator (:ator req) id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-parecer/salvar-rascunho->dominio ator id (:json-params req))]
+      (if (controllers/meu-salvar-rascunho-parecer repo-leg resolver-vereador ator id m)
+        (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                   (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
 ;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
 
 (defn- conflito-subscricao
@@ -1188,7 +1223,7 @@
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
            registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
-           comissoes-vigentes nomes-de-vereadores perfil-juridico]}]
+           comissoes-vigentes nomes-de-vereadores perfil-juridico copiloto-analise normas-publicadas?]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
@@ -1196,6 +1231,8 @@
         comissoes-vigentes (or comissoes-vigentes (constantly []))
         nomes-de-vereadores (or nomes-de-vereadores (constantly {}))
         perfil-juridico (or perfil-juridico (constantly nil))
+        ;; ADR-0019 fatia 2: sem o seam, a Casa conta como sem normas publicadas (o rascunho diz isso, nunca inventa)
+        normas-publicadas? (or normas-publicadas? (constantly false))
         papel (it/exige-papel "secretario")
         papel-vereador (it/exige-papel "vereador")
         papel-juridico (it/exige-papel "juridico")
@@ -1281,6 +1318,14 @@
       ["/legislativo/pareceres/:id" :patch
        [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/salvar-rascunho-parecer]
+      ;; ADR-0019 fatia 2: o rascunho da analise pela IA, no editor da secretaria (nada e' gravado)
+      ["/legislativo/pareceres/:id/copiloto" :post
+       [auth papel
+        (copiloto-analise-handler copiloto-analise
+                                  (fn [ator id] (controllers/copiloto-analise-parecer repo-legislativo resolver-comissoes
+                                                                                      copiloto-analise normas-publicadas?
+                                                                                      ator id)))]
+       :route-name :legislativo/copiloto-analise-parecer]
       ["/legislativo/pareceres/:id/emissao" :post
        [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo resolver-comissoes registro relogio)]
        :route-name :legislativo/emitir-parecer]
@@ -1362,6 +1407,17 @@
        :route-name :legislativo/acusar-ciencia]
       ["/meu/pareceres/:id" :get [auth papel-vereador (meu-parecer-editor-handler repo-legislativo resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-parecer-editor]
+      ;; ADR-0019 fatia 2: o relator salva o texto do parecer (nova versao 'rascunho') e pede o rascunho da analise a IA
+      ["/meu/pareceres/:id" :patch
+       [auth papel-vereador it/corpo-json (meu-salvar-rascunho-parecer-handler repo-legislativo resolver-vereador resolver-comissoes)]
+       :route-name :legislativo/meu-salvar-rascunho-parecer]
+      ["/meu/pareceres/:id/copiloto" :post
+       [auth papel-vereador
+        (copiloto-analise-handler copiloto-analise
+                                  (fn [ator id] (controllers/meu-copiloto-analise-parecer repo-legislativo resolver-vereador
+                                                                                          resolver-comissoes copiloto-analise
+                                                                                          normas-publicadas? ator id)))]
+       :route-name :legislativo/meu-copiloto-analise-parecer]
       ["/meu/pareceres/:id/emissao" :post
        [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-emitir-parecer]

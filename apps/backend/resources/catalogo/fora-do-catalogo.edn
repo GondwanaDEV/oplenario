@@ -148,4 +148,11 @@
  :legislativo/meu-pedido-juridico {:categoria :so-tela
                                    :motivo "o relator pede o parecer juridico da materia que relata, na tela; a proposta do agente entra na fatia 2"}
  :transparencia/pareceres-juridicos {:categoria :so-tela
-                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}}
+                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}
+ ;; ---------- ADR-0019 fatia 2 (Eixo 5): o copiloto do relator ----------
+ :legislativo/copiloto-analise-parecer {:categoria :so-tela
+                                        :motivo "a tela do editor pede a IA um rascunho da analise do parecer (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-copiloto-analise-parecer {:categoria :so-tela
+                                            :motivo "o relator pede, no editor, o rascunho da analise a IA (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-salvar-rascunho-parecer {:categoria :so-tela
+                                           :motivo "o relator salva o texto do proprio parecer no editor; texto de parecer e' de quem assina, o agente nao redige"}}

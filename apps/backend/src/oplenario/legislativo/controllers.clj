@@ -1209,3 +1209,90 @@
   sobre `cadastros` (§22.5.3)."
   [comissoes-vigentes ente-id]
   (comissoes-vigentes ente-id))
+
+;; ========================= ADR-0019, Eixo 5 (fatia 2): o copiloto do relator =========================
+;; No editor do parecer de comissao, o relator (ou a secretaria, que redige por ele) pede a IA (seam `copiloto` do host,
+;; sobre o satelite) o RASCUNHO da analise de constitucionalidade e juridicidade: a IA le a materia (o texto PUBLICO,
+;; `texto-para-ia`) e os dispositivos da LOM/Regimento da Casa e cita cada um. Nada e' gravado aqui: o texto volta ao
+;; editor e o relator revisa e salva pelo fluxo de sempre (nova versao de texto). O core CONFERE o que a IA devolveu:
+;; so' citacoes da propria materia ou de dispositivo da Casa, status conhecido, textos com teto; o texto limpo e os
+;; pontos a confirmar sao recalculados aqui; incerteza 'normal' so' com tudo conferido.
+
+(def ^:private teto-analise 20000)
+(def ^:private teto-citacoes 60)
+(def ^:private status-de-citacao #{"conferida" "sem_trecho" "trecho_nao_encontrado" "fonte_nao_lida"})
+(def ^:private fonte-de-norma #"norma:[^\s|\]\"#]+#[^\s|\]\"]+")
+
+(defn- com-teto [s n] (when (string? s) (subs s 0 (min n (count s)))))
+
+(defn- conferir-citacao
+  "A citacao, se for da propria materia (`materia:<id>`) ou de um dispositivo da Casa (`norma:<id>#<endereco>`) e com
+  status conhecido; senao, cai."
+  [proposicao-id {:keys [fonte-id rotulo trecho status]}]
+  (let [fid (str fonte-id)]
+    (when (and (or (= fid (str "materia:" proposicao-id)) (re-matches fonte-de-norma fid))
+               (contains? status-de-citacao (str status)))
+      {:fonte-id fid :rotulo (com-teto rotulo 500) :trecho (com-teto trecho 1000) :status (str status)})))
+
+(defn conferir-analise
+  "O rascunho que a IA devolveu -> o que a tela recebe (ver a secao). `normas-publicadas?` e' o que o CORE sabe da Casa
+  (nunca o eco do satelite): sem normas -> 'sem-normas'; com dispositivo conferido citado -> 'citadas'; senao
+  'sem-dispositivo'. Texto vazio -> sem analise (a tela manda redigir pelo editor)."
+  [proposicao-id normas-publicadas? resposta]
+  (let [a (:analise resposta)
+        texto (com-teto (logic/texto-limpo (some-> (:texto a) str)) teto-analise)
+        citacoes (into [] (comp (keep #(conferir-citacao proposicao-id %)) (take teto-citacoes)) (:citacoes a))
+        sem-fonte (filterv int? (:paragrafos-sem-fonte a))
+        tudo-conferido? (and (seq citacoes) (every? #(= "conferida" (:status %)) citacoes) (empty? sem-fonte))
+        analise (when-not (str/blank? texto)
+                  {:texto texto :citacoes citacoes :paragrafos-sem-fonte sem-fonte
+                   :pontos-a-confirmar (logic/pontos-a-confirmar texto)
+                   :incerteza (if (and tudo-conferido? normas-publicadas? (= "normal" (:incerteza a)))
+                                "normal" "revisar_com_atencao")
+                   :modelo (str (or (:modelo a) ""))})]
+    {:analise analise
+     :normas (cond (not normas-publicadas?) "sem-normas"
+                   (some #(and (str/starts-with? (:fonte-id %) "norma:") (= "conferida" (:status %))) (:citacoes analise))
+                   "citadas"
+                   :else "sem-dispositivo")
+     :indisponivel (when-not analise (get-in resposta [:indisponivel :mensagem]))}))
+
+(defn- pedido-de-analise [t comissao-nome normas-publicadas?]
+  {:proposicao_id (str (:proposicao-id t)) :tipo (:tipo t) :ano (:ano t) :sequencial (:sequencial t)
+   ;; o satelite le no maximo 30 mil caracteres da materia; o teto aqui so' evita mandar um documento inteiro a toa
+   :ementa (:ementa t) :texto (com-teto (:texto t) 100000) :autor_texto (:autor-texto t) :comissao comissao-nome
+   :normas_publicadas (boolean normas-publicadas?) :correlation_id (str (random-uuid))})
+
+(defn- analisar-parecer
+  "`dados` = o agregado do editor JA' autorizado. So' parecer sobre proposicao (nil -> 404). IA fora lanca
+  `:ia/indisponivel` (a borda responde 503, R-IA-1)."
+  [repo-legislativo copiloto normas-publicadas? ente-id {:keys [parecer]}]
+  (when (= "proposicao" (:objeto-tipo parecer))
+    (when-let [t (repo/texto-para-ia repo-legislativo ente-id (:objeto-id parecer))]
+      (let [publicadas? (boolean (normas-publicadas? ente-id))]
+        (conferir-analise (:objeto-id parecer) publicadas?
+                          (copiloto ente-id (pedido-de-analise t (:comissao-nome parecer) publicadas?)))))))
+
+(defn copiloto-analise-parecer
+  "POST /legislativo/pareceres/:id/copiloto — a secretaria, no editor do parecer. nil = parecer inexistente nesta Casa
+  ou nao e' sobre proposicao (-> 404)."
+  [repo-legislativo resolver-comissoes copiloto normas-publicadas? ator id]
+  (let [ente-id (:ente-id ator)]
+    (some->> (buscar-parecer-editor repo-legislativo resolver-comissoes ente-id id)
+             (analisar-parecer repo-legislativo copiloto normas-publicadas? ente-id))))
+
+(defn meu-copiloto-analise-parecer
+  "POST /meu/pareceres/:id/copiloto — o vereador-relator. MESMA posse de `meu-parecer-editor` (so' o relator deste
+  parecer; qualquer outro caso -> nil -> 404 sem distinguir), verificada ANTES de chamar a IA."
+  [repo-legislativo resolver-vereador resolver-comissoes copiloto normas-publicadas? ator id]
+  (some->> (meu-parecer-editor repo-legislativo resolver-vereador resolver-comissoes ator id)
+           (analisar-parecer repo-legislativo copiloto normas-publicadas? (:ente-id ator))))
+
+(defn meu-salvar-rascunho-parecer
+  "PATCH /meu/pareceres/:id — o relator grava uma nova versao 'rascunho' do texto (Relatorio + Analise), o mesmo fluxo
+  da secretaria (`salvar-rascunho-parecer`). MESMA posse de `meu-parecer-editor`: nil -> 404 sem distinguir motivo."
+  [repo-legislativo resolver-vereador ator id m]
+  (let [ente-id (:ente-id ator)]
+    (when-let [vereador-id (resolver-vereador ente-id (:identidade-id ator))]
+      (when (repo/relator-do-parecer? repo-legislativo ente-id vereador-id id)
+        (repo/nova-versao-parecer! repo-legislativo ente-id m)))))
