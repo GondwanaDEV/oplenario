@@ -8,6 +8,7 @@
             [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.restricao-da-casa :as restricao-casa]
+            [oplenario.encerramento :as encerramento]
             [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
@@ -307,7 +308,8 @@
     plataforma-ia-override :plataforma-ia
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
-    ficha-e-janelas-override :ficha-e-janelas-publicas}]
+    ficha-e-janelas-override :ficha-e-janelas-publicas
+    :as deps-de-montar}]
   (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
         ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
         ;; sessao em curso (sessoes) decide se a suspensao aprovada entra agora ou espera o encerramento — o host cruza
@@ -547,8 +549,25 @@
          :sessao-em-curso? sessao-em-curso?
          :ao-mudar-estado (:invalidar! estado-casa)
          ;; ADR-0018 (fatia 2): o plano de dados do encerramento (ver os parametros de `montar`)
-         :exportar-casa exportar-casa
-         :apagar-casa apagar-casa
+         ;; o default e' o plano de dados real (`oplenario.encerramento`), sobre o MESMO pool do registro (o role herda
+         ;; `oplenario_operacao`, o unico com EXECUTE na funcao de apagamento). A chave PRESENTE vence, mesmo nil (= indisponivel):
+         ;; e' como os testes passam fakes ou desligam o plano de dados
+         :exportar-casa (if (contains? deps-de-montar :exportar-casa)
+                          exportar-casa
+                          (when (and repo-admin-sistema repo-auditoria objeto-store)
+                            (fn [ente-id exportacao-id]
+                              (encerramento/exportar-casa!
+                               {:datasource (:datasource repo-admin-sistema) :objeto-store objeto-store
+                                :auditoria (encerramento/seams-de-auditoria repo-auditoria repo-admin-sistema)}
+                               ente-id exportacao-id))))
+         :apagar-casa (if (contains? deps-de-montar :apagar-casa)
+                        apagar-casa
+                        (when (and repo-admin-sistema objeto-store)
+                          (fn [ente-id pedido-id]
+                            (encerramento/apagar-casa!
+                             {:datasource (:datasource repo-admin-sistema) :objeto-store objeto-store
+                              :idp idp :plataforma-ia ia}
+                             ente-id pedido-id))))
          :executar-exportacao (or executar-exportacao exportacao-comp/em-segundo-plano)
          :garantir-perfil-da-casa!
          (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
