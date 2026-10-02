@@ -42,9 +42,9 @@ test("E2 — /expediente lista os modelos e o botao de gerar deixa de ser inalca
   await expect(page.getByText("Ofício padrão da Mesa")).toBeVisible({ timeout: 30_000 });
 });
 
-test("E8 — /notificacoes com :vereador tem item nao-lido com 'Marcar como lida'", async ({ page }) => {
+test("E8 — /notificacoes (a caixa, ADR-0020) com :vereador tem aviso nao-lido com 'Marcar como lido'", async ({ page }) => {
   await page.goto(ids.e8.url, { timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Marcar como lida" }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Marcar como lido" }).first()).toBeVisible({ timeout: 30_000 });
 });
 
 test("E7 — /pos-aprovacao oferece gerar autografo", async ({ page }) => {
