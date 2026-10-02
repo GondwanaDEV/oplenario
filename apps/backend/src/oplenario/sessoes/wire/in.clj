@@ -203,3 +203,18 @@
   do corpo. O teto de linhas e' folgado sobre o maximo real (6 tipos x (5 fases + generica) = 36)."
   [:map {:closed true}
    [:itens [:vector {:max 64} ItemTempoRegimental]]])
+
+;; ---------- ADR-0019 fatia 3 (Eixo 7): publicar a pauta ----------
+
+(def PublicarPauta
+  "Corpo de POST /sessoes/:id/pauta/publicacao. So' a `justificativa`, exigida na REPUBLICACAO (o que mudou). Quem
+  publica e a que titulo vem do ator e da regra da Casa, nunca do corpo."
+  [:map {:closed true}
+   [:justificativa {:optional true} [:maybe [:string {:max 2000}]]]])
+
+(def DefinirRegraPauta
+  "Corpo de PUT /regra-da-pauta (so' `admin_ente`): quem publica e a antecedencia minima em horas (ausente/nil = a Casa
+  nao tem antecedencia minima)."
+  [:map {:closed true}
+   [:quem-publica (km/enum-de logic/quem-publica-pauta)]
+   [:antecedencia-minima-horas {:optional true} [:maybe [:int {:min 1 :max logic/teto-antecedencia-horas}]]]])

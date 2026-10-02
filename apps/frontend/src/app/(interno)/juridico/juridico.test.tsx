@@ -38,7 +38,7 @@ const pedido = (extra: Record<string, unknown> = {}) => ({
 });
 const assinado = (extra: Record<string, unknown> = {}) => ({
   id: "pj1", numero: 3, ano: 2026, estado: "assinado", relatorio: "Analisei a matéria.", fundamentacao: "Art. 30, I, da CF.",
-  conclusao: "com_ressalvas", assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:05:00" },
+  conclusao: "com_ressalvas", assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:05:00", algoritmo: "STUB-ICP-v0", sha256: `sha256:${"cd34".repeat(16)}` },
   "substitui-id": null, substituido: false, ...extra,
 });
 const rascunho = (extra: Record<string, unknown> = {}) => ({
@@ -203,6 +203,8 @@ describe("detalhe /juridico/:id — o jurídico escreve e assina", () => {
     expect(within(ass).getByText("Lúcia Prado")).toBeTruthy();
     expect(within(ass).getByText("OAB/CE 12345 · Advogado(a) contratado(a)")).toBeTruthy();
     expect(within(ass).getByText("Assinado em 30/09/2026, 14:05")).toBeTruthy();
+    expect(within(ass).getByText("cd34".repeat(16))).toBeTruthy(); // o carimbo: o hash do texto assinado
+    expect(within(ass).getByText(/ainda não é assinatura ICP-Brasil/)).toBeTruthy();
     expect(screen.queryByLabelText("Relatório")).toBeNull(); // assinado é imutável: sem editor
     expect(screen.getByRole("button", { name: "Emitir novo parecer (substitui este)" })).toBeTruthy();
   });
@@ -331,5 +333,102 @@ describe("detalhe /juridico/:id — a secretaria lê e cancela", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancelar o pedido" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/já foi atendido/);
     expect(screen.queryByText(/A secretaria cancelou/)).toBeNull();
+  });
+});
+
+// ---------------- ADR-0019 fatia 2a: as notas técnicas da IA na fila do jurídico ----------------
+
+const NOTAS = "/api/legislativo/notas-tecnicas";
+const resumoNota = (extra: Record<string, unknown> = {}) => ({
+  id: "n1", "proposicao-id": "p1", tipo: "projeto_lei", sequencial: 7, ano: 2026, ementa: "Institui o Programa de Hortas",
+  estado: "pendente", incerteza: "normal", "criada-em": "2026-09-30T09:00:00Z", "decidida-em": null, ...extra,
+});
+
+describe("fila /juridico — seção 'Notas técnicas da IA'", () => {
+  it("o jurídico troca de seção e vê as notas pendentes, com o rótulo de rascunho da IA e o link para lê-las", async () => {
+    const c = mockar({
+      [`GET ${BASE}`]: { corpo: { pedidos: [] } },
+      [`GET ${NOTAS}`]: { corpo: { itens: [resumoNota(), resumoNota({ id: "n2", incerteza: "revisar_com_atencao", ementa: "Cria o conselho" })], "casa-com-juridico": true } },
+    });
+    render(<PaginaJuridico />);
+    await screen.findByText(/Nenhum pedido pendente para você/);
+    expect(c.some((x) => x.url.startsWith(NOTAS))).toBe(false); // só busca quando abre a seção
+    fireEvent.click(screen.getByRole("button", { name: "Notas técnicas da IA" }));
+    const lista = await screen.findByRole("list", { name: "Notas técnicas da IA a conferir" });
+    const linhas = within(lista).getAllByRole("listitem");
+    expect(linhas).toHaveLength(2);
+    expect(within(linhas[0]).getByText("PL 7/2026")).toBeTruthy();
+    expect(within(linhas[0]).getByText("Rascunho da IA")).toBeTruthy();
+    expect(within(linhas[1]).getByText("Ler com atenção")).toBeTruthy();
+    expect(within(linhas[0]).getByRole("link", { name: /Ler a nota técnica: PL 7\/2026/ }).getAttribute("href")).toBe("/juridico/notas/n1?token=tk");
+    expect(c.find((x) => x.url.startsWith(NOTAS))!.url).toBe(`${NOTAS}?estado=pendente`);
+    // o texto da IA nunca é chamado de parecer
+    expect(screen.getByText(/Texto de IA não é parecer/)).toBeTruthy();
+    // voltar aos pedidos
+    fireEvent.click(screen.getByRole("button", { name: "Pedidos de parecer" }));
+    expect(await screen.findByText(/Nenhum pedido pendente para você/)).toBeTruthy();
+  });
+
+  it("sem notas: mensagem vazia honesta; falha: alerta, nunca 'nenhuma nota'", async () => {
+    mockar({ [`GET ${BASE}`]: { corpo: { pedidos: [] } }, [`GET ${NOTAS}`]: { status: 500, corpo: {} } });
+    render(<PaginaJuridico />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notas técnicas da IA" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/A conferência das proposições|Não foi possível/);
+    expect(screen.queryByText(/Nenhuma nota técnica a conferir/)).toBeNull();
+  });
+
+  it("nenhuma nota pendente", async () => {
+    mockar({ [`GET ${BASE}`]: { corpo: { pedidos: [] } }, [`GET ${NOTAS}`]: { corpo: { itens: [], "casa-com-juridico": true } } });
+    render(<PaginaJuridico />);
+    fireEvent.click(await screen.findByRole("button", { name: "Notas técnicas da IA" }));
+    expect(await screen.findByText(/Nenhuma nota técnica a conferir/)).toBeTruthy();
+  });
+
+  it("a secretaria não tem a seção (a nota dela está em /conferencias)", async () => {
+    estadoAuth.papeis = ["secretario"];
+    mockar({ [`GET ${BASE}`]: { corpo: { pedidos: [] } } });
+    render(<PaginaJuridico />);
+    await screen.findByText(/Nenhum pedido pendente/);
+    expect(screen.queryByRole("button", { name: "Notas técnicas da IA" })).toBeNull();
+  });
+});
+
+describe("pedido aberto a partir da nota (origem do rascunho)", () => {
+  const url = `${BASE}/ped1`;
+
+  it("o rascunho vindo da nota: diz a origem, vem sem conclusão e exige que o advogado a escolha para assinar", async () => {
+    mockar({
+      [`GET ${url}`]: {
+        corpo: pedido({
+          origem: "nota_tecnica", "pedido-por": "Lúcia Prado", "em-nome-de": null,
+          parecer: rascunho({ relatorio: "Rascunho iniciado a partir da nota técnica da IA — a revisar.", fundamentacao: "Texto da nota.", conclusao: null, "origem-rascunho": "nota_tecnica" }),
+        }),
+      },
+    });
+    render(<PaginaPedido />);
+    expect(await screen.findByText(/Aberto por Lúcia Prado a partir da nota técnica da IA/)).toBeTruthy();
+    const nota = screen.getAllByRole("note").find((n) => /Rascunho iniciado a partir da nota técnica da IA\. Revise/.test(n.textContent ?? ""));
+    expect(nota).toBeTruthy();
+    expect((screen.getByLabelText("Fundamentação") as HTMLTextAreaElement).value).toBe("Texto da nota.");
+    expect((screen.getByLabelText("Conclusão") as HTMLSelectElement).value).toBe("");
+    expect((screen.getByRole("button", { name: "Assinar parecer" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Para assinar, falta preencher a conclusão.")).toBeTruthy();
+  });
+
+  it("assinado, a ficha interna diz 'revisado e assinado por X'", async () => {
+    mockar({
+      [`GET ${url}`]: {
+        corpo: pedido({ estado: "atendido", parecer: assinado({ "origem-rascunho": "nota_tecnica" }) }),
+      },
+    });
+    render(<PaginaPedido />);
+    expect(await screen.findByText("Rascunho iniciado a partir de nota técnica da IA, revisado e assinado por Lúcia Prado.")).toBeTruthy();
+  });
+
+  it("parecer escrito do zero: sem linha de origem", async () => {
+    mockar({ [`GET ${url}`]: { corpo: pedido({ estado: "atendido", parecer: assinado() }) } });
+    render(<PaginaPedido />);
+    await screen.findByLabelText("Parecer jurídico nº 3/2026, texto");
+    expect(screen.queryByText(/nota técnica da IA/)).toBeNull();
   });
 });

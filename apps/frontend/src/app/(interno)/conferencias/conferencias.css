@@ -72,3 +72,6 @@
   padding: 0.6rem 0.7rem; width: 100%; resize: vertical; line-height: 1.6; min-height: 14rem;
 }
 .conf-falta { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+
+/* ADR-0019 fatia 2a: a Casa com juridico ativo — a nota tambem esta' na fila dele */
+.conf-juridico { margin: 0; max-width: 52rem; padding: 0.6rem 0.8rem; border-left: 3px solid var(--cobalto); background: color-mix(in srgb, var(--cobalto) 10%, var(--surface)); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }

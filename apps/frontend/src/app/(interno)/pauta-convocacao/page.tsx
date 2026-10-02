@@ -36,6 +36,7 @@ import { formatarData, formatarHora } from "@/lib/formatar-data";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import type { ProposicaoResumoOut } from "@/lib/contrato-legislativo.gen";
 import { FormItemPauta } from "../../sessoes/[id]/form-item-pauta";
+import { PublicarPauta } from "../../publicar-pauta";
 import { TopoInterno } from "../topo";
 import "./pauta-convocacao.css";
 
@@ -178,6 +179,15 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
                     )}
                   </dl>
                 </div>
+              )}
+
+              {/* ADR-0019 fatia 3: publicar a pauta (a versão oficial do portal e da TV), com os avisos */}
+              {estadoDetalhe === "pronto" && (
+                <PublicarPauta
+                  token={token}
+                  sessaoId={alvo.sessaoId}
+                  chavePauta={(pauta?.itens ?? []).map((i) => `${i.id}:${i.fase}:${i.ordem}`).join("|")}
+                />
               )}
 
               <div className="card">

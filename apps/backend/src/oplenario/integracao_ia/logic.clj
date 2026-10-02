@@ -128,8 +128,9 @@
    :tipo    "OrcamentoIADefinido"
    :versao  1
    :chave   (str "OrcamentoIADefinido:v1:" id)
-   :payload {:mensal      (.toPlainString (bigdec mensal))
-             :teto-duro   (.toPlainString (bigdec teto-duro))
+   ;; sem valor (mig 0161) = "a Casa volta a so' medir": o satelite apaga o orcamento dela
+   :payload {:mensal      (when mensal (.toPlainString (bigdec mensal)))
+             :teto-duro   (when teto-duro (.toPlainString (bigdec teto-duro)))
              :moeda       moeda
              :definido-em (str (if (instance? java.util.Date definido-em)
                                  (.toInstant ^java.util.Date definido-em)

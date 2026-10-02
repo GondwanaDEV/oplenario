@@ -35,11 +35,14 @@
   fast-follow). `info-ente` chega INJETADA pelo host (cross-modulo por inversao de dependencia sobre o Repo
   de cadastros — §22.10, mesmo padrao de consultar-sessao/membros-da-casa/painel-compliance; transparencia
   nunca importa cadastros). Ente inexistente -> 404 (nunca devolve o UUID como se fosse nome)."
-  [info-ente resolver-ente-publico]
+  [info-ente resolver-ente-publico acesso-restrito-desde]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
       (if-let [e (info-ente ente-id)]
-        (http/json-resposta 200 (adapters-out-ente/->wire e))
+        ;; ADR-0018: a faixa "Sistema da Camara com acesso restrito desde DD/MM" do portal (o portal segue no ar)
+        (http/json-resposta 200 (adapters-out-ente/->wire
+                                 (assoc e :acesso-restrito-desde (when acesso-restrito-desde
+                                                                   (acesso-restrito-desde ente-id)))))
         (http/json-resposta 404 {:erro "ente nao encontrado"})))))
 
 (defn- listar-materias-handler
@@ -213,9 +216,9 @@
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
   [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas
-           nomes-dos-vereadores pareceres-juridicos-publicos]}]
+           nomes-dos-vereadores pareceres-juridicos-publicos acesso-restrito-desde]}]
   #{["/portal/casa/:ente" :get
-     [(info-ente-handler info-ente resolver-ente-publico)]
+     [(info-ente-handler info-ente resolver-ente-publico acesso-restrito-desde)]
      :route-name :transparencia/info-ente]
     ["/portal/casa/:ente/materias" :get
      [(listar-materias-handler repo-transparencia resolver-ente-publico info-ente)]

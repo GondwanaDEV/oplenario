@@ -16,6 +16,7 @@ import {
   camposDoParecer,
   camposIguais,
   frasesFaltaParaAssinar,
+  linhaDeOrigemDoParecer,
   linhaDoPedido,
   modoDoDetalhe,
   podeCancelar,
@@ -192,6 +193,9 @@ function Editor({ pedido, token, aoMudar }: { pedido: PedidoJuridicoOut; token: 
           Este rascunho parte do texto do parecer já assinado. O anterior continua valendo até você assinar este; depois
           disso, os dois ficam na ficha, e o anterior aparece como substituído.
         </p>
+      )}
+      {pedido.parecer && linhaDeOrigemDoParecer(pedido.parecer) && (
+        <p className="jur-origem" role="note">{linhaDeOrigemDoParecer(pedido.parecer)}</p>
       )}
       <p className="jur-dica">
         Só você, como jurídico da Casa, escreve e assina. Texto de IA não é parecer: se usar um rascunho de máquina, você o

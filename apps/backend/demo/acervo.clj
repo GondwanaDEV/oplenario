@@ -685,7 +685,8 @@
            :fundamentacao "A matéria trata de assunto de interesse local (art. 30, I, da Constituição Federal) e não invade a iniciativa reservada ao Chefe do Executivo, pois não cria cargos, não altera a estrutura administrativa nem cria despesa obrigatória sem a devida previsão. A redação observa a Lei Complementar nº 95/1998."
            :conclusao "favoravel"})
         (repo-juridico/assinar-parecer-juridico! repo ente (:id p)
-          {:por identidade-juridica :nome "Paulo Henrique Bezerra" :oab "CE 12345" :qualificacao "efetivo"}))
+          {:por identidade-juridica :nome "Paulo Henrique Bezerra" :oab "CE 12345" :qualificacao "efetivo"
+           :assinador (assinador-icp/assinador-stub)}))
       ;; 2. pendente, com rascunho em curso: a materia que esta nas comissoes
       (let [p (repo-juridico/criar-pedido-juridico! repo ente
                 {:proposicao-id em-comissoes :assunto "Análise jurídica da matéria" :origem "secretaria"

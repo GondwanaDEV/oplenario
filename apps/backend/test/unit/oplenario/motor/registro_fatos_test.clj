@@ -3,13 +3,16 @@
   CRÍTICO) e o resolver-para. Prova: (a) as relações REAIS de F1 (cadastros+identidade) passam a
   costura; (b) fn com aridade divergente é pega; (c) fn sem assinatura é pega; (d) assinatura-sem-fn
   é LEGAL (uni-direcional); (e) resolver-para resolve por nome, injeta a tx, e é fail-closed."
-  (:require [clojure.test :refer [deftest is]]
+  (:require [clojure.test :refer [deftest is testing]]
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
             [oplenario.identidade.relacoes.identidade :as rel-id]
             [oplenario.legislativo.relacoes :as rel-legis]
             [oplenario.motor.catalogo :as cat]
-            [oplenario.motor.components.registro-fatos :as rf]))
+            [oplenario.motor.components.registro-fatos :as rf]
+            [oplenario.motor.nucleo :as nuc]
+            [oplenario.motor.tipos :as t]
+            [oplenario.motor.verificador :as v]))
 
 (def ^:private fns-reais (merge rel-cad/relacoes rel-id/relacoes))
 
@@ -36,6 +39,26 @@
   (is (= "Booleano" (:nome (:retorno (cat/buscar-assinatura "aprovada_em_votacao")))))
   (is (:ok (rf/verificar-costura (merge fns-reais rel-legis/relacoes)))
       "e o registry COMPLETO (como o host o funde) tambem costura"))
+
+(deftest fato-da-etapa-juridica-adr-0019
+  ;; ADR-0019 Eixo 8: `tem_parecer_juridico_assinado` entra pelo MESMO caminho de `aprovada_em_votacao` — assinatura no
+  ;; catalogo, fn nas relacoes do legislativo, costura fail-closed. Desligado por padrao: so' vale onde a Casa poe a guarda.
+  (is (contains? rel-legis/relacoes "tem_parecer_juridico_assinado"))
+  (is (:ok (rf/verificar-costura rel-legis/relacoes)))
+  (let [sig (cat/buscar-assinatura "tem_parecer_juridico_assinado")]
+    (is (= "relacao" (:categoria sig)))
+    (is (= [t/PROPOSICAO-ID] (:params sig)))
+    (is (= t/BOOLEANO (:retorno sig)) "guard e' predicado: tipa Booleano"))
+  (testing "o verificador estatico: a guarda do rito tipa como Booleano com a materia como ProposicaoId"
+    (let [env {"proposicao" t/PROPOSICAO-ID}]
+      (is (= t/BOOLEANO (v/inferir (nuc/parse-expr "tem_parecer_juridico_assinado(proposicao)") env)))
+      (is (= t/BOOLEANO (v/inferir (nuc/parse-expr "tem_parecer_juridico_assinado(proposicao) e aprovada_em_votacao(proposicao)") env))
+          "compoe com os outros fatos, sem tocar em codigo")
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"esperava ProposicaoId"
+            (v/inferir (nuc/parse-expr "tem_parecer_juridico_assinado(sessao)") {"sessao" t/SESSAO-ID}))
+          "argumento de outro tipo e' recusado ao salvar")
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"esperava 1 arg"
+            (v/inferir (nuc/parse-expr "tem_parecer_juridico_assinado(proposicao, proposicao)") env))))))
 
 (deftest costura-pega-aridade-divergente
   ;; populacao real é (tx) → domínio 0; finge uma fn de 2 args de domínio sob o mesmo nome

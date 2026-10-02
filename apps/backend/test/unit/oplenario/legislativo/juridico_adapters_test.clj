@@ -64,7 +64,9 @@
 (def ^:private assinado
   {:id (random-uuid) :pedido-id (random-uuid) :estado "assinado" :numero 3 :ano 2026 :relatorio "R" :fundamentacao "F"
    :conclusao "favoravel" :assinado-em (Instant/parse "2026-09-30T12:00:00Z") :assinatura-nome "Paulo" :assinatura-oab "CE 1"
-   :assinatura-qualificacao "efetivo" :substituido false :substitui-id nil})
+   :assinatura-qualificacao "efetivo" :assinatura-algoritmo "STUB-ICP-v0"
+   :conteudo-sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+   :substituido false :substitui-id nil})
 
 (deftest saida-do-pedido
   (let [pedido {:id (random-uuid) :proposicao-id (random-uuid) :assunto "A" :prazo (LocalDate/parse "2026-10-01")
@@ -75,8 +77,13 @@
     (is (= "PL 007/2026" (get-in w [:proposicao :ref])))
     (is (= "2026-10-01" (:prazo w)))
     (is (= "Marina" (:pedido-por w)) "o nome, nunca o id de quem pediu")
-    (is (= {:nome "Paulo" :oab "CE 1" :qualificacao "efetivo" :em "2026-09-30T12:00:00Z"}
+    (is (= {:nome "Paulo" :oab "CE 1" :qualificacao "efetivo" :em "2026-09-30T12:00:00Z"
+            :algoritmo "STUB-ICP-v0"
+            :sha256 "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
            (get-in w [:parecer :assinatura])))
+    (testing "parecer assinado antes do carimbo existir: a assinatura sai sem algoritmo nem hash (nunca inventa)"
+      (let [w (out/pedido->wire (assoc pedido :parecer (assoc assinado :assinatura-algoritmo nil :conteudo-sha256 nil)))]
+        (is (= [nil nil] ((juxt #(get-in % [:parecer :assinatura :algoritmo]) #(get-in % [:parecer :assinatura :sha256])) w)))))
     (testing "consulta avulsa: sem materia"
       (is (nil? (:proposicao (out/pedido->wire (assoc pedido :proposicao-id nil))))))
     (testing "a fila nao leva o texto"
@@ -96,6 +103,8 @@
     (is (string? (get-in d [:pareceres 0 :pedido-id]))))
   (let [p (out/publicos->wire [assinado])]
     (is (= ["favoravel" "Paulo"] ((juxt #(get-in % [:pareceres 0 :conclusao]) #(get-in % [:pareceres 0 :assinatura :nome])) p)))
+    (is (= "STUB-ICP-v0" (get-in p [:pareceres 0 :assinatura :algoritmo])) "o portal mostra o carimbo")
+    (is (re-matches #"sha256:[0-9a-f]{64}" (get-in p [:pareceres 0 :assinatura :sha256])))
     (is (not (contains? (get-in p [:pareceres 0]) :pedido-id)) "o portal nao expoe o pedido"))
   (is (= {:pareceres []} (out/publicos->wire []))))
 
@@ -107,3 +116,37 @@
       (is (= [false nil] ((juxt #(get-in % [:pareceres 0 :ja-existia]) #(get-in % [:pareceres 0 :relator-id])) w))))
     (is (= {:id (str id) :relator-id (str id) :relator-nome "Ana"}
            (out/relator->wire {:id id :relator-id id :relator-nome "Ana"})))))
+
+;; ---------------- ADR-0019 fatia 2a: nota tecnica como rascunho + antecipar o portal ----------------
+
+(deftest parametros->dominio-so-aceita-booleano
+  (is (= {:publicar-ao-assinar true} (in/parametros->dominio {"publicar-ao-assinar" true})))
+  (is (= {:publicar-ao-assinar false} (in/parametros->dominio {"publicar-ao-assinar" false})))
+  (testing "fail-closed: texto, numero, nulo, ausente e corpo que nao e' objeto"
+    (doseq [ruim [{"publicar-ao-assinar" "false"} {"publicar-ao-assinar" "true"} {"publicar-ao-assinar" 1}
+                  {"publicar-ao-assinar" nil} {} "texto" nil]]
+      (is (invalido? in/parametros->dominio ruim) (pr-str ruim)))))
+
+(deftest saida-da-origem-do-rascunho-e-do-parametro
+  (let [rascunho (assoc assinado :estado "rascunho" :numero nil :ano nil :origem-rascunho "nota_tecnica")
+        pedido {:id (random-uuid) :proposicao-id (random-uuid) :assunto "Análise jurídica da matéria" :prazo nil
+                :estado "pendente" :pedido-por-nome "Paulo" :em-nome-de nil :origem "nota_tecnica"
+                :criado-em (Instant/parse "2026-09-30T10:00:00Z") :materia-tipo "projeto_lei" :materia-sequencial 7
+                :materia-ano 2026 :materia-ementa "Ementa" :parecer rascunho}
+        w (out/pedido->wire pedido)]
+    (is (= ["nota_tecnica" "nota_tecnica"] [(:origem w) (get-in w [:parecer :origem-rascunho])])
+        "o pedido e o rascunho dizem de onde vieram")
+    (testing "escrito do zero: origem nil"
+      (is (nil? (get-in (out/pedido->wire (assoc pedido :origem "secretaria" :parecer (dissoc rascunho :origem-rascunho)))
+                        [:parecer :origem-rascunho]))))
+    (testing "a ficha carrega a origem do assinado"
+      (is (= ["nota_tecnica"]
+             (mapv :origem-rascunho (:pareceres (out/da-materia->wire {:pareceres [(assoc assinado :origem-rascunho "nota_tecnica")]
+                                                                       :pedidos-abertos []}))))))
+    (testing "o portal NAO mostra a origem"
+      (is (not-any? #{:origem-rascunho}
+                    (keys (first (:pareceres (out/publicos->wire [(assoc assinado :origem-rascunho "nota_tecnica")])))))))
+    (testing "origem fora do vocabulario e' bug de servidor (contrato fechado)"
+      (is (thrown? clojure.lang.ExceptionInfo (out/pedido->wire (assoc-in pedido [:parecer :origem-rascunho] "ia")))))
+    (is (= {:publicar-ao-assinar true} (out/parametros->wire {:publicar-ao-assinar true})))
+    (is (= {:publicar-ao-assinar false} (out/parametros->wire {})))))

@@ -6,6 +6,7 @@
   (:require [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
             [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
+            [oplenario.restricao-da-casa :as restricao-casa]
             [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
@@ -25,6 +26,7 @@
             [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
+            [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.mcp :as mcp]
             [oplenario.normas.components.repositorio :as repo-normas-comp]
@@ -90,6 +92,19 @@
   `resolver-vereador`)."
   [repo-cadastros ente-id ids]
   (repo-cadastros-comp/nomes-de-comissoes repo-cadastros ente-id ids))
+
+(defn cargo-na-mesa
+  "ADR-0019 fatia 3: identidade -> o CARGO dela na Mesa Diretora vigente em `data`, NESTA Casa (\"presidente\",
+  \"1_secretario\"...), ou nil — host wiring (§22.5.3, excecao nomeada, mesma forma de `resolver-vereador`). E' o que a
+  regra da pauta da Casa (quem publica: Presidente, 1o Secretario ou Mesa) consulta no ATO. Parte do vereador da
+  identidade (`vereador-por-identidade`) e do `roster-da-casa` na data — o MESMO dado que a chamada e o telao mostram
+  (`cargo-mesa`, lido de `cadastros.comissao_cargo` da Mesa vigente). So' mandato VIGENTE: o licenciado nao exerce o
+  cargo. `sessoes` recebe esta fn pronta e nunca importa `cadastros` (§22.10)."
+  [repo-cadastros ente-id identidade-id data]
+  (when-let [vid (:id (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id))]
+    (some (fn [l] (when (and (= vid (:vereador-id l)) (= "vigente" (:estado-mandato l)))
+                    (not-empty (:cargo-mesa l))))
+          (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))))
 
 (defn nome-na-casa
   "identidade-id -> nome, SO' de quem tem vinculo NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma
@@ -257,6 +272,14 @@
     {:ficha   (select-keys composta [:vereador :mandato :legislatura :comissoes])
      :janelas (janelas-de-exercicio (:mandatos composta) (:licencas composta))}))
 
+(defn- normas-da-casa-publicadas?
+  "ADR-0019 fatia 2: a Casa ja' publicou (conferiu e tornou vigente) alguma norma PROPRIA — a LOM ou o Regimento? As de
+  referencia (federal/estadual, sem Casa) nao contam: o copiloto do relator precisa das normas da Casa. Sem o Repo de
+  normas (testes de outras verticais), nao."
+  [repo-normas ente-id]
+  (boolean (when repo-normas
+             (some #(and (= ente-id (:ente-id %)) (:vigente %)) (repo-normas-comp/listar-normas repo-normas ente-id)))))
+
 (defn montar
   "Conjunto de rotas Pedestal (table syntax) a partir dos deps do servidor. `erro`/`cabecalhos` sao GLOBAIS
   (it/globais prepended em http/servico) — nao por rota. Aqui: `autenticacao` resolve o ator; `exige-papel`
@@ -272,11 +295,27 @@
            ;; ADR-0016: o console do operador (supratenant)
            idp-operacao repo-admin-sistema operacao
            ;; ADR-0017: a trilha de auditoria da Casa
-           repo-auditoria]
+           repo-auditoria
+           ;; ADR-0018: o cache do seam `estado-da-casa` (30 s; os testes passam 0)
+           cache-estado-da-casa-ms]
+    plataforma-ia-override :plataforma-ia
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas}]
-  (let [auth (it/autenticacao idp repo-identidade)
+  (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
+        ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
+        ;; sessao em curso (sessoes) decide se a suspensao aprovada entra agora ou espera o encerramento — o host cruza
+        ;; os dois modulos (§22.10). Sem o registro montado (testes de outras verticais), nao ha' restricao.
+        sessao-em-curso? (fn [ente-id] (boolean (when repo-sessoes (repo-sessoes-comp/sessao-em-curso? repo-sessoes ente-id))))
+        estado-casa (restricao-casa/com-cache
+                     (if repo-admin-sistema
+                       (admin-sistema-http/estado-da-casa repo-admin-sistema {:sessao-em-curso? sessao-em-curso?}
+                                                          (or relogio (tempo/relogio-sistema)))
+                       (constantly nil))
+                     (or cache-estado-da-casa-ms 30000))
+        estado-da-casa (:estado-da-casa estado-casa)
+        restricao (restricao-casa/restricao estado-da-casa)
+        auth (it/autenticacao idp repo-identidade restricao)
         ;; F6: relogio de producao (kernel/tempo) p/ o prazo LAI do e-SIC — determinismo em teste vem de
         ;; injetar relogio-fixo direto no fragmento de rotas (participacao-http/rotas). resolver-ente-publico
         ;; = seam da rota PUBLICA (sem ator): mapeia o :ente do path -> ente-id (V1 = UUID coagido fail-closed);
@@ -355,6 +394,14 @@
         ;; dependencia de `consultar-sessao`. Consumido pelo `pauta-handler` (que degrada se isto falhar).
         resumir-proposicoes-fn (fn [ente-id ids]
                                  (repo-legislativo-comp/resumos-de-proposicoes repo-legislativo ente-id ids))
+        ;; ADR-0019 fatia 3 (publicar a pauta): a situacao de parecer das materias da pauta (legislativo) e o cargo
+        ;; de quem publica na Mesa de HOJE (cadastros) — os dois seams da regra e dos avisos, mesma inversao de
+        ;; dependencia de `resumir-proposicoes-fn` (sessoes nunca importa legislativo nem cadastros, §22.10).
+        situacao-de-parecer-fn (fn [ente-id ids]
+                                 (repo-situacao-comp/situacao-de-parecer-das-materias repo-legislativo ente-id ids))
+        cargo-na-mesa-fn (fn [ente-id identidade-id]
+                           (cargo-na-mesa repo-cadastros ente-id identidade-id
+                                          (tempo/hoje relogio-producao tempo/zona-civil-padrao)))
         ;; Etapa 5 fatia 1: o cabecalho da FOLHA (nome/legislatura da Casa) — seam irmao LITERAL de
         ;; `roster-da-casa-fn` acima, mesma inversao de dependencia sobre `cadastros` (sessoes nunca importa
         ;; cadastros, §22.10). Leva `data` na aridade pelo MESMO motivo de `roster-da-casa-fn` (nunca fechar
@@ -482,12 +529,19 @@
         integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
         ;; ADR-0008: o cliente core -> IA (leitura da transcricao). Construido uma vez; sem url/segredo toda leitura
         ;; responde indisponivel (R-IA-1), nunca 500.
-        ia (plataforma-ia/plataforma-ia integracao-ia)
+        ;; `plataforma-ia` nos deps (teste) substitui o cliente HTTP do satelite (ex.: um fake do copiloto do relator)
+        ia (or plataforma-ia-override (plataforma-ia/plataforma-ia integracao-ia))
         ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
         ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
         ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
     (-> #{["/saude"             :get http/saude :route-name :saude]
-          ["/eu"                :get [auth http/eu] :route-name :eu]
+          ;; ADR-0018: /eu leva a faixa de acesso restrito (o interno ve o motivo; a cidada, so' "acesso restrito")
+          ["/eu"                :get [auth (fn [req]
+                                             (let [ator (:ator req)
+                                                   v (restricao-casa/visao (some-> (:ente-id ator) estado-da-casa)
+                                                                           (not= "cidadao" (:tipo-vinculo ator)))]
+                                               (http/json-resposta 200 (cond-> {:ator ator} v (assoc :acesso-restrito v)))))]
+           :route-name :eu]
           ["/painel-secretaria" :get [auth (it/exige-papel "secretario") http/painel-secretaria]
            :route-name :painel-secretaria]}
         (into (sessoes-http/rotas {:auth auth :repo-sessoes repo-sessoes :objeto-store objeto-store
@@ -498,6 +552,9 @@
                                    ;; /assiduidade` (Etapa 6 fatia 3).
                                    :roster-da-casa-em-datas roster-da-casa-em-datas-fn
                                    :resumir-proposicoes resumir-proposicoes-fn
+                                   ;; ADR-0019 fatia 3: os seams de publicar a pauta (avisos e regra de cargo)
+                                   :situacao-de-parecer situacao-de-parecer-fn
+                                   :cargo-na-mesa cargo-na-mesa-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
@@ -532,6 +589,10 @@
                                                               (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
                                        :perfil-juridico (fn [ente-id identidade-id]
                                                           (repo-identidade-comp/perfil-juridico repo-identidade ente-id identidade-id))
+                                       ;; ADR-0019 fatia 2a: "Casa com juridico ativo" (>= 1 vinculo ativo com o papel `juridico`) —
+                                       ;; a nota tecnica da IA so' vai a fila do juridico quando ha' quem a use.
+                                       :casa-tem-juridico? (fn [ente-id]
+                                                             (repo-identidade-comp/casa-tem-papel-ativo? repo-identidade ente-id "juridico"))
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
@@ -553,6 +614,10 @@
                                        :ler-rascunho-resumo ler-rascunho-resumo-fn
                                        ;; Faixa B / B.7: o copiloto do requerimento — o rascunho da IA para o formulario
                                        :copiloto-requerimento (fn [ente-id pedido] (plataforma-ia/rascunhar-requerimento ia ente-id pedido))
+                                       ;; ADR-0019 fatia 2: o copiloto do relator — o rascunho da analise do parecer de
+                                       ;; comissao (satelite) e se a Casa ja' publicou LOM/Regimento (normas), pelo host
+                                       :copiloto-analise (fn [ente-id pedido] (plataforma-ia/rascunhar-analise-parecer ia ente-id pedido))
+                                       :normas-publicadas? (fn [ente-id] (normas-da-casa-publicadas? repo-normas ente-id))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
@@ -581,11 +646,15 @@
                                      :identidade-existe? identidade-existe?}))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
+                                        ;; ADR-0018: o recibo dos protocolos diz que a Casa esta' com o sistema restrito
+                                        :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                         :relogio relogio-producao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
                                          :info-ente info-ente
+                                         ;; ADR-0018: a faixa do portal — so' desde quando (o motivo nao e' publico)
+                                         :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                          ;; I-5 fatia 6: a borda passou a CONSUMIR o mapa inteiro
                                          ;; ({:ficha :janelas}) — a ficha decide o 404 e a janela recorta o
                                          ;; denominador de presenca. O host nao desembrulha mais nada.
@@ -636,6 +705,9 @@
                 ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
                 :deps-registro
                 {:idp-casa idp
+                 ;; ADR-0018: a sessao em curso adia a suspensao; transicionar invalida o cache desta instancia
+                 :sessao-em-curso? sessao-em-curso?
+                 :ao-mudar-estado (:invalidar! estado-casa)
                  :garantir-perfil-da-casa!
                  (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
                    (repo-cadastros-comp/garantir-municipio! repo-cadastros {:codigo-ibge municipio-ibge
@@ -681,6 +753,8 @@
                 (let [deps-catalogo
                       {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                        :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       ;; ADR-0019 fatia 3: publicar_pauta (proposta do agente) usa os MESMOS seams da tela
+                       :situacao-de-parecer situacao-de-parecer-fn :cargo-na-mesa cargo-na-mesa-fn
                        :registrar-chamada (catalogo/registrador repo-integracao-ia)
                        ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
                        :repo-normas repo-normas
@@ -692,10 +766,24 @@
                        :resolver-autor (fn [ente-id identidade-id]
                                          (resolver-autor-vereador repo-cadastros ente-id identidade-id))
                        :resolver-municipio resolver-municipio
+                       ;; ADR-0019 fatia 2: o caminho da materia (comissoes, relator, pedido de parecer juridico) — os
+                       ;; MESMOS seams de cadastros que a tela recebe (o agente propoe; a secretaria confirma)
+                       :resolver-comissoes resolver-comissoes-fn
+                       :vereador-vinculado? vereador-vinculado?
+                       ;; `vereadores_da_casa`: o mesmo seam do convite de subscricao (mandato vigente hoje)
+                       :colegas-da-casa (fn [ente-id]
+                                          (colegas-da-casa repo-cadastros ente-id
+                                                           (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
+                       :comissoes-vigentes (fn [ente-id]
+                                             (repo-cadastros-comp/comissoes-vigentes
+                                               repo-cadastros ente-id
+                                               (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
+                       :nomes-de-vereadores (fn [ente-id ids]
+                                              (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
                        :relogio relogio-producao
                        :propor (propostas/propositor repo-integracao-ia relogio-producao)
                        :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]
-                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo})
+                  (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo :restricao restricao})
                         (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
                                           :deps-catalogo deps-catalogo})))
                 #{})))))

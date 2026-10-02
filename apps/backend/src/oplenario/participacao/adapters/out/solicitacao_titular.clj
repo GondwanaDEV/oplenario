@@ -19,11 +19,14 @@
 
 (defn recibo->wire
   "Recibo de protocolo {:protocolo :recibo-em} -> SolicitacaoTitularReciboOut (resposta 201). Sem PII, sem id."
-  [r]
-  (validar! wire/SolicitacaoTitularReciboOut
-            {:protocolo (:protocolo r)
-             :recibo-em (->str (:recibo-em r))}
-            "SolicitacaoTitularReciboOut"))
+  ([r] (recibo->wire r nil))
+  ([r acesso-restrito-desde]
+   ;; ADR-0018: numa Casa com o sistema restrito, o recibo diz desde quando (o pedido segue valendo)
+   (validar! wire/SolicitacaoTitularReciboOut
+             (cond-> {:protocolo (:protocolo r)
+                      :recibo-em (->str (:recibo-em r))}
+               acesso-restrito-desde (assoc :acesso-restrito-desde (->str acesso-restrito-desde)))
+             "SolicitacaoTitularReciboOut")))
 
 (defn resposta-recibo->wire
   "Recibo da resposta {:respondida-em} -> RespostaTitularReciboOut (resposta 200). So o carimbo do ato."

@@ -22,11 +22,17 @@
 (def conjuntos
   "Publico -> nomes das ferramentas que um agente daquele publico oferece."
   {:secretaria #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
-                 "ler_dispositivo"}
+                 "ler_dispositivo"
+                 ;; ADR-0019 fatia 2: o caminho da materia. O agente so' PROPOE (a secretaria confirma em /propostas);
+                 ;; assinar parecer juridico nao e' ferramenta, e' ato pessoal do advogado.
+                 "pareceres_juridicos_da_materia" "pedir_parecer_juridico" "comissoes_da_casa" "vereadores_da_casa"
+                 "encaminhar_as_comissoes" "designar_relator"}
    :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
                 "ler_dispositivo"
                 ;; B.6: o requerimento do proprio vereador — o agente so' PROPOE; ele assina na tela (ADR-0012)
-                "modelos_de_requerimento" "protocolar_requerimento"}
+                "modelos_de_requerimento" "protocolar_requerimento"
+                ;; ADR-0019: o vereador le o que o juridico ja' opinou sobre a materia
+                "pareceres_juridicos_da_materia" "vereadores_da_casa"}
    ;; B.8 (ADR-0013): o agente institucional da Casa (sem pessoa) — le a materia e as normas, e so' deixa RASCUNHO
    :institucional #{"situacao_da_materia" "buscar_dispositivos" "ler_dispositivo" "registrar_nota_tecnica"}})
 

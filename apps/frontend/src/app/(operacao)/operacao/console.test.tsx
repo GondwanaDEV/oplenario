@@ -121,6 +121,116 @@ describe("A Câmara no console", () => {
   });
 });
 
+describe("Acesso da câmara (ADR-0018)", () => {
+  const ATIVA = { ...CASA, estado: "ativo", "ativada-em": "2026-09-27T11:00:00Z", restricao: null, "suspensao-agendada": false };
+  const FICHA_ATIVA = { casa: ATIVA, "primeiro-admin": null, "pedido-aberto": null, atuacao: [] };
+  const PEDIDO = {
+    id: "p1", "ente-id": "e1", "casa-nome": "Câmara Municipal de Baturité", acao: "suspender", motivo: "inadimplencia",
+    justificativa: "Três faturas em aberto (processo 12/2026).", estado: "aguardando", "pedido-por-id": "op-ana",
+    "pedido-por": "Ana Operação", "pedido-em": "2026-09-30T10:00:00Z", "confirmar-ate": null, "efetivado-em": null,
+  };
+
+  function porUrl(rotas: Record<string, unknown>) {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      const chave = `${init?.method ?? "GET"} ${url}`;
+      const corpo = rotas[chave] ?? rotas[url];
+      if (corpo === undefined) return json({}, 404);
+      return json(corpo);
+    });
+  }
+
+  it("a lista mostra a fila do 2º operador e as câmaras com acesso restrito", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+      casas: [{ ...ATIVA, estado: "suspenso", restricao: { motivo: "inadimplencia", desde: "2026-09-29T10:00:00Z" } }],
+      resumo: { total: 1, ativas: 0, "aguardando-admin": 0, suspensas: 1 },
+      pendentes: [PEDIDO],
+    })));
+    render(<CamarasNaPlataforma />);
+    const fila = await screen.findByRole("region", { name: "Aguardando o 2º operador" });
+    expect(fila.textContent).toMatch(/Suspensão · Inadimplência · pedido por Ana Operação/);
+    expect(within(fila).getByRole("link", { name: /Decidir o pedido/ }).getAttribute("href")).toBe("/operacao/casas/e1");
+    expect(screen.getByText("Com acesso restrito").parentElement!.textContent).toMatch(/1/);
+    expect(screen.getByRole("table").textContent).toMatch(/Suspensa.*acesso restrito/);
+  });
+
+  it("suspender: confere motivo e justificativa antes; depois pede ao console", async () => {
+    const f = porUrl({ "/api/operacao/casas/e1": FICHA_ATIVA,
+      "POST /api/operacao/casas/e1/suspensao": { casa: ATIVA, pedido: PEDIDO, efeito: null } });
+    vi.stubGlobal("fetch", f);
+    render(<CamaraNoConsole />);
+    fireEvent.click(await screen.findByRole("button", { name: "Pedir suspensão" }));
+    expect(await screen.findByText("Escolha o motivo.")).toBeTruthy();
+    expect(f.mock.calls.some(([u]) => String(u).endsWith("/suspensao"))).toBe(false);
+    fireEvent.change(screen.getByLabelText("Motivo"), { target: { value: "inadimplencia" } });
+    fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "Três faturas em aberto (processo 12/2026)." } });
+    fireEvent.click(screen.getByRole("button", { name: "Pedir suspensão" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Outro operador precisa aprovar/);
+    const chamada = f.mock.calls.find(([u]) => String(u).endsWith("/suspensao"))!;
+    expect(JSON.parse(String(chamada[1]!.body))).toEqual({ motivo: "inadimplencia", justificativa: "Três faturas em aberto (processo 12/2026)." });
+  });
+
+  it("incidente de segurança avisa que restringe agora", async () => {
+    vi.stubGlobal("fetch", porUrl({ "/api/operacao/casas/e1": FICHA_ATIVA }));
+    render(<CamaraNoConsole />);
+    fireEvent.change(await screen.findByLabelText("Motivo"), { target: { value: "incidente_de_seguranca" } });
+    expect(screen.getByText(/outro operador confirma em até 24 h/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Restringir agora" })).toBeTruthy();
+  });
+
+  it("o 2º operador aprova ou recusa o pedido aberto", async () => {
+    const f = porUrl({
+      "/api/operacao/casas/e1": { ...FICHA_ATIVA, "pedido-aberto": PEDIDO },
+      "/api/operacao/eu": { operador: { id: "op-beto", nome: "Beto", email: "b@x", papeis: ["operador"] } },
+      "POST /api/operacao/pedidos/p1/aprovacao": { casa: { ...ATIVA, "suspensao-agendada": true }, pedido: PEDIDO, efeito: "agendado" },
+    });
+    vi.stubGlobal("fetch", f);
+    render(<CamaraNoConsole />);
+    const pedido = await screen.findByRole("group", { name: "Aguardando o 2º operador" });
+    expect(pedido.textContent).toMatch(/Três faturas em aberto/);
+    expect(screen.queryByRole("button", { name: "Pedir suspensão" })).toBeNull();
+    fireEvent.click(await within(pedido).findByRole("button", { name: "Aprovar suspensão" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/sessão plenária em curso/);
+    expect(within(pedido).getByRole("button", { name: "Recusar" })).toBeTruthy();
+  });
+
+  it("quem pediu não aprova: só retira", async () => {
+    vi.stubGlobal("fetch", porUrl({
+      "/api/operacao/casas/e1": { ...FICHA_ATIVA, "pedido-aberto": PEDIDO },
+      "/api/operacao/eu": { operador: { id: "op-ana", nome: "Ana", email: "a@x", papeis: ["operador"] } },
+    }));
+    render(<CamaraNoConsole />);
+    expect(await screen.findByRole("button", { name: "Retirar pedido" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Aprovar/ })).toBeNull();
+  });
+
+  it("câmara suspensa: mostra desde quando e o motivo, e reativa com justificativa", async () => {
+    const suspensa = { ...ATIVA, estado: "suspenso", restricao: { motivo: "ordem_judicial", desde: "2026-09-29T10:00:00Z" } };
+    const f = porUrl({
+      "/api/operacao/casas/e1": { ...FICHA_ATIVA, casa: suspensa },
+      "POST /api/operacao/casas/e1/reativacao": { casa: ATIVA, pedido: null, efeito: null },
+    });
+    vi.stubGlobal("fetch", f);
+    render(<CamaraNoConsole />);
+    expect(await screen.findByText(/Acesso restrito desde/)).toBeTruthy();
+    expect(screen.getByText("Motivo: Ordem judicial")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Por que reativar"), { target: { value: "Decisão revogada em 30/09." } });
+    fireEvent.click(screen.getByRole("button", { name: "Reativar câmara" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/Câmara reativada/);
+    const chamada = f.mock.calls.find(([u]) => String(u).endsWith("/reativacao"))!;
+    expect(JSON.parse(String(chamada[1]!.body))).toEqual({ justificativa: "Decisão revogada em 30/09." });
+  });
+
+  it("recusa do servidor (409) aparece com o porquê", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) =>
+      init?.method === "POST" ? json({ erro: "ja' ha' um pedido esperando o 2o operador nesta Casa" }, 409) : json(FICHA_ATIVA)));
+    render(<CamaraNoConsole />);
+    fireEvent.change(await screen.findByLabelText("Motivo"), { target: { value: "pedido_da_casa" } });
+    fireEvent.change(screen.getByLabelText("Justificativa"), { target: { value: "Ofício 3/2026 da Mesa." } });
+    fireEvent.click(screen.getByRole("button", { name: "Pedir suspensão" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/pedido esperando o 2o operador/);
+  });
+});
+
 describe("Provisionar câmara", () => {
   function preencher() {
     fireEvent.change(screen.getByLabelText("Nome oficial"), { target: { value: "Câmara Municipal de Baturité" } });
@@ -171,5 +281,8 @@ describe("datas do console", () => {
     expect(haQuanto("2026-09-27T11:58:00Z", agora)).toBe("há 2 min");
     expect(haQuanto("2026-09-25T12:00:00Z", agora)).toBe("há 2 dias");
     expect(atividade({ estado: "provisionar", conviteEnviadoEm: null } as never, agora)).toBe("convite não saiu");
+    expect(atividade({ estado: "suspenso", restricao: { motivo: "inadimplencia", desde: "2026-09-25T12:00:00Z" } } as never, agora))
+      .toBe("acesso restrito há 2 dias");
+    expect(atividade({ estado: "ativo", suspensaoAgendada: true } as never, agora)).toBe("suspensão agendada para o fim da sessão");
   });
 });

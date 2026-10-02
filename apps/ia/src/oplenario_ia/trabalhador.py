@@ -450,9 +450,13 @@ class Trabalhador:
 
     def _definir_orcamento(self, t: Trabalho) -> None:
         ev = OrcamentoIADefinidoV1.model_validate(t.payload)
-        self.armazem.definir_orcamento(
-            t.ente_id, Orcamento(mensal=ev.mensal, teto_duro=ev.teto_duro, moeda=ev.moeda), ev.definido_em, t.chave
+        # sem valor (ADR-0018): a Casa volta a só medir
+        orcamento = (
+            None
+            if ev.mensal is None or ev.teto_duro is None
+            else Orcamento(mensal=ev.mensal, teto_duro=ev.teto_duro, moeda=ev.moeda)
         )
+        self.armazem.definir_orcamento(t.ente_id, orcamento, ev.definido_em, t.chave)
         self.armazem.concluir(t.id)
 
     # ---------- a conferência institucional (B.8) ----------

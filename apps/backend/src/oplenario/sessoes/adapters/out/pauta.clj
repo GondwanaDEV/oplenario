@@ -47,11 +47,15 @@
   "Pauta viva de dominio {:sessao-id :itens [...]} -> PautaOut (validada). itens vazio quando nao ha pauta.
   `resumos` opcional (Modo TV, docs/22): o resumo das proposicoes da pauta, por id."
   ([pauta] (pauta->wire pauta {}))
-  ([{:keys [sessao-id itens em-apreciacao]} resumos]
+  ([{:keys [sessao-id itens em-apreciacao publicacao]} resumos]
    (let [out (cond-> {:sessao-id (->str sessao-id)
                       :itens     (mapv (partial item->wire resumos) itens)}
                em-apreciacao (assoc :em-apreciacao {:item-id      (->str (:pauta-item-id em-apreciacao))
-                                                    :anunciado-em (->str (:anunciado-em em-apreciacao))}))]
+                                                    :anunciado-em (->str (:anunciado-em em-apreciacao))})
+               ;; ADR-0019 fatia 3: a pauta OFICIAL (a ultima versao publicada) — ausente = ainda nao publicada.
+               publicacao    (assoc :publicacao {:versao         (:numero-versao publicacao)
+                                                 :publicada-em   (->str (:publicado-em publicacao))
+                                                 :alterada-desde (boolean (:alterada-desde publicacao))}))]
      (when-not (m/validate wire/PautaOut out)
        ;; arvore completa de erros (inclui violacao aninhada em :itens[i]); `out` ja e' o projetado sem internos.
        (throw (ex-info "projecao de pauta viola o contrato PautaOut (bug de servidor)"

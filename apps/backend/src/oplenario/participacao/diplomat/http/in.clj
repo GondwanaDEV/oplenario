@@ -92,14 +92,20 @@
   confiada a RLS (com-tenant* com este ente-id). Fornecido pelo host a `rotas`; injetavel em teste."
   adapters-in/ente-param->uuid)
 
+(defn- restrita-desde
+  "ADR-0018: desde quando a Casa do ator esta' com o sistema restrito (seam do host), ou nil."
+  [acesso-restrito-desde req]
+  (when-let [ente (and acesso-restrito-desde (get-in req [:ator :ente-id]))]
+    (acesso-restrito-desde ente)))
+
 (defn- protocolar-handler
   "POST /portal/esic/pedidos (cidadao). adapters/in coage o corpo (fail-closed 400); o controller injeta o
   solicitante do ator + o recibo do relogio. 201 com {protocolo, recibo-em} (recibo instantaneo LAI)."
-  [repo-participacao relogio]
+  [repo-participacao relogio acesso-restrito-desde]
   (fn [req]
     (let [entrada (adapters-in/coagir-pedido (:json-params req))
           r       (controllers/protocolar-pedido repo-participacao relogio (:ator req) entrada)]
-      (http/json-resposta 201 (adapters-out-pedido/recibo->wire r)))))
+      (http/json-resposta 201 (adapters-out-pedido/recibo->wire r (restrita-desde acesso-restrito-desde req))))))
 
 (defn- meu-pedido-handler
   "GET /portal/esic/pedidos/:id (solicitante). Policy fina no controller (ator == solicitante -> 403 global).
@@ -135,12 +141,12 @@
   "POST /portal/esic/pedidos/:id/recursos (CIDADAO, so-auth). Coage o :id do pedido + o corpo {motivo} (400 se
   malformado). O controller aplica a policy fina (dono -> 403; nao-recorrivel -> 409; ausente -> 404). Sucesso -> 201
   {protocolo, recibo-em} (prova do relogio proprio do recurso)."
-  [repo-participacao relogio]
+  [repo-participacao relogio acesso-restrito-desde]
   (fn [req]
     (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           entrada (adapters-in-recurso/coagir-recurso (:json-params req))]
       (responder-op #(controllers/interpor-recurso! repo-participacao relogio (:ator req) id entrada)
-                    adapters-out-recurso/recibo->wire 201))))
+                    #(adapters-out-recurso/recibo->wire % (restrita-desde acesso-restrito-desde req)) 201))))
 
 (defn- responder-pedido-handler
   "POST /esic/pedidos/:id/resposta (SERVIDOR, exige-papel). Coage o :id + o corpo {corpo}. nil -> 404;
@@ -168,11 +174,11 @@
   "POST /portal/lgpd/solicitacoes (TITULAR autenticado, SO-auth — qualquer titular pede sobre os PROPRIOS dados,
   sem papel). adapters/in coage o corpo {tipo, detalhe?} (fail-closed 400); o controller injeta o titular do ator
   + o recibo do relogio. 201 com {protocolo, recibo-em} (recibo instantaneo do relogio LGPD)."
-  [repo-participacao relogio]
+  [repo-participacao relogio acesso-restrito-desde]
   (fn [req]
     (let [entrada (adapters-in-titular/coagir-solicitar (:json-params req))
           r       (controllers/solicitar-titular! repo-participacao relogio (:ator req) entrada)]
-      (http/json-resposta 201 (adapters-out-titular/recibo->wire r)))))
+      (http/json-resposta 201 (adapters-out-titular/recibo->wire r (restrita-desde acesso-restrito-desde req))))))
 
 (defn- minha-solicitacao-handler
   "GET /portal/lgpd/solicitacoes/:id (TITULAR). Policy fina no controller (ator == titular -> 403 global). Ausente
@@ -221,11 +227,11 @@
   "POST /portal/ouvidoria/manifestacoes (cidadao, SO-auth — ANONIMA NAO E' SEM-AUTH). adapters/in coage o
   corpo (fail-closed 400); o controller decide o que persiste (manifestante/created-by nil quando anonima).
   201 com {protocolo, recibo-em}."
-  [repo-participacao relogio]
+  [repo-participacao relogio acesso-restrito-desde]
   (fn [req]
     (let [entrada (adapters-in-manifestacao/coagir-manifestacao (:json-params req))
           r       (controllers/protocolar-manifestacao! repo-participacao relogio (:ator req) entrada)]
-      (http/json-resposta 201 (adapters-out-manifestacao/recibo->wire r)))))
+      (http/json-resposta 201 (adapters-out-manifestacao/recibo->wire r (restrita-desde acesso-restrito-desde req))))))
 
 (defn- minha-manifestacao-handler
   "GET /portal/ouvidoria/manifestacoes/:id (manifestante). Policy fina no controller: ANONIMA -> nil SEMPRE
@@ -336,10 +342,11 @@
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
   publica) e o `relogio` (kernel/tempo — injetavel em teste). `oplenario.rotas` funde este fragmento ao
-  conjunto. POST usa `corpo-json`; as rotas GET nao tem corpo."
-  [{:keys [auth repo-participacao resolver-ente-publico relogio]}]
+  conjunto. POST usa `corpo-json`; as rotas GET nao tem corpo. `acesso-restrito-desde` (opcional, ADR-0018) = seam
+  do host (fn [ente-id] -> Instant|nil): o recibo dos protocolos do cidadao diz que a Casa esta' com o sistema restrito."
+  [{:keys [auth repo-participacao resolver-ente-publico relogio acesso-restrito-desde]}]
   #{["/portal/esic/pedidos" :post
-     [auth it/corpo-json (protocolar-handler repo-participacao relogio)]
+     [auth it/corpo-json (protocolar-handler repo-participacao relogio acesso-restrito-desde)]
      :route-name :participacao/protocolar-esic]
     ;; CIDADA: o que ela protocolou (formularios do cidadao). Literal no nivel 2 — sem colisao com `casa/:ente`.
     ["/portal/meus-protocolos" :get
@@ -359,7 +366,7 @@
     ;; CIDADAO: interpor recurso (so-auth, sem papel — LAI: qualquer solicitante recorre; a policy fina [dono]
     ;; mora no controller). Sob /portal (superficie do cidadao).
     ["/portal/esic/pedidos/:id/recursos" :post
-     [auth it/corpo-json (interpor-recurso-handler repo-participacao relogio)]
+     [auth it/corpo-json (interpor-recurso-handler repo-participacao relogio acesso-restrito-desde)]
      :route-name :participacao/interpor-recurso]
     ;; SERVIDOR: responder pedido / decidir recurso (exige-papel "secretario"). FORA de /portal (balcao interno).
     ["/esic/pedidos/:id/resposta" :post
@@ -372,7 +379,7 @@
     ;; TITULAR: solicitar exercicio de direito (SO-auth, sem papel — qualquer titular pede sobre os PROPRIOS
     ;; dados). Sob /portal (superficie do cidadao/titular).
     ["/portal/lgpd/solicitacoes" :post
-     [auth it/corpo-json (solicitar-titular-handler repo-participacao relogio)]
+     [auth it/corpo-json (solicitar-titular-handler repo-participacao relogio acesso-restrito-desde)]
      :route-name :participacao/solicitar-titular]
     ["/portal/lgpd/solicitacoes/:id" :get
      [auth (minha-solicitacao-handler repo-participacao relogio)]
@@ -393,7 +400,7 @@
     ;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
     ;; CIDADAO: protocolar manifestacao (SO-auth — ANONIMA NAO E' SEM-AUTH, ver docstring do handler).
     ["/portal/ouvidoria/manifestacoes" :post
-     [auth it/corpo-json (protocolar-manifestacao-handler repo-participacao relogio)]
+     [auth it/corpo-json (protocolar-manifestacao-handler repo-participacao relogio acesso-restrito-desde)]
      :route-name :participacao/protocolar-manifestacao]
     ["/portal/ouvidoria/manifestacoes/:id" :get
      [auth (minha-manifestacao-handler repo-participacao relogio)]

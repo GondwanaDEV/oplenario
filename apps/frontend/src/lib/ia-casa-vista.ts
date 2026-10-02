@@ -12,6 +12,7 @@ const NOMES: Record<string, string> = {
   "agente.responder": "Assistente da Casa",
   "requerimento.preencher": "Copiloto do requerimento",
   "requerimento.justificar": "Copiloto do requerimento",
+  "relator.analisar": "Copiloto do relator",
 };
 
 /** O nome que a Casa conhece para uma operação do satélite (a operação crua quando não há nome). */

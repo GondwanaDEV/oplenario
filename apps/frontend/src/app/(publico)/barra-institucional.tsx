@@ -28,16 +28,20 @@
 
 import { useEffect, useState } from "react";
 import { useTema } from "@/lib/tema";
+import { FaixaAcessoRestrito } from "@/lib/faixa-acesso-restrito";
 import "./public.css";
 
 export function BarraInstitucional({
   ente,
   nomeCasa,
   paginaAtual,
+  acessoRestritoDesde,
 }: {
   ente: string;
   nomeCasa: string;
   paginaAtual?: "inicio";
+  /** ADR-0018: a Casa suspensa — a faixa "acesso restrito desde DD/MM" (o portal segue no ar; sem motivo). */
+  acessoRestritoDesde?: string | null;
 }) {
   const { tema, alternar } = useTema();
   const [navAberta, setNavAberta] = useState(false);
@@ -52,71 +56,74 @@ export function BarraInstitucional({
   }, [navAberta]);
 
   return (
-    <header className="topo">
-      <div className="envelope topo-grade">
-        <div className="brasao-marca">
-          <BrasaoGenerico />
-          <div className="brasao-nome">
-            <b>{nomeCasa}</b>
-            <span>Portal do Cidadão</span>
+    <>
+      <header className="topo">
+        <div className="envelope topo-grade">
+          <div className="brasao-marca">
+            <BrasaoGenerico />
+            <div className="brasao-nome">
+              <b>{nomeCasa}</b>
+              <span>Portal do Cidadão</span>
+            </div>
+          </div>
+
+          <nav aria-label="Seções do portal" className="nav-publica-nav">
+            <button
+              type="button"
+              className="nav-publica-toggle"
+              aria-expanded={navAberta}
+              aria-controls="nav-publica-lista"
+              aria-label={navAberta ? "Fechar menu" : "Abrir menu"}
+              onClick={() => setNavAberta((aberta) => !aberta)}
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
+            <ul id="nav-publica-lista" className="nav-publica" data-aberta={navAberta}>
+              <li>
+                <a href={`/portal/casa/${ente}`} aria-current={paginaAtual === "inicio" ? "page" : undefined}>
+                  Início
+                </a>
+              </li>
+              <li>
+                <a href={`/portal/casa/${ente}#destaque`}>Proposições</a>
+              </li>
+              <li>
+                <a href={`/portal/casa/${ente}#civico`}>Sessões</a>
+              </li>
+              <li>
+                <a href={`/portal/casa/${ente}#civico`}>Transparência</a>
+              </li>
+              <li>
+                <a href={`/portal/casa/${ente}#balcoes`}>Acesso à informação</a>
+              </li>
+              <li>
+                <a href={`/portal/casa/${ente}#civico`}>Ouvidoria</a>
+              </li>
+            </ul>
+          </nav>
+
+          <div className="topo-dir">
+            <button
+              className="tema-btn"
+              type="button"
+              aria-pressed={tema === "escuro"}
+              onClick={alternar}
+              title="Alternar tema claro / escuro"
+            >
+              <span aria-hidden="true">{tema === "escuro" ? "☾" : "☀"}</span>
+              <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
+            </button>
+            <a className="govbr-topo" href={`/portal/casa/${ente}/participar`} aria-label="Entrar com conta gov.br">
+              <span className="g" aria-hidden="true">
+                gov.br
+              </span>
+              Entrar
+            </a>
           </div>
         </div>
-
-        <nav aria-label="Seções do portal" className="nav-publica-nav">
-          <button
-            type="button"
-            className="nav-publica-toggle"
-            aria-expanded={navAberta}
-            aria-controls="nav-publica-lista"
-            aria-label={navAberta ? "Fechar menu" : "Abrir menu"}
-            onClick={() => setNavAberta((aberta) => !aberta)}
-          >
-            <span aria-hidden="true">☰</span>
-          </button>
-          <ul id="nav-publica-lista" className="nav-publica" data-aberta={navAberta}>
-            <li>
-              <a href={`/portal/casa/${ente}`} aria-current={paginaAtual === "inicio" ? "page" : undefined}>
-                Início
-              </a>
-            </li>
-            <li>
-              <a href={`/portal/casa/${ente}#destaque`}>Proposições</a>
-            </li>
-            <li>
-              <a href={`/portal/casa/${ente}#civico`}>Sessões</a>
-            </li>
-            <li>
-              <a href={`/portal/casa/${ente}#civico`}>Transparência</a>
-            </li>
-            <li>
-              <a href={`/portal/casa/${ente}#balcoes`}>Acesso à informação</a>
-            </li>
-            <li>
-              <a href={`/portal/casa/${ente}#civico`}>Ouvidoria</a>
-            </li>
-          </ul>
-        </nav>
-
-        <div className="topo-dir">
-          <button
-            className="tema-btn"
-            type="button"
-            aria-pressed={tema === "escuro"}
-            onClick={alternar}
-            title="Alternar tema claro / escuro"
-          >
-            <span aria-hidden="true">{tema === "escuro" ? "☾" : "☀"}</span>
-            <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
-          </button>
-          <a className="govbr-topo" href={`/portal/casa/${ente}/participar`} aria-label="Entrar com conta gov.br">
-            <span className="g" aria-hidden="true">
-              gov.br
-            </span>
-            Entrar
-          </a>
-        </div>
-      </div>
-    </header>
+      </header>
+      <FaixaAcessoRestrito restricao={acessoRestritoDesde ? { desde: acessoRestritoDesde } : null} />
+    </>
   );
 }
 

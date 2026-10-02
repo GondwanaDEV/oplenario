@@ -97,7 +97,9 @@ jobs:
             await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);
             await tela(ctx, '/paineis/ia', '6-paineis-ia', /IA da Casa/);
             // a area do administrador da Casa (ADR-0005): conceder acesso + o interruptor da conferencia automatica
-            await tela(ctx, '/administracao', '7-administracao', /Acessos dos vereadores[\s\S]*Confer[eê]ncia autom[aá]tica/);
+            await tela(ctx, '/administracao', '7-administracao', /Acessos dos vereadores[\s\S]*Confer[eê]ncia autom[aá]tica[\s\S]*Parecer jur[ií]dico no portal/);
+            // ADR-0019 fatia 2a: a nota tecnica da IA chega 'a fila do juridico (a persona acumula `juridico`)
+            await tela(ctx, '/juridico', '8-juridico', /Notas t[eé]cnicas da IA/);
 
             // ---------- leituras da API ----------
             const lista = async (rota, chave) => {
@@ -112,6 +114,12 @@ jobs:
             await lista('/propostas', 'itens');
             await lista('/legislativo/notas-tecnicas?estado=pendente', 'itens');
             await lista('/identidade/agentes-institucionais', 'itens');
+            // ADR-0019 fatia 2a: o parametro "publicar ao assinar" da Casa (admin_ente)
+            try {
+              const r = await api(ctx, '/api/legislativo/parametros-parecer-juridico');
+              const okPar = r.status === 200 && typeof r.body?.['publicar-ao-assinar'] === 'boolean';
+              rec('GET /legislativo/parametros-parecer-juridico', okPar ? 'OK' : 'ERRO', `status=${r.status} publicar-ao-assinar=${r.body?.['publicar-ao-assinar']}`);
+            } catch (e) { rec('GET /legislativo/parametros-parecer-juridico', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
 
             // o painel da IA: consumo-disponivel=true so' quando o core consegue ler o consumo do satelite
             try {
@@ -145,6 +153,29 @@ jobs:
               const okA = r.status() === 200 && eventos.includes('resposta') && !eventos.includes('indisponivel');
               rec('POST /agente/perguntas', okA ? 'OK' : 'ERRO', `status=${r.status()} eventos=${eventos.join(',') || '-'}`);
             } catch (e) { rec('POST /agente/perguntas', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+
+            // ---------- opt-in: o copiloto do relator (ADR-0019 fatia 2b) num parecer de comissao do acervo ----------
+            if (!PERGUNTAR) rec('POST /legislativo/pareceres/:id/copiloto', 'OK', 'pulado (perguntar=false)');
+            else try {
+              const lp = await api(ctx, '/api/legislativo/proposicoes?limite=50');
+              let parecerId = null;
+              for (const it of (lp.body?.itens || [])) {
+                const f = await api(ctx, `/api/legislativo/proposicoes/${it.id}/ficha`);
+                const par = (f.body?.pareceres || [])[0];
+                if (par) { parecerId = par.id; break; }
+              }
+              if (!parecerId) rec('POST /legislativo/pareceres/:id/copiloto', 'ERRO', 'nenhum parecer de comissao no acervo');
+              else {
+                const r = await ctx.request.fetch(`${B}/api/legislativo/pareceres/${parecerId}/copiloto`, {
+                  method: 'POST', timeout: 90000,
+                  headers: { 'content-type': 'application/json', accept: 'application/json' },
+                  data: JSON.stringify({}),
+                });
+                let j = null; try { j = await r.json(); } catch {}
+                const okC = r.status() === 200 && typeof j?.analise?.texto === 'string' && j.analise.texto.length > 0;
+                rec('POST /legislativo/pareceres/:id/copiloto', okC ? 'OK' : 'ERRO', `status=${r.status()} texto=${j?.analise?.texto?.length ?? '-'} normas=${j?.normas ?? '-'}`);
+              }
+            } catch (e) { rec('POST /legislativo/pareceres/:id/copiloto', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
 
             console.log('\n===== RESUMO FUMACA (IA / producao) =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);

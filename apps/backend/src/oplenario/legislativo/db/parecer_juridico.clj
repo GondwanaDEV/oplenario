@@ -6,8 +6,11 @@
   (:require [clojure.string :as str]
             [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum])
-  (:import (java.sql Date Timestamp)
+            [oplenario.kernel.db-util :as comum]
+            [oplenario.legislativo.components.assinador-icp :as assinador-icp]
+            [oplenario.legislativo.db.parametro-parecer :as parametro])
+  (:import (java.security MessageDigest)
+           (java.sql Date Timestamp)
            (java.time Instant LocalDate)))
 
 (set! *warn-on-reflection* true)
@@ -94,7 +97,8 @@
 (def ^:private colunas-parecer
   [:pj.id :pj.pedido_id :pj.proposicao_id :pj.estado :pj.relatorio :pj.fundamentacao :pj.conclusao :pj.substitui_id
    :pj.numero :pj.ano :pj.assinado_em :pj.assinatura_nome :pj.assinatura_oab :pj.assinatura_qualificacao
-   :pj.criado_em substituido])
+   :pj.assinatura_algoritmo :pj.conteudo_sha256
+   :pj.criado_em :pj.origem_rascunho substituido])
 
 (defn- consulta-pareceres [ente-id & onde]
   {:select colunas-parecer
@@ -154,24 +158,53 @@
                                  :autor_id autor-id}]}))))
     (parecer-corrente tx ente-id pedido-id)))
 
+(defn conteudo-canonico
+  "Os bytes que a assinatura cobre, numa forma ESTAVEL e sem ambiguidade: uma linha por campo, `nome:tamanho:valor` (o
+  tamanho do valor em caracteres blinda contra o texto livre que contenha `\\n` ou `:`). Ordem fixa, sem mapa. So' o que o
+  PORTAL tambem mostra (numero/ano, signatario, conclusao, relatorio, fundamentacao) — quem le o parecer publicado consegue
+  recomputar o hash sem acesso ao banco. Versionado (`v1`): mudar a forma e' emitir `v2`, nunca reescrever."
+  ^String [{:keys [numero ano nome oab qualificacao conclusao relatorio fundamentacao]}]
+  (str/join "\n" (into ["parecer-juridico/v1"]
+                       (map (fn [[k v]] (let [v (str v)] (str k ":" (count v) ":" v))))
+                       [["numero" numero] ["ano" ano] ["signatario" nome] ["oab" oab] ["qualificacao" qualificacao]
+                        ["conclusao" conclusao] ["relatorio" relatorio] ["fundamentacao" fundamentacao]])))
+
+(defn sha256-do-conteudo
+  "`sha256:<hex>` do texto canonico em UTF-8 (o mesmo formato de hash do livro de atas e do congelamento da folha)."
+  [^String canonico]
+  (let [dig (.digest (MessageDigest/getInstance "SHA-256") (.getBytes canonico "UTF-8"))]
+    (str "sha256:" (apply str (map #(format "%02x" (bit-and (int %) 0xff)) dig)))))
+
 (defn assinar!
   "Assina o RASCUNHO `parecer-id`: numero/ano sequenciais da Casa (serializados por advisory lock), snapshot de quem
-  assinou e o pedido vira 'atendido' — tudo numa tx. Nao e' rascunho (ja' assinado, ou de outra Casa) -> nil."
-  [tx ente-id parecer-id {:keys [por nome oab qualificacao]}]
+  assinou, CARIMBO (o `assinador` assina os bytes canonicos do texto ja' com nº/ano e signatario; algoritmo, assinatura
+  destacada e SHA-256 ficam gravados) e o pedido vira 'atendido' — tudo numa tx. Nao e' rascunho (ja' assinado, ou de outra
+  Casa) -> nil. `assinador` (AssinadorICP) e' obrigatorio: assinatura sem carimbo o banco recusa."
+  [tx ente-id parecer-id {:keys [por nome oab qualificacao assinador]}]
+  (when-not assinador (throw (ex-info "assinar!: assinador ausente" {:ente-id ente-id})))
   (jdbc/execute-one! tx ["SELECT pg_advisory_xact_lock(hashtextextended(?, 7162600019))"
                          (str "parecer-juridico:" ente-id)])
-  (let [ano (:ano (jdbc/execute-one! tx ["SELECT extract(year FROM (now() AT TIME ZONE 'America/Fortaleza'))::int AS ano"]))
-        numero (:n (jdbc/execute-one! tx ["SELECT coalesce(max(numero), 0) + 1 AS n FROM legislativo.parecer_juridico
-                                           WHERE ente_id = ? AND ano = ?" ente-id ano]))
-        r (jdbc/execute-one! tx
-            (sql/format {:update :legislativo.parecer_juridico
-                         :set {:estado "assinado" :numero numero :ano ano :assinado_por por :assinado_em [:now]
-                               :assinatura_nome nome :assinatura_oab oab :assinatura_qualificacao qualificacao
-                               :atualizado_em [:now]}
-                         :where [:and [:= :ente_id ente-id] [:= :id parecer-id] [:= :estado "rascunho"]]
-                         :returning [:pedido_id]}))]
-    (when r
-      (mudar-estado-do-pedido! tx ente-id (:parecer_juridico/pedido_id r) "pendente" "atendido")
+  (when-let [rascunho (jdbc/execute-one! tx
+                        (sql/format {:select [:pedido_id :relatorio :fundamentacao :conclusao]
+                                     :from [:legislativo.parecer_juridico]
+                                     :where [:and [:= :ente_id ente-id] [:= :id parecer-id] [:= :estado "rascunho"]]
+                                     :for :update}))]
+    (let [{:keys [pedido-id relatorio fundamentacao conclusao]} (comum/linha->kebab rascunho)
+          ano (:ano (jdbc/execute-one! tx ["SELECT extract(year FROM (now() AT TIME ZONE 'America/Fortaleza'))::int AS ano"]))
+          numero (:n (jdbc/execute-one! tx ["SELECT coalesce(max(numero), 0) + 1 AS n FROM legislativo.parecer_juridico
+                                             WHERE ente_id = ? AND ano = ?" ente-id ano]))
+          canonico (conteudo-canonico {:numero numero :ano ano :nome nome :oab oab :qualificacao qualificacao
+                                       :conclusao conclusao :relatorio relatorio :fundamentacao fundamentacao})
+          {:keys [algoritmo assinatura-b64]} (assinador-icp/assinar assinador (.getBytes canonico "UTF-8"))]
+      (jdbc/execute-one! tx
+        (sql/format {:update :legislativo.parecer_juridico
+                     :set {:estado "assinado" :numero numero :ano ano :assinado_por por :assinado_em [:now]
+                           :assinatura_nome nome :assinatura_oab oab :assinatura_qualificacao qualificacao
+                           :assinatura_algoritmo algoritmo :assinatura_b64 assinatura-b64
+                           :conteudo_sha256 (sha256-do-conteudo canonico)
+                           :atualizado_em [:now]}
+                     :where [:and [:= :ente_id ente-id] [:= :id parecer-id]]}))
+      (mudar-estado-do-pedido! tx ente-id pedido-id "pendente" "atendido")
       (buscar-parecer tx ente-id parecer-id))))
 
 (defn substituir!
@@ -206,6 +239,18 @@
                                                                  [:= :pj.estado "assinado"])
                                              :order-by [[:pj.assinado_em :desc] [:pj.id :asc]])))))
 
+(defn tem-parecer-assinado?
+  "A materia tem parecer juridico ASSINADO e vigente? Booleano — a fonte do fato `tem_parecer_juridico_assinado` do motor
+  (ADR-0019 Eixo 8). Pergunta so' 'assinado', NUNCA 'favoravel': o parecer e' opinativo, e um parecer contrario assinado
+  tambem cumpre a etapa (a Casa decide com a opiniao na mao, nao com o veredito do advogado). 'Vigente' = nao substituido
+  por outro assinado; como o substituto assinado tambem conta, basta existir UM assinado — e o RASCUNHO do substituto nao
+  tira o vigente. Pedido cancelado nao entra: cancelar so' se faz sem parecer assinado (o CHECK do pedido garante)."
+  [tx ente-id proposicao-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [1] :from [:legislativo.parecer_juridico]
+                        :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id] [:= :estado "assinado"]]
+                        :limit 1}))))
+
 (defn pedidos-abertos-da-materia [tx ente-id proposicao-id]
   (mapv ->pedido
         (jdbc/execute! tx (sql/format (assoc (consulta-pedidos ente-id [:= :pd.proposicao_id proposicao-id]
@@ -224,9 +269,11 @@
                         :where [:and [:= :p.ente_id ente-id] [:= :p.id proposicao-id] [:= :e.terminal true]]}))))
 
 (defn publicos-da-materia
-  "O que o portal mostra: so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4), e so' o parecer vigente."
+  "O que o portal mostra: so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4) — ou ja' ao assinar, quando a Casa
+  antecipou (`parametro-parecer`) — e so' o parecer vigente. Consulta avulsa (sem materia) nunca chega aqui: o portal
+  le' por materia."
   [tx ente-id proposicao-id]
-  (if (materia-deliberada? tx ente-id proposicao-id)
+  (if (or (parametro/publicar-ao-assinar? tx ente-id) (materia-deliberada? tx ente-id proposicao-id))
     (filterv (complement :substituido) (pareceres-assinados-da-materia tx ente-id proposicao-id))
     []))
 

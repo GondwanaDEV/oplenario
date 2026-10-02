@@ -33,3 +33,29 @@
   "Path -> UUID, ou nil (o handler responde 404)."
   [s]
   (try (UUID/fromString (str s)) (catch IllegalArgumentException _ nil)))
+
+;; ---- ADR-0018 (fatia 1) ----
+
+(defn- corpo! [schema json-params]
+  (when-not (map? json-params) (invalido! "corpo deve ser objeto JSON" :corpo))
+  (let [c (into {} (map (fn [[k v]] [k (aparar v)])) json-params)]
+    (when-not (m/validate schema c) (invalido! "pedido invalido" :corpo))
+    c))
+
+(defn pedir-suspensao->dominio [json-params]
+  (let [c (corpo! wire/PedirSuspensaoIn json-params)]
+    {:motivo (get c "motivo") :justificativa (get c "justificativa")}))
+
+(defn iniciar-encerramento->dominio [json-params]
+  (let [c (corpo! wire/IniciarEncerramentoIn json-params)]
+    {:origem (get c "origem") :justificativa (get c "justificativa")}))
+
+(defn decisao->justificativa
+  "Corpo opcional (sem corpo = sem justificativa)."
+  [json-params]
+  (if (nil? json-params)
+    nil
+    (not-empty (get (corpo! wire/DecisaoIn json-params) "justificativa"))))
+
+(defn reativar->justificativa [json-params]
+  (get (corpo! wire/ReativarIn json-params) "justificativa"))

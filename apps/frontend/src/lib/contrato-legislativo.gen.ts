@@ -77,6 +77,7 @@ export interface ParecerResumoOut {
   comissaoId: string;
   comissaoNome?: string | null;
   relatorId?: string | null;
+  relatorNome?: string | null;
   votoRelator?: string | null;
   estado: string;
 }
@@ -128,6 +129,21 @@ export interface ParecerEditorOut {
   assinaturaAlgoritmo?: string | null;
   assinadoPor?: string | null;
   assinadoEm?: string | null;
+}
+
+export interface AnaliseCopilotoOut {
+  texto: string;
+  citacoes: CitacaoCopilotoOut[];
+  paragrafosSemFonte: number[];
+  pontosAConfirmar: string[];
+  incerteza: "normal" | "revisar_com_atencao";
+  modelo: string;
+}
+
+export interface CopilotoAnaliseOut {
+  analise: AnaliseCopilotoOut | null;
+  normas: "citadas" | "sem-dispositivo" | "sem-normas";
+  indisponivel: string | null;
 }
 
 export interface DocumentoOut {
@@ -522,6 +538,7 @@ export interface NotaTecnicaResumoOut {
 
 export interface NotasTecnicasOut {
   itens: NotaTecnicaResumoOut[];
+  casaComJuridico: boolean;
 }
 
 export interface NotaTecnicaOut {

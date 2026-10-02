@@ -1,0 +1,20 @@
+/* O relator redige o parecer (ADR-0019 fatia 2). O cabeçalho, `.tela-estado`, `.vazio` e `.erro-inline` vêm de
+   ../assinar/assinar.css; `.btn*` do chassi. Aqui só o que é desta tela. */
+.redigir-pagina { display: grid; gap: 1.1rem; padding-bottom: 2rem; }
+.red-sub { margin: -0.4rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.red-form { display: grid; gap: 0.35rem; }
+.red-form label { font-weight: 700; font-size: var(--t-13); color: var(--texto); margin-top: 0.6rem; }
+.red-form textarea, .red-confirmar input { width: 100%; font: inherit; font-size: var(--t-16); padding: 0.6rem 0.7rem;
+  border-radius: 8px; border: 1px solid var(--campo-borda); background: var(--surface); color: var(--texto); resize: vertical; }
+.red-aj { margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+.red-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.red-ok { margin: 0.4rem 0 0; font-size: var(--t-13); color: var(--texto); }
+.red-aviso { margin: 0.3rem 0; padding: 0.45rem 0.7rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto);
+  border-radius: 8px; font-size: var(--t-12); color: var(--texto); }
+.red-juridico { display: grid; gap: 0.5rem; padding: 0.9rem 1rem; border: 1px solid var(--linha); border-radius: var(--raio);
+  background: var(--surface); }
+.red-juridico h2 { margin: 0; font-family: var(--display); font-size: var(--t-16); color: var(--texto); }
+.red-juridico > button { justify-self: start; }
+.red-lista { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.25rem; font-size: var(--t-13); color: var(--texto); }
+.red-confirmar { display: grid; gap: 0.35rem; }
+.red-confirmar label { font-weight: 700; font-size: var(--t-13); color: var(--texto); }

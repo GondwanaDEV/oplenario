@@ -9,6 +9,7 @@ import { usePapeis } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
 import {
   ABAS,
+  AVISO_JURIDICO_ATIVO,
   linhaDaNota,
   linhaDoAgente,
   numeroDaNota,
@@ -95,6 +96,10 @@ export function FilaConferencias({ token = null }: { token?: string | null }) {
       </header>
 
       <PainelAgente token={token} agentes={agentes} />
+
+      {estado.fase === "pronto" && estado.dado.casaComJuridico && (
+        <p className="conf-juridico" role="note">{AVISO_JURIDICO_ATIVO}</p>
+      )}
 
       <nav className="conf-abas" aria-label="Filtrar as notas">
         {ABAS.map((a) => (

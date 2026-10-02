@@ -266,3 +266,11 @@
       (throw (ex-info "sessoes no periodo de apuracao de assiduidade acima do teto"
                       {:tipo :limite/sessoes-excedido :medido-ao-menos (count linhas) :teto teto})))
     (mapv (fn [linha] (assoc linha :data-de-referencia (logic/data-de-referencia-da-sessao linha))) linhas)))
+
+(defn alguma-em-curso?
+  "ADR-0018 (Eixo 2): a Casa tem sessao plenaria EM CURSO agora ('aberta' ou 'suspensa' — a suspensa volta a abrir)?
+  A suspensao da Casa pedida enquanto isso espera o encerramento."
+  [tx ente-id]
+  (some? (jdbc/execute-one! tx (sql/format {:select [[1 :um]] :from [:sessoes.sessao]
+                                            :where [:and [:= :ente_id ente-id] [:in :estado ["aberta" "suspensa"]]]
+                                            :limit 1}))))

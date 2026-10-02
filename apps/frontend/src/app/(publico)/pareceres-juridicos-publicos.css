@@ -11,3 +11,5 @@
 .pj-assinatura { margin-top: 1.2rem; padding-top: 0.8rem; border-top: 1px solid var(--papel-linha); display: grid; gap: 0.1rem; font-size: var(--t-13); }
 .pj-assinatura b { font-size: var(--t-16); }
 .pj-assinatura span { color: var(--papel-texto-2); }
+.pj-assinatura .pj-carimbo code { font-family: var(--mono); font-size: var(--t-12); overflow-wrap: anywhere; }
+.pj-assinatura .pj-carimbo-aviso { font-size: var(--t-12); }

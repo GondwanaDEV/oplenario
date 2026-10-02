@@ -43,8 +43,10 @@ const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
 // `© 2026 <slug>` do rodapé. Um link errado exibia um portal de transparência crível para uma Casa que
 // não existe. 404 (uuid bem-formado, sem Casa) e 400 (id malformado) são ambos veredito definitivo de
 // "não existe"; qualquer outra falha (5xx, timeout, rede) é transitória e MANTÉM a degradação documentada.
+// `acessoRestritoDesde` (ADR-0018): a Casa suspensa — o portal segue no ar e mostra a faixa, só com a data (o motivo
+// não é público e nem vem do backend). Ausente quando a Casa está ativa.
 export type ResolucaoCasa =
-  | { estado: "ok"; nomeOficial: string; nomeCurto?: string }
+  | { estado: "ok"; nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string }
   | { estado: "inexistente" }
   | { estado: "indisponivel" };
 
@@ -53,8 +55,13 @@ export async function resolverCasa(ente: string): Promise<ResolucaoCasa> {
     const r = await fetch(`${backend}/portal/casa/${codificarSegmento(ente)}`, { cache: "no-store" });
     if (r.status === 404 || r.status === 400) return { estado: "inexistente" };
     if (!r.ok) return { estado: "indisponivel" };
-    const c = camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string };
-    return { estado: "ok", nomeOficial: c.nomeOficial, nomeCurto: c.nomeCurto };
+    const c = camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string | null };
+    return {
+      estado: "ok",
+      nomeOficial: c.nomeOficial,
+      nomeCurto: c.nomeCurto,
+      ...(c.acessoRestritoDesde ? { acessoRestritoDesde: c.acessoRestritoDesde } : {}),
+    };
   } catch {
     return { estado: "indisponivel" };
   }
@@ -63,9 +70,15 @@ export async function resolverCasa(ente: string): Promise<ResolucaoCasa> {
 // Contrato preservado VERBATIM (null p/ qualquer não-ok) — as telas internas (matéria, vereador) degradam
 // pro slug de propósito: elas já têm o seu próprio "não encontrado" para o objeto que exibem, e o nome da
 // Casa ali é moldura, não o assunto. Só a CAPA precisa do veredito, e usa `resolverCasa`.
+// `acessoRestritoDesde` (ADR-0018) segue junto quando a Casa está suspensa: as páginas de formulário mostram a faixa.
 export async function buscarNomeCasa(
   ente: string,
-): Promise<{ nomeOficial: string; nomeCurto?: string } | null> {
+): Promise<{ nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string } | null> {
   const r = await resolverCasa(ente);
-  return r.estado === "ok" ? { nomeOficial: r.nomeOficial, nomeCurto: r.nomeCurto } : null;
+  if (r.estado !== "ok") return null;
+  return {
+    nomeOficial: r.nomeOficial,
+    nomeCurto: r.nomeCurto,
+    ...(r.acessoRestritoDesde ? { acessoRestritoDesde: r.acessoRestritoDesde } : {}),
+  };
 }

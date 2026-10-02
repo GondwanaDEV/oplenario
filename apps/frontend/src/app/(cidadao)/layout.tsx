@@ -21,6 +21,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { TemaProvider, useTema } from "@/lib/tema";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
+import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import { usePathname } from "next/navigation";
 import "./cidadao.css";
 
@@ -32,12 +33,19 @@ export default function LayoutCidadao({ children }: { children: React.ReactNode 
   );
 }
 
+// ADR-0018: a cidadã vê só "acesso restrito" (o backend não manda o motivo a ela); os pedidos dela seguem.
+function FaixaDaSessao() {
+  const { token } = useAuth();
+  return <FaixaAcessoRestritoDaSessao token={token} />;
+}
+
 function LeitorToken({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   return (
     <AuthProvider tokenQuery={searchParams.get("token")}>
       <TemaProvider>
         <TopoCidadao />
+        <FaixaDaSessao />
         <main>{children}</main>
       </TemaProvider>
     </AuthProvider>

@@ -34,6 +34,11 @@
     "Faixa B / B.7: o copiloto do requerimento. `pedido` = {:descricao :modelos [{:id :nome :campos}] :correlation_id}
     -> {:preenchimento :justificativa :indisponivel}. Rascunho: o core confere contra os modelos e a tela devolve ao
     formulario. Timeout de 30 s (dois passos de modelo). Lanca `:ia/indisponivel`.")
+  (rascunhar-analise-parecer [this ente-id pedido]
+    "ADR-0019, Eixo 5: o copiloto do relator. `pedido` = {:proposicao_id :tipo :ano :sequencial :ementa :texto
+    :autor_texto :comissao :normas_publicadas :correlation_id} -> {:analise {:texto :citacoes :paragrafos-sem-fonte
+    :pontos-a-confirmar :incerteza :modelo ...} :normas :indisponivel}. Rascunho: o core confere as citacoes e o editor
+    recebe o texto. Timeout de 45 s (um passo de modelo sobre a materia inteira). Lanca `:ia/indisponivel`.")
   (consumo [this ente-id mes]
     "Faixa B / B.9: o consumo de IA da Casa no mes `mes` ('AAAA-MM') x o orcamento que o satelite esta' aplicando, o
     estado da cota e, por capacidade, execucoes, custo e revisao humana. So' contagens e valores. Lanca
@@ -84,6 +89,9 @@
   (rascunhar-requerimento [_ ente-id pedido]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/requerimentos/rascunhos") pedido (Duration/ofSeconds 30))
         (indisponivel! "copiloto sem resposta")))
+  (rascunhar-analise-parecer [_ ente-id pedido]
+    (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/pareceres/analises") pedido (Duration/ofSeconds 45))
+        (indisponivel! "copiloto do relator sem resposta")))
   (consumo [_ ente-id mes]
     (or (ler-json url segredo cliente (str "/v1/entes/" ente-id "/consumo?mes=" mes))
         (indisponivel! "consumo sem resposta")))

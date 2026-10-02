@@ -26,6 +26,7 @@ import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
 import { derivarTramitacao } from "@/lib/tramitacao-vista";
 import { comToken } from "@/lib/nav";
+import { PublicarPauta } from "@/app/publicar-pauta";
 import type {
   CienciaPendenteOut,
   ParecerResumoMeuPainelOut,
@@ -91,6 +92,12 @@ export default function PaginaHomeVereador() {
           <ProximaSessaoResumo estadoSessoes={estadoSessoes} sessao={vista.proximaSessao} />
         </div>
       </section>
+
+      {/* ADR-0019 fatia 3: quando a regra da Casa manda o Presidente, o 1º Secretário ou a Mesa publicar a pauta, é aqui
+          que ele publica a da próxima sessão. Só aparece para quem pode (o servidor decide pelo cargo). */}
+      {vista.proximaSessao && vista.proximaSessao.estado === "agendada" && (
+        <PublicarPauta token={token} sessaoId={vista.proximaSessao.id} soQuemPode />
+      )}
 
       {vista.ciencias.length > 0 && (
         <section aria-live="polite" aria-label="Para sua ciência">
@@ -455,6 +462,9 @@ function CartaoParecer({ parecer, token }: { parecer: ParecerResumoMeuPainelOut;
         {/* Rota REAL (Task 11): o grupo (vereador) não entra na URL -> /parecer/:id/assinar. `comToken`
             preserva o ?token= de dev entre navegações internas — mesmo padrão do tabbar (layout.tsx) e do
             router.push de volta em parecer/[id]/assinar/page.tsx; sem ele o clique perderia o token dev. */}
+        <Link className="btn btn-contorno btn-mini" href={comToken(`/parecer/${parecer.id}/redigir`, token)}>
+          Redigir
+        </Link>
         <Link className="btn btn-primaria btn-mini" href={comToken(`/parecer/${parecer.id}/assinar`, token)}>
           Revisar e assinar
         </Link>

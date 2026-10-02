@@ -26,6 +26,10 @@ export const ABAS: { filtro: FiltroFila; rotulo: string }[] = [
   { filtro: "descartada", rotulo: "Descartadas" },
 ];
 
+/** ADR-0019 Eixo 5: na Casa com jurídico ativo, a nota pendente também está na fila do jurídico. */
+export const AVISO_JURIDICO_ATIVO =
+  "Esta Casa tem jurídico ativo: a nota pendente também aparece na fila dele, para servir de rascunho do parecer. Quem a usar primeiro tira a nota das duas filas.";
+
 export function numeroDaNota(n: Pick<NotaTecnicaResumoOut, "tipo" | "sequencial" | "ano">): string {
   return formatarNumeroProposicao(n.tipo, n.sequencial, n.ano);
 }

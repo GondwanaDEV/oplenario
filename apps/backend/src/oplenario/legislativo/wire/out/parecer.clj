@@ -49,3 +49,35 @@
    [:assinatura-algoritmo {:optional true} [:maybe :string]]
    [:assinado-por {:optional true} [:maybe :string]]
    [:assinado-em {:optional true} [:maybe :string]]])
+
+;; ---------- ADR-0019, Eixo 5 (fatia 2): o copiloto do relator ----------
+
+(def CitacaoAnaliseOut
+  "De onde veio um trecho do rascunho: a materia (`materia:<id>`) ou um dispositivo da Casa (`norma:<id>#<endereco>`),
+  com o rotulo legivel (o dispositivo leva a data ate' quando o texto foi conferido) e o resultado da conferencia."
+  [:map {:closed true}
+   [:fonte-id :string]
+   [:rotulo [:maybe :string]]
+   [:trecho [:maybe :string]]
+   [:status :string]])
+
+(def AnaliseCopilotoOut
+  "O rascunho da analise de constitucionalidade e juridicidade, ja' conferido pelo core: `texto` e' o texto LIMPO (sem
+  as marcas de citacao; os `[confirmar: ...]` ficam) que vai para o campo Analise do editor; `pontos-a-confirmar` sao
+  recalculados pelo core a partir dele. Nunca e' parecer: o relator revisa e salva pelo fluxo de sempre."
+  [:map {:closed true}
+   [:texto :string]
+   [:citacoes [:sequential CitacaoAnaliseOut]]
+   [:paragrafos-sem-fonte [:sequential :int]]
+   [:pontos-a-confirmar [:sequential :string]]
+   [:incerteza (km/enum-de #{"normal" "revisar_com_atencao"})]
+   [:modelo :string]])
+
+(def CopilotoAnaliseOut
+  "POST /legislativo/pareceres/:id/copiloto e /meu/pareceres/:id/copiloto. `normas`: a Casa nao publicou normas de
+  referencia ('sem-normas'), publicou mas nenhum dispositivo foi citado ('sem-dispositivo'), ou o rascunho cita
+  dispositivo conferido ('citadas'). `indisponivel` = a mensagem R-IA-1 quando a IA nao rascunhou."
+  [:map {:closed true}
+   [:analise [:maybe AnaliseCopilotoOut]]
+   [:normas (km/enum-de #{"sem-normas" "sem-dispositivo" "citadas"})]
+   [:indisponivel [:maybe :string]]])

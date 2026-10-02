@@ -60,3 +60,13 @@
     (is (str/includes? out "preenchimento: PreenchimentoCopilotoOut | null;"))
     (is (str/includes? out "justificativa: JustificativaCopilotoOut | null;"))
     (is (str/includes? out "citacoes: CitacaoCopilotoOut[];"))))
+
+;; ---------- ADR-0019 fatia 2 (copiloto do relator) ----------
+
+(deftest copiloto-analise-out-reusa-a-citacao-do-copiloto-e-fecha-os-enums
+  (let [out (gerar-legislativo/gerar-tudo)]
+    (is (str/includes? out "export interface CopilotoAnaliseOut {"))
+    (is (str/includes? out "analise: AnaliseCopilotoOut | null;"))
+    (is (str/includes? out "normas: \"citadas\" | \"sem-dispositivo\" | \"sem-normas\";"))
+    (is (str/includes? out "incerteza: \"normal\" | \"revisar_com_atencao\";"))
+    (is (str/includes? out "pontosAConfirmar: string[];"))))

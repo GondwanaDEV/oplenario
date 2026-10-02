@@ -84,3 +84,39 @@
   [tx {:keys [tipo ente-id payload]}]
   (when-let [ev (logic/promover tipo ente-id payload)]
     (eventos/inserir-saida! tx ev)))
+
+;; ---------------------------------------------------------------------------------------------
+;; ADR-0018 (Eixo 2): a IA da Casa SUSPENSA pausa — cota zero, pelo proprio orcamento da ADR-0014. Consumidores do relay
+;; (tx do outbox, supratenant): setam o tenant na tx para a RLS do orcamento e publicam `OrcamentoIADefinido` no feed
+;; na mesma tx. A suspensao grava 0/0 (o satelite fica "esgotada": nem o que a pessoa pede roda); a reativacao devolve
+;; a definicao que valia antes — ou uma SEM VALOR, se antes a Casa so' media. Idempotentes pelo que a ultima diz.
+;; ---------------------------------------------------------------------------------------------
+
+(def definido-pela-suspensao "operacao:casa-suspensa")
+(def definido-pela-reativacao "operacao:casa-reativada")
+
+(defn- definir-em-tx! [tx o]
+  (let [d (orcamento/inserir! tx o)]
+    (eventos/inserir-saida! tx (logic/evento-orcamento d))
+    d))
+
+(defn pausar-por-suspensao-em-tx!
+  "Handler de `admin_sistema.casa.suspensa`."
+  [tx {:keys [ente-id]}]
+  (when ente-id
+    (tenancy/set-tenant! tx ente-id)
+    (let [ultima (orcamento/ultima tx ente-id)]
+      (when-not (= definido-pela-suspensao (:definido-por ultima))
+        (definir-em-tx! tx {:ente-id ente-id :mensal 0M :teto-duro 0M :moeda (or (:moeda ultima) "USD")
+                            :definido-por definido-pela-suspensao})))))
+
+(defn retomar-apos-reativacao-em-tx!
+  "Handler de `admin_sistema.casa.reativada`."
+  [tx {:keys [ente-id]}]
+  (when ente-id
+    (tenancy/set-tenant! tx ente-id)
+    (let [ultima (orcamento/ultima tx ente-id)]
+      (when (= definido-pela-suspensao (:definido-por ultima))
+        (let [antes (orcamento/ultima-exceto tx ente-id definido-pela-suspensao)]
+          (definir-em-tx! tx {:ente-id ente-id :mensal (:mensal antes) :teto-duro (:teto-duro antes)
+                              :moeda (or (:moeda antes) (:moeda ultima)) :definido-por definido-pela-reativacao}))))))

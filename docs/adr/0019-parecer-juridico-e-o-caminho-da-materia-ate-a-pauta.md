@@ -210,13 +210,106 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
 - **Distribuir não move a matéria no rito.** A secretaria abre os pareceres; o gatilho `despachar` continua sendo o ato
   de tramitação de sempre. Designar o relator grava o relator e **não** dispara a transição do rito de parecer
   (`aguardando_designacao → com_relator`), que é dado da Casa; o parecer com relator sai da fila de relatores pendentes da Mesa.
-- **Antecipar o portal para "ao assinar":** configuração por Casa, ainda não existe (hoje só depois da deliberação).
-- **UI do relator pedir o parecer** no app do vereador: a rota `POST /meu/pareceres/:id/pedido-juridico` está pronta e
-  testada; falta o botão.
-- **Assinatura com carimbo:** o parecer tem snapshot, número e imutabilidade, mas não o `STUB-ICP-v0` do resto do
-  legislativo. Entra com a ICP real.
+- ~~**Antecipar o portal para "ao assinar"**~~ — feito na fatia 2a.
+- ~~**UI do relator pedir o parecer**~~ — feito na fatia 2b (`/parecer/[id]/redigir`).
+- ~~**Assinatura com carimbo**~~ — feito junto com a fatia 4 (`STUB-ICP-v0`, como o resto do legislativo).
 - **Resumo legível na trilha** por ação (a corrente registra o ato, mas o rótulo é o genérico).
 - **Autorização fina** (só o presidente da comissão designa o relator): quando uma Casa pedir.
+
+## Materialização — fatias 2, 3 e 4 (30/09/2026)
+
+**Fatia 2a — a nota técnica da IA vira rascunho do advogado** (migs `…130` e `…131`):
+
+- Na Casa **com jurídico ativo** (alguém com o papel `juridico` vigente, perguntado à identidade pelo seam
+  `casa-tem-juridico?`), o jurídico lê as notas técnicas do agente institucional (ADR-0013) na seção "Notas técnicas da
+  IA" de `/juridico` e em `/juridico/notas/[id]`.
+- "Usar como rascunho" (`POST /legislativo/notas-tecnicas/:id/rascunho-juridico`) faz tudo numa transação: abre o pedido
+  ou reaproveita o que existe, cria o rascunho sem as marcas de citação e sem conclusão, registra
+  `origem_rascunho = nota_tecnica` e marca a nota como aproveitada.
+- A ficha interna mostra a origem; o portal, não. O parecer é do advogado, e o texto da IA nunca é chamado de parecer.
+- Casa sem jurídico: a nota segue para a secretaria em `/conferencias`, como antes.
+- **Parâmetro `publicar_ao_assinar`** por Casa (`GET/PUT /legislativo/parametros-parecer-juridico`, `admin_ente`),
+  exposto no bloco "Parecer jurídico no portal" de `/administracao`. A consulta avulsa nunca vai ao portal.
+
+**Fatia 2b — o copiloto do relator:**
+
+- Capacidade `relator.analisar` no satélite (`POST /v1/entes/:e/pareceres/analises`).
+  - Lê a matéria (conteúdo de terceiro) e os dispositivos da LOM e do RI pelo índice (B.5).
+  - Redige pelo núcleo, com citação conferida por parágrafo e `[confirmar: …]` onde não há fonte.
+  - Sem normas publicadas, rascunha só com a matéria e diz isso.
+  - Tem o conjunto de avaliação `copiloto-relator` no CI.
+- No core, o painel aparece nos dois editores de parecer de comissão: o da secretaria (`POST
+  /legislativo/pareceres/:id/copiloto`) e o do relator (`POST /meu/pareceres/:id/copiloto`, em `/parecer/[id]/redigir`).
+  - O core confere as citações: só vale citar a própria matéria ou um dispositivo da Casa.
+  - IA fora → 503 (R-IA-1).
+  - O rascunho tem o selo "não é parecer"; o relator usa, substitui ou acrescenta, e salva por `PATCH /meu/pareceres/:id`.
+- O relator pede o parecer jurídico pela mesma tela.
+
+**Fatia 2 — o agente propõe os atos do jurídico** (ADR-0009/0012):
+
+- Viram ações do catálogo, sempre como proposta que a secretaria confirma em `/propostas`:
+  - `pedir_parecer_juridico`;
+  - `encaminhar_as_comissoes`;
+  - `designar_relator`.
+- Leituras novas: `pareceres_juridicos_da_materia`, `comissoes_da_casa` e `vereadores_da_casa`.
+- Assinar, salvar e substituir o parecer continuam só pela tela: são atos pessoais do advogado.
+- Dois casos de segurança na avaliação do agente: o pedido só vira proposta, e o agente não assina parecer.
+
+**Fatia 4 — a etapa obrigatória, desligada por padrão:**
+
+- Fato `tem_parecer_juridico_assinado(proposicao.id)` no registro do motor (ADR-0004).
+  - A costura é *fail-closed*.
+  - Pergunta se o parecer foi **assinado**, nunca se é **favorável**.
+- A Casa que exige a etapa escreve no rito o estado `em_analise_juridica` e a guarda. Nenhuma Casa tem isso por padrão.
+- **Carimbo** (mig `…150`): o `AssinadorICP` assina os bytes canônicos do texto, com número/ano e signatário.
+  - Algoritmo, assinatura e SHA-256 ficam gravados.
+  - Aparecem na ficha, no pedido e no portal, com o aviso de que o `STUB-ICP-v0` não é ICP-Brasil.
+
+**Fatia 3 — publicar a pauta** (mig `…120`):
+
+- **A regra da Casa** (`sessoes.regra_pauta`, com RLS) define quem publica: `secretaria`, `presidente`,
+  `primeiro_secretario` ou `mesa`, além da antecedência mínima em horas.
+  - O `admin_ente` configura em "Regras da pauta", em `/administracao` (`GET/PUT /regra-da-pauta`).
+  - A regra é **exclusiva**: com `presidente`, a secretaria prepara a pauta, mas não publica.
+  - O cargo vem da Mesa vigente (seam `cargo-na-mesa` no host, sobre o roster da Casa). O licenciado não publica. Um
+    cargo com grafia desconhecida não conta (*fail-closed*).
+- **"Publicar a pauta"** (`POST /sessoes/:id/pauta/publicacao`) é um ato único, feito numa transação travada por
+  sessão.
+  - Congela a versão numerada; a tabela é append-only.
+  - A versão guarda a regra do momento (`publicada_a_titulo`) e os avisos que existiam ao publicar.
+  - A primeira publicação é a inicial. As seguintes são **republicação** e exigem justificativa.
+  - Recusa (409): pauta vazia, pauta sem mudança, pauta que mudou entre a conferência e o ato, e republicação sem
+    justificativa. Dois cliques geram uma versão só.
+- **Aviso, não bloqueio:**
+  - a matéria sem parecer de comissão emitido (seam `situacao-de-parecer`, sobre o legislativo) ou com pedido jurídico
+    pendente aparece listada;
+  - antecedência abaixo do mínimo, medida em minutos, gera o aviso `antecedencia-nao-cumprida`.
+- **Onde aparece:**
+  - o painel de publicar fica acima da pauta, em `/pauta-convocacao`, e na home do vereador para quem pode publicar;
+  - o **portal** mostra a versão congelada em `/portal/casa/[ente]/pautas`. Sessão secreta não aparece;
+  - a **TV** segue listando a pauta viva, com o selo "Pauta oficial · vN publicada em …" ou "alterada em plenário desde
+    então".
+- **Agente:** `publicar_pauta` entrou no catálogo como ato com confirmação. A proposta lista os avisos, e a recusa vira
+  409 legível.
+- **Trilha:** a publicação e a regra entram com resumo legível, por exemplo "publicou a pauta v2 (republicação) pela
+  Mesa com 1 aviso(s)".
+- **Demo:** a Casa demo tem a regra `secretaria` e a v1 publicada da sessão agendada.
+
+**Riscos conhecidos da fatia 3:**
+
+- O roster guarda um cargo na Mesa por vereador.
+- Um evento SSE de publicação ainda não existe: a TV só vê o selo novo quando rebusca a pauta.
+- `pauta-mudou` compara o conjunto de matérias, não a ordem delas.
+
+**Ainda de fora, de propósito:**
+
+- **Pedido sobre emenda**: até uma Casa pedir.
+- **Resumo legível na trilha** por ação: a corrente registra o ato, mas o rótulo é o genérico (ADR-0017, *Materialização*).
+- **Autorização fina** do relator (só o presidente da comissão designa): quando uma Casa pedir, pela autorização por
+  transição.
+- **Vigência do dispositivo citado:** o copiloto cita o dispositivo conferido, com a data da conferência (B.5), mas não
+  verifica se uma norma posterior o revogou.
+- **Assinatura ICP-Brasil real:** a dívida `STUB-ICP-v0` de todo o legislativo.
 
 ## O que peço para decidir
 

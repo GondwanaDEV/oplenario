@@ -44,6 +44,24 @@ describe("PareceresJuridicosPublicos", () => {
     expect(within(secao).getByText("Assinado em 30/09/2026, 14:05")).toBeTruthy();
   });
 
+  it("mostra o carimbo (SHA-256 do texto) com o aviso do stub; sem carimbo, nada é inventado", async () => {
+    const hex = "ab12".repeat(16);
+    mockar({
+      status: 200,
+      corpo: {
+        pareceres: [
+          parecer({ assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "efetivo", em: "2026-09-30T14:05:00", algoritmo: "STUB-ICP-v0", sha256: `sha256:${hex}` } }),
+          parecer({ numero: 2, assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "efetivo", em: "2026-09-30T14:05:00", algoritmo: null, sha256: null } }),
+        ],
+      },
+    });
+    render(<PareceresJuridicosPublicos ente={ENTE} proposicaoId="p1" />);
+    await screen.findByRole("heading", { name: "Parecer jurídico nº 3/2026" });
+    expect(screen.getByText(hex)).toBeTruthy();
+    expect(screen.getByText(/ainda não é assinatura ICP-Brasil/)).toBeTruthy();
+    expect(screen.getAllByText(/SHA-256 do texto assinado/)).toHaveLength(1); // o parecer sem carimbo não mostra linha nenhuma
+  });
+
   it("vários pareceres: um item por parecer", async () => {
     mockar({ status: 200, corpo: { pareceres: [parecer(), parecer({ numero: 4, conclusao: "contrario" })] } });
     render(<PareceresJuridicosPublicos ente={ENTE} proposicaoId="p1" />);

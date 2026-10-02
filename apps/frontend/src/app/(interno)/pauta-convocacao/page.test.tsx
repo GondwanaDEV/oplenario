@@ -93,6 +93,13 @@ function servidorFalso() {
     if (url === "/api/sessoes/s2/pauta") return json(200, { "sessao-id": "s2", itens: [] });
     if (url === "/api/sessoes/s1") return json(200, SESSAO);
     if (url === "/api/sessoes/s1/pauta") return json(200, { "sessao-id": "s1", itens: itens.map((i) => ({ ...i })) });
+    // ADR-0019 fatia 3: a tela de publicar a pauta (a regra da Casa, sem publicação ainda)
+    if (url === "/api/sessoes/s1/pauta/publicacao")
+      return json(200, {
+        "sessao-id": "s1", regra: { "quem-publica": "secretaria", "antecedencia-minima-horas": null, configurada: false },
+        "pode-publicar": true, republicacao: false, "itens-na-pauta": itens.length, versoes: [],
+        "alterada-desde-a-publicacao": false, avisos: [], "avisos-indisponiveis": false,
+      });
     if (url.startsWith("/api/legislativo/proposicoes?")) {
       const busca = new URL(url, "http://x").searchParams.get("busca");
       const lista = busca ? PROPS.filter((p) => p.ementa.toLowerCase().includes(busca.toLowerCase())) : PROPS;
@@ -123,6 +130,14 @@ describe("PaginaPautaConvocacao — montar a pauta", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("ADR-0019 fatia 3: a tela traz o painel de publicar a pauta, com o selo e o botão", async () => {
+    render(<PaginaPautaConvocacao />);
+    await pautaCarregada();
+    const painel = await screen.findByRole("region", { name: "Publicar a pauta" });
+    expect(within(painel).getByText("Pauta ainda não publicada")).toBeTruthy();
+    expect((within(painel).getByRole("button", { name: "Publicar a pauta" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("mostra a pauta por fase, com numeração dentro da fase e o resumo da matéria vindo da própria pauta", async () => {

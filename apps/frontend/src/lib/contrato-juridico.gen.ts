@@ -6,13 +6,20 @@
 export type EstadoPedido = "pendente" | "atendido" | "cancelado";
 export type ConclusaoJuridica = "favoravel" | "contrario" | "com_ressalvas" | "orientacao";
 export type QualificacaoJuridica = "efetivo" | "comissionado" | "contratado";
-export type OrigemPedido = "secretaria" | "relator";
+/** `nota_tecnica`: o advogado abriu o pedido a partir da nota técnica da IA ("Usar como rascunho"). */
+export type OrigemPedido = "secretaria" | "relator" | "nota_tecnica";
+/** De onde o RASCUNHO partiu; `null` = escrito do zero. Só na borda interna: o portal não mostra a origem. */
+export type OrigemRascunho = "nota_tecnica";
 
 export interface AssinaturaJuridicaOut {
   nome: string;
   oab: string;
   qualificacao: QualificacaoJuridica | string;
   em: string;
+  /** O carimbo do texto assinado (ADR-0019 fatia 4): o algoritmo (hoje "STUB-ICP-v0", que NÃO é ICP-Brasil real) e o
+   *  SHA-256 dos bytes canônicos (`sha256:<hex>`). null só no parecer assinado antes de o carimbo existir. */
+  algoritmo?: string | null;
+  sha256?: string | null;
 }
 
 /** O parecer do advogado. `numero`/`ano` só existem depois de assinado. Na LISTA da fila, `relatorio` e
@@ -28,6 +35,8 @@ export interface ParecerJuridicoOut {
   assinatura: AssinaturaJuridicaOut | null;
   substituiId?: string | null;
   substituido: boolean;
+  /** ADR-0019 fatia 2a: o rascunho partiu da nota técnica da IA. Informativo: o parecer é de quem o assinou. */
+  origemRascunho?: OrigemRascunho | null;
 }
 
 export interface MateriaDoPedidoOut {
@@ -118,4 +127,9 @@ export interface RelatorDesignadoOut {
   id: string;
   relatorId: string;
   relatorNome: string;
+}
+
+/** GET/PUT /legislativo/parametros-parecer-juridico (`admin_ente`): quando o portal mostra o parecer assinado. */
+export interface ParametrosParecerJuridicoOut {
+  publicarAoAssinar: boolean;
 }

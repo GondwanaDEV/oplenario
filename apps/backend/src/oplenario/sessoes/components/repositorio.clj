@@ -3,7 +3,8 @@
   (ADR-0001 §3). O protocolo RepoSessoes expoe as ACOES (tenant-aware: trata `com-tenant*` por dentro); o
   record segura o :datasource (via `using`); o db/ e' a IMPL. O controller depende DESTE Component, nunca do
   db/ direto. (Eventos de dominio Sessao*/real-time = eixos posteriores do F4.)"
-  (:require [oplenario.kernel.tenancy :as tenancy]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.anuncio :as anuncio]
             [oplenario.sessoes.db.ata :as ata]
@@ -15,6 +16,8 @@
             [oplenario.sessoes.db.incidente :as incidente]
             [oplenario.sessoes.db.pauta :as pauta]
             [oplenario.sessoes.db.presenca :as presenca]
+            [oplenario.sessoes.db.regra-pauta :as regra-pauta]
+            [oplenario.sessoes.components.repositorio-publicacao :as repo-publicacao]
             [oplenario.sessoes.db.sessao :as sessao]
             [oplenario.sessoes.db.transcricao :as transcricao]
             [oplenario.sessoes.db.tribuna :as tribuna]
@@ -743,7 +746,56 @@
            ;; nenhuma — na MESMA tx, para o numero publicado nao ser de outro snapshot que o das sessoes.
            :sessoes-sem-data-de-referencia (sessao/contar-fechadas-sem-data-de-referencia tx ente-id periodo)
            :presencas-por-sessao (presenca/presencas-correntes-das-sessoes tx ente-id sessoes-com-instante)
-           :justificativas-por-sessao (presenca/justificativas-das-sessoes tx ente-id sessao-ids)})))))
+           :justificativas-por-sessao (presenca/justificativas-das-sessoes tx ente-id sessao-ids)}))))
+
+  ;; ---------- ADR-0019 fatia 3 (Eixo 7): publicar a pauta ----------
+  repo-publicacao/RepoPublicacaoPauta
+  (regra-da-pauta [this ente-id] (transacao this ente-id #(regra-pauta/buscar % ente-id)))
+  (definir-regra-da-pauta! [this ente-id m] (transacao this ente-id #(regra-pauta/definir! % ente-id m)))
+  (publicacao-da-pauta [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [p (pauta/buscar-pauta-por-sessao tx ente-id sessao-id)]
+          {:regra   (regra-pauta/buscar tx ente-id)
+           :itens   (if p (pauta/listar-itens tx ente-id (:id p)) [])
+           :versoes (if p (pauta/listar-versoes tx ente-id (:id p)) [])}))))
+  ;; O ATO. Tudo o que decide a versao (vazia? mudou desde a ultima? inicial ou republicacao?) roda DEPOIS da trava e
+  ;; sobre a leitura DESTA tx — nunca sobre a leitura que o controller fez para a tela: dois cliques em 'Publicar'
+  ;; geram UMA versao (o segundo ve a do primeiro e cai em :sem-alteracao), nunca duas iguais.
+  (publicar-pauta! [this ente-id {:keys [sessao-id justificativa created-by a-titulo avisos-de proposicoes-conferidas]}]
+    (transacao this ente-id
+      (fn [tx]
+        (pauta/travar-publicacao! tx ente-id sessao-id)
+        (let [p       (pauta/buscar-pauta-por-sessao tx ente-id sessao-id)
+              itens   (if p (pauta/listar-itens tx ente-id (:id p)) [])
+              versoes (if p (pauta/listar-versoes tx ente-id (:id p)) [])
+              ultima  (last (filter :publica versoes))
+              tipo    (logic/tipo-da-proxima-publicacao versoes)
+              recusa  (fn [motivo msg] (throw (ex-info msg {:tipo :conflito/publicacao-pauta :motivo motivo
+                                                            :sessao-id sessao-id})))]
+          (when (empty? itens)
+            (recusa :pauta-vazia "a pauta nao tem item: inclua as materias antes de publicar"))
+          (when (and ultima (not (logic/alterada-desde-a-publicacao? ultima itens)))
+            (recusa :sem-alteracao (str "a pauta nao mudou desde a publicacao v" (:numero-versao ultima))))
+          (when (and proposicoes-conferidas
+                     (not= (set proposicoes-conferidas) (into #{} (keep :proposicao-id) itens)))
+            (recusa :pauta-mudou "a pauta mudou enquanto voce publicava: recarregue e confira de novo"))
+          (when (and (= "republicacao" tipo) (or (nil? justificativa) (str/blank? justificativa)))
+            (recusa :justificativa-obrigatoria "republicar a pauta exige dizer o que mudou (justificativa)"))
+          (let [{:keys [id]} (pauta/publicar-versao! tx {:ente-id ente-id :pauta-sessao-id (:id p)
+                                                         :tipo-versao tipo :publica true
+                                                         :justificativa (when (= "republicacao" tipo) justificativa)
+                                                         :created-by created-by :a-titulo a-titulo
+                                                         :avisos (vec (when avisos-de (avisos-de itens)))})]
+            (pauta/buscar-versao tx ente-id id))))))
+  (pautas-publicas [this ente-id] (transacao this ente-id #(pauta/pautas-publicas % ente-id)))
+  (pauta-oficial [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [p (pauta/buscar-pauta-por-sessao tx ente-id sessao-id)
+              publicas (if p (filterv :publica (pauta/listar-versoes tx ente-id (:id p))) [])]
+          {:vigente (last publicas)
+           :versoes (vec (reverse (map #(dissoc % :snapshot :avisos) publicas)))})))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
@@ -762,3 +814,9 @@
   molde de `identidade-do-vereador-em-tx` (fn de topo sobre tx, injetada pelo host)."
   [tx ente-id m]
   (transcricao/registrar! tx (assoc m :ente-id ente-id)))
+
+(defn sessao-em-curso?
+  "ADR-0018 (Eixo 2): ha' sessao plenaria em curso nesta Casa agora? O host injeta isto no `admin_sistema` (a
+  suspensao aprovada espera o encerramento). Fn de topo, fora do protocolo (so' leitura, uma tx do tenant)."
+  [repo ente-id]
+  (tenancy/com-tenant* (:ds (:datasource repo)) ente-id #(sessao/alguma-em-curso? % ente-id)))

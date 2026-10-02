@@ -9,7 +9,7 @@
 
 import type { PautaItemOut, PautaOut, SessaoOut } from "./contrato";
 import { formatarTempo, relogioDaFala, segundosDecorridos, tempoDaFala, type SituacaoTempo } from "./cronometro";
-import { formatarHora } from "./formatar-data";
+import { formatarData, formatarHora } from "./formatar-data";
 import { iniciais } from "./iniciais";
 import { derivarPlacar } from "./placar-vista";
 import type { EstadoPlenario, PlacarVotacao, VotoNominal } from "./plenario-reducer";
@@ -369,4 +369,16 @@ export function vistaTribunaTv(estado: EstadoPlenario, agoraMs: number): VistaTr
     situacao: tempo.situacao,
     esgotado,
   };
+}
+
+// ---------------------------------------------------------------- a pauta OFICIAL (ADR-0019 fatia 3)
+
+/** O que a TV diz sobre a pauta oficial: a versão publicada (nº e quando), se a pauta mudou em plenário desde então, ou
+ * que ainda não foi publicada — honesto, nunca uma pauta viva apresentada como oficial. `null` sem pauta carregada. */
+export function pautaOficialTv(pauta: PautaOut | null): string | null {
+  if (!pauta) return null;
+  const p = pauta.publicacao;
+  if (!p) return "Pauta ainda não publicada";
+  const base = `Pauta oficial · v${p.versao} publicada em ${formatarData(p["publicada-em"])} às ${formatarHora(p["publicada-em"])}`;
+  return p["alterada-desde"] ? `${base} · alterada em plenário desde então` : base;
 }

@@ -31,6 +31,8 @@ from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 from oplenario_ia.inferencia.fabrica import criar_porta
 from oplenario_ia.nucleo import Nucleo
+from oplenario_ia.parecer import analise
+from oplenario_ia.parecer.analise import PedidoAnalise
 from oplenario_ia.requerimento import copiloto
 from oplenario_ia.requerimento.copiloto import PedidoCopiloto
 
@@ -339,6 +341,47 @@ def criar_app(
                 "modelo": j.modelo,
                 "contaminado": j.contaminado,
             },
+            "indisponivel": None
+            if r.indisponivel is None
+            else {"motivo": r.indisponivel.motivo, "mensagem": r.indisponivel.mensagem},
+        }
+
+    @app.post("/v1/entes/{ente_id}/pareceres/analises", dependencies=[Depends(servico)])
+    def analise_do_relator(ente_id: str, pedido: PedidoAnalise) -> dict[str, Any]:
+        """O copiloto do relator (ADR-0019, Eixo 5): o rascunho da análise de constitucionalidade e juridicidade do
+        parecer de comissão, citando a matéria e os dispositivos da Casa. Nada é guardado além do registro da execução
+        (B4); o core confere as citações contra a matéria e recalcula o texto limpo e os pontos a confirmar."""
+
+        def buscar(consulta: str) -> list[Resultado]:
+            assert arm is not None
+            vetor = emb.embed([consulta], "consulta")[0]
+            return arm.buscar(ente_id, consulta, vetor, emb.modelo, ["dispositivo"], 4, emb.distancia_maxima)
+
+        r = analise.rascunhar(nucleo_do_app(), pedido, ente_id, buscar if arm is not None else None)
+        a = r.analise
+        return {
+            "analise": None
+            if a is None
+            else {
+                "execucao-id": a.execucao_id,
+                "texto": a.texto,
+                "citacoes": [
+                    {
+                        "fonte-id": c.fonte_id,
+                        "rotulo": r.fontes.get(c.fonte_id),
+                        "trecho": c.trecho,
+                        "status": c.status,
+                    }
+                    for c in a.citacoes
+                ],
+                "paragrafos-sem-fonte": a.paragrafos_sem_fonte,
+                "pontos-a-confirmar": pontos_a_confirmar(a.texto),
+                "incerteza": a.incerteza.nivel,
+                "motivos-incerteza": list(a.incerteza.motivos),
+                "modelo": a.modelo,
+                "contaminado": a.contaminado,
+            },
+            "normas": r.normas,
             "indisponivel": None
             if r.indisponivel is None
             else {"motivo": r.indisponivel.motivo, "mensagem": r.indisponivel.mensagem},

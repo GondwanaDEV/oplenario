@@ -152,10 +152,17 @@ export interface EmApreciacaoOut {
   anunciadoEm: string;
 }
 
+export interface PublicacaoResumoOut {
+  versao: number;
+  publicadaEm: string;
+  alteradaDesde: boolean;
+}
+
 export interface PautaOut {
   sessaoId: string;
   itens: PautaItemOut[];
   emApreciacao?: EmApreciacaoOut;
+  publicacao?: PublicacaoResumoOut;
 }
 
 export interface ItemAnunciadoOut {
@@ -612,4 +619,115 @@ export interface TempoRegimentalOut {
 
 export interface TemposRegimentaisOut {
   itens: TempoRegimentalOut[];
+}
+
+export interface AvisoPautaOut {
+  tipo: "antecedencia-nao-cumprida" | "pedido-juridico-pendente" | "sem-parecer-comissao";
+  itemId?: string;
+  proposicaoId?: string;
+  proposicao?: ProposicaoResumoPautaOut;
+  pareceresEmAndamento?: number;
+  pedidosPendentes?: number;
+  minimoHoras?: number;
+  horasReais?: number;
+}
+
+export interface RegraPautaOut {
+  quemPublica: "mesa" | "presidente" | "primeiro_secretario" | "secretaria";
+  antecedenciaMinimaHoras: number | null;
+  configurada: boolean;
+  atualizadoEm?: string | null;
+}
+
+export interface AntecedenciaPautaOut {
+  minimoHoras: number;
+  horasReais: number;
+  cumprida: boolean;
+}
+
+export interface VersaoPautaOut {
+  versao: number;
+  tipoVersao: "execucao_final" | "publicacao_inicial" | "republicacao";
+  publicadaEm: string;
+  itens: number;
+  justificativa?: string | null;
+  aTitulo?: "mesa" | "presidente" | "primeiro_secretario" | "secretaria" | null;
+  publicadaPorNome?: string | null;
+}
+
+export interface PublicacaoPautaOut {
+  sessaoId: string;
+  regra: RegraPautaOut;
+  podePublicar: boolean;
+  motivo?: string | null;
+  republicacao: boolean;
+  itensNaPauta: number;
+  ultima?: VersaoPautaOut | null;
+  versoes: VersaoPautaOut[];
+  alteradaDesdeAPublicacao: boolean;
+  avisos: AvisoPautaOut[];
+  avisosIndisponiveis: boolean;
+  antecedencia?: AntecedenciaPautaOut | null;
+}
+
+export interface PautaPublicadaOut {
+  sessaoId: string;
+  versao: number;
+  tipoVersao: "execucao_final" | "publicacao_inicial" | "republicacao";
+  publicadaEm: string;
+  itens: number;
+  avisos: AvisoPautaOut[];
+  aviso?: "antecedencia-nao-cumprida";
+  antecedencia?: AntecedenciaPautaOut | null;
+}
+
+export interface PautaOficialResumoOut {
+  versao: number;
+  publicadaEm: string;
+  itens: number;
+}
+
+export interface SessaoPautaPublicaOut {
+  sessaoId: string;
+  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  numeroSequencial: number;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  agendadaPara?: string | null;
+  abertaEm?: string | null;
+  pautaOficial?: PautaOficialResumoOut | null;
+}
+
+export interface PautasPublicasOut {
+  sessoes: SessaoPautaPublicaOut[];
+}
+
+export interface ItemPautaOficialOut {
+  id: string;
+  fase: "expediente" | "explicacoes_pessoais" | "grande_expediente" | "ordem_do_dia" | "tribuna_livre_cidadao";
+  tipoItem: "comunicado" | "homenagem" | "leitura" | "proposicao";
+  proposicaoId?: string;
+  proposicao?: ProposicaoResumoPautaOut;
+  textoDescricao?: string;
+  ordem: number;
+}
+
+export interface VersaoPautaPublicaOut {
+  versao: number;
+  tipoVersao: "execucao_final" | "publicacao_inicial" | "republicacao";
+  publicadaEm: string;
+  justificativa?: string | null;
+}
+
+export interface PautaOficialVigenteOut {
+  versao: number;
+  tipoVersao: "execucao_final" | "publicacao_inicial" | "republicacao";
+  publicadaEm: string;
+  justificativa?: string | null;
+  itens: ItemPautaOficialOut[];
+}
+
+export interface PautaOficialOut {
+  sessao: SessaoPautaPublicaOut;
+  vigente?: PautaOficialVigenteOut | null;
+  versoes: VersaoPautaPublicaOut[];
 }

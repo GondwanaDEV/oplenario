@@ -14,6 +14,7 @@
             [oplenario.sessoes.adapters.in.pauta :as adapters-in-pauta]
             [oplenario.sessoes.adapters.in.assiduidade :as adapters-in-assiduidade]
             [oplenario.sessoes.adapters.in.presenca :as adapters-in-presenca]
+            [oplenario.sessoes.adapters.in.publicacao-pauta :as adapters-in-pub]
             [oplenario.sessoes.adapters.in.sessao :as adapters-in]
             [oplenario.sessoes.adapters.in.tribuna :as adapters-in-tribuna]
             [oplenario.sessoes.adapters.out.assiduidade :as adapters-out-assiduidade]
@@ -24,6 +25,7 @@
             [oplenario.sessoes.adapters.out.livro-atas :as adapters-out-livro]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.presenca :as adapters-out-presenca]
+            [oplenario.sessoes.adapters.out.publicacao-pauta :as adapters-out-pub]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
             [oplenario.sessoes.controllers :as controllers])
@@ -1108,6 +1110,103 @@
                 wire {:de (:de periodo) :ate (:ate periodo) :tipos (:tipos periodo) :recorte recorte})
                {:de (:de periodo) :ate (:ate periodo) :recorte recorte})))))
 
+
+;; ---------- ADR-0019 fatia 3 (Eixo 7): PUBLICAR A PAUTA ----------
+
+(def ^:private rotulo-titulo
+  {"secretaria" "pela secretaria" "presidente" "pelo Presidente" "primeiro_secretario" "pelo 1º Secretário"
+   "mesa" "pela Mesa"})
+
+(defn- rotulo-da-publicacao
+  "O resumo do efeito na trilha (ADR-0017 1-C): qual versao, a que titulo e quantos avisos acompanharam o ato."
+  [v]
+  (let [n (count (:avisos v))]
+    (str "publicou a pauta v" (:numero-versao v)
+         (when (= "republicacao" (:tipo-versao v)) " (republicação)")
+         " " (get rotulo-titulo (:publicada-a-titulo v) "")
+         (when (pos? n) (str " com " n " aviso(s)")))))
+
+(defn- publicacao-da-pauta-handler
+  "GET /sessoes/:id/pauta/publicacao (secretaria ou vereador; a regra fina no controller): a tela de publicar. 404 =
+  sessao inexistente. `agora` e' o relogio do servidor (a antecedencia e' medida aqui, nunca no cliente)."
+  [deps resumir-proposicoes relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [r (controllers/publicacao-da-pauta deps ator id (tempo/agora relogio))]
+        (http/json-resposta 200 (adapters-out-pub/publicacao->wire
+                                 r (controllers/resumos-das-materias resumir-proposicoes (:ente-id ator)
+                                                                     (keep :proposicao-id (:avisos r)))))
+        (http/json-resposta 404 {:erro "sessao nao encontrada"})))))
+
+(defn- publicar-pauta-handler
+  "POST /sessoes/:id/pauta/publicacao: o ATO de publicar. 201 com a versao e os avisos (aviso nunca bloqueia; fora da
+  antecedencia volta `aviso: antecedencia-nao-cumprida`). 403 = a regra da Casa diz que outra pessoa publica; 404 =
+  sessao inexistente; 409 = sessao fechada, ou o Repo recusou (`motivo`: pauta-vazia | sem-alteracao | pauta-mudou |
+  justificativa-obrigatoria). A trilha recebe o resumo do efeito."
+  [deps resumir-proposicoes relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          m    (adapters-in-pub/publicar->dominio (get-in req [:path-params :id]) (:json-params req))]
+      (try
+        (if-let [r (controllers/publicar-pauta! deps ator m (tempo/agora relogio))]
+          (let [v (:versao r)]
+            (assoc (http/json-resposta 201 (adapters-out-pub/publicada->wire
+                                            r (controllers/resumos-das-materias resumir-proposicoes (:ente-id ator)
+                                                                                (keep :proposicao-id (:avisos v)))))
+                   :auditoria {:rotulo (rotulo-da-publicacao v) :recurso-tipo "sessao"
+                               :recurso-id (str (:sessao-id m))
+                               :campos (cond-> [:pauta] (:justificativa m) (conj :justificativa))}))
+          (http/json-resposta 404 {:erro "sessao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (case (:tipo (ex-data e))
+            :conflito/publicacao-pauta (http/json-resposta 409 {:erro (ex-message e)
+                                                                :motivo (name (:motivo (ex-data e)))})
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
+(defn- regra-da-pauta-handler
+  "GET /regra-da-pauta: a regra da pauta da Casa do ator (a gravada, ou o padrao com `configurada` false)."
+  [repo-sessoes]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-pub/regra->wire (controllers/regra-da-pauta repo-sessoes (:ator req))))))
+
+(defn- definir-regra-da-pauta-handler
+  "PUT /regra-da-pauta (so' `admin_ente`): troca a regra inteira (idempotente). 400 = corpo invalido."
+  [repo-sessoes]
+  (fn [req]
+    (let [m (adapters-in-pub/regra->dominio (:json-params req))
+          r (controllers/definir-regra-da-pauta! repo-sessoes (:ator req) m)]
+      (assoc (http/json-resposta 200 (adapters-out-pub/regra->wire r))
+             :auditoria {:rotulo (str "regra da pauta: publica " (:quem-publica r)
+                                      (if-let [h (:antecedencia-minima-horas r)]
+                                        (str ", antecedência mínima de " h " h")
+                                        ", sem antecedência mínima"))
+                         :campos [:quem-publica :antecedencia-minima-horas]}))))
+
+(defn- pautas-publicas-handler
+  "GET /portal/casa/:ente/pautas (PUBLICA): as sessoes publicas com a pauta oficial (ou 'ainda nao publicada').
+  :ente malformado -> 400; Casa inexistente -> 404 (a voz da rota-pai do portal)."
+  [repo-sessoes resolver-ente-publico casa-existe?]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if (casa-existe? ente-id)
+        (http/json-resposta 200 (adapters-out-pub/pautas-publicas->wire (controllers/pautas-publicas repo-sessoes ente-id)))
+        (http/json-resposta 404 {:erro "ente nao encontrado"})))))
+
+(defn- pauta-oficial-publica-handler
+  "GET /portal/casa/:ente/pautas/:sessao-id (PUBLICA): a pauta oficial de uma sessao publica. 404 unico para
+  inexistente e secreta; sessao publica sem publicacao -> 200 sem `vigente`."
+  [repo-sessoes resolver-ente-publico casa-existe? resumir-proposicoes]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
+          id (adapters-in/id-param->uuid (get-in req [:path-params :sessao-id]))]
+      (if-let [r (when (casa-existe? ente-id) (controllers/pauta-oficial-publica repo-sessoes ente-id id))]
+        (http/json-resposta 200 (adapters-out-pub/pauta-oficial->wire
+                                 r (controllers/resumos-das-materias resumir-proposicoes ente-id
+                                                                     (keep :proposicao-id (:snapshot (:vigente r))))))
+        (http/json-resposta 404 {:erro "pauta nao encontrada"})))))
+
 (defn rotas
   "Fragmento de rotas do modulo (table syntax Pedestal). Recebe o interceptor `auth` (compartilhado), o
   `repo-sessoes` (Repo-Component) + o `objeto-store` (p/ a ingestao de gravacao e p/ a folha) +
@@ -1124,7 +1223,11 @@
   borda (leitura operacional da Mesa, nao um read-model publico)."
   [{:keys [auth repo-sessoes objeto-store resolver-vereador relogio roster-da-casa dados-da-casa
            serializador-folha renderizador-pdf roster-da-casa-em-datas resumir-proposicoes nome-na-casa
-           ler-transcricao ler-rascunho-ata resolver-ente-publico casa-existe?]}]
+           ler-transcricao ler-rascunho-ata resolver-ente-publico casa-existe?
+           ;; ADR-0019 fatia 3: os seams de publicar a pauta (host). OPCIONAIS de proposito: sem
+           ;; `situacao-de-parecer` a tela diz que os avisos por materia nao foram conferidos (aviso nunca bloqueia);
+           ;; sem `cargo-na-mesa` a regra de cargo (presidente/1o secretario/Mesa) nao autoriza ninguem (fail-closed).
+           situacao-de-parecer cargo-na-mesa]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1159,7 +1262,10 @@
     (throw (ex-info "sessoes/rotas: seam :casa-existe? ausente ou nao-funcao"
                     {:tipo :servidor/erro
                      :classe (some-> casa-existe? class .getName)})))
-  (let [papel-vereador (it/exige-papel "vereador")]
+  (let [papel-vereador (it/exige-papel "vereador")
+        deps-publicacao {:repo-sessoes repo-sessoes :situacao-de-parecer situacao-de-parecer
+                         :cargo-na-mesa cargo-na-mesa :nome-na-casa nome-na-casa}
+        relogio-pub (or relogio (tempo/relogio-sistema))]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]
     ;; MESMO path do POST acima, metodo diferente — Pedestal despacha por (path, metodo); precedente
@@ -1305,6 +1411,23 @@
     ["/sessoes/:id/pauta/itens/:item-id/anuncio" :post
      [auth (it/exige-papel "secretario") (anunciar-item-handler repo-sessoes relogio)]
      :route-name :sessoes/anunciar-item-pauta]
+    ;; ADR-0019 fatia 3 — PUBLICAR A PAUTA. `publicacao` e' literal IRMAO de `itens` sob `/pauta` (sem filho `:param`
+    ;; no mesmo nivel: sem sombreamento). Gate grosso: secretaria OU vereador (o Presidente, o 1o Secretario e a Mesa
+    ;; sao vereadores); QUEM publica e' a regra da Casa, decidida no controller.
+    ["/sessoes/:id/pauta/publicacao" :get
+     [auth (it/exige-algum-papel #{"secretario" "vereador"})
+      (publicacao-da-pauta-handler deps-publicacao resumir-proposicoes relogio-pub)]
+     :route-name :sessoes/publicacao-da-pauta]
+    ["/sessoes/:id/pauta/publicacao" :post
+     [auth (it/exige-algum-papel #{"secretario" "vereador"}) it/corpo-json
+      (publicar-pauta-handler deps-publicacao resumir-proposicoes relogio-pub)]
+     :route-name :sessoes/publicar-pauta]
+    ;; a regra da pauta da Casa: no TOPO pela mesma razao de `/tempos-regimentais` (o `:id` de `/sessoes/:id`).
+    ["/regra-da-pauta" :get [auth (it/exige-algum-papel #{"admin_ente" "secretario" "vereador"})
+                             (regra-da-pauta-handler repo-sessoes)]
+     :route-name :sessoes/regra-da-pauta]
+    ["/regra-da-pauta" :put [auth (it/exige-papel "admin_ente") it/corpo-json (definir-regra-da-pauta-handler repo-sessoes)]
+     :route-name :sessoes/definir-regra-da-pauta]
     ["/sessoes/:id/gravacao" :get [auth (listar-gravacoes-handler repo-sessoes)] :route-name :sessoes/listar-gravacoes]
     ;; Faixa A / A.3 — a transcricao (ADR-0008). Leitura operacional da secretaria; o texto vem da IA pelo seam
     ;; `ler-transcricao` (host). Sem o seam (testes de outras verticais), a leitura do texto responde 503 (R-IA-1).
@@ -1364,7 +1487,13 @@
     ["/portal/casa/:ente/atas" :get [(livro-atas-publico-handler repo-sessoes resolver-ente-publico casa-existe?)]
      :route-name :sessoes/livro-atas-publico]
     ["/portal/casa/:ente/atas/:sessao-id" :get [(ata-do-livro-publica-handler repo-sessoes resolver-ente-publico casa-existe?)]
-     :route-name :sessoes/ata-do-livro-publica]}))
+     :route-name :sessoes/ata-do-livro-publica]
+    ;; ADR-0019 fatia 3 — a PAUTA OFICIAL no portal (anonima, so' sessao publica e nao secreta).
+    ["/portal/casa/:ente/pautas" :get [(pautas-publicas-handler repo-sessoes resolver-ente-publico casa-existe?)]
+     :route-name :sessoes/pautas-publicas]
+    ["/portal/casa/:ente/pautas/:sessao-id" :get
+     [(pauta-oficial-publica-handler repo-sessoes resolver-ente-publico casa-existe? resumir-proposicoes)]
+     :route-name :sessoes/pauta-oficial-publica]}))
 
 (defn presenca-resumo-wire
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO

@@ -12,6 +12,7 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.sessoes.components.renderizador-pdf :as renderizador-pdf]
             [oplenario.sessoes.components.repositorio :as repo]
+            [oplenario.sessoes.components.repositorio-publicacao :as repo-pub]
             [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.gerador-folha :as gerador-folha]
             [oplenario.sessoes.logic :as logic]
@@ -409,7 +410,17 @@
                         nil)))]
       (cond-> {:sessao-id id :itens (vec itens)}
         (and anuncio (some #(= (:pauta-item-id anuncio) (:id %)) itens))
-        (assoc :em-apreciacao anuncio)))))
+        (assoc :em-apreciacao anuncio)
+        ;; ADR-0019 fatia 3: a pauta OFICIAL (a ultima versao publicada) e se a viva mudou desde entao. Mesma postura
+        ;; do anuncio: enriquecimento — a pauta viva nunca cai porque a leitura da publicacao falhou (nem num deploy
+        ;; em que a API nova chega antes da mig 20260930000120).
+        pauta
+        (as-> m (if-let [v (try (repo/versao-publica-corrente repo-sessoes ente-id (:id pauta))
+                                (catch Exception e
+                                  (log/warn e "publicacao da pauta indisponivel; a pauta segue sem ela")
+                                  nil))]
+                  (assoc m :publicacao (assoc v :alterada-desde (logic/alterada-desde-a-publicacao? v itens)))
+                  m))))))
 
 (defn resumos-da-pauta
   "Modo TV (docs/22): o resumo (tipo/ano/sequencial/ementa) das proposicoes de uma pauta JA' autorizada e lida
@@ -1517,3 +1528,143 @@
   (authz/exige-papel! ator "secretario")
   (logic/validar-tempos-regimentais! itens)
   (repo/substituir-tempos-regimentais! repo-sessoes (:ente-id ator) itens (:identidade-id ator)))
+
+;; ========================= ADR-0019 fatia 3 (Eixo 7): PUBLICAR A PAUTA =========================
+;; "Publicar a pauta" e' um ATO UNICO sobre a pauta inteira: congela a versao, entra na trilha (o interceptor global,
+;; com o resumo que o handler devolve) e vira a pauta OFICIAL do portal e da TV. `deps` = {:repo-sessoes
+;; :situacao-de-parecer :cargo-na-mesa :nome-na-casa} — os tres ultimos sao seams do host (§22.10: sessoes nunca
+;; importa legislativo, cadastros nem identidade).
+;;
+;; QUEM PUBLICA: a regra da Casa (`sessoes.regra_pauta`, padrao 'secretaria'). A regra de cargo (presidente, 1o
+;; secretario, Mesa) le o cargo do ATOR na Mesa VIGENTE HOJE pelo seam `cargo-na-mesa` (identidade -> vereador ->
+;; `cadastros.comissao_cargo` da Mesa) — o mesmo dado que a chamada e o telao mostram, nunca um campo do corpo. O
+;; seam so' e' chamado quando a regra depende de cargo; falhando, quem depende dele nao publica agora (fail-closed).
+
+(defn- cargo-do-ator
+  [cargo-na-mesa ator regra]
+  (when (and cargo-na-mesa (not= "secretaria" (:quem-publica regra)) (:identidade-id ator))
+    (try (cargo-na-mesa (:ente-id ator) (:identidade-id ator))
+         (catch Exception e
+           (log/warn e "cargo na Mesa indisponivel; quem publica pelo cargo nao publica agora")
+           nil))))
+
+(defn- situacao-das-materias
+  "{:situacao {pid situacao}} ou {:indisponivel true} — ENRIQUECIMENTO: o aviso nunca bloqueia, entao o legislativo fora
+  do ar nao impede publicar; a tela diz que os avisos nao foram conferidos."
+  [situacao-de-parecer ente-id itens]
+  (let [ids (into #{} (keep :proposicao-id) itens)]
+    (cond (empty? ids)               {:situacao {}}
+          (nil? situacao-de-parecer) {:indisponivel true}
+          :else (try {:situacao (situacao-de-parecer ente-id ids)}
+                     (catch Exception e
+                       (log/warn e "situacao de parecer das materias indisponivel; a pauta segue sem os avisos")
+                       {:indisponivel true})))))
+
+(defn- avisos-da-publicacao [itens situacao antecedencia]
+  (let [ant (logic/aviso-de-antecedencia antecedencia)]
+    (cond-> (logic/avisos-das-materias itens (or situacao {}))
+      ant (conj ant))))
+
+(defn- com-quem-publicou
+  "Cada versao com o nome de quem a publicou (so' de quem tem vinculo nesta Casa, pelo seam `nome-na-casa`)."
+  [nome-na-casa ente-id versoes]
+  (if nome-na-casa
+    (let [nomes (nomes-de-quem-congelou nome-na-casa ente-id (map #(hash-map :gerada-por (:created-by %)) versoes))]
+      (mapv #(assoc % :publicada-por-nome (get nomes (:created-by %))) versoes))
+    (vec versoes)))
+
+(def ^:private motivo-sessao-fechada "A sessão já foi encerrada: a pauta não se publica mais.")
+
+(defn publicacao-da-pauta
+  "A tela de publicar a pauta (GET /sessoes/:id/pauta/publicacao): a regra da Casa, se o ATOR pode publicar (e por que
+  nao), a ultima versao e o historico (mais recente primeiro), se a pauta viva mudou desde a publicacao e os avisos
+  calculados AGORA (por materia e de antecedencia). `agora` = o relogio lido na borda. nil = sessao inexistente (404)."
+  [{:keys [repo-sessoes situacao-de-parecer cargo-na-mesa nome-na-casa]} ator sessao-id agora]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (let [ente     (:ente-id ator)
+          {:keys [regra itens versoes]} (repo-pub/publicacao-da-pauta repo-sessoes ente sessao-id)
+          regra    (logic/regra-da-pauta regra)
+          decisao  (logic/pode-publicar-pauta regra (:papeis ator) (cargo-do-ator cargo-na-mesa ator regra))
+          fechada? (contains? logic/estados-sessao-fechada (:estado s))
+          publicas (com-quem-publicou nome-na-casa ente (filterv :publica versoes))
+          ultima   (last publicas)
+          {:keys [situacao indisponivel]} (situacao-das-materias situacao-de-parecer ente itens)
+          ant      (logic/antecedencia regra s agora)]
+      {:sessao-id sessao-id
+       :regra regra
+       :pode-publicar (and (:pode decisao) (not fechada?))
+       :motivo (cond (not (:pode decisao)) (:motivo decisao)
+                     fechada? motivo-sessao-fechada)
+       :republicacao (= "republicacao" (logic/tipo-da-proxima-publicacao versoes))
+       :itens-na-pauta (count itens)
+       :ultima ultima
+       :versoes (vec (reverse publicas))
+       :alterada (logic/alterada-desde-a-publicacao? ultima itens)
+       :avisos (avisos-da-publicacao itens situacao ant)
+       :avisos-indisponiveis (boolean indisponivel)
+       :antecedencia ant})))
+
+(defn publicar-pauta!
+  "O ATO de publicar a pauta (POST /sessoes/:id/pauta/publicacao). Carrega a sessao (nil -> 404), mesma Casa (403),
+  sessao fechada recusa (409); a REGRA DA CASA decide quem publica (quem nao pode: 403 — a tela ja' mostrou o motivo).
+  Os avisos (materia sem parecer da comissao, pedido juridico pendente, antecedencia nao cumprida) sao calculados e
+  GRAVADOS na versao, e NUNCA bloqueiam. O Repo decide numa tx travada: vazia, sem mudanca, mudou no meio, falta de
+  justificativa na republicacao -> `:conflito/publicacao-pauta` (409). Devolve {:sessao-id :versao :antecedencia}."
+  [{:keys [repo-sessoes situacao-de-parecer cargo-na-mesa]} ator {:keys [sessao-id justificativa]} agora]
+  (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+    (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
+    (exigir-sessao-aberta! s)
+    (let [ente    (:ente-id ator)
+          regra   (logic/regra-da-pauta (repo-pub/regra-da-pauta repo-sessoes ente))
+          decisao (logic/pode-publicar-pauta regra (:papeis ator) (cargo-do-ator cargo-na-mesa ator regra))]
+      (when-not (:pode decisao)
+        (authz/negar! :regra-da-pauta {:quem-publica (:quem-publica regra) :ator (:identidade-id ator)}))
+      (let [{:keys [itens]} (repo-pub/publicacao-da-pauta repo-sessoes ente sessao-id)
+            {:keys [situacao]} (situacao-das-materias situacao-de-parecer ente itens)
+            ant (logic/antecedencia regra s agora)
+            v   (repo-pub/publicar-pauta! repo-sessoes ente
+                  {:sessao-id sessao-id :justificativa justificativa :created-by (:identidade-id ator)
+                   :a-titulo (:a-titulo decisao)
+                   :proposicoes-conferidas (into #{} (keep :proposicao-id) itens)
+                   :avisos-de (fn [itens-da-tx] (avisos-da-publicacao itens-da-tx situacao ant))})]
+        {:sessao-id sessao-id :versao v :antecedencia ant}))))
+
+(defn resumos-das-materias
+  "O resumo (tipo/ano/sequencial/ementa) das materias citadas por avisos ou pelo snapshot, pelo seam `resumir-
+  proposicoes` — os ids podem vir como texto (o JSONB da versao). Enriquecimento: falhou, sai sem resumo."
+  [resumir-proposicoes ente-id ids]
+  (let [ids (into #{} (keep #(if (uuid? %) % (some-> % str parse-uuid))) ids)]
+    (if (or (empty? ids) (nil? resumir-proposicoes))
+      {}
+      (try (resumir-proposicoes ente-id ids)
+           (catch Exception e
+             (log/warn e "resumo das materias indisponivel; a pauta segue sem ele")
+             {})))))
+
+(defn regra-da-pauta
+  "A regra efetiva da pauta da Casa do ator (a gravada ou o padrao)."
+  [repo-sessoes ator]
+  (logic/regra-da-pauta (repo-pub/regra-da-pauta repo-sessoes (:ente-id ator))))
+
+(defn definir-regra-da-pauta!
+  "Grava a regra da pauta da Casa. So' o `admin_ente` (a borda ja' exige; aqui a segunda camada). Quem configurou vem do
+  ator."
+  [repo-sessoes ator m]
+  (authz/exige-papel! ator "admin_ente")
+  (logic/regra-da-pauta
+   (repo-pub/definir-regra-da-pauta! repo-sessoes (:ente-id ator) (assoc m :atualizada-por (:identidade-id ator)))))
+
+(defn pautas-publicas
+  "O PORTAL (sem ator): as sessoes publicas com a situacao da pauta oficial. O `ente-id` vem do path; a RLS isola."
+  [repo-sessoes ente-id]
+  (repo-pub/pautas-publicas repo-sessoes ente-id))
+
+(defn pauta-oficial-publica
+  "O PORTAL: a pauta oficial de uma sessao. nil (404) para sessao inexistente, secreta ou sem transmissao publica — o
+  mesmo 404 para os tres (`logic/ata-no-portal?`, a mesma regra do livro de atas). Sessao publica sem publicacao ->
+  `:vigente` nil ('pauta ainda nao publicada')."
+  [repo-sessoes ente-id sessao-id]
+  (when-let [s (repo/buscar-sessao repo-sessoes ente-id sessao-id)]
+    (when (logic/ata-no-portal? s)
+      (assoc (repo-pub/pauta-oficial repo-sessoes ente-id sessao-id) :sessao s))))

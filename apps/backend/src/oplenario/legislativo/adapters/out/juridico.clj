@@ -19,12 +19,14 @@
 (defn- assinatura [p]
   (when (= "assinado" (:estado p))
     {:nome (:assinatura-nome p) :oab (:assinatura-oab p) :qualificacao (:assinatura-qualificacao p)
-     :em (->str (:assinado-em p))}))
+     :em (->str (:assinado-em p))
+     :algoritmo (:assinatura-algoritmo p) :sha256 (:conteudo-sha256 p)}))
 
 (defn- parecer [p com-texto?]
   (cond-> {:id (->str (:id p)) :numero (:numero p) :ano (:ano p) :estado (:estado p)
            :conclusao (:conclusao p) :assinatura (assinatura p)
-           :substitui-id (->str (:substitui-id p)) :substituido (boolean (:substituido p))}
+           :substitui-id (->str (:substitui-id p)) :substituido (boolean (:substituido p))
+           :origem-rascunho (:origem-rascunho p)}
     ;; o texto so' sai quando o dominio o trouxe: o rascunho de outrem chega SEM ele (controller/ocultar-rascunho)
     (and com-texto? (contains? p :relatorio)) (assoc :relatorio (:relatorio p) :fundamentacao (:fundamentacao p))))
 
@@ -67,8 +69,17 @@
                                        :assinatura (assinatura p)})
                               pareceres)}))
 
+(defn parametros->wire [{:keys [publicar-ao-assinar]}]
+  (validado wire/ParametrosParecerJuridicoOut {:publicar-ao-assinar (boolean publicar-ao-assinar)}))
+
 (defn comissoes->wire [cs]
   (validado wire/ComissoesOut {:comissoes (mapv (fn [c] {:id (->str (:id c)) :nome (:nome c)}) cs)}))
+
+(defn vereadores->wire
+  "Vereadores com mandato vigente: id, nome de exibicao e partido (nada mais do cadastro sai)."
+  [vs]
+  (validado wire/VereadoresDaCasaOut
+            {:vereadores (mapv (fn [v] {:id (->str (:id v)) :nome (:nome v) :partido (:partido v)}) vs)}))
 
 (defn pareceres-abertos->wire [ps]
   (validado wire/PareceresAbertosOut

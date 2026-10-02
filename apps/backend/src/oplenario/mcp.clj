@@ -107,7 +107,8 @@
             (http/json-resposta 200 (rpc-erro (get msg "id") -32603 "erro interno"))))))))
 
 (defn rotas
-  "POST /integracao/ia/v1/mcp — so' com a credencial delegada (ADR-0010)."
-  [{:keys [repo-identidade deps]}]
-  #{["/integracao/ia/v1/mcp" :post [(it/autenticacao-agente repo-identidade) it/corpo-json (mcp-handler deps)]
+  "POST /integracao/ia/v1/mcp — so' com a credencial delegada (ADR-0010). `restricao` (ADR-0018): a Casa suspensa
+  nao atende o agente (POST fora da allowlist -> 423; a IA dela ja' esta' pausada pela cota zero)."
+  [{:keys [repo-identidade deps restricao]}]
+  #{["/integracao/ia/v1/mcp" :post [(it/autenticacao-agente repo-identidade restricao) it/corpo-json (mcp-handler deps)]
      :route-name :integracao-ia/mcp]})

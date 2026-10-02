@@ -11,7 +11,10 @@
   relogio LGPD (CONTADOR SEPARADO do e-SIC). So o protocolo + o instante do recibo. Sem PII, sem id interno."
   [:map {:closed true}
    [:protocolo :string]
-   [:recibo-em :string]])
+   [:recibo-em :string]
+   ;; ADR-0018 (Eixo 2): a Casa esta' com o sistema restrito — o pedido foi recebido e o prazo corre; o recibo diz
+   ;; desde quando (so' a data; o motivo nao e' publico). Ausente numa Casa ativa.
+   [:acesso-restrito-desde {:optional true} :string]])
 
 (def RespostaTitularReciboOut
   "Recibo da resposta a uma solicitacao (resposta 200 de POST /lgpd/solicitacoes/:id/resposta): so o instante

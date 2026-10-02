@@ -2,9 +2,12 @@
   "As entradas do CATALOGO DE ACOES que sao de sessoes (ADR-0009). A primeira: a pauta de uma sessao — por padrao a
   da sessao em curso ou da proxima, que e' como uma pessoa pergunta ('o que vai ser votado na proxima sessao?').
   So' sessao de transmissao PUBLICA: sessao secreta nunca vai a IA (§22.11, B1), e o agente e' a IA."
-  (:require [oplenario.kernel.catalogo :as catalogo]
+  (:require [clojure.string :as str]
+            [oplenario.kernel.catalogo :as catalogo]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.sessoes.adapters.out.livro-atas :as adapters-out-livro]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
+            [oplenario.sessoes.adapters.out.publicacao-pauta :as adapters-out-pub]
             [oplenario.sessoes.components.repositorio :as repo]
             [oplenario.sessoes.controllers :as controllers]
             [oplenario.sessoes.wire.out :as wire]))
@@ -25,6 +28,33 @@
 
 (defn- sessao-publica? [repo-sessoes ator sid]
   (publica? (repo/buscar-sessao repo-sessoes (:ente-id ator) sid)))
+
+(defn- deps-publicacao [deps] (select-keys deps [:repo-sessoes :situacao-de-parecer :cargo-na-mesa :nome-na-casa]))
+
+(defn- agora [{:keys [relogio]}] (tempo/agora (or relogio (tempo/relogio-sistema))))
+
+(def ^:private rotulo-tipo-sessao
+  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"})
+
+(def ^:private rotulo-aviso
+  {"sem-parecer-comissao" "sem parecer da comissão"
+   "pedido-juridico-pendente" "com pedido de parecer jurídico pendente"})
+
+(defn- texto-da-proposta
+  "O que a pessoa le antes de confirmar a publicacao proposta pelo agente: o tamanho da pauta, se e' republicacao (e a
+  justificativa), e os AVISOS — os mesmos da tela, para ninguem publicar sem ve-los."
+  [{:keys [itens-na-pauta republicacao ultima avisos antecedencia avisos-indisponiveis]} justificativa]
+  (let [materias (filter :proposicao-id avisos)
+        linhas (cond-> [(str "A pauta tem " itens-na-pauta (if (= 1 itens-na-pauta) " item." " itens."))]
+                 republicacao (conj (str "Será uma republicação (a versão publicada é a v" (:numero-versao ultima)
+                                         "). O que mudou: " (or (not-empty justificativa) "— (informe na tela)") "."))
+                 (seq materias) (conj (str (count materias) " aviso(s) sobre matérias: "
+                                           (str/join "; " (map #(get rotulo-aviso (:tipo %) (:tipo %)) materias)) "."))
+                 avisos-indisponiveis (conj "Os avisos sobre as matérias não puderam ser conferidos agora.")
+                 (and antecedencia (not (:cumprida antecedencia)))
+                 (conj (str "Fora da antecedência mínima da Casa (" (:minimo-horas antecedencia) " h; faltam "
+                            (:horas-reais antecedencia) " h para o início).")))]
+    (str/join "\n" (conj linhas "Os avisos não impedem a publicação."))))
 
 (def entradas
   [(catalogo/entrada
@@ -66,4 +96,42 @@
                    (when-let [sid (or sessao-id
                                       (:sessao-id (first (controllers/livro-de-atas-publico repo-sessoes ente))))]
                      (some-> (controllers/ata-do-livro-publica repo-sessoes ente sid nil)
-                             (adapters-out-livro/ata-do-livro->wire true)))))})])
+                             (adapters-out-livro/ata-do-livro->wire true)))))})
+   ;; ADR-0019 fatia 3 (Eixo 7): publicar a pauta e' ATO (congela a pauta oficial) — o agente PROPOE, a pessoa confere os
+   ;; avisos e confirma (ADR-0012). Nao e' ato pessoal (voto, presenca, conducao ao vivo): e' ato de expediente.
+   (catalogo/entrada
+    {:nome "publicar_pauta"
+     :descricao (str "Publica a pauta de uma sessao plenaria: congela a pauta atual como a pauta OFICIAL, a que o portal "
+                     "do cidadao e a TV do plenario mostram. Voce NAO publica: isto cria uma PROPOSTA, e a pessoa confere "
+                     "os avisos (materia sem parecer da comissao, pedido de parecer juridico pendente, antecedencia "
+                     "minima da Casa) e confirma na tela. Republicar exige `justificativa` (o que mudou desde a versao "
+                     "publicada). Quem pode publicar e' regra da Casa (secretaria, Presidente, 1o Secretario ou Mesa).")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario" "vereador"}
+     :entrada [:map {:closed true}
+               [:sessao-id {:description "A sessao cuja pauta sera' publicada."} :uuid]
+               [:justificativa {:optional true :description "Na republicacao: o que mudou desde a versao publicada."}
+                [:maybe [:string {:min 1 :max 2000}]]]]
+     :saida wire/PautaPublicadaOut
+     :rotas #{:sessoes/publicar-pauta}
+     :apresentar (fn [{:keys [repo-sessoes] :as deps} ator {:keys [sessao-id justificativa]}]
+                   (when-let [r (controllers/publicacao-da-pauta (deps-publicacao deps) ator sessao-id (agora deps))]
+                     (let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
+                       {:titulo (str "Publicar a pauta da sessão " (get rotulo-tipo-sessao (:tipo-sessao s) (:tipo-sessao s))
+                                     " nº " (:numero-sequencial s))
+                        :texto (texto-da-proposta r justificativa)})))
+     :executar (fn [deps ator {:keys [sessao-id justificativa]}]
+                 (try
+                   (when-let [r (controllers/publicar-pauta! (deps-publicacao deps) ator
+                                                             {:sessao-id sessao-id :justificativa justificativa}
+                                                             (agora deps))]
+                     (adapters-out-pub/publicada->wire
+                      r (controllers/resumos-das-materias (:resumir-proposicoes deps) (:ente-id ator)
+                                                          (keep :proposicao-id (:avisos (:versao r))))))
+                   (catch clojure.lang.ExceptionInfo e
+                     ;; a recusa do ato (pauta vazia, sem mudanca, falta de justificativa, sessao fechada) chega a quem
+                     ;; confirmou como conflito legivel da proposta, nao como erro interno
+                     (if (#{:conflito/publicacao-pauta :conflito/sessao-fechada} (:tipo (ex-data e)))
+                       (throw (ex-info (ex-message e) {:tipo :proposta/ato-recusado} e))
+                       (throw e)))))})])

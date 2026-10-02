@@ -34,6 +34,8 @@
     (buscar-pauta-por-sessao [_ _ente-id _sessao-id] {:id pauta-id})
     (buscar-item [_ _ente-id id] (when item (assoc item :id id)))
     (listar-itens [_ _ente-id _pauta-sessao-id] itens)
+    ;; ADR-0019 fatia 3: a leitura da pauta pergunta pela pauta oficial (nenhuma publicada aqui).
+    (versao-publica-corrente [_ _ente-id _pauta-sessao-id] nil)
     (item-em-apreciacao [_ _ente-id _sessao-id]
       (if (instance? Exception anuncio) (throw anuncio) anuncio))
     (anunciar-item! [_ ente-id m]
