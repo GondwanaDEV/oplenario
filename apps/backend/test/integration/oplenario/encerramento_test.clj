@@ -42,6 +42,14 @@
 
 (defn- sql! [& args] (jdbc/execute! *dono* (vec args) opts))
 
+(defn- sql-cenario!
+  "Monta um cenario que o banco recusaria pela via normal (ex.: desfazer uma confirmacao de recebimento, que um trigger
+  impede): como dono, com os triggers de usuario desligados SO' nesta transacao."
+  [& args]
+  (jdbc/with-transaction [tx *dono*]
+    (jdbc/execute! tx ["SET LOCAL session_replication_role = replica"])
+    (jdbc/execute! tx (vec args) opts)))
+
 (defn- criar-filhas-de-teste!
   "Uma FILHA sem `ente_id` (FK para remessa_gerada, que tem PK de uma coluna) e uma NETA — o inventario tem de acha-las
   pela FK. Com grants ao app, como uma tabela de modulo teria."
@@ -65,8 +73,12 @@
   (let [{:keys [entes operadores]} @criados
         uuids #(into-array java.util.UUID %)]
     (when (seq entes)
-      (doseq [t ["admin_sistema.pedido_restricao" "admin_sistema.exportacao_casa" "admin_sistema.ente"]]
-        (jdbc/execute! ds [(str "DELETE FROM " t " WHERE ente_id = ANY (?)") (uuids entes)])))
+      ;; a Casa ENCERRADA e' imutavel por trigger (a linha do registro e' a prova); a limpeza do TESTE roda como dono
+      ;; com os triggers de usuario desligados SO' nesta transacao
+      (jdbc/with-transaction [tx ds]
+        (jdbc/execute! tx ["SET LOCAL session_replication_role = replica"])
+        (doseq [t ["admin_sistema.pedido_restricao" "admin_sistema.exportacao_casa" "admin_sistema.ente"]]
+          (jdbc/execute! tx [(str "DELETE FROM " t " WHERE ente_id = ANY (?)") (uuids entes)]))))
     (when (seq operadores)
       (jdbc/execute! ds ["DELETE FROM admin_sistema.operador WHERE id = ANY (?)" (uuids operadores)]))
     (reset! criados {:entes #{} :operadores #{}})))
@@ -469,11 +481,11 @@
     (let [{:keys [pedido exportacao]} (liberar-apagamento! a)]
       (sql! "DELETE FROM admin_sistema.exportacao_casa WHERE ente_id = ? AND id <> ?" a exportacao)
       (testing "exportacao pronta mas SEM confirmacao de recebimento"
-        (sql! "UPDATE admin_sistema.exportacao_casa SET confirmada_em = NULL, confirmada_por = NULL,
+        (sql-cenario! "UPDATE admin_sistema.exportacao_casa SET confirmada_em = NULL, confirmada_por = NULL,
                confirmada_por_tipo = NULL WHERE id = ?" exportacao)
         (is (re-find #"nao confirmou o recebimento" (str (recusa #(apagar pedido))))))
       (testing "confirmada ha' 89 dias: a guarda ainda nao terminou"
-        (sql! "UPDATE admin_sistema.exportacao_casa SET confirmada_em = now() - interval '89 days',
+        (sql-cenario! "UPDATE admin_sistema.exportacao_casa SET confirmada_em = now() - interval '89 days',
                confirmada_por = gen_random_uuid(), confirmada_por_tipo = 'admin_ente' WHERE id = ?" exportacao)
         (is (re-find #"guarda de 90 dias" (str (recusa #(apagar pedido))))))
       (testing "o role da aplicacao DENTRO do tenant nem executa a funcao (so' a Operacao)"
