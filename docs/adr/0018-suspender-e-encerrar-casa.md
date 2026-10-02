@@ -1,7 +1,7 @@
 # ADR-0018 — Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados
 
 - **Status:** ✅ **Aceito** (30/09/2026 — "gostei do plano e vamos manter", as recomendações dos cinco eixos como
-  escritas). **Fatia 1 implementada em 30/09/2026** — ver *Materialização — fatia 1* no fim.
+  escritas). **Fatia 1 implementada em 30/09/2026; fatia 2 (encerrar) em 02/10/2026** — ver as seções *Materialização* no fim.
 - **Contexto de decisão:**
   - `produto/13` 12.1: ciclo `provisionar → ativo → suspenso → encerrado`;
   - 9.6: portabilidade / saída do contrato — o ciclo `encerrado` não tinha feature de saída (G18);
@@ -203,4 +203,91 @@ Depois do "Confirmo" (com as correções), esta ADR vira **Aceita** e a fatia 1 
   arquivo.
 - **A allowlist é uma primeira leitura do Eixo 2**, revisável quando uma Casa real passar por isso. Por exemplo:
   publicar um ato já aprovado antes da suspensão hoje fica bloqueado.
+
+## Materialização — fatia 2: encerrar (02/10/2026)
+
+A sequência do Eixo 4 está inteira:
+**exportação entregue → confirmação → guarda de 90 dias → apagamento por dois operadores → `encerrado`**.
+
+**O registro (supratenant, sobrevive ao apagamento):**
+
+- Migration `…170`: `admin_sistema.exportacao_casa` (hash, manifesto e confirmação), pedido `apagar`/`fim_da_guarda`,
+  e `ente.encerrada_em`, `destino_acervo_url` e `apagamento` (o resumo).
+- Migration `…175`: a Casa `encerrado` é imutável por trigger. A linha é a prova e nem se apaga; só o destino do acervo
+  continua editável. A confirmação de recebimento também não se desfaz.
+
+**A exportação completa (9.6), em `oplenario.encerramento`:**
+
+- O inventário dos dados da Casa é **descoberto no catálogo do Postgres** (`admin_sistema.inventario_da_casa()`):
+  - entram as tabelas com `ente_id` e as filhas por FK;
+  - ficam de fora `admin_sistema`, `ia` e as tabelas de referência.
+
+  Uma tabela nova de tenant entra sozinha, e a exportação e o apagamento leem o mesmo inventário.
+- O ZIP, em formato aberto, traz:
+  - `dados/<schema>/<tabela>.csv` e `dicionario.csv`;
+  - `arquivos/` com os blobs da Casa;
+  - `auditoria/`, com a corrente conferida (ADR-0017) e os selos do dia;
+  - `manifesto.json` com o sha256 de cada arquivo, e um `LEIA-ME.txt`.
+- A leitura é feita pelo role de runtime, com a RLS da Casa: a exportação de uma Casa não enxerga outra (testado com
+  duas Casas).
+- **O cidadão sai pseudonimizado**, com o mesmo pseudônimo da tela da trilha (ADR-0017 4c), para proteger a
+  manifestação anônima (LGPD; Lei 13.460 art. 10 §7º).
+  - O id dele não aparece em nenhum byte do ZIP. O protocolo de manifestação sai sem autor e sem IP.
+  - A corrente é conferida **antes** de pseudonimizar e está ancorada nos selos públicos.
+  - Servidores, vereadores e agentes seguem identificados, porque são atos da função pública.
+- **Quem gera:**
+  - o `admin_ente`, a qualquer momento, em `/administracao` ("Exportar os dados da Câmara");
+  - o operador, só com o encerramento em curso.
+- **Quem baixa é só o `admin_ente` da Casa.** O operador vê metadados (estado, bytes, sha256), nunca o conteúdo: somos
+  operador LGPD.
+- A Casa confirma o recebimento vendo o SHA-256, ou o operador registra o ofício.
+- Só vale a confirmação feita **depois** do início do encerramento. A de portabilidade não abre a guarda.
+
+**O apagamento (Eixo 4.5):**
+
+- O app não é dono das tabelas, e há triggers de imutabilidade. Por isso o banco é apagado por uma função **`SECURITY
+  DEFINER`** do dono (`admin_sistema.apagar_dados_da_casa`, migration `…171`).
+  - Ela **confere no próprio banco** o pedido `apagar` aprovado por outro operador, a Casa em encerramento e a
+    exportação confirmada há 90 dias ou mais.
+  - Os triggers são desligados só dentro da transação: `session_replication_role` com dono superuser; lock + `DISABLE
+    TRIGGER` com dono gerenciado.
+  - EXECUTE é só da Operação.
+- O apagamento remove também:
+  - os blobs e as exportações, no object storage (`listar` entrou no `ObjetoStore`);
+  - o **realm** da Casa no Keycloak;
+  - os dados da Casa no **satélite de IA** (`DELETE /v1/entes/{ente}`).
+- **Retomável:**
+  - IdP ou satélite fora deixam o passo **pendente**, e a Casa **não** vira `encerrado` com dado vivo em outro lugar;
+  - o console oferece "Retomar";
+  - o resumo parcial fica selado na atuação e se soma ao da retomada, para não perder a contagem.
+- Fica conosco o resumo selado: tabelas, totais, objetos e o **hash da exportação entregue**. Também ficam a atuação da
+  Operação e o evento `admin_sistema.casa.encerrada`.
+
+**A Casa encerrada (Eixo 4.4 a + c; Eixo 5):**
+
+- `encerrado → *` nunca acontece.
+- Toda rota da Casa, inclusive a leitura, o portal e o login, responde **410** com a data e o destino do acervo.
+- O portal mostra "Esta Câmara não usa mais O Plenário" com o link informado pelo operador.
+
+**Durante o encerramento**, os protocolos do cidadão seguem abertos, como na suspensão (Eixo 2): o prazo legal corre.
+A allowlist ganhou gerar e confirmar a exportação pelo `admin_ente`.
+
+**Testes:**
+
+- Integração de ponta a ponta com o plano de dados **real**: rotas → exportação → confirmação → 90 dias → apagamento
+  two-person → `encerrado` → 410.
+- O teste de vazamento ganhou a dimensão "Casa encerrada".
+- A função SQL é testada com recusas, Casa vizinha intacta, triggers e RLS restaurados, e dono não-superuser.
+
+**Riscos e o que ficou de fora:**
+
+- **Evento atrasado:** um evento da Casa que o relay já pegou antes do apagamento pode recriar linhas. O apagamento
+  remove do outbox o que não foi processado.
+- **Concorrência do apagamento:** ele roda na requisição; duas execuções da mesma Casa só são barradas dentro de uma
+  mesma instância. A função do banco é idempotente.
+- **Blob fora da convenção** `<pasta>/<ente>/`: é relatado no resumo e não é apagado.
+- **Ainda não existem:**
+  - o aviso por e-mail (SMTP, `[GAP]` de infra);
+  - o anexo do ofício (só o texto);
+  - a importação de volta (16.9) para uma Casa que retorna como Casa nova.
 

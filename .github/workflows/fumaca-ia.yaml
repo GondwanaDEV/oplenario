@@ -97,7 +97,7 @@ jobs:
             await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);
             await tela(ctx, '/paineis/ia', '6-paineis-ia', /IA da Casa/);
             // a area do administrador da Casa (ADR-0005): conceder acesso + o interruptor da conferencia automatica
-            await tela(ctx, '/administracao', '7-administracao', /Acessos dos vereadores[\s\S]*Confer[eê]ncia autom[aá]tica[\s\S]*Parecer jur[ií]dico no portal/);
+            await tela(ctx, '/administracao', '7-administracao', /^(?=[\s\S]*Acessos dos vereadores)(?=[\s\S]*Confer[eê]ncia autom[aá]tica)(?=[\s\S]*Parecer jur[ií]dico no portal)(?=[\s\S]*Exportar os dados da C[aâ]mara)/);
             // ADR-0019 fatia 2a: a nota tecnica da IA chega 'a fila do juridico (a persona acumula `juridico`)
             await tela(ctx, '/juridico', '8-juridico', /Notas t[eé]cnicas da IA/);
 
@@ -114,6 +114,12 @@ jobs:
             await lista('/propostas', 'itens');
             await lista('/legislativo/notas-tecnicas?estado=pendente', 'itens');
             await lista('/identidade/agentes-institucionais', 'itens');
+            // ADR-0018 fatia 2: o bloco de exportacao do admin_ente (so' leitura: nao gera exportacao em producao)
+            try {
+              const r = await api(ctx, '/api/administracao/exportacoes');
+              const okE = r.status === 200 && r.body?.disponivel === true && Array.isArray(r.body?.exportacoes);
+              rec('GET /administracao/exportacoes', okE ? 'OK' : 'ERRO', `status=${r.status} disponivel=${r.body?.disponivel} exportacoes=${r.body?.exportacoes?.length ?? '-'}`);
+            } catch (e) { rec('GET /administracao/exportacoes', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
             // ADR-0019 fatia 2a: o parametro "publicar ao assinar" da Casa (admin_ente)
             try {
               const r = await api(ctx, '/api/legislativo/parametros-parecer-juridico');
