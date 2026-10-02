@@ -226,14 +226,12 @@ if (sessaoVotar) {
   };
   console.log(`   votacao NOMINAL aberta: ${rec.id} sobre ${objeto.id} (${objeto.tipo} ${objeto.sequencial}/${objeto.ano})`);
   bloqueio("janela-sse-5min",
-    "DUAS coisas do cockpit /votar nao vem de snapshot nenhum, so do SSE: (a) o PLACAR — `estadoInicial()` " +
-    "(plenario-reducer.ts:167) nasce com placar=null; (b) a PRESENCA — `hidratarQuorum` " +
-    "(plenario-reducer.ts:289) so preenche os NUMEROS do quorum, nunca `presentes`. A CanalStore Valkey " +
-    "guarda 5 min (tempo_real/components.clj:39). Consequencia medida em browser: passada a janela, " +
-    "/votar mostra 'Nenhuma votacao aberta' e/ou trata como AUSENTE quem esta presente no banco ha horas. " +
-    "Logo E5-confirmar/E6-votar tem de abrir a pagina DENTRO DE ~5 MIN desta preparacao; fora disso, " +
-    "re-rode e2e/t3/preparar.sh (ou o proprio spec reabre a votacao: corpo em e6.reabrirVotacao) e, para " +
-    "votar, clique 'Confirmar presenca' antes (e6.preambuloObrigatorio).");
+    "A PRESENCA do proprio vereador no cockpit /votar ainda so vem do SSE: `hidratarQuorum` " +
+    "(plenario-reducer.ts) preenche os NUMEROS do quorum, nunca `presentes`, e a CanalStore Valkey guarda " +
+    "5 min (tempo_real/components.clj). Passada a janela, quem esta presente no banco volta a ver " +
+    "'Confirme sua presenca' (o voto nao se perde: `ja-votou` vence). O PLACAR ja vem por snapshot " +
+    "(`hidratarVotacao`, GET /votacao-aberta) desde 02/10/2026. E5/E6 criam a presenca fresca no beforeAll; " +
+    "para votar a mao fora disso, clique 'Confirmar presenca' antes (e6.preambuloObrigatorio).");
 }
 
 // ---- 3. E2: os modelos de documento (fixtures.sql) ---------------------------------------

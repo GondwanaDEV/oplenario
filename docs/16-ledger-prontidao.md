@@ -2618,7 +2618,11 @@ presença volta a ver "Confirme sua presença" (o voto em si não se perde: `ja-
 snapshot da própria presença no page-load, irmão do `hidratarVotacao`; até lá o E5 cobre a confirmação e a
 2ª visita DENTRO da janela, e diz isso no comentário.
 
-**Medição:** RESULTADO_RODADAS
+**Medição (local, roteiro do job, cada rodada com DB recriado e `next dev` frio):** antes do conserto do E3,
+6 rodadas deram 5 × 90 passed e 1 × 89 passed + 1 flaky (o E3 da hidratação, salvo pelo `retries: 2` do
+describe — que esconde o flake mas não o explica). Depois: **3 rodadas seguidas, 90 passed · 0 flaky · 9
+skipped** (os 6 `test.fixme` documentais + as 3 sondas opt-in), ~1,7 min cada. O run do CI deste PR é a
+prova de que o mesmo vale na máquina do GitHub.
 
 ---
 
