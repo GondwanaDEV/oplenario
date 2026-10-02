@@ -133,3 +133,26 @@
   "Eixo 4.5 (salvaguarda): so' com o encerramento em curso, a exportacao confirmada e a guarda cumprida."
   [casa confirmacao ^Instant agora]
   (boolean (and (em-encerramento? casa) confirmacao (guarda-cumprida? (:confirmada-em confirmacao) agora))))
+
+(defn- campo-de
+  "O campo `k` do mapa, com chave keyword OU string (o resumo volta do jsonb com chaves string). `false` e' valor."
+  [m k]
+  (when (map? m) (if (contains? m k) (get m k) (get m (name k)))))
+
+(defn somar-resumos
+  "PURA: o resumo de uma retomada somado ao das execucoes anteriores do mesmo pedido. Contagens somam (tabelas por nome,
+  linhas, objetos, exportacoes apagadas); o estado dos passos externos (realm, IA, pendencias, completo?) e' o da ULTIMA
+  execucao; a exportacao entregue e' a da primeira que a trouxe."
+  [anterior atual]
+  (if-not anterior
+    atual
+    (let [tabelas (fn [r] (into {} (map (fn [[k v]] [(name k) v])) (campo-de r :tabelas)))
+          n (fn [r k] (or (campo-de r k) 0))]
+      (assoc atual
+             :tabelas (merge-with + (tabelas anterior) (tabelas atual))
+             :linhas-total (+ (n anterior :linhas-total) (n atual :linhas-total))
+             :objetos (+ (n anterior :objetos) (n atual :objetos))
+             :exportacoes-apagadas (+ (n anterior :exportacoes-apagadas) (n atual :exportacoes-apagadas))
+             :objetos-fora-da-convencao (vec (distinct (concat (campo-de anterior :objetos-fora-da-convencao)
+                                                               (campo-de atual :objetos-fora-da-convencao))))
+             :exportacao (or (campo-de anterior :exportacao) (campo-de atual :exportacao))))))

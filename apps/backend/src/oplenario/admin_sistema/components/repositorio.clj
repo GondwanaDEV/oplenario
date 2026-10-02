@@ -67,7 +67,9 @@
   (concluir-apagamento! [this pedido-id resumo operador-id agora]
     "O apagamento terminou: a Casa vira `encerrado` com o resumo + o hash da exportacao entregue, selado, e o evento
     `admin_sistema.casa.encerrada` sai -> a Casa.")
-  (registrar-apagamento-interrompido! [this pedido-id operador-id erro] "Sela que o apagamento parou no meio.")
+  (registrar-apagamento-interrompido! [this pedido-id operador-id erro resumo-parcial]
+    "Sela que o apagamento parou no meio. `resumo-parcial` (ou nil) = o que ja' foi apagado ate' aqui (o banco apaga uma vez
+    so': a retomada conta zero linhas), somado de volta na conclusao.")
   (apagamento-pendente [this ente-id] "O pedido de apagamento aprovado que ainda nao terminou (retomavel), ou nil.")
   (apagamento-efetivado [this ente-id] "O pedido de apagamento que encerrou a Casa, ou nil."))
 
@@ -446,12 +448,13 @@
     (transacao this #(aprovar-apagamento-em-tx! % pedido-id operador-id justificativa agora)))
   (concluir-apagamento! [this pedido-id resumo operador-id agora]
     (transacao this #(concluir-apagamento-em-tx! % pedido-id resumo operador-id agora)))
-  (registrar-apagamento-interrompido! [this pedido-id operador-id erro]
+  (registrar-apagamento-interrompido! [this pedido-id operador-id erro resumo-parcial]
     (transacao this
       (fn [tx]
         (let [p (restricao/por-id tx pedido-id)]
           (atuacao/registrar! tx {:operador-id operador-id :ente-id (:ente-id p) :acao "apagamento-interrompido"
-                                  :detalhe {:pedido (str pedido-id) :erro erro}})))))
+                                  :detalhe (cond-> {:pedido (str pedido-id) :erro erro}
+                                             resumo-parcial (assoc :resumo resumo-parcial))})))))
   (apagamento-pendente [_ ente-id] (restricao/apagamento-aprovado-pendente (:ds datasource) ente-id))
   (apagamento-efetivado [_ ente-id] (restricao/apagamento-efetivado (:ds datasource) ente-id)))
 

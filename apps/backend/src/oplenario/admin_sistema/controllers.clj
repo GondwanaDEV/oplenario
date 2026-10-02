@@ -334,6 +334,29 @@
   ;; uma execucao do apagamento por Casa nesta instancia (dois cliques em "Retomar" nao rodam juntos)
   (java.util.concurrent.ConcurrentHashMap/newKeySet))
 
+(defn- campo
+  "O campo `k` do mapa, com chave keyword OU string (o resumo volta do jsonb com chaves string). `false` e' valor."
+  [m k]
+  (when (map? m) (if (contains? m k) (get m k) (get m (name k)))))
+
+(defn- resumo-parcial-anterior
+  "O resumo do que as execucoes anteriores DESTE pedido ja' apagaram (o mais recente `apagamento-interrompido` com
+  resumo), ou nil. O banco apaga uma vez so' — sem isto, a retomada concluiria com zero linhas e perderia a prova."
+  [repo-op ente-id pedido-id]
+  (->> (repo/atuacao-do-ente repo-op ente-id 1000)
+       (filter #(and (= "apagamento-interrompido" (:acao %))
+                     (= (str pedido-id) (str (campo (:detalhe %) :pedido)))
+                     (campo (:detalhe %) :resumo)))
+       first
+       :detalhe
+       (#(campo % :resumo))))
+
+(defn- pendencias-de [resumo]
+  (when (false? (campo resumo :completo?))
+    (let [ps (campo resumo :pendencias)]
+      (str "ficou pendente: " (if (seq ps) (str/join ", " (map name ps)) "um passo externo")
+           " — retome quando o servico voltar"))))
+
 (defn- executar-apagamento!
   "Chama o seam `:apagar-casa` FORA da tx (ele confere de novo no banco o pedido aprovado) e fecha: `encerrado` com o
   resumo, ou o apagamento interrompido selado (o pedido segue aprovado e o console oferece retomar)."
@@ -346,12 +369,20 @@
                                                                     :causa "apagamento-rodando"})))
     (try
       (try
-        (let [resumo (apagar ente-id pedido-id)
-              casa (repo/concluir-apagamento! repo-op pedido-id resumo (:operador-id ator) agora)]
-          {:casa casa :pedido (repo/pedido-por-id repo-op pedido-id) :efeito :encerrada})
+        (let [resumo (logic/somar-resumos (resumo-parcial-anterior repo-op ente-id pedido-id) (apagar ente-id pedido-id))]
+          (if-let [pendente (pendencias-de resumo)]
+            ;; o seam voltou sem lancar mas com passo externo pendente (IdP ou satelite fora): a Casa NAO vira
+            ;; `encerrado` com dado vivo em outro lugar — fica interrompido, com o parcial guardado para a retomada
+            (do (log/warn "admin-sistema: o apagamento da Casa ficou com pendencia" {:ente-id ente-id :pedido pedido-id
+                                                                                    :pendencias (campo resumo :pendencias)})
+                (repo/registrar-apagamento-interrompido! repo-op pedido-id (:operador-id ator) pendente resumo)
+                {:casa (repo/casa-por-id repo-op ente-id) :pedido (repo/pedido-por-id repo-op pedido-id)
+                 :efeito :apagamento-interrompido :erro pendente})
+            (let [casa (repo/concluir-apagamento! repo-op pedido-id resumo (:operador-id ator) agora)]
+              {:casa casa :pedido (repo/pedido-por-id repo-op pedido-id) :efeito :encerrada})))
         (catch Throwable t
           (log/error t "admin-sistema: o apagamento da Casa parou no meio" {:ente-id ente-id :pedido pedido-id})
-          (repo/registrar-apagamento-interrompido! repo-op pedido-id (:operador-id ator) (mensagem-de t))
+          (repo/registrar-apagamento-interrompido! repo-op pedido-id (:operador-id ator) (mensagem-de t) nil)
           {:casa (repo/casa-por-id repo-op ente-id) :pedido (repo/pedido-por-id repo-op pedido-id)
            :efeito :apagamento-interrompido :erro (mensagem-de t)}))
       (finally

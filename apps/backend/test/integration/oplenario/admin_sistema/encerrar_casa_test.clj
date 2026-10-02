@@ -414,3 +414,43 @@
               ["exportacao-da-casa/baixar" "leitura_sensivel" "baixou a exportação completa da Câmara"]]
              (mapv (juxt :registro/acao :registro/classe :registro/rotulo) regs)))
       (is (= "exportacao" (:registro/recurso_tipo (last regs))) "o recurso e' a exportacao (do caminho)"))))
+
+(deftest apagamento-com-pendencia-nao-encerra-e-a-retomada-soma-o-parcial
+  ;; o seam real VOLTA (sem lancar) com `:completo? false` quando o IdP ou o satelite estao fora: a Casa nao pode virar
+  ;; `encerrado` com dado vivo em outro lugar, e a 2a execucao (que apaga zero linhas no banco) nao pode apagar a prova
+  (let [chamadas (atom 0)
+        apagar (fn [_ _]
+                 (if (= 1 (swap! chamadas inc))
+                   {:tabelas {"legislativo.proposicao" 3 "sessoes.sessao" 2} :linhas-total 5 :objetos 7
+                    :exportacoes-apagadas 1 :realm-apagado? false :ia {:pendente true :motivo "fora do ar"}
+                    :exportacao {:id "e1" :sha256 (apply str (repeat 64 "a"))}
+                    :pendencias [:realm :ia] :completo? false}
+                   {:tabelas {"legislativo.proposicao" 0 "sessoes.sessao" 0} :linhas-total 0 :objetos 0
+                    :exportacoes-apagadas 0 :realm-apagado? true :ia {:pendente false :total 4}
+                    :exportacao {:id "e1" :sha256 (apply str (repeat 64 "a"))}
+                    :pendencias [] :completo? true}))
+        svc (servico {}) ana (operador! "Ana") beto (operador! "Beto") ente (casa-ativa! ana)]
+    (encerramento-em-curso! svc ana beto ente)
+    (let [t0 (Instant/now) svc0 (servico {:agora t0 :apagar apagar})
+          _ (post-casa svc0 ente admin "/administracao/exportacoes" {})
+          exp (first (:exportacoes (ler (get-casa svc0 ente admin "/administracao/exportacoes"))))
+          _ (is (= 200 (:status (post-casa svc0 ente admin (str "/administracao/exportacoes/" (:id exp) "/confirmacao")
+                                           {:sha256 (:sha256 exp)}))))
+          svc91 (servico {:agora (.plus t0 (Duration/ofDays 91)) :apagar apagar})
+          pedido (get-in (ler (post-op svc91 ana (str "/operacao/casas/" ente "/apagamento")
+                                       {:justificativa "Fim da guarda de 90 dias."}))
+                         [:pedido :id])]
+      (testing "1a execucao com pendencia: interrompido, a Casa segue suspensa, e o porque nomeia o passo"
+        (let [b (ler (post-op svc91 beto (str "/operacao/pedidos/" pedido "/aprovacao") {}))]
+          (is (= "apagamento-interrompido" (:efeito b)))
+          (is (re-find #"realm, ia" (:erro b)))
+          (is (= "suspenso" (get-in b [:casa :estado])))))
+      (testing "a retomada conclui, e o resumo soma o que a 1a execucao apagou (a prova nao se perde)"
+        (let [b (ler (post-op svc91 ana (str "/operacao/casas/" ente "/apagamento/retomada") {}))
+              ap (get-in (ficha svc91 ana ente) [:encerramento :apagamento])]
+          (is (= "encerrada" (:efeito b)))
+          (is (= "encerrado" (get-in b [:casa :estado])))
+          (is (= 5 (:linhas-total ap)))
+          (is (= 7 (:objetos ap)))
+          (is (= 3 (get-in ap [:tabelas :legislativo.proposicao])))
+          (is (= 2 @chamadas)))))))
