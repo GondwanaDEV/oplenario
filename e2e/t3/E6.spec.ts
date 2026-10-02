@@ -89,16 +89,10 @@ test.describe.serial("E6 — Votar (vereador)", () => {
   });
 
   test("votar Sim no cockpit ao vivo — caminho feliz", async ({ page }) => {
-    // [QUARENTENA SSE — opt-in E2E_T3_SSE] Este e o unico caso que depende de um EVENTO SSE AO VIVO chegar
-    // dentro do timeout: a transicao pos-voto para "Você votou Sim" vem de `votosNominais[meuVereadorId]`
-    // no placar empurrado pelo SSE — o cockpit NAO hidrata voto/placar/presentes por SNAPSHOT (achado
-    // arquitetural janela-sse-5min; plenario-reducer.ts:167/289). O beforeAll ja' faz a mitigacao maxima
-    // (reabre votacao + presenca fresca), e AINDA assim, num run de CI de ~6min > janela de 5min, o evento
-    // pode nao chegar a tempo — e o worker que trava aqui derruba a fila (cascata "did not run"). Nao e'
-    // bug de instrumento consertavel; e' a arquitetura. Roda LOCALMENTE dentro da janela com E2E_T3_SSE=1.
-    // Des-quarentenar = hidratar placar/presentes por snapshot no page-load (o conserto de produto real,
-    // registrado em docs/16). Ver tambem sonda-precondicoes e E5 grupo B.
-    test.skip(!process.env.E2E_T3_SSE, "cockpit ao vivo depende de evento SSE dentro da janela de 5min (achado janela-sse-5min) — opt-in E2E_T3_SSE, roda local");
+    // Fora da quarentena SSE desde 02/10/2026: o placar (com os votos nominais) agora vem por SNAPSHOT no
+    // page-load (`hidratarVotacao`, GET /votacao-aberta), e o beforeAll cria a votação e a presença FRESCAS que
+    // este caso usa — nada aqui depende do replay de 5 min da CanalStore. O "Você votou" depois do F5 também
+    // sai do snapshot (`ja-votou` tem precedência sobre a presença em meu-voto-vista).
     // 1o goto desta rota nesta corrida do next dev: compilação sob demanda pode passar de 20s.
     await page.goto(URL_VOTAR_PRESIDENTE, { waitUntil: "domcontentloaded", timeout: 90_000 });
 
@@ -108,13 +102,18 @@ test.describe.serial("E6 — Votar (vereador)", () => {
 
     // preâmbulo obrigatório (mapa e6.preambuloObrigatorio): se a presença ainda não chegou pelo SSE quando
     // a página monta, a tela pede para confirmar presença antes de oferecer os botões de voto.
+    // Espera a tela DECIDIR antes de olhar: logo depois do load o placar ainda pode estar a caminho, e um
+    // `isVisible()` instantâneo dava "não" ao pedido de presença que aparecia um instante depois — sem ninguém
+    // clicar, os botões nunca vinham (falha intermitente vista ao tirar este caso da quarentena SSE).
     const btnConfirmarPresenca = page.getByRole("button", { name: "Confirmar presença" });
-    if (await btnConfirmarPresenca.isVisible().catch(() => false)) {
-      await btnConfirmarPresenca.click();
+    const grupoVoto = page.getByRole("group", { name: "Seu voto na votação corrente" });
+    await expect(grupoVoto.or(btnConfirmarPresenca)).toBeVisible({ timeout: 30_000 });
+    if (await btnConfirmarPresenca.isVisible()) {
+      // a presença registrada no beforeAll pode chegar pelo SSE e sumir com o pedido entre o `isVisible` e o
+      // clique — aí não há o que clicar, e o que prova o caso é o grupo de voto aparecer logo abaixo
+      await btnConfirmarPresenca.click({ timeout: 5_000 }).catch(() => {});
       await expect(btnConfirmarPresenca).toBeHidden({ timeout: 15_000 });
     }
-
-    const grupoVoto = page.getByRole("group", { name: "Seu voto na votação corrente" });
     await expect(grupoVoto).toBeVisible({ timeout: 15_000 });
     const btnSim = grupoVoto.getByRole("button", { name: "Sim", exact: true });
     await expect(btnSim).toBeVisible();
@@ -129,6 +128,10 @@ test.describe.serial("E6 — Votar (vereador)", () => {
     expect(resposta.status()).toBe(201);
     const corpoResposta = (await resposta.json()) as { id: string };
     votoIdPresidente = corpoResposta.id;
+    // a votação em que a TELA votou é a CORRENTE da sessão — não necessariamente a que este beforeAll abriu:
+    // o grupo B do E5 abre outra na mesma sessão e, com 2 workers, pode virar a corrente no meio deste spec
+    // (abertura substitui o placar). O "votar duas vezes" abaixo tem de mirar a mesma votação do clique.
+    votacaoId = /\/votacoes\/([0-9a-f-]{36})\/meu-voto/.exec(resposta.url())?.[1] ?? votacaoId;
     expect(votoIdPresidente).toBeTruthy();
 
     // a) a tela diz que gravou — mensagem fixa (NOME_VOTO["sim"] = "Sim") + os 3 botões somem (ciclo
