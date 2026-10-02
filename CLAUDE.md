@@ -118,9 +118,14 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   - a cota de IA fica zerada enquanto a Casa está suspensa;
   - faixa sem motivo em todas as superfícies;
   - "Acesso da Câmara" na ficha do console.
-- Iniciar o encerramento para em `suspenso/encerramento_em_curso`.
+- **Encerrar ENTREGUE (02/10/2026, fatia 2):**
+  - exportação completa em formato aberto, gerada pelo `admin_ente` ou pelo operador; só o `admin_ente` baixa, com o
+    cidadão pseudonimizado;
+  - confirmação pelo SHA-256, depois guarda de 90 dias;
+  - apagamento aprovado por dois operadores, feito por uma função `SECURITY DEFINER` que confere tudo no banco, e que
+    apaga também o object storage, o realm e o satélite; retomável;
+  - estado `encerrado` imutável, com 410 e a página "não usa mais O Plenário".
 - **Falta:**
-  - a fatia 2 da ADR-0018: exportação completa + apagamento → `encerrado`;
   - o e-mail de aviso (SMTP);
   - acesso de suporte (12.7, `[GAP]` jurídico);
   - flags (12.3);
@@ -160,7 +165,7 @@ deliberação, e o caminho da comissão por tela (encaminhar às comissões, des
   `STUB-ICP-v0` do parecer.
 - **Falta, de propósito:** pedido sobre emenda, autorização fina do relator e verificação de vigência do dispositivo
   citado. Ver *Materialização* na ADR.
-- **Esperam o Daouda:** as perguntas ao Rigoni no fim da ADR.
+- **As perguntas ao Rigoni foram decididas pela pesquisa (02/10/2026):** o código já atende; ver o fim da ADR.
 
 **Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
 [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma

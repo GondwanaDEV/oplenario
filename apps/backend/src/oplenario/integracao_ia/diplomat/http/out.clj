@@ -46,7 +46,11 @@
   (observabilidade [this horas]
     "Onda E (`observabilidade-ia`): a saude da IA em TODAS as Casas nas ultimas `horas` (1-168) — volume, latencia
     p50/p95, o que nao rodou e por que, custo, por capacidade e por fornecedor/modelo, e a serie por hora. Sem ente e
-    sem texto: so' o console do operador le. Lanca `:ia/indisponivel`."))
+    sem texto: so' o console do operador le. Lanca `:ia/indisponivel`.")
+  (apagar-ente [this ente-id]
+    "ADR-0018 (Eixo 4.5): apaga no satelite TUDO da Casa encerrada (fila, transcricoes, rascunhos, indice, registro,
+    orcamento) — o core nao toca o schema `ia`. -> {:ente_id :apagados {\"ia.tabela\" n} :total n}. Idempotente (de
+    novo = zeros). Lanca `:ia/indisponivel` (o apagamento da Casa marca a IA como pendente e e' retomado)."))
 
 (defn- indisponivel! [motivo]
   (throw (ex-info "plataforma de IA indisponivel" {:tipo :ia/indisponivel :motivo motivo})))
@@ -71,6 +75,22 @@
        200 (json/read-value ^String (.body r) json/keyword-keys-object-mapper)
        404 nil
        (indisponivel! (str "status " (.statusCode r)))))))
+
+(defn- apagar-json
+  "DELETE no satelite: 200 -> mapa; qualquer outra coisa (inclusive 404: a rota existe sempre) -> `:ia/indisponivel`."
+  [url segredo ^HttpClient cliente caminho]
+  (when (or (str/blank? url) (str/blank? segredo)) (indisponivel! "integracao nao configurada"))
+  (let [req (-> (HttpRequest/newBuilder (URI/create (str (str/replace url #"/+$" "") caminho)))
+                (.header "Authorization" (str "Bearer " segredo))
+                (.timeout (Duration/ofSeconds 60))
+                (.DELETE)
+                (.build))
+        ^HttpResponse r (try (.send cliente req (HttpResponse$BodyHandlers/ofString))
+                             (catch java.io.IOException e (indisponivel! (.getMessage e)))
+                             (catch InterruptedException e (indisponivel! (.getMessage e))))]
+    (if (= 200 (.statusCode r))
+      (json/read-value ^String (.body r) json/keyword-keys-object-mapper)
+      (indisponivel! (str "status " (.statusCode r))))))
 
 (defrecord PlataformaIAHttp [url segredo ^HttpClient cliente]
   PlataformaIA
@@ -97,7 +117,9 @@
         (indisponivel! "consumo sem resposta")))
   (observabilidade [_ horas]
     (or (ler-json url segredo cliente (str "/v1/observabilidade?horas=" (long horas)))
-        (indisponivel! "observabilidade sem resposta"))))
+        (indisponivel! "observabilidade sem resposta")))
+  (apagar-ente [_ ente-id]
+    (apagar-json url segredo cliente (str "/v1/entes/" ente-id))))
 
 (defn plataforma-ia
   "{:url :segredo} -> PlataformaIA. url/segredo em branco = toda leitura responde indisponivel (R-IA-1)."

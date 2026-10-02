@@ -134,7 +134,8 @@
     #_{:clj-kondo/ignore [:missing-protocol-method]}
     (reify os/ObjetoStore
       (guardar! [_ chave b content-type] (swap! dados assoc chave {:bytes b :content-type content-type}) chave)
-      (obter [_ chave] (:bytes (get @dados chave))))))
+      (obter [_ chave] (:bytes (get @dados chave)))
+      (listar [_ prefixo _recursivo?] (vec (sort (filter #(str/starts-with? % prefixo) (keys @dados))))))))
 
 (defn- objeto-store-que-perde-o-blob
   "Aceita o `guardar!` (devolve a chave, como o real) e DESCARTA os bytes: `obter` sempre devolve nil. E' o

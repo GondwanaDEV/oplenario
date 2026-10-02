@@ -80,7 +80,7 @@
   (let [repo (:repo-compliance *sys*) ente (random-uuid)
         os-quebrado (reify os/ObjetoStore
                       (guardar! [_ _ _ _] (throw (ex-info "S3 indisponivel" {})))
-                      (obter [_ _] nil) (remover! [_ _] nil) (guardar-stream! [_ _ _ _] nil))
+                      (obter [_ _] nil) (remover! [_ _] nil) (guardar-stream! [_ _ _ _] nil) (listar [_ _ _] []))
         m (assoc (m-base ente) :objeto-store os-quebrado)]
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"S3 indisponivel"
           (repo-compliance/gerar-remessa! repo ente m)) "a falha do S3 propaga")

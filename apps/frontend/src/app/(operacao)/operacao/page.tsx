@@ -64,6 +64,7 @@ export default function CamarasNaPlataforma() {
             <option value="ativo">Ativa</option>
             <option value="provisionar">Aguardando 1º admin</option>
             <option value="suspenso">Suspensa</option>
+            <option value="encerrado">Encerrada</option>
           </select>
         </label>
         <label className="op-filtro">
@@ -134,7 +135,7 @@ function Linha({ casa, token }: { casa: Casa; token: string | null }) {
   );
 }
 
-/** ADR-0018: os pedidos de suspensão/encerramento que esperam o 2º operador, de todas as câmaras (mais antigo primeiro). */
+/** ADR-0018: os pedidos de suspensão/encerramento/apagamento que esperam o 2º operador, de todas as câmaras (mais antigo primeiro). */
 function FilaDoSegundoOperador({ pedidos, token }: { pedidos: Pedido[]; token: string | null }) {
   return (
     <section className="op-fila" aria-labelledby="titulo-fila">
@@ -144,7 +145,7 @@ function FilaDoSegundoOperador({ pedidos, token }: { pedidos: Pedido[]; token: s
           <li key={p.id}>
             <b>{p.casaNome ?? "Câmara"}</b>
             <span>
-              {p.acao === "encerrar" ? "Encerramento" : "Suspensão"} · {rotuloMotivo(p.motivo)} · pedido por{" "}
+              {p.acao === "encerrar" ? "Encerramento" : p.acao === "apagar" ? "Apagamento" : "Suspensão"} · {rotuloMotivo(p.motivo)} · pedido por{" "}
               {p.pedidoPor ?? "—"} {haQuanto(p.pedidoEm)}
             </span>
             <Link className="op-link" href={comToken(`/operacao/casas/${p.enteId}`, token)}

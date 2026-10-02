@@ -3,10 +3,12 @@
   (oplenario.interceptors) — fica separada de http.clj p/ evitar ciclo (http nao conhece interceptors). W2
   monta /saude (publica) + /eu (auth) + /painel-secretaria (auth + papel). W3 adiciona as rotas-dado de cada
   modulo (com o servidor `using` os Repo). `montar` recebe os deps ja injetados (idp + repo-identidade)."
-  (:require [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
+  (:require [oplenario.admin-sistema.components.exportacao :as exportacao-comp]
+            [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
             [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.restricao-da-casa :as restricao-casa]
+            [oplenario.encerramento :as encerramento]
             [oplenario.agente :as agente]
             [oplenario.busca :as busca]
             [oplenario.catalogo :as catalogo]
@@ -297,11 +299,17 @@
            ;; ADR-0017: a trilha de auditoria da Casa
            repo-auditoria
            ;; ADR-0018: o cache do seam `estado-da-casa` (30 s; os testes passam 0)
-           cache-estado-da-casa-ms]
+           cache-estado-da-casa-ms
+           ;; ADR-0018 (fatia 2): o plano de dados do encerramento — os dois trabalhos pesados que cruzam todos os
+           ;; modulos e o object storage, por isso no HOST (§22.10). `exportar-casa` = (fn [ente-id exportacao-id] ->
+           ;; {:chave :sha256 :bytes :manifesto}); `apagar-casa` = (fn [ente-id pedido-id] -> resumo, retomavel). Sem eles
+           ;; (nil), gerar/apagar respondem 503 nomeado. `executar-exportacao` (fn [f]) = o executor (testes: sincrono).
+           exportar-casa apagar-casa executar-exportacao]
     plataforma-ia-override :plataforma-ia
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
-    ficha-e-janelas-override :ficha-e-janelas-publicas}]
+    ficha-e-janelas-override :ficha-e-janelas-publicas
+    :as deps-de-montar}]
   (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
         ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
         ;; sessao em curso (sessoes) decide se a suspensao aprovada entra agora ou espera o encerramento — o host cruza
@@ -533,8 +541,54 @@
         ia (or plataforma-ia-override (plataforma-ia/plataforma-ia integracao-ia))
         ler-transcricao-fn (fn [ente-id tid] (plataforma-ia/ler-transcricao ia ente-id tid))
         ler-rascunho-ata-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-ata ia ente-id rid))
-        ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))]
-    (-> #{["/saude"             :get http/saude :route-name :saude]
+        ler-rascunho-resumo-fn (fn [ente-id rid] (plataforma-ia/ler-rascunho-resumo ia ente-id rid))
+        ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
+        deps-registro
+        {:idp-casa idp
+         ;; ADR-0018: a sessao em curso adia a suspensao; transicionar invalida o cache desta instancia
+         :sessao-em-curso? sessao-em-curso?
+         :ao-mudar-estado (:invalidar! estado-casa)
+         ;; ADR-0018 (fatia 2): o plano de dados do encerramento (ver os parametros de `montar`)
+         ;; o default e' o plano de dados real (`oplenario.encerramento`), sobre o MESMO pool do registro (o role herda
+         ;; `oplenario_operacao`, o unico com EXECUTE na funcao de apagamento). A chave PRESENTE vence, mesmo nil (= indisponivel):
+         ;; e' como os testes passam fakes ou desligam o plano de dados
+         :exportar-casa (if (contains? deps-de-montar :exportar-casa)
+                          exportar-casa
+                          (when (and repo-admin-sistema repo-auditoria objeto-store)
+                            (fn [ente-id exportacao-id]
+                              (encerramento/exportar-casa!
+                               {:datasource (:datasource repo-admin-sistema) :objeto-store objeto-store
+                                :auditoria (encerramento/seams-de-auditoria repo-auditoria repo-admin-sistema)}
+                               ente-id exportacao-id))))
+         :apagar-casa (if (contains? deps-de-montar :apagar-casa)
+                        apagar-casa
+                        (when (and repo-admin-sistema objeto-store)
+                          (fn [ente-id pedido-id]
+                            (encerramento/apagar-casa!
+                             {:datasource (:datasource repo-admin-sistema) :objeto-store objeto-store
+                              :idp idp :plataforma-ia ia}
+                             ente-id pedido-id))))
+         :executar-exportacao (or executar-exportacao exportacao-comp/em-segundo-plano)
+         :garantir-perfil-da-casa!
+         (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
+           (repo-cadastros-comp/garantir-municipio! repo-cadastros {:codigo-ibge municipio-ibge
+                                                                    :nome municipio-nome :uf uf})
+           (repo-cadastros-comp/criar-ente! repo-cadastros ente-id
+                                            {:ente-id ente-id :municipio-ibge municipio-ibge
+                                             :nome-oficial nome :nome-curto nome-curto}))
+         :garantir-primeiro-admin!
+         (fn [ente-id {:keys [cpf nome]}]
+           (let [iid (repo-identidade-comp/criar-identidade! repo-identidade
+                                                              {:id (random-uuid) :cpf cpf :nome nome})]
+             (repo-identidade-comp/conceder-acesso! repo-identidade ente-id
+                                                    {:id (random-uuid) :ente-id ente-id :identidade-id iid
+                                                     :tipo "servidor" :estado "ativo"}
+                                                    ["admin_ente"])
+             iid))
+         :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}]
+    ;; ADR-0018 (fatia 2): a Casa ENCERRADA responde 410 tambem nas rotas publicas dela (o portal, a descoberta do login)
+    (restricao-casa/com-casa-encerrada
+     (-> #{["/saude"             :get http/saude :route-name :saude]
           ;; ADR-0018: /eu leva a faixa de acesso restrito (o interno ve o motivo; a cidada, so' "acesso restrito")
           ["/eu"                :get [auth (fn [req]
                                              (let [ator (:ator req)
@@ -702,29 +756,11 @@
                 :relogio relogio-producao :operacao operacao
                 ;; Onda E: a observabilidade da IA de todas as Casas — so' o console do operador le (sem ente, sem texto)
                 :observabilidade-ia (fn [horas] (plataforma-ia/observabilidade ia horas))
-                ;; o provisionamento cruza cadastros/identidade/IdP das Casas SO' por estes seams (§22.10)
-                :deps-registro
-                {:idp-casa idp
-                 ;; ADR-0018: a sessao em curso adia a suspensao; transicionar invalida o cache desta instancia
-                 :sessao-em-curso? sessao-em-curso?
-                 :ao-mudar-estado (:invalidar! estado-casa)
-                 :garantir-perfil-da-casa!
-                 (fn [ente-id {:keys [nome nome-curto uf municipio-ibge municipio-nome]}]
-                   (repo-cadastros-comp/garantir-municipio! repo-cadastros {:codigo-ibge municipio-ibge
-                                                                            :nome municipio-nome :uf uf})
-                   (repo-cadastros-comp/criar-ente! repo-cadastros ente-id
-                                                    {:ente-id ente-id :municipio-ibge municipio-ibge
-                                                     :nome-oficial nome :nome-curto nome-curto}))
-                 :garantir-primeiro-admin!
-                 (fn [ente-id {:keys [cpf nome]}]
-                   (let [iid (repo-identidade-comp/criar-identidade! repo-identidade
-                                                                      {:id (random-uuid) :cpf cpf :nome nome})]
-                     (repo-identidade-comp/conceder-acesso! repo-identidade ente-id
-                                                            {:id (random-uuid) :ente-id ente-id :identidade-id iid
-                                                             :tipo "servidor" :estado "ativo"}
-                                                            ["admin_ente"])
-                     iid))
-                 :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}}))
+                :deps-registro deps-registro}))
+        ;; ADR-0018 (fatia 2): a exportacao completa vista pela Casa (o admin_ente), com o interceptor DA CASA
+        (into (admin-sistema-http/rotas-da-casa {:auth auth :repo-admin-sistema repo-admin-sistema
+                                                 :relogio relogio-producao :objeto-store objeto-store
+                                                 :deps-registro deps-registro}))
         ;; Faixa A / A.3 (ADR-0008): a fronteira de SERVICO com o satelite de IA. So' entra com o Repo (os testes de
         ;; outras verticais montam sem ele). Os seams abaixo sao o unico caminho da IA ate' sessoes/cadastros.
         (into (if repo-integracao-ia
@@ -786,4 +822,5 @@
                   (into (mcp/rotas {:repo-identidade repo-identidade :deps deps-catalogo :restricao restricao})
                         (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
                                           :deps-catalogo deps-catalogo})))
-                #{})))))
+                #{})))
+     estado-da-casa)))

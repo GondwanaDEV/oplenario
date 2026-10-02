@@ -231,3 +231,33 @@
   font-size: var(--t-13); color: var(--texto-2); display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
 .op-fila li b { color: var(--texto); }
 .op-fila li .op-link { margin-left: auto; }
+
+/* ---- ADR-0018 (fatia 2): o encerramento em etapas (exportação → confirmação → guarda → destino → apagamento) ---- */
+.op-etapas { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.op-etapa { display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.9rem; background: var(--surface); border: 1px solid var(--linha);
+  border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.2rem; }
+.op-etapa .n { width: 2.2rem; height: 2.2rem; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono);
+  font-weight: 700; font-size: var(--t-13); border: 2px solid var(--linha); color: var(--texto-2); background: var(--surface-2); }
+.op-etapa-feita .n { background: #6B9B72; border-color: #6B9B72; color: #fff; }
+.op-etapa-atual { border-color: light-dark(var(--cobalto), var(--foco)); }
+.op-etapa-atual .n { border-color: light-dark(var(--cobalto), var(--foco)); color: var(--cobalto-texto); }
+.op-etapa .corpo { min-width: 0; display: grid; gap: 0.6rem; }
+.op-etapa .cab { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.op-etapa h3 { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0; }
+.op-etapa .st { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.op-etapa-feita .st { color: light-dark(#234429, #A6BFA2); }
+.op-etapa-atual .st { color: var(--cobalto-texto); font-weight: 600; }
+.op-etapa .aj { font-size: var(--t-13); color: var(--texto-2); margin: 0; max-width: 72ch; line-height: 1.5; }
+.op-etapa .op-pedido { margin-top: 0; }
+.op-codigo { font-family: var(--mono); font-size: var(--t-12); color: var(--texto); overflow-wrap: anywhere; word-break: break-all; }
+.op-manifesto { display: block; font-family: var(--mono); font-size: var(--t-12); font-weight: 400; color: var(--texto-2); }
+.op-exportacao + .op-exportacao { border-top: 1px solid var(--linha); }
+.op-tabelas summary { cursor: pointer; font-size: var(--t-13); font-weight: 600; color: var(--texto); min-height: 24px; }
+.op-tabelas ul { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.op-tabelas li { display: flex; justify-content: space-between; gap: 1rem; font-size: var(--t-13); color: var(--texto-2); }
+.op-tabelas li b { font-family: var(--mono); color: var(--texto); }
+/* a ação irreversível: branco sobre a telha ESCURA (GUIDELINES §5.1 — o branco não passa AA sobre a telha clara) */
+.btn.op-btn-perigo { background: var(--telha-fundo); border-color: var(--telha-fundo); color: #fff; }
+.btn.op-btn-perigo:hover { filter: brightness(0.94); }
+.btn.op-btn-perigo:focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+@media (max-width: 620px) { .op-etapa { grid-template-columns: 1fr; } }

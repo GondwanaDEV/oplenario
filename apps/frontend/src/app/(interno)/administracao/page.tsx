@@ -10,7 +10,8 @@
 // acesso. O form é o mesmo componente (3 passos, acesso por último — use-conceder-acesso.ts). Quem já tem acesso
 // (`comAcesso`: a identidade já está ligada ao cadastro) aparece marcado e sem o botão — conceder de novo só daria
 // conflito (409) no passo 2. Aqui também fica o
-// interruptor da conferência automática (o agente institucional, B.8), que só o admin_ente liga.
+// interruptor da conferência automática (o agente institucional, B.8), que só o admin_ente liga, e a exportação
+// completa dos dados da Casa (ADR-0018 fatia 2, 9.6).
 
 import { useState } from "react";
 import Link from "next/link";
@@ -25,6 +26,7 @@ import { ConcederAuditorForm } from "./conceder-auditor-form";
 import { ConcederJuridicoForm } from "./conceder-juridico-form";
 import { ParecerNoPortal } from "./parecer-no-portal";
 import { RegrasDaPauta } from "./regras-da-pauta";
+import { ExportarDados } from "./exportar-dados";
 import { PainelAgente } from "../conferencias/fila-conferencias";
 import { useAgentesInstitucionais } from "@/lib/use-conferencias";
 import "../cadastros/vereadores/cadastro-vereadores.css";
@@ -201,6 +203,7 @@ function Conteudo() {
 
         <ParecerNoPortal token={token} />
         <RegrasDaPauta token={token} />
+        <ExportarDados token={token} />
 
         <section className="adm-outras" aria-labelledby="adm-outras-titulo">
           <h2 id="adm-outras-titulo">Outras áreas da administração</h2>

@@ -26,7 +26,10 @@
   (criar-usuario! [_ _ _] (throw (ex-info "idp-dev: criar-usuario indisponivel (carry Keycloak)" {})))
   (convidar! [_ _ente-id _identidade-id]
     (throw (ex-info "idp-dev nao envia convite (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))
-  (resetar-mfa! [_ _ _] (throw (ex-info "idp-dev: reset-mfa indisponivel (carry Keycloak)" {}))))
+  (resetar-mfa! [_ _ _] (throw (ex-info "idp-dev: reset-mfa indisponivel (carry Keycloak)" {})))
+  ;; dev nao provisiona realm nenhum (provisionar-realm! lanca) -> nao ha' o que apagar: o realm "ja' inexistente"
+  ;; do contrato. Nunca roda em producao (idp-para so' liga o idp-dev em dev/test).
+  (apagar-realm! [_ _] {:realm nil :existia? false}))
 
 (defn idp-dev
   "Component IdP de dev/teste (sem estado/Lifecycle). Prod injeta a impl Keycloak (carry F1.4)."

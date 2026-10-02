@@ -16,6 +16,8 @@
   (is (r/escrita-permitida? :head :qualquer/rota))
   (is (r/escrita-permitida? :post :participacao/protocolar-esic) "o protocolo do cidadao segue")
   (is (r/escrita-permitida? :post :participacao/responder-pedido) "o servidor responde o e-SIC")
+  (is (r/escrita-permitida? :post :exportacao-da-casa/gerar) "a Casa suspensa exporta (portabilidade, 9.6)")
+  (is (r/escrita-permitida? :post :exportacao-da-casa/confirmar-recebimento))
   (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")
   (is (not (r/escrita-permitida? :post :rota/que-ainda-nao-existe)) "escrita nova nasce bloqueada (fail-closed)"))
 
@@ -34,11 +36,46 @@
     (is (nil? (:response (guarda (ctx :post :legislativo/criar-proposicao :ativa)))) "Casa ativa escreve")
     (is (nil? (:response (guarda (ctx :post :legislativo/criar-proposicao :fora-do-registro)))) "sem registro, sem restricao")))
 
-(deftest o-seam-nao-consulta-o-registro-na-leitura
-  (let [chamadas (atom 0)
-        guarda (r/restricao (fn [_] (swap! chamadas inc) suspensa))]
-    (guarda (ctx :get :legislativo/listar :susp))
-    (is (zero? @chamadas))))
+(def encerrada {:estado "encerrado" :encerrada-em (Instant/parse "2027-01-10T15:00:00Z") :nome "Câmara Municipal de Baturité"
+                :destino-acervo-url "https://camara.exemplo.gov.br/acervo"})
+
+(deftest a-casa-encerrada-nao-responde-nada
+  ;; ADR-0018 (fatia 2): ao contrario da suspensa, a encerrada recusa tambem a LEITURA — por isso o estado e' lido em
+  ;; toda requisicao da Casa (do cache de 30 s, nao do banco)
+  (let [guarda (r/restricao (fn [_] encerrada))]
+    (doseq [[metodo rota] [[:get :legislativo/listar] [:post :participacao/protocolar-esic]
+                           [:post :legislativo/criar-proposicao] [:post :exportacao-da-casa/gerar]]]
+      (let [c (guarda (ctx metodo rota :enc))
+            res (:response c)]
+        (is (= 410 (:status res)) (str rota))
+        (is (= {:erro "esta Camara nao usa mais O Plenario" :encerrada-em "2027-01-10T15:00:00Z"
+                :nome "Câmara Municipal de Baturité"
+                :destino-acervo-url "https://camara.exemplo.gov.br/acervo"}
+               (json/read-value (:body res) json/keyword-keys-object-mapper)))
+        (is (nil? (get-in c [:request :ator])) "sem ator: a trilha da Casa apagada nao ganha registro")))))
+
+(deftest as-rotas-publicas-da-casa
+  (is (r/rota-publica-da-casa? "/portal/casa/:ente"))
+  (is (r/rota-publica-da-casa? "/portal/casa/:ente/materias/:proposicao_id"))
+  (is (r/rota-publica-da-casa? "/auth/descoberta/:ente"))
+  (is (not (r/rota-publica-da-casa? "/portal/casas")))
+  (is (not (r/rota-publica-da-casa? "/operacao/casas/:ente")) "o console e' supratenant")
+  (let [ente (random-uuid)
+        i (r/casa-encerrada-publica (fn [e] (when (= e ente) encerrada)))
+        ctx-publico (fn [v] {:request {:request-method :get :path-params {:ente v}}})]
+    (is (= 410 (get-in ((:enter i) (ctx-publico (str ente))) [:response :status])))
+    (is (nil? (:response ((:enter i) (ctx-publico (str (random-uuid)))))) "outra Casa segue")
+    (is (nil? (:response ((:enter i) (ctx-publico "nao-e-uuid")))) "o handler faz o 400 dele"))
+  (testing "o host poe o interceptor na frente so' das rotas publicas da Casa"
+    (let [h (fn [_] {:status 200})
+          rotas (r/com-casa-encerrada #{["/portal/casa/:ente" :get h :route-name :a]
+                                        ["/auth/descoberta/:ente" :get [h] :route-name :b]
+                                        ["/operacao/casas/:ente" :get [h] :route-name :c]}
+                                      (constantly nil))
+          por-nome (into {} (map (fn [r] [(nth r 4) (nth r 2)])) rotas)]
+      (is (= 2 (count (:a por-nome))))
+      (is (= 2 (count (:b por-nome))))
+      (is (= [h] (:c por-nome))))))
 
 (deftest o-cache-do-estado
   (let [leituras (atom 0)

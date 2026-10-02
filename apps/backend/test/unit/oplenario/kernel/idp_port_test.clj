@@ -11,3 +11,9 @@
 (deftest idp-dev-recusa-convidar
   (is (thrown? Exception (idp/convidar! (idp-dev/idp-dev) (random-uuid) (random-uuid)))
       "idp-dev nao provisiona nem envia e-mail — lanca, como as outras 3 ops de provisionamento"))
+
+(deftest apagar-realm-existe-no-port-e-o-dev-nao-tem-realm
+  (is (some? (resolve 'oplenario.kernel.components.idp/apagar-realm!))
+      "o port expoe o inverso do provisionamento (ADR-0018, apagamento da Casa encerrada)")
+  (is (= {:realm nil :existia? false} (idp/apagar-realm! (idp-dev/idp-dev) (random-uuid)))
+      "dev nao provisiona realm -> nada a apagar, idempotente"))

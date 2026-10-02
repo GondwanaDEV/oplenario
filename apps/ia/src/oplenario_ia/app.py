@@ -9,6 +9,7 @@ categorizada vira `ErroEstruturado` com o status da categoria — nunca um 500 o
 from __future__ import annotations
 
 import hmac
+import uuid
 from collections.abc import Callable
 from typing import Annotated, Any, Protocol
 
@@ -26,7 +27,13 @@ from oplenario_ia.busca.indice import TIPOS, TIPOS_PADRAO
 from oplenario_ia.confianca.consumo import consumo_do_mes
 from oplenario_ia.confianca.cota import Cota, Fonte
 from oplenario_ia.confianca.observabilidade import janela, observar
-from oplenario_ia.confianca.registro import ConsultaConsumo, RegistroConfianca, RegistroJsonl, RegistroMemoria
+from oplenario_ia.confianca.registro import (
+    ApagaPorEnte,
+    ConsultaConsumo,
+    RegistroConfianca,
+    RegistroJsonl,
+    RegistroMemoria,
+)
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
 from oplenario_ia.inferencia.fabrica import criar_porta
@@ -57,8 +64,9 @@ class PedidoBusca(BaseModel):
     limite: int = Field(default=20, ge=1, le=50)
 
 
-class _Registro(RegistroConfianca, ConsultaConsumo, Protocol):
-    """O registro que a API usa: anexa execuções e responde o consumo da Casa (B.9)."""
+class _Registro(RegistroConfianca, ConsultaConsumo, ApagaPorEnte, Protocol):
+    """O registro que a API usa: anexa execuções, responde o consumo da Casa (B.9) e apaga a Casa encerrada
+    (ADR-0018)."""
 
 
 def criar_app(
@@ -293,6 +301,23 @@ def criar_app(
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         return c.model_dump(mode="json", by_alias=True)
+
+    @app.delete("/v1/entes/{ente_id}", dependencies=[Depends(servico)])
+    def apagar_ente(ente_id: str) -> dict[str, Any]:
+        """ADR-0018 (Eixo 4.5): a Casa encerrada sai do satélite — fila, transcrições, rascunhos, revisões, índice,
+        orçamento e o registro da Camada de Confiança. Só o core chama, depois de conferir as salvaguardas do
+        apagamento no banco dele. Idempotente (de novo = zeros). Sem armazenamento configurado responde 503: o core
+        marca a IA como pendente e tenta de novo — nunca um "apagado" que não aconteceu."""
+        try:
+            ente = str(uuid.UUID(ente_id))
+        except ValueError as e:
+            raise HTTPException(422, "ente_id inválido") from e
+        if arm is None:
+            raise HTTPException(503, "armazenamento do satélite não configurado")
+        apagados = dict(arm.apagar_ente(ente))
+        n_registro = registro_do_app().apagar_ente(ente)
+        apagados["ia.registro_evento"] = apagados.get("ia.registro_evento", 0) + n_registro
+        return {"ente_id": ente, "apagados": dict(sorted(apagados.items())), "total": sum(apagados.values())}
 
     @app.get("/v1/observabilidade", dependencies=[Depends(servico)])
     def observabilidade(horas: int = 24) -> dict[str, Any]:

@@ -131,7 +131,9 @@
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; o compliance segue (a remessa ao TCE) e a Casa nomeia o encarregado LGPD
     :compliance/validar-remessa :compliance/submeter-remessa :compliance/resposta-remessa
-    :participacao/definir-encarregado})
+    :participacao/definir-encarregado
+    ;; ADR-0018 (fatia 2): a portabilidade — gerar a exportacao completa e confirmar o recebimento (o encerramento anda)
+    :exportacao-da-casa/gerar :exportacao-da-casa/confirmar-recebimento})
 
 (deftest a-allowlist-e-a-revisada
   (is (= allowlist-esperada restricao-casa/allowlist))
@@ -207,3 +209,55 @@
     (let [r2 (protocolar ativa)]
       (is (= 201 (:status r2)))
       (is (not (contains? (ler r2) :acesso-restrito-desde))))))
+
+;; ---------- ADR-0018 (fatia 2): a Casa ENCERRADA nao responde nada ----------
+
+(defn- casa-encerrada!
+  "Uma Casa no registro ja' encerrada (o caminho inteiro ate' aqui e' do encerrar_casa_test)."
+  []
+  (let [ente (casa! false)]
+    (jdbc/execute! *ds* ["UPDATE admin_sistema.ente SET estado = 'encerrado', encerrada_em = now(),
+                          destino_acervo_url = 'https://camara.exemplo.gov.br/acervo' WHERE ente_id = ?" ente])
+    ente))
+
+(defn- rotas-da-casa-montadas
+  "Toda rota montada que e' da Casa: as que passam pelo interceptor de Casa (a pessoa, o agente) e as publicas que
+  trazem a Casa no caminho (o portal, a descoberta do login). Leitura e escrita."
+  []
+  (->> (route/expand-routes (rotas-montadas))
+       (filter #(or (some autenticacao-da-casa (nomes-dos-interceptors %))
+                    (restricao-casa/rota-publica-da-casa? (:path %))))
+       (map (fn [r] {:nome (:route-name r) :metodo (:method r) :caminho (:path r)
+                     :agente? (contains? (nomes-dos-interceptors r) ::it/autenticacao-agente)
+                     :publica? (restricao-casa/rota-publica-da-casa? (:path r))}))))
+
+(deftest casa-encerrada-responde-410-em-toda-rota-dela
+  (let [svc (servico) encerrada (casa-encerrada!) ativa (casa! false)
+        rotas (rotas-da-casa-montadas)
+        chamar (fn [ente {:keys [metodo caminho agente? publica?]}]
+                 (pt/response-for svc metodo (if publica?
+                                               (str/replace (caminho-concreto caminho)
+                                                            #"^(/portal/casa|/auth/descoberta)/[^/]+"
+                                                            (str "$1/" ente))
+                                               (caminho-concreto caminho))
+                                  :headers (cond agente? {"authorization" (str "Bearer cred-" ente)
+                                                          "Content-Type" "application/json"}
+                                                 publica? {"Content-Type" "application/json"}
+                                                 :else (como ente servidora))
+                                  :body "{}"))]
+    (is (> (count rotas) 150) "sanidade: leitura e escrita da Casa, o agente, o portal")
+    (is (some :publica? rotas))
+    (testing "toda rota da Casa — inclusive LEITURA, o portal e o login — responde 410 com a data e o destino"
+      (doseq [r rotas]
+        (let [resp (chamar encerrada r)]
+          (is (= 410 (:status resp)) (str (:nome r) " " (:metodo r) " " (:caminho r)))
+          (when (= 410 (:status resp))
+            (let [b (json/read-value (:body resp) json/keyword-keys-object-mapper)]
+              (is (= "https://camara.exemplo.gov.br/acervo" (:destino-acervo-url b)))
+              (is (some? (:encerrada-em b))))))))
+    (testing "controle: a Casa ativa nao leva 410"
+      (doseq [r (take 20 rotas)]
+        (is (not= 410 (:status (chamar ativa r))) (str (:nome r)))))
+    (testing "a trilha da Casa apagada nao ganha registro novo (o 410 sai sem ator)"
+      (is (empty? (tenancy/com-tenant* *ds* encerrada
+                    #(jdbc/execute! % ["SELECT 1 FROM auditoria.registro WHERE ente_id = ?" encerrada])))))))

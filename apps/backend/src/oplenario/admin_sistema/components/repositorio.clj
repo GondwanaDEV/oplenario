@@ -5,6 +5,7 @@
   (:require [next.jdbc :as jdbc]
             [oplenario.admin-sistema.db.atuacao :as atuacao]
             [oplenario.admin-sistema.db.ente :as ente]
+            [oplenario.admin-sistema.db.exportacao :as exp]
             [oplenario.admin-sistema.db.operador :as op]
             [oplenario.admin-sistema.db.restricao :as restricao]
             [oplenario.admin-sistema.diplomat.producers :as producers]
@@ -44,13 +45,43 @@
     agendada entra quando nao ha' mais sessao em curso (`sessao-em-curso?` = fn [] -> bool). -> a Casa.")
   (pedidos-abertos [this] "A fila 'aguardando 2o operador' de todas as Casas.")
   (pedido-por-id [this pedido-id])
-  (pedido-aberto-da-casa [this ente-id]))
+  (pedido-aberto-da-casa [this ente-id])
+  ;; ADR-0018 (fatia 2): ENCERRAR. A exportacao (9.6) e a confirmacao de recebimento, o destino do acervo, o pedido de
+  ;; apagamento (two-person rule de novo) e o estado final `encerrado`. Cada passo e' UMA tx com a atuacao selada.
+  (iniciar-exportacao! [this pedido agora]
+    "{:ente-id :solicitante-tipo (operador|admin_ente) :solicitante} -> a linha `gerando` (uma por Casa). O operador so'
+    manda gerar durante o encerramento; o admin_ente, a qualquer momento (portabilidade).")
+  (concluir-exportacao! [this exportacao-id resultado] "{:chave :sha256 :bytes :manifesto} -> a linha `pronta`.")
+  (falhar-exportacao! [this exportacao-id erro] "-> a linha `falhou`, com o erro.")
+  (confirmar-recebimento! [this exportacao-id confirmacao]
+    "{:ente-id (a Casa de quem confirma, nil = operador) :tipo (admin_ente|oficio) :por :texto :sha256 :em} -> a
+    exportacao confirmada. Uma vez so'.")
+  (exportacoes-da-casa [this ente-id] "As exportacoes da Casa, mais recente primeiro.")
+  (exportacao-por-id [this exportacao-id])
+  (definir-destino-acervo! [this ente-id operador-id url] "Para onde foi o acervo publico (Eixo 4.4 c) -> a Casa.")
+  (pedir-apagamento! [this ente-id operador-id justificativa agora]
+    "Eixo 4.5: so' depois da guarda de 90 dias desde a confirmacao -> {:pedido :casa}.")
+  (aprovar-apagamento! [this pedido-id operador-id justificativa agora]
+    "O 2o operador aprova o apagamento (as mesmas salvaguardas de novo) -> {:pedido :casa}. Nao apaga: quem apaga e'
+    o seam do host, depois desta tx.")
+  (concluir-apagamento! [this pedido-id resumo operador-id agora]
+    "O apagamento terminou: a Casa vira `encerrado` com o resumo + o hash da exportacao entregue, selado, e o evento
+    `admin_sistema.casa.encerrada` sai -> a Casa.")
+  (registrar-apagamento-interrompido! [this pedido-id operador-id erro resumo-parcial]
+    "Sela que o apagamento parou no meio. `resumo-parcial` (ou nil) = o que ja' foi apagado ate' aqui (o banco apaga uma vez
+    so': a retomada conta zero linhas), somado de volta na conclusao.")
+  (apagamento-pendente [this ente-id] "O pedido de apagamento aprovado que ainda nao terminou (retomavel), ou nil.")
+  (apagamento-efetivado [this ente-id] "O pedido de apagamento que encerrou a Casa, ou nil."))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; ADR-0018 — as transicoes, sobre a tx. `conflito!` vira 409 na borda (com o porque).
 ;; ---------------------------------------------------------------------------------------------
 
-(defn- conflito! [msg] (throw (ex-info msg {:tipo :admin-sistema/conflito})))
+(defn- conflito!
+  "409 na borda. `causa` (opcional) e' o codigo estavel que a tela le; `extra` vai junto no corpo."
+  ([msg] (throw (ex-info msg {:tipo :admin-sistema/conflito})))
+  ([msg causa] (conflito! msg causa nil))
+  ([msg causa extra] (throw (ex-info msg {:tipo :admin-sistema/conflito :causa causa :extra extra}))))
 
 (defn- casa-ou-404! [tx ente-id]
   (or (ente/por-id tx ente-id) (throw (ex-info "Casa nao encontrada" {:tipo :admin-sistema/nao-encontrada}))))
@@ -78,11 +109,14 @@
     casa))
 
 (defn- acao-do-selo
-  "O nome da acao na atuacao: `suspensao-pedida|aprovada|recusada` ou `encerramento-pedido|aprovado|recusado`."
+  "O nome da acao na atuacao: `suspensao-pedida|aprovada|recusada`, `encerramento-pedido|aprovado|recusado` ou
+  `apagamento-pedido|aprovado|recusado`."
   [{:keys [acao]} sufixo]
-  (if (= "encerrar" acao)
-    (str "encerramento-" (subs sufixo 0 (dec (count sufixo))) "o")
-    (str "suspensao-" sufixo)))
+  (let [masculino (str (subs sufixo 0 (dec (count sufixo))) "o")]
+    (case acao
+      "encerrar" (str "encerramento-" masculino)
+      "apagar" (str "apagamento-" masculino)
+      (str "suspensao-" sufixo))))
 
 (defn- pedir-em-tx! [tx {:keys [ente-id acao motivo justificativa pedido-por]} ^Instant agora]
   (let [casa (casa-ou-404! tx ente-id)]
@@ -111,6 +145,8 @@
 
 (defn- aprovar-em-tx! [tx pedido-id operador-id justificativa sessao-em-curso?]
   (let [p (pedido-aberto-ou-409! tx pedido-id)]
+    (when (= "apagar" (:acao p))
+      (conflito! "o pedido de apagamento se aprova pelo caminho do apagamento"))
     (when (= operador-id (:pedido-por p))
       (conflito! "quem pediu nao aprova o proprio pedido: outro operador precisa aprovar"))
     (let [casa (ente/por-id tx (:ente-id p))
@@ -149,6 +185,13 @@
 
 (defn- reativar-em-tx! [tx ente-id operador-id justificativa]
   (let [casa (casa-ou-404! tx ente-id)]
+    ;; ADR-0018 (fatia 2): o apagamento aprovado nao tem volta (pode ter parado no meio); o pedido que espera o 2o
+    ;; operador se recusa ou se retira antes
+    (when (restricao/apagamento-aprovado-pendente tx ente-id)
+      (conflito! "o apagamento desta Casa ja' foi aprovado e nao tem volta — retome-o" "apagamento-aprovado"))
+    (when (= "apagar" (:acao (restricao/aberto-da-casa tx ente-id)))
+      (conflito! "ha' um pedido de apagamento esperando o 2o operador — recuse-o ou retire-o antes de reativar"
+                 "apagamento-pedido"))
     (cond
       (= "suspenso" (:estado casa))
       (do (when-let [p (restricao/aberto-da-casa tx ente-id)]
@@ -185,6 +228,158 @@
   (or (:suspensao-agendada casa)
       (when (= "suspenso" (:estado casa))
         (some-> (restricao/aberto-da-casa ds (:ente-id casa)) (logic/incidente-vencido? agora)))))
+
+
+;; ---------------------------------------------------------------------------------------------
+;; ADR-0018 (fatia 2): ENCERRAR — a exportacao, a confirmacao, a guarda, o apagamento e o estado final.
+;; ---------------------------------------------------------------------------------------------
+
+(defn- travar-casa!
+  "Serializa as transicoes desta Casa (a leitura do estado e a escrita que depende dele caem juntas)."
+  [tx ente-id]
+  (jdbc/execute-one! tx ["SELECT 1 FROM admin_sistema.ente WHERE ente_id = ? FOR UPDATE" ente-id]))
+
+(defn- iniciar-exportacao-em-tx! [tx {:keys [ente-id solicitante-tipo solicitante]} ^Instant agora]
+  (travar-casa! tx ente-id)
+  (let [casa (casa-ou-404! tx ente-id)]
+    (case solicitante-tipo
+      "operador" (when-not (logic/em-encerramento? casa)
+                   (conflito! (str "a Operacao so' manda gerar a exportacao com o encerramento em curso — fora dele, "
+                                  "quem gera e' o administrador da Casa")
+                             "fora-do-encerramento"))
+      "admin_ente" (when-not (#{"ativo" "suspenso"} (:estado casa))
+                     (conflito! "esta Casa nao esta' num estado que permita exportar" "estado-da-casa")))
+    (when-let [g (exp/gerando-da-casa tx ente-id)]
+      (if (logic/geracao-abandonada? g agora)
+        (do (exp/falhar! tx (:id g) "a geracao nao terminou (o processo foi interrompido)")
+            (atuacao/registrar! tx {:ente-id ente-id :acao "exportacao-falhou"
+                                    :detalhe {:exportacao (str (:id g)) :erro "interrompida"}}))
+        (conflito! "ja' ha' uma exportacao sendo gerada para esta Casa — espere ela terminar" "exportacao-em-andamento")))
+    (let [e (exp/inserir! tx {:id (random-uuid) :ente-id ente-id :solicitada-por-tipo solicitante-tipo
+                              :solicitada-por solicitante})]
+      (atuacao/registrar! tx {:operador-id (when (= "operador" solicitante-tipo) solicitante) :ente-id ente-id
+                              :acao "exportacao-solicitada"
+                              :detalhe {:exportacao (str (:id e)) :por solicitante-tipo}})
+      e)))
+
+(defn- concluir-exportacao-em-tx! [tx id resultado]
+  (when-let [e (exp/concluir! tx id resultado)]
+    (atuacao/registrar! tx {:ente-id (:ente-id e) :acao "exportacao-pronta"
+                            :detalhe {:exportacao (str id) :sha256 (:sha256 e) :bytes (:bytes e)}})
+    e))
+
+(defn- falhar-exportacao-em-tx! [tx id erro]
+  (when-let [e (exp/falhar! tx id erro)]
+    (atuacao/registrar! tx {:ente-id (:ente-id e) :acao "exportacao-falhou"
+                            :detalhe {:exportacao (str id) :erro erro}})
+    e))
+
+(defn- confirmar-em-tx! [tx id {:keys [ente-id tipo por texto sha256 em]}]
+  (let [e (or (exp/por-id tx id) (throw (ex-info "exportacao nao encontrada" {:tipo :admin-sistema/nao-encontrada})))]
+    ;; o admin_ente de OUTRA Casa nao enxerga esta exportacao (404, nunca 403: nem a existencia vaza)
+    (when (and ente-id (not= ente-id (:ente-id e)))
+      (throw (ex-info "exportacao nao encontrada" {:tipo :admin-sistema/nao-encontrada})))
+    (travar-casa! tx (:ente-id e))
+    (when (= "encerrado" (:estado (ente/por-id tx (:ente-id e))))
+      (conflito! "a Casa ja' esta' encerrada" "casa-encerrada"))
+    (when-not (= "pronta" (:estado e))
+      (conflito! "so' se confirma o recebimento de uma exportacao pronta" "exportacao-nao-pronta"))
+    (when (:confirmada-em e)
+      (conflito! "o recebimento desta exportacao ja' foi confirmado — a confirmacao nao se desfaz" "ja-confirmada"))
+    (when (and sha256 (not= sha256 (:sha256 e)))
+      (conflito! "o codigo informado nao e' o desta exportacao" "codigo-nao-confere"))
+    (let [c (or (exp/confirmar! tx id {:tipo tipo :por por :texto texto :em em})
+                (conflito! "o recebimento desta exportacao ja' foi confirmado" "ja-confirmada"))]
+      (atuacao/registrar! tx {:operador-id (when (= "oficio" tipo) por) :ente-id (:ente-id c)
+                              :acao "recebimento-confirmado"
+                              :detalhe (cond-> {:exportacao (str id) :sha256 (:sha256 c) :por tipo}
+                                         texto (assoc :oficio texto))})
+      c)))
+
+(defn- confirmacao-vigente
+  "A confirmacao que vale para o encerramento desta Casa (ver `logic/confirmacao-do-encerramento`)."
+  [tx casa]
+  (logic/confirmacao-do-encerramento (exp/da-casa tx (:ente-id casa) 500) (:restrita-desde casa)))
+
+(defn- salvaguardas-do-apagamento!
+  "Eixo 4.5: encerramento em curso, exportacao confirmada, guarda de 90 dias cumprida. Devolve a confirmacao."
+  [tx casa ^Instant agora]
+  (when (= "encerrado" (:estado casa)) (conflito! "a Casa ja' esta' encerrada" "casa-encerrada"))
+  (when-not (logic/em-encerramento? casa)
+    (conflito! "so' se apaga uma Casa com o encerramento em curso" "fora-do-encerramento"))
+  (let [conf (confirmacao-vigente tx casa)]
+    (when-not conf
+      (conflito! "a Casa ainda nao confirmou o recebimento da exportacao — sem confirmacao, nao se apaga"
+                 "sem-confirmacao"))
+    (when-not (logic/guarda-cumprida? (:confirmada-em conf) agora)
+      (conflito! "a janela de guarda de 90 dias desde a confirmacao ainda nao passou" "guarda-em-curso"
+                 {:apagamento-possivel-em (str (logic/apagamento-possivel-em (:confirmada-em conf)))}))
+    conf))
+
+(defn- pedir-apagamento-em-tx! [tx ente-id operador-id justificativa ^Instant agora]
+  (travar-casa! tx ente-id)
+  (let [casa (casa-ou-404! tx ente-id)
+        conf (salvaguardas-do-apagamento! tx casa agora)]
+    (when (restricao/apagamento-aprovado-pendente tx ente-id)
+      (conflito! "o apagamento desta Casa ja' foi aprovado — retome-o" "apagamento-aprovado"))
+    (when (restricao/aberto-da-casa tx ente-id)
+      (conflito! "ja' ha' um pedido esperando o 2o operador nesta Casa" "pedido-aberto"))
+    (let [p (restricao/inserir! tx {:id (random-uuid) :ente-id ente-id :acao "apagar" :motivo "fim_da_guarda"
+                                    :justificativa justificativa :pedido-por operador-id})]
+      (atuacao/registrar! tx {:operador-id operador-id :ente-id ente-id :acao "apagamento-pedido"
+                              :detalhe {:pedido (str (:id p)) :justificativa justificativa
+                                        :exportacao-sha256 (:sha256 conf)}})
+      {:pedido p :casa casa})))
+
+(defn- aprovar-apagamento-em-tx! [tx pedido-id operador-id justificativa ^Instant agora]
+  (let [p (pedido-aberto-ou-409! tx pedido-id)]
+    (when-not (= "apagar" (:acao p)) (conflito! "este pedido nao e' de apagamento"))
+    (when (= operador-id (:pedido-por p))
+      (conflito! "quem pediu nao aprova o proprio pedido: outro operador precisa aprovar" "mesmo-operador"))
+    (travar-casa! tx (:ente-id p))
+    (let [casa (ente/por-id tx (:ente-id p))
+          conf (salvaguardas-do-apagamento! tx casa agora)
+          p (or (restricao/decidir! tx pedido-id {:estado "aprovado" :decidido-por operador-id :justificativa justificativa})
+                (conflito! "este pedido ja' foi decidido"))]
+      (atuacao/registrar! tx {:operador-id operador-id :ente-id (:ente-id p) :acao "apagamento-aprovado"
+                              :detalhe {:pedido (str pedido-id) :exportacao-sha256 (:sha256 conf)}})
+      {:pedido p :casa casa})))
+
+(defn- pares-ordenados
+  "Um mapa de contagens -> [\"chave=valor\" ...] ordenado. A atuacao sela o detalhe como ele volta do jsonb, e o jsonb
+  reordena chaves de mapas aninhados: em vetor de texto, a ordem e' a nossa e o selo confere."
+  [m]
+  (when (map? m) (vec (sort (map (fn [[k v]] (str (name k) "=" v)) m)))))
+
+(defn- concluir-apagamento-em-tx! [tx pedido-id resumo operador-id ^Instant agora]
+  (let [p (or (restricao/por-id tx pedido-id) (throw (ex-info "pedido nao encontrado" {:tipo :admin-sistema/nao-encontrada})))]
+    (when-not (and (= "apagar" (:acao p)) (= "aprovado" (:estado p)))
+      (conflito! "este pedido nao e' um apagamento aprovado"))
+    (travar-casa! tx (:ente-id p))
+    (when (:efetivado-em p) (conflito! "a Casa ja' esta' encerrada" "casa-encerrada"))
+    (let [ente-id (:ente-id p)
+          casa (ente/por-id tx ente-id)
+          _ (when-not (logic/transicao-permitida? (:estado casa) "encerrado")
+              (conflito! "a Casa nao esta' num estado que permita encerrar" "estado-da-casa"))
+          conf (or (confirmacao-vigente tx casa) (conflito! "a confirmacao de recebimento sumiu" "sem-confirmacao"))
+          registro (merge (select-keys resumo [:tabelas :linhas-total :objetos :realm-apagado? :ia :exportacoes-apagadas])
+                          {:pedido (str pedido-id)
+                           :exportacao {:id (str (:id conf)) :sha256 (:sha256 conf) :bytes (:bytes conf)
+                                        :confirmada-em (str (:confirmada-em conf))
+                                        :confirmada-por (:confirmada-por-tipo conf)}})
+          c (or (ente/encerrar! tx ente-id agora registro)
+                (conflito! "a Casa nao esta' com o encerramento em curso" "fora-do-encerramento"))]
+      (restricao/marcar-efetivado! tx pedido-id)
+      (atuacao/registrar! tx {:operador-id operador-id :ente-id ente-id :acao "casa-encerrada"
+                              :detalhe {:pedido (str pedido-id) :exportacao-sha256 (:sha256 conf)
+                                        :linhas-total (:linhas-total resumo) :objetos (:objetos resumo)
+                                        :realm-apagado (boolean (:realm-apagado? resumo))
+                                        :exportacoes-apagadas (:exportacoes-apagadas resumo)
+                                        :tabelas (pares-ordenados (:tabelas resumo))
+                                        :ia (pares-ordenados (:ia resumo))}})
+      (producers/emitir-encerrada! tx ente-id {:encerrada-em (str (:encerrada-em c)) :pedido-id pedido-id
+                                               :exportacao-sha256 (:sha256 conf)})
+      c)))
 
 (defrecord RepoAdminSistemaPg [datasource sessao-janela-ociosa-seg]
   RepoAdminSistema
@@ -231,7 +426,37 @@
         casa)))
   (pedidos-abertos [_] (restricao/abertos (:ds datasource)))
   (pedido-por-id [_ pedido-id] (restricao/por-id (:ds datasource) pedido-id))
-  (pedido-aberto-da-casa [_ ente-id] (restricao/aberto-da-casa (:ds datasource) ente-id)))
+  (pedido-aberto-da-casa [_ ente-id] (restricao/aberto-da-casa (:ds datasource) ente-id))
+  (iniciar-exportacao! [this pedido agora] (transacao this #(iniciar-exportacao-em-tx! % pedido agora)))
+  (concluir-exportacao! [this id resultado] (transacao this #(concluir-exportacao-em-tx! % id resultado)))
+  (falhar-exportacao! [this id erro] (transacao this #(falhar-exportacao-em-tx! % id erro)))
+  (confirmar-recebimento! [this id confirmacao] (transacao this #(confirmar-em-tx! % id confirmacao)))
+  (exportacoes-da-casa [_ ente-id] (exp/da-casa (:ds datasource) ente-id 50))
+  (exportacao-por-id [_ id] (exp/por-id (:ds datasource) id))
+  (definir-destino-acervo! [this ente-id operador-id url]
+    (transacao this
+      (fn [tx]
+        (casa-ou-404! tx ente-id)
+        (let [c (or (ente/definir-destino-acervo! tx ente-id url)
+                    (conflito! "o destino do acervo se informa no encerramento" "fora-do-encerramento"))]
+          (atuacao/registrar! tx {:operador-id operador-id :ente-id ente-id :acao "destino-do-acervo-informado"
+                                  :detalhe {:url (or url "")}})
+          c))))
+  (pedir-apagamento! [this ente-id operador-id justificativa agora]
+    (transacao this #(pedir-apagamento-em-tx! % ente-id operador-id justificativa agora)))
+  (aprovar-apagamento! [this pedido-id operador-id justificativa agora]
+    (transacao this #(aprovar-apagamento-em-tx! % pedido-id operador-id justificativa agora)))
+  (concluir-apagamento! [this pedido-id resumo operador-id agora]
+    (transacao this #(concluir-apagamento-em-tx! % pedido-id resumo operador-id agora)))
+  (registrar-apagamento-interrompido! [this pedido-id operador-id erro resumo-parcial]
+    (transacao this
+      (fn [tx]
+        (let [p (restricao/por-id tx pedido-id)]
+          (atuacao/registrar! tx {:operador-id operador-id :ente-id (:ente-id p) :acao "apagamento-interrompido"
+                                  :detalhe (cond-> {:pedido (str pedido-id) :erro erro}
+                                             resumo-parcial (assoc :resumo resumo-parcial))})))))
+  (apagamento-pendente [_ ente-id] (restricao/apagamento-aprovado-pendente (:ds datasource) ente-id))
+  (apagamento-efetivado [_ ente-id] (restricao/apagamento-efetivado (:ds datasource) ente-id)))
 
 (defn ativar-casa-em-tx!
   "Consumidor (na tx do relay): a Casa passa a 'ativo' quando o 1o administrador entra. Sela a atuacao sem operador
