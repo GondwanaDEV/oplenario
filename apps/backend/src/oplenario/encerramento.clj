@@ -10,6 +10,7 @@
   dono que apaga no banco e as salvaguardas conferidas la')."
   (:require [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema]
             [oplenario.auditoria.components.repositorio :as repo-auditoria]
+            [oplenario.auditoria.logic :as auditoria-logic]
             [oplenario.encerramento.apagamento :as apagamento]
             [oplenario.encerramento.exportacao :as exportacao]))
 
@@ -23,7 +24,9 @@
   ([repo-aud] (seams-de-auditoria repo-aud nil))
   ([repo-aud repo-op]
    (cond-> {:verificar (fn [ente-id] (repo-auditoria/verificar repo-aud ente-id))
-            :selos-do-dia (fn [ente-id] (repo-auditoria/selos-do-dia repo-aud ente-id 1000000))}
+            :selos-do-dia (fn [ente-id] (repo-auditoria/selos-do-dia repo-aud ente-id 1000000))
+            ;; o MESMO pseudonimo do cidadao que a tela da trilha mostra (ADR-0017 4c)
+            :pseudonimo (fn [ente-id identidade-id] (auditoria-logic/pseudonimo ente-id identidade-id))}
      repo-op
      (assoc :ancoras (fn [ente-id]
                        (->> (repo-admin-sistema/atuacao-do-ente repo-op ente-id 1000000)
@@ -45,10 +48,14 @@
                    Casa nao enxerga outra.
     :objeto-store  o Component `ObjetoStore` (com `listar`).
     :auditoria     {:verificar (fn [ente-id] -> {:integra :total :cabeca :quebra-em})   ; obrigatorio
+                    :pseudonimo (fn [ente-id identidade-id] -> \"#a1b2c3\")              ; obrigatorio
                     :selos-do-dia (fn [ente-id] -> [{:dia :seq :selo}])
                     :ancoras (fn [ente-id] -> [{:em :dia :seq :selo-do-dia :selo-da-operacao}])}  ; opcional
                    — monte com `(seams-de-auditoria repo-auditoria repo-admin-sistema)`.
     :agora         (opcional) (fn [] -> Instant).
+
+  Quem e' so' cidadao na Casa sai pseudonimizado (ver `encerramento.protecao`); a corrente da trilha e' conferida
+  antes, sobre os dados reais.
 
   Devolve {:chave \"exportacoes/<ente>/<id>.zip\" :sha256 <hex64 do ZIP inteiro> :bytes n :manifesto {...}} — o
   manifesto e' o mesmo `manifesto.json` do ZIP (chaves string, pronto para o jsonb de `admin_sistema.exportacao_casa`).
