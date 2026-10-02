@@ -502,10 +502,13 @@ const alvoComTexto =
 let alvoSemTexto = editaveis.find((e) => !e.temTexto && !reservadosE3.has(e.id)) ?? null;
 if (!alvoSemTexto && vereadorIdDoVereador) {
   try {
-    const tipoValido = editaveis[0]?.tipo ?? listaProps.itens[0]?.tipo ?? "requerimento";
+    // projeto_lei: espécie SEM campo próprio (indicação, requerimento e moção exigem o dado da espécie desde o
+    // PR #64). E `autor-texto` junto do `autor-tipo` — o nome de exibição é obrigatório na mesma escrita. Sem
+    // os dois, o POST dava 400 e o E3 "editar só a ementa" ficava pulado no CI sem ninguém ver.
+    const tipoValido = "projeto_lei";
     const nova = exigir(await api(TOK.secretaria, "POST", "/legislativo/proposicoes", {
       tipo: tipoValido, ano: new Date().getFullYear(), ementa: `T3-E3 alvo sem-texto ${carimbo}`,
-      "autor-tipo": "vereador", "autor-id": vereadorIdDoVereador,
+      "autor-tipo": "vereador", "autor-id": vereadorIdDoVereador, "autor-texto": "Vereador da demo (T3)",
     }), "POST /legislativo/proposicoes (E3 alvo sem-texto)");
     alvoSemTexto = { id: nova.id, tipo: tipoValido, ano: nova.ano ?? new Date().getFullYear(), estado: "em_elaboracao", lockVersion: 0, temTexto: false };
     console.log(`   E3 alvo sem-texto FABRICADO: ${nova.id}`);
