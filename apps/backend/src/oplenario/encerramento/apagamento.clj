@@ -10,7 +10,11 @@
     3. o BANCO (`admin_sistema.apagar_dados_da_casa`, SECURITY DEFINER do dono: confere de novo e apaga numa transacao
        so') — falha LANCA;
     4. as EXPORTACOES `exportacoes/<ente>/` (depois do banco: ate' aqui a Casa ainda podia baixar a dela);
-    5. o REALM da Casa no IdP e 6. os dados no SATELITE de IA — fora do ar = `pendente`, nunca sucesso fingido."
+    5. o REALM da Casa no IdP e 6. os dados no SATELITE de IA — fora do ar = `pendente`, nunca sucesso fingido;
+    7. a VARREDURA: o banco e os blobs da convencao de novo. A Casa fechou quando o apagamento comecou (mig 0177), mas
+       uma escrita que ja' estava em voo naquele instante (e o evento que ela emitiu) pode ter gravado depois do passo
+       3; a varredura, segundos depois, apaga o que sobrou. O resumo soma as duas passadas e diz quanto a varredura
+       achou (`:varredura`)."
   (:require [clojure.string :as str]
             [jsonista.core :as json]
             [next.jdbc :as jdbc]
@@ -113,11 +117,17 @@
                                   :total (:total r)})))
           pendencias (cond-> []
                        (:pendente realm) (conj :realm)
-                       (:pendente ia) (conj :ia))]
+                       (:pendente ia) (conj :ia))
+          sobra-blobs (remover-todos! objeto-store
+                                      (arquivos/por-convencao objeto-store ente-id #{arquivos/pasta-das-exportacoes})
+                                      "varredura dos arquivos")
+          sobra (apagar-no-banco! ds ente-id pedido-id)
+          tabelas (merge-with + tabelas sobra)]
       {:ente-id ente-id
        :tabelas tabelas
        :linhas-total (reduce + 0 (vals tabelas))
-       :objetos objetos
+       :varredura {:linhas (reduce + 0 (vals sobra)) :objetos sobra-blobs}
+       :objetos (+ objetos sobra-blobs)
        :objetos-fora-da-convencao fora-da-convencao
        :exportacoes-apagadas exportacoes
        :realm-apagado? (not (:pendente realm))

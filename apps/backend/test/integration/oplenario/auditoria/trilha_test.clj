@@ -131,7 +131,7 @@
     (testing "o cidadao sai pseudonimizado; o auditor ve tudo — inclusive quem leu a trilha"
       (let [t (trilha svc ente ana)
             acoes (mapv :acao (:registros t))]
-        (is (some #(re-matches #"Cidadão #[0-9a-f]{6}" (str (get-in % [:ator :nome]))) (:registros t)))
+        (is (some #(re-matches #"Cidadão #[0-9a-f]{12}" (str (get-in % [:ator :nome]))) (:registros t)))
         (is (= 1 (count (filter #(= ["auditoria/trilha" "leitura_sensivel"] ((juxt :acao :classe) %)) (:registros t))))
             "a leitura do admin_ente ficou registrada (a do vereador sobre a propria, nao)")
         (is (some #{"identidade/conceder-acesso"} acoes))))

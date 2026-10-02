@@ -4,7 +4,7 @@
   A Casa recebe os dados dela, mas nao mais do que a tela da trilha mostra sobre quem e' so' CIDADAO:
   - o id de quem, nesta Casa, so' tem vinculo de cidadao (nenhum vinculo de servidor/vereador/admin, nenhum papel)
     vira, em QUALQUER campo exportado (coluna uuid, texto, JSON, lista), o MESMO pseudonimo que a tela da trilha usa
-    (`#a1b2c3`, estavel por Casa). Servidores, vereadores e agentes seguem com o id real: sao atos da funcao publica;
+    (`#a1b2c3d4e5f6`, estavel por Casa). Servidores, vereadores e agentes seguem com o id real: sao atos da funcao publica;
   - na trilha (`auditoria.registro`), toda linha em que o ator agiu como cidadao sai com o pseudonimo e SEM o IP — mesmo
     que a pessoa tambem seja servidora, porque ali ela agiu como cidada;
   - e a linha do ato que PODE ser anonimo (protocolar manifestacao de ouvidoria — Lei 13.460, art. 10 §7o) sai sem
@@ -22,6 +22,20 @@
 (def acoes-que-podem-ser-anonimas
   "Os atos do cidadao cuja linha na trilha sai SEM ator (o ato em si pode ter sido anonimo)."
   #{"participacao/protocolar-manifestacao"})
+
+(defn sem-colisao
+  "O `pseudonimo` (fn [id] -> \"#...\") que RECUSA dar o mesmo pseudonimo a duas pessoas: a exportacao falha (e o
+  operador gera de novo depois de uma correcao) em vez de fundir dois cidadaos num so' no arquivo que a Casa guarda.
+  Com 48 bits (`auditoria.logic/pseudonimo`) a chance e' desprezivel; a recusa e' para que nunca seja silenciosa."
+  [pseudonimo]
+  (let [donos (atom {})]
+    (fn [id]
+      (let [p (pseudonimo id)
+            dono (get (swap! donos update p #(or % id)) p)]
+        (when (not= dono id)
+          (throw (ex-info (str "dois cidadaos com o mesmo pseudonimo (" p ") — a exportacao nao funde pessoas")
+                          {:tipo :encerramento/falhou :passo :pseudonimo})))
+        p))))
 
 (defn protetor
   "(fn [texto] -> texto): troca cada UUID de `cidadaos` (strings minusculas) pelo pseudonimo `(pseudonimo id)`."

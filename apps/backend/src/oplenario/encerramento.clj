@@ -48,7 +48,7 @@
                    Casa nao enxerga outra.
     :objeto-store  o Component `ObjetoStore` (com `listar`).
     :auditoria     {:verificar (fn [ente-id] -> {:integra :total :cabeca :quebra-em})   ; obrigatorio
-                    :pseudonimo (fn [ente-id identidade-id] -> \"#a1b2c3\")              ; obrigatorio
+                    :pseudonimo (fn [ente-id identidade-id] -> \"#a1b2c3d4e5f6\")        ; obrigatorio
                     :selos-do-dia (fn [ente-id] -> [{:dia :seq :selo}])
                     :ancoras (fn [ente-id] -> [{:em :dia :seq :selo-do-dia :selo-da-operacao}])}  ; opcional
                    — monte com `(seams-de-auditoria repo-auditoria repo-admin-sistema)`.
@@ -84,7 +84,8 @@
     {:ente-id                     uuid
      :tabelas                     {\"schema.tabela\" linhas-apagadas ...}  ; TODAS do inventario (zeros inclusive) +
                                                                           ; identidade.identidade (orfas) quando houve
-     :linhas-total                n
+     :linhas-total                n (as duas passadas)
+     :varredura                   {:linhas n :objetos n} — o que a 2a passada (a varredura) ainda achou
      :objetos                     n blobs removidos (fora as exportacoes)
      :objetos-fora-da-convencao   [chaves referenciadas fora de `<pasta>/<ente>/`, NAO removidas]
      :exportacoes-apagadas        n

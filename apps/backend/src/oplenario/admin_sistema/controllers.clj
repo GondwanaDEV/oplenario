@@ -132,7 +132,11 @@
   (when-let [c (efetivar-pendentes! repo-op deps ente-id agora)]
     (cond-> {:estado (:estado c) :motivo (:motivo-restricao c) :desde (:restrita-desde c)}
       (= "encerrado" (:estado c)) (assoc :encerrada-em (:encerrada-em c) :destino-acervo-url (:destino-acervo-url c)
-                                         :nome (:nome c)))))
+                                         :nome (:nome c))
+      ;; o apagamento comecou (mig 0177): a Casa ja' fechou, mesmo antes do `encerrado` — dado sendo apagado nao
+      ;; recebe linha nova (`restricao-da-casa/encerrada?`)
+      (and (not= "encerrado" (:estado c)) (:apagamento-iniciado-em c))
+      (assoc :apagando? true :destino-acervo-url (:destino-acervo-url c) :nome (:nome c)))))
 
 (defn pedir-suspensao!
   [repo-op deps ator ente-id {:keys [motivo justificativa]} agora]
@@ -330,10 +334,6 @@
     (mudou! deps ente-id)
     r))
 
-(defonce ^:private apagando
-  ;; uma execucao do apagamento por Casa nesta instancia (dois cliques em "Retomar" nao rodam juntos)
-  (java.util.concurrent.ConcurrentHashMap/newKeySet))
-
 (defn- campo
   "O campo `k` do mapa, com chave keyword OU string (o resumo volta do jsonb com chaves string). `false` e' valor."
   [m k]
@@ -364,9 +364,12 @@
   (let [apagar (:apagar-casa deps)
         {:keys [ente-id]} pedido
         pedido-id (:id pedido)]
-    (when-not (.add ^java.util.Set apagando ente-id)
+    ;; uma execucao por Casa ENTRE instancias (lease no registro, mig 0177); a 1a FECHA a Casa: dali em diante o
+    ;; interceptor da Casa responde 410 a tudo, e o estado dela nao fica no cache (`restricao-da-casa/com-cache`)
+    (when-not (repo/reservar-apagamento! repo-op ente-id (:operador-id ator) agora)
       (throw (ex-info "o apagamento desta Casa ja' esta' rodando" {:tipo :admin-sistema/conflito
                                                                     :causa "apagamento-rodando"})))
+    (mudou! deps ente-id)
     (try
       (try
         (let [resumo (logic/somar-resumos (resumo-parcial-anterior repo-op ente-id pedido-id) (apagar ente-id pedido-id))]
@@ -386,7 +389,8 @@
           {:casa (repo/casa-por-id repo-op ente-id) :pedido (repo/pedido-por-id repo-op pedido-id)
            :efeito :apagamento-interrompido :erro (mensagem-de t)}))
       (finally
-        (.remove ^java.util.Set apagando ente-id)
+        ;; concluido, o `encerrado` ja' soltou o lease junto; interrompido, solta aqui (a Casa segue fechada)
+        (repo/liberar-apagamento! repo-op ente-id)
         (mudou! deps ente-id)))))
 
 (defn- aprovar-apagamento!

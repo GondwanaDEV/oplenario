@@ -14,14 +14,17 @@
    :provisionada_por :primeiro_admin_identidade_id :primeiro_admin_email :convite_enviado_em :ativada_em
    :motivo_restricao :restrita_desde :suspensao_agendada
    ;; ADR-0018 (fatia 2): a Casa encerrada
-   :encerrada_em :destino_acervo_url :apagamento])
+   :encerrada_em :destino_acervo_url :apagamento
+   ;; mig 0177: a Casa fecha quando o apagamento comeca + o lease de uma execucao por Casa
+   :apagamento_iniciado_em :apagamento_em_execucao_desde])
 
 (defn- ->instant [v] (if (instance? java.sql.Timestamp v) (.toInstant ^java.sql.Timestamp v) v))
 
 (defn- ->casa [r]
   (when r
     (-> (reduce #(update %1 %2 ->instant) (comum/linha->kebab r)
-                [:criado-em :atualizado-em :convite-enviado-em :ativada-em :restrita-desde :encerrada-em])
+                [:criado-em :atualizado-em :convite-enviado-em :ativada-em :restrita-desde :encerrada-em
+                 :apagamento-iniciado-em :apagamento-em-execucao-desde])
         (update :apagamento comum/jsonb->kw))))
 
 (defn inserir!
@@ -99,7 +102,29 @@
   [conn ente-id encerrada-em resumo]
   (atualizar-se! conn ente-id [:and [:= :estado "suspenso"] [:= :motivo_restricao "encerramento_em_curso"]]
                  {:estado "encerrado" :motivo_restricao nil :suspensao_agendada nil :encerrada_em encerrada-em
-                  :apagamento (comum/->jsonb resumo)}))
+                  :apagamento (comum/->jsonb resumo) :apagamento_em_execucao_desde nil}))
+
+(def validade-da-execucao-seg
+  "O lease de uma execucao do apagamento vence depois disto: a instancia que caiu no meio nao trava a retomada."
+  (* 15 60))
+
+(defn reservar-apagamento!
+  "Reserva a execucao do apagamento desta Casa (lease entre instancias, mig 0177) e, na 1a vez, FECHA a Casa
+  (`apagamento_iniciado_em`, que nao muda mais). Devolve a Casa, ou nil se outra execucao esta' rodando (lease vigente)
+  ou a Casa nao esta' com o encerramento em curso."
+  [conn ente-id ^java.time.Instant agora]
+  (atualizar-se! conn ente-id
+                 [:and [:= :estado "suspenso"] [:= :motivo_restricao "encerramento_em_curso"]
+                  [:or [:= :apagamento_em_execucao_desde nil]
+                   [:< :apagamento_em_execucao_desde (.minusSeconds agora validade-da-execucao-seg)]]]
+                 {:apagamento_em_execucao_desde agora
+                  :apagamento_iniciado_em [:coalesce :apagamento_iniciado_em agora]}))
+
+(defn liberar-apagamento!
+  "Solta o lease (a execucao terminou sem encerrar: interrompida ou com pendencia). A Casa segue FECHADA."
+  [conn ente-id]
+  (atualizar-se! conn ente-id [:and [:<> :estado "encerrado"] [:<> :apagamento_em_execucao_desde nil]]
+                 {:apagamento_em_execucao_desde nil}))
 
 (defn definir-destino-acervo!
   "Para onde foi o acervo publico (https), ou nil para tirar. So' numa Casa com o encerramento em curso ou encerrada."

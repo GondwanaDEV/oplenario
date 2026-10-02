@@ -77,9 +77,16 @@
       (assoc :auditoria {:rotulo "recusado: Casa com acesso restrito"})))
 
 (defn encerrada?
-  "PURA: o estado (do seam) e' de uma Casa encerrada?"
+  "PURA: o estado (do seam) e' de uma Casa encerrada — ou cujo apagamento ja' comecou (`:apagando?`, mig 0177: dado sendo
+  apagado nao recebe linha nova, nem da allowlist do cidadao, nem o registro da trilha)?"
   [estado]
-  (= "encerrado" (:estado estado)))
+  (or (= "encerrado" (:estado estado)) (boolean (:apagando? estado))))
+
+(defn em-encerramento?
+  "PURA: a Casa esta' com o encerramento em curso (suspensa para encerrar)? E' o estado que nao entra no cache: o
+  apagamento pode comecar a qualquer momento e tem de fechar a Casa em todas as instancias na hora."
+  [estado]
+  (and (restrita? estado) (= "encerramento_em_curso" (:motivo estado))))
 
 (defn resposta-410
   "A Casa encerrada: o nome (publico, do registro), quando e para onde foi o acervo publico (se a Casa informou).
@@ -156,7 +163,11 @@
                          (if (and expira (< agora (long expira)))
                            v
                            (let [v (ler ente-id)]
-                             (swap! cache assoc ente-id [(+ agora (long ttl-ms)) v])
+                             ;; a Casa com o encerramento em curso e' lida do registro a cada requisicao (rara, e o
+                             ;; inicio do apagamento a fecha em TODAS as instancias na hora — ver `em-encerramento?`)
+                             (if (em-encerramento? v)
+                               (swap! cache dissoc ente-id)
+                               (swap! cache assoc ente-id [(+ agora (long ttl-ms)) v]))
                              v))))
      :invalidar! (fn [ente-id] (swap! cache dissoc ente-id) nil)}))
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { TopoInterno, destinosVisiveis } from "./topo";
 import { TemaProvider } from "@/lib/tema";
 import { AuthProvider } from "@/lib/auth";
@@ -12,7 +12,14 @@ import { AuthProvider } from "@/lib/auth";
 // literal, é resolvido do servidor (achado ao vivo: o cabeçalho mostrava o MESMO ator fixo pra qualquer
 // persona logada).
 describe("TopoInterno", () => {
-  afterEach(() => vi.restoreAllMocks());
+  // `cleanup` explicito (a suite nao liga os globals do Vitest, entao o Testing Library nao desmonta sozinho): sem
+  // ele, os tres Topos ficavam montados ate' o fim do arquivo e, sob carga no CI, o React ainda tinha trabalho
+  // agendado quando o jsdom era desmontado -> "ReferenceError: window is not defined" (3 erros nao tratados, CI do
+  // PR #82, com os 8 testes verdes).
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it("mostra o rótulo da área e o nome+papel resolvidos do ator autenticado", async () => {
     global.fetch = vi.fn(

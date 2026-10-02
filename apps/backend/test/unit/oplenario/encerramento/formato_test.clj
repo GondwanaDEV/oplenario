@@ -6,6 +6,7 @@
             [oplenario.encerramento.arquivos :as arquivos]
             [oplenario.encerramento.csv :as csv]
             [oplenario.encerramento.inventario :as inventario]
+            [oplenario.encerramento.protecao :as protecao]
             [oplenario.encerramento.protecao :as protecao])
   (:import (java.sql Timestamp)
            (java.time Instant LocalDate)
@@ -77,3 +78,11 @@
                (linha ["e" "pessoa" s "legislativo/protocolar" "10.0.0.1"])))))
     (testing "fora da trilha, so' a troca de ids"
       (is (= ["#p-aaaa" "cidadao"] ((protecao/protetor-de-linha "x.y" ["a" "ator_tipo"] proteger pseudo) [c "cidadao"]))))))
+
+(deftest o-pseudonimo-nunca-funde-duas-pessoas
+  (let [p (protecao/sem-colisao (fn [id] (if (#{"a" "b"} id) "#igual" (str "#" id))))]
+    (is (= "#igual" (p "a")))
+    (is (= "#igual" (p "a")) "a mesma pessoa, o mesmo pseudonimo")
+    (is (= "#c" (p "c")))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"mesmo pseudonimo" (p "b"))
+        "outra pessoa com o mesmo pseudonimo: a exportacao falha em vez de fundir as duas")))
