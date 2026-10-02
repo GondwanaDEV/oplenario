@@ -114,6 +114,27 @@
                                 :motivo "o 2o operador aprova o pedido de suspensao/encerramento (two-person rule, ADR-0018)"}
  :admin-sistema/recusar-pedido {:categoria :supratenant
                                 :motivo "o 2o operador recusa (ou quem pediu retira) o pedido de suspensao/encerramento"}
+ ;; ---------- ADR-0018 (fatia 2): encerrar — exportacao, confirmacao, destino do acervo, apagamento ----------
+ ;; Nenhuma e' acao do agente: exportar a Casa inteira, confirmar que a recebeu e apagar sao atos de pessoa, com
+ ;; consequencia irreversivel, e a Casa suspensa/encerrada nem tem agente (a IA dela esta' pausada).
+ :admin-sistema/gerar-exportacao {:categoria :supratenant
+                                  :motivo "a Operacao manda gerar a exportacao completa da Casa durante o encerramento (9.6)"}
+ :admin-sistema/registrar-oficio-de-recebimento {:categoria :supratenant
+                                                 :motivo "a Operacao registra a confirmacao de recebimento que a Casa mandou por oficio"}
+ :admin-sistema/definir-destino-acervo {:categoria :supratenant
+                                        :motivo "a Operacao informa para onde foi o acervo publico da Casa encerrada (Eixo 4.4 c)"}
+ :admin-sistema/pedir-apagamento {:categoria :supratenant
+                                  :motivo "um operador pede o apagamento dos dados da Casa depois da guarda de 90 dias; outro aprova"}
+ :admin-sistema/retomar-apagamento {:categoria :supratenant
+                                    :motivo "o apagamento aprovado que parou no meio roda de novo (retomavel), pelo console"}
+ :exportacao-da-casa/listar {:categoria :so-tela
+                             :motivo "o bloco de exportacao da area do administrador da Casa: estado, tamanho e hash"}
+ :exportacao-da-casa/gerar {:categoria :so-tela
+                            :motivo "gerar a exportacao completa (portabilidade, 9.6) e' ato do administrador da Casa, na tela"}
+ :exportacao-da-casa/baixar {:categoria :so-tela
+                             :motivo "baixar o arquivo da Casa inteira e' do administrador, na tela; o agente nunca carrega isso"}
+ :exportacao-da-casa/confirmar-recebimento {:categoria :so-tela
+                                            :motivo "confirmar o recebimento abre a contagem da guarda do apagamento: ato de pessoa, na tela"}
  ;; ---------- Onda E: o livro de atas no portal ----------
  :sessoes/livro-atas-publico {:categoria :so-tela
                               :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}

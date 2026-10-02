@@ -8,6 +8,9 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { ObservabilidadeIA } from "./observabilidade-ia-vista";
+import type { Exportacao } from "./contrato-exportacao";
+
+export type { Exportacao } from "./contrato-exportacao";
 
 export type EstadoCasa = "provisionar" | "ativo" | "suspenso" | "encerrado";
 
@@ -25,14 +28,17 @@ export type Casa = {
   restricao?: { motivo: string; desde: string } | null;
   /** ADR-0018: a suspensão aprovada que espera a sessão plenária em curso encerrar. */
   suspensaoAgendada?: boolean;
+  /** ADR-0018 (fatia 2): quando a Casa foi encerrada, e para onde foi o acervo público (se informado). */
+  encerradaEm?: string | null;
+  destinoAcervoUrl?: string | null;
 };
 
-/** ADR-0018: o pedido de suspensão/encerramento que espera o 2º operador. */
+/** ADR-0018: o pedido de suspensão/encerramento/apagamento que espera o 2º operador. */
 export type Pedido = {
   id: string;
   enteId: string;
   casaNome: string | null;
-  acao: "suspender" | "encerrar";
+  acao: "suspender" | "encerrar" | "apagar";
   motivo: string;
   justificativa: string;
   estado: "aguardando" | "aprovado" | "recusado" | "expirado" | "retirado";
@@ -45,7 +51,7 @@ export type Pedido = {
 
 export type ListaDeCasas = {
   casas: Casa[];
-  resumo: { total: number; ativas: number; aguardandoAdmin: number; suspensas?: number };
+  resumo: { total: number; ativas: number; aguardandoAdmin: number; suspensas?: number; encerradas?: number };
   pendentes?: Pedido[];
 };
 
@@ -58,10 +64,38 @@ export type Atuacao = {
   selo: string;
 };
 
+/** O resumo do apagamento, como o backend o guarda no registro (a prova de que apagamos). */
+export type ResumoApagamento = {
+  tabelas?: Record<string, number>;
+  linhasTotal?: number;
+  objetos?: number;
+  "realmApagado?"?: boolean;
+  ia?: Record<string, number>;
+  exportacoesApagadas?: number;
+  pedido?: string;
+  exportacao?: { id: string; sha256: string; bytes: number | null; confirmadaEm: string; confirmadaPor: string };
+};
+
+export type Encerramento = {
+  emCurso: boolean;
+  desde: string | null;
+  exportacoes: Exportacao[];
+  confirmacao: Exportacao | null;
+  apagamentoPossivelEm: string | null;
+  podePedirApagamento: boolean;
+  exportacaoDisponivel: boolean;
+  apagamentoDisponivel: boolean;
+  apagamentoPendente: Pedido | null;
+  destinoAcervoUrl: string | null;
+  encerradaEm: string | null;
+  apagamento: ResumoApagamento | null;
+};
+
 export type FichaDaCasa = {
   casa: Casa;
   primeiroAdmin: { nome: string | null; email: string | null } | null;
   pedidoAberto?: Pedido | null;
+  encerramento?: Encerramento | null;
   atuacao: Atuacao[];
 };
 
@@ -136,6 +170,28 @@ const MENSAGENS: Record<number, string> = {
   404: "Esta Casa não está no registro.",
 };
 
+/** ADR-0018 (fatia 2): as recusas nomeadas do encerramento (`causa` do 409/503), em frase da tela. */
+const MENSAGENS_CAUSA: Record<string, string> = {
+  "fora-do-encerramento": "Isto só vale com o encerramento da câmara em curso.",
+  "exportacao-em-andamento": "Já há uma exportação sendo gerada para esta câmara. Espere ela terminar.",
+  "exportacao-indisponivel": "A exportação completa ainda não está disponível nesta instalação.",
+  "apagamento-indisponivel": "O apagamento ainda não está disponível nesta instalação.",
+  "sem-confirmacao": "A câmara ainda não confirmou o recebimento da exportação. Sem confirmação, não se apaga.",
+  "guarda-em-curso": "A janela de guarda de 90 dias desde a confirmação ainda não passou.",
+  "ja-confirmada": "O recebimento desta exportação já foi confirmado. A confirmação não se desfaz.",
+  "exportacao-nao-pronta": "Só se confirma o recebimento de uma exportação pronta.",
+  "apagamento-aprovado": "O apagamento desta câmara já foi aprovado e não tem volta. Retome-o.",
+  "apagamento-pedido": "Há um pedido de apagamento esperando o 2º operador. Recuse ou retire antes.",
+  "apagamento-rodando": "O apagamento desta câmara já está rodando. Recarregue em instantes.",
+  "sem-apagamento-pendente": "Não há apagamento aprovado esperando ser retomado.",
+  "casa-encerrada": "A câmara já está encerrada.",
+  "fila-cheia": "A fila de exportações está cheia. Tente de novo em alguns minutos.",
+};
+
+export function mensagemDaCausa(causa: string | undefined): string | null {
+  return causa ? MENSAGENS_CAUSA[causa] ?? null : null;
+}
+
 async function enviar<T>(caminho: string, token: string | null, corpo?: unknown): Promise<ResultadoEnvio<T>> {
   try {
     const r = await apiFetch(caminho, {
@@ -146,9 +202,13 @@ async function enviar<T>(caminho: string, token: string | null, corpo?: unknown)
       cache: "no-store",
     });
     if (r.ok) return { ok: true, dados: camelizarChaves(await r.json()) as T };
-    if (r.status === 409) {
-      const b = (await r.json().catch(() => ({}))) as { erro?: string };
-      return { ok: false, mensagem: b.erro ? primeiraMaiuscula(b.erro) + "." : "A Casa não está mais nesse estado." };
+    if (r.status === 409 || r.status === 503) {
+      const b = (await r.json().catch(() => ({}))) as { erro?: string; causa?: string };
+      const nomeada = mensagemDaCausa(b.causa);
+      if (nomeada) return { ok: false, mensagem: nomeada };
+      if (r.status === 409) {
+        return { ok: false, mensagem: b.erro ? primeiraMaiuscula(b.erro) + "." : "A Casa não está mais nesse estado." };
+      }
     }
     return { ok: false, mensagem: MENSAGENS[r.status] ?? "O servidor não conseguiu concluir agora. Tente de novo em instantes." };
   } catch {
@@ -186,7 +246,13 @@ export function reaplicarLogin(ente: string, token: string | null) {
 
 // ---- ADR-0018: suspender, reativar, iniciar o encerramento ----
 
-export type Transicao = { casa: Casa; pedido: Pedido | null; efeito: "imediato" | "agendado" | "ja-efetivado" | null };
+export type Transicao = {
+  casa: Casa;
+  pedido: Pedido | null;
+  efeito: "imediato" | "agendado" | "ja-efetivado" | "encerrada" | "apagamento-interrompido" | null;
+  /** O apagamento que parou no meio diz por quê (a tela oferece retomar). */
+  erro?: string;
+};
 
 export const MOTIVOS_SUSPENSAO = [
   { valor: "inadimplencia", rotulo: "Inadimplência" },
@@ -207,6 +273,7 @@ const ROTULOS_MOTIVO: Record<string, string> = {
   incidente_de_seguranca: "Incidente de segurança",
   encerramento_em_curso: "Encerramento em curso",
   fim_de_contrato: "Fim do contrato",
+  fim_da_guarda: "Fim da guarda de 90 dias",
 };
 
 export function rotuloMotivo(motivo: string): string {
@@ -243,6 +310,48 @@ export function aprovarPedido(pedido: string, token: string | null) {
 export function recusarPedido(pedido: string, justificativa: string, token: string | null) {
   const j = justificativa.trim();
   return enviar<Transicao>(`/api/operacao/pedidos/${encodeURIComponent(pedido)}/recusa`, token, j ? { justificativa: j } : {});
+}
+
+// ---- ADR-0018 (fatia 2): encerrar — exportação, ofício, destino do acervo, apagamento ----
+
+/** A Operação manda gerar a exportação completa (só com o encerramento em curso). */
+export function gerarExportacao(ente: string, token: string | null) {
+  return enviar<Exportacao>(`${base(ente)}/exportacoes`, token);
+}
+
+/** A Câmara confirmou o recebimento por ofício: o operador registra, com o texto do ofício. */
+export function registrarOficio(exportacao: string, texto: string, token: string | null) {
+  return enviar<Exportacao>(`/api/operacao/exportacoes/${encodeURIComponent(exportacao)}/oficio`, token, { texto: texto.trim() });
+}
+
+/** Para onde foi o acervo público (https), ou vazio para tirar. */
+export function definirDestinoAcervo(ente: string, url: string, token: string | null) {
+  const u = url.trim();
+  return enviar<Transicao>(`${base(ente)}/destino-acervo`, token, { url: u || null });
+}
+
+export function pedirApagamento(ente: string, justificativa: string, token: string | null) {
+  return enviar<Transicao>(`${base(ente)}/apagamento`, token, { justificativa: justificativa.trim() });
+}
+
+export function retomarApagamento(ente: string, token: string | null) {
+  return enviar<Transicao>(`${base(ente)}/apagamento/retomada`, token);
+}
+
+/** O texto do ofício: o servidor recusa menos de 10 caracteres. */
+export function conferirOficio(texto: string): string | null {
+  const t = texto.trim();
+  if (t.length < 10) return "Escreva o número, a data e quem assina o ofício — ele fica na atuação selada.";
+  if (t.length > 2000) return "O texto do ofício passa de 2.000 caracteres.";
+  return null;
+}
+
+/** O destino do acervo é um endereço https (ou vazio). */
+export function conferirDestino(url: string): string | null {
+  const u = url.trim();
+  if (!u) return null;
+  if (!/^https:\/\/\S+$/.test(u) || u.length > 500) return "Informe o endereço completo, começando com https://.";
+  return null;
 }
 
 // ---- conferência no navegador (espelha o backend; o servidor confere de novo) ----
@@ -303,6 +412,16 @@ const ACOES: Record<string, string> = {
   "pedido-retirado": "Pedido retirado por quem pediu",
   "casa-suspensa": "Câmara com acesso restrito",
   "casa-reativada": "Câmara reativada",
+  "exportacao-solicitada": "Exportação completa solicitada",
+  "exportacao-pronta": "Exportação completa pronta",
+  "exportacao-falhou": "A geração da exportação falhou",
+  "recebimento-confirmado": "Recebimento da exportação confirmado",
+  "destino-do-acervo-informado": "Destino do acervo público informado",
+  "apagamento-pedido": "Apagamento pedido",
+  "apagamento-aprovado": "Apagamento aprovado pelo 2º operador",
+  "apagamento-recusado": "Apagamento recusado pelo 2º operador",
+  "apagamento-interrompido": "O apagamento parou no meio",
+  "casa-encerrada": "Câmara encerrada: dados apagados",
 };
 
 export function rotuloAcao(acao: string): string {

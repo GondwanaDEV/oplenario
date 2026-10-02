@@ -21,6 +21,7 @@ import {
 } from "@/lib/use-operacao";
 import { dataHora, haQuanto } from "../../quando";
 import { AcessoDaCamara } from "./acesso-da-camara";
+import { EncerramentoDaCamara } from "./encerramento";
 
 export default function CamaraNoConsole() {
   const { ente } = useParams<{ ente: string }>();
@@ -56,7 +57,7 @@ function Ficha({ ficha, token, recemProvisionada, aoMudar }: {
   recemProvisionada: string | null;
   aoMudar: () => void;
 }) {
-  const { casa, primeiroAdmin, atuacao, pedidoAberto } = ficha;
+  const { casa, primeiroAdmin, atuacao, pedidoAberto, encerramento } = ficha;
   const [ocupado, setOcupado] = useState<"convite" | "login" | null>(null);
   const [aviso, setAviso] = useState<{ tipo: "ok" | "erro"; texto: string } | null>(null);
 
@@ -141,6 +142,8 @@ function Ficha({ ficha, token, recemProvisionada, aoMudar }: {
       </section>
 
       <AcessoDaCamara casa={casa} pedidoAberto={pedidoAberto ?? null} token={token} aoMudar={aoMudar} />
+      <EncerramentoDaCamara casa={casa} encerramento={encerramento} pedidoAberto={pedidoAberto ?? null} token={token}
+        aoMudar={aoMudar} />
 
       <section className="op-secao" aria-labelledby="titulo-suporte">
         <h2 id="titulo-suporte">Acesso de suporte</h2>

@@ -15,7 +15,7 @@
 // "erro" genérico — em NENHUM dos dois o botão "Entrar" aparece (fail-closed: nunca oferecer login para
 // uma Câmara que não confirmamos existir).
 
-export type EstadoEntrada = "ok" | "nao-encontrada" | "erro";
+export type EstadoEntrada = "ok" | "nao-encontrada" | "encerrada" | "erro";
 
 export interface RespostaDescoberta {
   "ente-id"?: unknown;
@@ -35,11 +35,24 @@ export interface VistaEntrada {
   estado: EstadoEntrada;
   enteId: string | null;
   nome: string | null;
+  /** ADR-0018 (fatia 2): a Câmara encerrada — para onde foram os documentos públicos, se ela informou. */
+  destinoAcervoUrl?: string | null;
 }
 
 export function derivarVistaEntrada(resultado: ResultadoDescoberta): VistaEntrada {
   if (resultado.status === 404) {
     return { estado: "nao-encontrada", enteId: null, nome: null };
+  }
+  // ADR-0018 (fatia 2): a Câmara encerrada não tem mais login — nem botão (o 410 vem com o nome e o destino do acervo)
+  if (resultado.status === 410) {
+    const nome = resultado.corpo?.nome;
+    const destino = resultado.corpo?.["destino-acervo-url"];
+    return {
+      estado: "encerrada",
+      enteId: null,
+      nome: typeof nome === "string" ? nome : null,
+      destinoAcervoUrl: typeof destino === "string" && /^https:\/\//.test(destino) ? destino : null,
+    };
   }
   if (resultado.status !== 200 || !resultado.corpo) {
     return { estado: "erro", enteId: null, nome: null };

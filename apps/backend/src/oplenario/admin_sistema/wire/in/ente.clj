@@ -41,3 +41,25 @@
   "Eixo 5: um operador reativa, com motivo (ex.: pagamento regularizado)."
   [:map {:closed true}
    ["justificativa" Justificativa]])
+
+;; ---- ADR-0018 (fatia 2): encerrar ----
+
+(def ConfirmarRecebimentoIn
+  "O admin_ente confirma o recebimento DIGITANDO de volta (ou colando) o codigo que a tela mostra: confirma o arquivo
+  certo, nao um clique distraido."
+  [:map {:closed true}
+   ["sha256" [:re #"^[0-9a-f]{64}$"]]])
+
+(def OficioIn
+  "O operador registra a confirmacao recebida por oficio: o texto do oficio (numero, data, quem assina)."
+  [:map {:closed true}
+   ["texto" [:string {:min 10 :max 2000}]]])
+
+(def DestinoAcervoIn
+  "Para onde foi o acervo publico (Eixo 4.4 c): https, ou null para tirar."
+  [:map {:closed true}
+   ["url" [:maybe [:and [:string {:max 500}] [:re #"^https://[^\s]+$"]]]]])
+
+(def PedirApagamentoIn
+  [:map {:closed true}
+   ["justificativa" Justificativa]])

@@ -45,14 +45,31 @@ const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
 // "não existe"; qualquer outra falha (5xx, timeout, rede) é transitória e MANTÉM a degradação documentada.
 // `acessoRestritoDesde` (ADR-0018): a Casa suspensa — o portal segue no ar e mostra a faixa, só com a data (o motivo
 // não é público e nem vem do backend). Ausente quando a Casa está ativa.
+// `encerrada` (ADR-0018 fatia 2): a Câmara deixou de usar O Plenário e os dados dela foram apagados — o backend
+// responde 410 em toda rota dela, com o nome (público, do registro), a data e, se informado, para onde foi o acervo.
 export type ResolucaoCasa =
   | { estado: "ok"; nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string }
+  | { estado: "encerrada"; nome: string | null; encerradaEm: string | null; destinoAcervoUrl: string | null }
   | { estado: "inexistente" }
   | { estado: "indisponivel" };
+
+/** O corpo do 410 da Câmara encerrada -> a resolução. Só https sai como link (o backend já só aceita https). */
+export function casaEncerrada(corpo: unknown): Extract<ResolucaoCasa, { estado: "encerrada" }> {
+  const c = (corpo ?? {}) as Record<string, unknown>;
+  const texto = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+  const destino = texto(c["destino-acervo-url"]);
+  return {
+    estado: "encerrada",
+    nome: texto(c.nome),
+    encerradaEm: texto(c["encerrada-em"]),
+    destinoAcervoUrl: destino && /^https:\/\//.test(destino) ? destino : null,
+  };
+}
 
 export async function resolverCasa(ente: string): Promise<ResolucaoCasa> {
   try {
     const r = await fetch(`${backend}/portal/casa/${codificarSegmento(ente)}`, { cache: "no-store" });
+    if (r.status === 410) return casaEncerrada(await r.json().catch(() => ({})));
     if (r.status === 404 || r.status === 400) return { estado: "inexistente" };
     if (!r.ok) return { estado: "indisponivel" };
     const c = camelizarChaves(await r.json()) as { nomeOficial: string; nomeCurto?: string; acessoRestritoDesde?: string | null };

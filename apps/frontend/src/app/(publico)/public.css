@@ -487,3 +487,10 @@
    `text-decoration-line`). CARRY registrado: corrigir a regra BASE alcança todos os links em prosa do
    portal de uma vez — está fora do escopo desta fatia porque mexeria em telas que ela não tocou. */
 .em-breve-motivo a { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ============== ADR-0018 fatia 2 — a Câmara que não usa mais O Plenário ============== */
+.casa-encerrada { max-width: 640px; padding: 4rem 1.5rem; }
+.casa-encerrada .em-breve { border-style: solid; display: grid; gap: 0.6rem; padding: 1.4rem 1.5rem; }
+.casa-encerrada .em-breve-titulo { font-size: var(--t-21); margin: 0; }
+.casa-encerrada .em-breve-motivo { font-size: var(--t-16); }
+.casa-encerrada .em-breve-motivo a { color: var(--marca); overflow-wrap: anywhere; }
