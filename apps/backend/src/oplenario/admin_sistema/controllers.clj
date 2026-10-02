@@ -4,8 +4,10 @@
   (sessoes do console e do realm derrubadas). Tudo fica na atuacao."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [oplenario.admin-sistema.components.exportacao :as exportacao]
             [oplenario.admin-sistema.components.idp-admin :as idp]
             [oplenario.admin-sistema.components.repositorio :as repo]
+            [oplenario.admin-sistema.logic :as logic]
             [oplenario.kernel.components.idp :as idp-casa]))
 
 (defn- validar-operador! [{:keys [email nome]}]
@@ -123,11 +125,14 @@
     depois))
 
 (defn estado-da-casa
-  "O seam do host: a restricao vigente da Casa ({:estado :motivo :desde}), ou nil (fora do registro — as Casas de demo
-  e as dos testes nao passam pelo console; sem registro nao ha' restricao)."
+  "O seam do host: a restricao vigente da Casa ({:estado :motivo :desde}; encerrada, tambem {:encerrada-em
+  :destino-acervo-url :nome} — o nome publico do registro, que sobrevive ao apagamento), ou nil (fora do registro — as Casas de demo e as dos testes nao passam pelo console; sem
+  registro nao ha' restricao)."
   [repo-op deps ente-id agora]
   (when-let [c (efetivar-pendentes! repo-op deps ente-id agora)]
-    {:estado (:estado c) :motivo (:motivo-restricao c) :desde (:restrita-desde c)}))
+    (cond-> {:estado (:estado c) :motivo (:motivo-restricao c) :desde (:restrita-desde c)}
+      (= "encerrado" (:estado c)) (assoc :encerrada-em (:encerrada-em c) :destino-acervo-url (:destino-acervo-url c)
+                                         :nome (:nome c)))))
 
 (defn pedir-suspensao!
   [repo-op deps ator ente-id {:keys [motivo justificativa]} agora]
@@ -149,14 +154,19 @@
     (mudou! deps ente-id)
     r))
 
+(declare aprovar-apagamento!)
+
 (defn aprovar-pedido!
-  [repo-op deps ator pedido-id justificativa]
+  "O 2o operador aprova. O pedido de APAGAMENTO (fatia 2) segue o caminho dele: aprovado, dispara o apagamento."
+  [repo-op deps ator pedido-id justificativa agora]
   (let [p (or (repo/pedido-por-id repo-op pedido-id)
-              (throw (ex-info "pedido nao encontrado" {:tipo :admin-sistema/nao-encontrada})))
-        r (repo/aprovar-pedido! repo-op pedido-id (:operador-id ator) justificativa
-                                ((sessao-em-curso-de deps (:ente-id p))))]
-    (mudou! deps (:ente-id p))
-    r))
+              (throw (ex-info "pedido nao encontrado" {:tipo :admin-sistema/nao-encontrada})))]
+    (if (= "apagar" (:acao p))
+      (aprovar-apagamento! repo-op deps ator p justificativa agora)
+      (let [r (repo/aprovar-pedido! repo-op pedido-id (:operador-id ator) justificativa
+                                    ((sessao-em-curso-de deps (:ente-id p))))]
+        (mudou! deps (:ente-id p))
+        r))))
 
 (defn recusar-pedido!
   "Outro operador recusa; quem pediu RETIRA o proprio pedido. O incidente recusado devolve a Casa a ativa."
@@ -189,8 +199,11 @@
                   casas)
      :pendentes (fila-de-aprovacao repo-op)}))
 
+(declare encerramento-da-casa)
+
 (defn ficha-da-casa
-  "A Casa + o 1o administrador (nome) + o pedido que espera o 2o operador + a atuacao da Operacao nela."
+  "A Casa + o 1o administrador (nome) + o pedido que espera o 2o operador + o encerramento (fatia 2) + a atuacao da
+  Operacao nela."
   [repo-op deps ente-id agora]
   (casa-ou-404! repo-op ente-id)
   (let [casa (efetivar-pendentes! repo-op deps ente-id agora)]
@@ -198,4 +211,222 @@
      :primeiro-admin (when-let [iid (:primeiro-admin-identidade-id casa)]
                        {:nome ((:nome-da-identidade deps) iid) :email (:primeiro-admin-email casa)})
      :pedido-aberto (repo/pedido-aberto-da-casa repo-op ente-id)
+     :encerramento (encerramento-da-casa repo-op deps casa agora)
      :atuacao (repo/atuacao-do-ente repo-op ente-id 50)}))
+
+;; ---------------------------------------------------------------------------------------------
+;; ADR-0018 (fatia 2): ENCERRAR (Eixo 4). A sequencia, por etapas:
+;;   1. a EXPORTACAO completa (9.6) — o admin_ente gera quando quiser (portabilidade); o operador manda gerar durante o
+;;      encerramento. Gera em segundo plano. Quem BAIXA e' so' o admin_ente da Casa: a Operacao e' operadora (LGPD) e ve
+;;      so' metadado (estado, tamanho, hash, manifesto resumido);
+;;   2. a CONFIRMACAO de recebimento — o admin_ente na tela (vendo o hash) ou o operador registrando o oficio; nao se
+;;      desfaz;
+;;   3. a GUARDA de 90 dias desde a confirmacao, so' leitura + exportar de novo;
+;;   4. o DESTINO do acervo publico (opcional), que o portal mostra depois;
+;;   5. o APAGAMENTO — um operador pede, outro aprova (two-person rule); a aprovacao dispara o apagamento (seam do host,
+;;      retomavel). Terminou: `encerrado`, com o resumo e o hash da exportacao, para sempre.
+;;
+;; Os dois trabalhos pesados vem do host como seams (§22.10 — o plano de dados cruza todos os modulos):
+;;   `:exportar-casa` (fn [ente-id exportacao-id] -> {:chave :sha256 :bytes :manifesto}; falha = excecao);
+;;   `:apagar-casa`   (fn [ente-id pedido-id] -> {:tabelas :linhas-total :objetos :realm-apagado? :ia
+;;                                                :exportacoes-apagadas}; retomavel).
+;; Sem eles (nil), o passo responde 503 nomeado — nunca 500. `:executar-exportacao` (fn [f]) e' o executor (o pool
+;; dedicado em producao; sincrono nos testes).
+;; ---------------------------------------------------------------------------------------------
+
+(defn- indisponivel! [msg causa]
+  (throw (ex-info msg {:tipo :admin-sistema/indisponivel :causa causa})))
+
+(defn- mensagem-de [^Throwable t]
+  (let [m (or (ex-message t) (.getName (class t)))]
+    (subs m 0 (min 500 (count m)))))
+
+(defn- resultado-valido? [{:keys [chave sha256 bytes]}]
+  (and (string? chave) (string? sha256) (re-matches #"^[0-9a-f]{64}$" sha256) (integer? bytes) (not (neg? bytes))))
+
+(defn- gerar-agora!
+  "Roda a geracao e fecha a linha: `pronta` com o que voltou, ou `falhou` com a mensagem (nunca dado da Casa)."
+  [repo-op exportar {:keys [id ente-id]}]
+  (try
+    (let [r (exportar ente-id id)]
+      (if (resultado-valido? r)
+        (repo/concluir-exportacao! repo-op id r)
+        (repo/falhar-exportacao! repo-op id "a geracao devolveu um resultado sem arquivo ou sem hash")))
+    (catch Throwable t
+      (log/warn t "admin-sistema: a exportacao da Casa falhou" {:ente-id ente-id :exportacao id})
+      (repo/falhar-exportacao! repo-op id (mensagem-de t)))))
+
+(defn gerar-exportacao!
+  "Abre a geracao (uma por Casa) e a entrega ao executor. `solicitante` = {:tipo \"operador\"|\"admin_ente\" :id}.
+  Devolve a linha como esta' depois de submeter (`gerando`, ou ja' `pronta` com o executor sincrono)."
+  [repo-op deps {:keys [tipo id]} ente-id agora]
+  (let [exportar (or (:exportar-casa deps)
+                     (indisponivel! "a exportacao completa ainda nao esta' disponivel nesta instalacao"
+                                    "exportacao-indisponivel"))
+        executar (or (:executar-exportacao deps) exportacao/em-segundo-plano)
+        e (repo/iniciar-exportacao! repo-op {:ente-id ente-id :solicitante-tipo tipo :solicitante id} agora)]
+    (try
+      (executar #(gerar-agora! repo-op exportar e))
+      (catch clojure.lang.ExceptionInfo ex
+        (repo/falhar-exportacao! repo-op (:id e) (ex-message ex))
+        (throw ex)))
+    (repo/exportacao-por-id repo-op (:id e))))
+
+(defn exportacao-da-casa!
+  "A exportacao `id` vista pela Casa `ente-id` (o admin_ente): a de outra Casa nao existe (404)."
+  [repo-op ente-id id]
+  (let [e (and id (repo/exportacao-por-id repo-op id))]
+    (when-not (and e (= ente-id (:ente-id e)))
+      (throw (ex-info "exportacao nao encontrada" {:tipo :admin-sistema/nao-encontrada})))
+    e))
+
+(defn arquivo-para-baixar!
+  "A exportacao PRONTA da propria Casa, para servir o arquivo. Fora disso: 404 (outra Casa) ou 409 (nao pronta)."
+  [repo-op ente-id id]
+  (let [e (exportacao-da-casa! repo-op ente-id id)]
+    (when-not (= "pronta" (:estado e))
+      (throw (ex-info "esta exportacao ainda nao tem arquivo" {:tipo :admin-sistema/conflito
+                                                               :causa "exportacao-nao-pronta"})))
+    e))
+
+(defn confirmar-recebimento!
+  "A Casa confirma que recebeu (o admin_ente, com o hash que ela ve na tela)."
+  [repo-op deps ator ente-id exportacao-id sha256 agora]
+  (let [e (repo/confirmar-recebimento! repo-op exportacao-id {:ente-id ente-id :tipo "admin_ente"
+                                                               :por (:identidade-id ator) :sha256 sha256 :em agora})]
+    (mudou! deps ente-id)
+    e))
+
+(defn registrar-oficio!
+  "O operador registra a confirmacao de recebimento que a Casa mandou por oficio (o texto do oficio fica selado)."
+  [repo-op deps ator exportacao-id texto agora]
+  (let [e (repo/confirmar-recebimento! repo-op exportacao-id {:tipo "oficio" :por (:operador-id ator) :texto texto
+                                                               :em agora})]
+    (mudou! deps (:ente-id e))
+    e))
+
+(defn exportacoes-para-a-casa
+  "O bloco \"Exportar os dados da Camara\" do admin_ente: se a exportacao existe nesta instalacao, se o encerramento
+  esta' em curso (a confirmacao abre a contagem da guarda) e as exportacoes, mais recente primeiro."
+  [repo-op deps ente-id]
+  (let [casa (and ente-id (repo/casa-por-id repo-op ente-id))]
+    {:disponivel (boolean (and casa (:exportar-casa deps)))
+     :em-encerramento (boolean (and casa (logic/em-encerramento? casa)))
+     :exportacoes (if casa (vec (take 10 (repo/exportacoes-da-casa repo-op ente-id))) [])}))
+
+(defn definir-destino-acervo!
+  [repo-op deps ator ente-id url]
+  (casa-ou-404! repo-op ente-id)
+  (let [c (repo/definir-destino-acervo! repo-op ente-id (:operador-id ator) url)]
+    (mudou! deps ente-id)
+    c))
+
+(defn pedir-apagamento!
+  [repo-op deps ator ente-id justificativa agora]
+  (casa-ou-404! repo-op ente-id)
+  (when-not (:apagar-casa deps)
+    (indisponivel! "o apagamento ainda nao esta' disponivel nesta instalacao" "apagamento-indisponivel"))
+  (let [r (repo/pedir-apagamento! repo-op ente-id (:operador-id ator) justificativa agora)]
+    (mudou! deps ente-id)
+    r))
+
+(defonce ^:private apagando
+  ;; uma execucao do apagamento por Casa nesta instancia (dois cliques em "Retomar" nao rodam juntos)
+  (java.util.concurrent.ConcurrentHashMap/newKeySet))
+
+(defn- campo
+  "O campo `k` do mapa, com chave keyword OU string (o resumo volta do jsonb com chaves string). `false` e' valor."
+  [m k]
+  (when (map? m) (if (contains? m k) (get m k) (get m (name k)))))
+
+(defn- resumo-parcial-anterior
+  "O resumo do que as execucoes anteriores DESTE pedido ja' apagaram (o mais recente `apagamento-interrompido` com
+  resumo), ou nil. O banco apaga uma vez so' — sem isto, a retomada concluiria com zero linhas e perderia a prova."
+  [repo-op ente-id pedido-id]
+  (->> (repo/atuacao-do-ente repo-op ente-id 1000)
+       (filter #(and (= "apagamento-interrompido" (:acao %))
+                     (= (str pedido-id) (str (campo (:detalhe %) :pedido)))
+                     (campo (:detalhe %) :resumo)))
+       first
+       :detalhe
+       (#(campo % :resumo))))
+
+(defn- pendencias-de [resumo]
+  (when (false? (campo resumo :completo?))
+    (let [ps (campo resumo :pendencias)]
+      (str "ficou pendente: " (if (seq ps) (str/join ", " (map name ps)) "um passo externo")
+           " — retome quando o servico voltar"))))
+
+(defn- executar-apagamento!
+  "Chama o seam `:apagar-casa` FORA da tx (ele confere de novo no banco o pedido aprovado) e fecha: `encerrado` com o
+  resumo, ou o apagamento interrompido selado (o pedido segue aprovado e o console oferece retomar)."
+  [repo-op deps ator pedido agora]
+  (let [apagar (:apagar-casa deps)
+        {:keys [ente-id]} pedido
+        pedido-id (:id pedido)]
+    (when-not (.add ^java.util.Set apagando ente-id)
+      (throw (ex-info "o apagamento desta Casa ja' esta' rodando" {:tipo :admin-sistema/conflito
+                                                                    :causa "apagamento-rodando"})))
+    (try
+      (try
+        (let [resumo (logic/somar-resumos (resumo-parcial-anterior repo-op ente-id pedido-id) (apagar ente-id pedido-id))]
+          (if-let [pendente (pendencias-de resumo)]
+            ;; o seam voltou sem lancar mas com passo externo pendente (IdP ou satelite fora): a Casa NAO vira
+            ;; `encerrado` com dado vivo em outro lugar — fica interrompido, com o parcial guardado para a retomada
+            (do (log/warn "admin-sistema: o apagamento da Casa ficou com pendencia" {:ente-id ente-id :pedido pedido-id
+                                                                                    :pendencias (campo resumo :pendencias)})
+                (repo/registrar-apagamento-interrompido! repo-op pedido-id (:operador-id ator) pendente resumo)
+                {:casa (repo/casa-por-id repo-op ente-id) :pedido (repo/pedido-por-id repo-op pedido-id)
+                 :efeito :apagamento-interrompido :erro pendente})
+            (let [casa (repo/concluir-apagamento! repo-op pedido-id resumo (:operador-id ator) agora)]
+              {:casa casa :pedido (repo/pedido-por-id repo-op pedido-id) :efeito :encerrada})))
+        (catch Throwable t
+          (log/error t "admin-sistema: o apagamento da Casa parou no meio" {:ente-id ente-id :pedido pedido-id})
+          (repo/registrar-apagamento-interrompido! repo-op pedido-id (:operador-id ator) (mensagem-de t) nil)
+          {:casa (repo/casa-por-id repo-op ente-id) :pedido (repo/pedido-por-id repo-op pedido-id)
+           :efeito :apagamento-interrompido :erro (mensagem-de t)}))
+      (finally
+        (.remove ^java.util.Set apagando ente-id)
+        (mudou! deps ente-id)))))
+
+(defn- aprovar-apagamento!
+  [repo-op deps ator pedido justificativa agora]
+  (when-not (:apagar-casa deps)
+    (indisponivel! "o apagamento ainda nao esta' disponivel nesta instalacao" "apagamento-indisponivel"))
+  (let [{p :pedido} (repo/aprovar-apagamento! repo-op (:id pedido) (:operador-id ator) justificativa agora)]
+    (mudou! deps (:ente-id p))
+    (executar-apagamento! repo-op deps ator p agora)))
+
+(defn retomar-apagamento!
+  "O apagamento aprovado que parou no meio roda de novo (o seam e' retomavel)."
+  [repo-op deps ator ente-id agora]
+  (casa-ou-404! repo-op ente-id)
+  (when-not (:apagar-casa deps)
+    (indisponivel! "o apagamento ainda nao esta' disponivel nesta instalacao" "apagamento-indisponivel"))
+  (let [p (or (repo/apagamento-pendente repo-op ente-id)
+              (throw (ex-info "nao ha' apagamento aprovado esperando ser retomado nesta Casa"
+                              {:tipo :admin-sistema/conflito :causa "sem-apagamento-pendente"})))]
+    (executar-apagamento! repo-op deps ator p agora)))
+
+(defn- encerramento-da-casa
+  "O bloco do encerramento na ficha do console (nil quando nao ha' nada a mostrar: Casa ativa sem exportacao)."
+  [repo-op deps casa agora]
+  (let [ente-id (:ente-id casa)
+        exportacoes (repo/exportacoes-da-casa repo-op ente-id)
+        em-curso? (logic/em-encerramento? casa)
+        encerrada? (= "encerrado" (:estado casa))]
+    (when (or em-curso? encerrada? (seq exportacoes))
+      (let [conf (when (or em-curso? encerrada?)
+                   (logic/confirmacao-do-encerramento exportacoes (:restrita-desde casa)))]
+        {:em-curso em-curso?
+         :desde (when (or em-curso? encerrada?) (:restrita-desde casa))
+         :exportacoes (vec (take 10 exportacoes))
+         :confirmacao conf
+         :apagamento-possivel-em (some-> conf :confirmada-em logic/apagamento-possivel-em)
+         :pode-pedir-apagamento (logic/pode-pedir-apagamento? casa conf agora)
+         :exportacao-disponivel (boolean (:exportar-casa deps))
+         :apagamento-disponivel (boolean (:apagar-casa deps))
+         :apagamento-pendente (when em-curso? (repo/apagamento-pendente repo-op ente-id))
+         :destino-acervo-url (:destino-acervo-url casa)
+         :encerrada-em (:encerrada-em casa)
+         :apagamento (:apagamento casa)}))))

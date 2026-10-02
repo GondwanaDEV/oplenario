@@ -140,6 +140,24 @@ describe("resolverCasa (veredito de existência da Casa)", () => {
     });
   });
 
+  it("Casa encerrada (ADR-0018 fatia 2): 410 -> encerrada, com o nome, a data e só um destino https", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 410,
+      json: async () => ({ erro: "x", nome: "Câmara Municipal de Baturité", "encerrada-em": "2027-01-05T15:00:00Z",
+        "destino-acervo-url": "https://camarabaturite.ce.gov.br/acervo" }),
+    })) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-encerrado")).toEqual({
+      estado: "encerrada", nome: "Câmara Municipal de Baturité", encerradaEm: "2027-01-05T15:00:00Z",
+      destinoAcervoUrl: "https://camarabaturite.ce.gov.br/acervo",
+    });
+    global.fetch = vi.fn(async () => ({
+      ok: false, status: 410, json: async () => ({ "destino-acervo-url": "javascript:alert(1)" }),
+    })) as unknown as typeof fetch;
+    expect(await resolverCasa("ente-encerrado")).toEqual({ estado: "encerrada", nome: null, encerradaEm: null, destinoAcervoUrl: null });
+    expect(await buscarNomeCasa("ente-encerrado")).toBeNull();
+  });
+
   it("Casa suspensa (ADR-0018): traz a data da restrição para a faixa — e só ela", async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,

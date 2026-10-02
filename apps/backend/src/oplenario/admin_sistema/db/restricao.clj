@@ -1,5 +1,5 @@
 (ns oplenario.admin-sistema.db.restricao
-  "O PEDIDO de suspensao/encerramento de uma Casa e a decisao dele (ADR-0018, mig 0160). SUPRATENANT (role
+  "O PEDIDO de suspensao/encerramento/apagamento de uma Casa e a decisao dele (ADR-0018, mig 0160). SUPRATENANT (role
   oplenario_operacao). O banco segura as duas regras que nao podem depender de disciplina: quem pede nao decide
   (`pedido_restricao_duas_pessoas`) e ha' no maximo UM pedido aberto por Casa (indice unico parcial). Toda decisao e'
   UPDATE condicional a `estado = 'aguardando'` (CAS): dois operadores decidindo ao mesmo tempo, so' um decide."
@@ -83,3 +83,18 @@
                                                  :set {:efetivado_em [:now]}
                                                  :where [:and [:= :id id] [:= :efetivado_em nil]]
                                                  :returning colunas}))))
+
+(defn apagamento-aprovado-pendente
+  "ADR-0018 (fatia 2): o pedido de APAGAMENTO aprovado cujo apagamento ainda nao terminou (falhou no meio: o console
+  oferece retomar), com os nomes. nil = nao ha'."
+  [conn ente-id]
+  (some-> (jdbc/execute-one! conn (sql/format (com-nomes [:and [:= :p.ente_id ente-id] [:= :p.acao "apagar"]
+                                                          [:= :p.estado "aprovado"] [:= :p.efetivado_em nil]])))
+          ->pedido-com-nomes))
+
+(defn apagamento-efetivado
+  "O pedido de apagamento que encerrou a Casa (com os nomes), ou nil."
+  [conn ente-id]
+  (some-> (jdbc/execute-one! conn (sql/format (com-nomes [:and [:= :p.ente_id ente-id] [:= :p.acao "apagar"]
+                                                          [:= :p.estado "aprovado"] [:!= :p.efetivado_em nil]])))
+          ->pedido-com-nomes))

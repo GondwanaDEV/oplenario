@@ -214,3 +214,38 @@ class ArmazemMemoria:
 
     def trabalhos(self) -> list[dict[str, Any]]:
         return [{k: t[k] for k in ("id", "tipo", "chave", "estado", "tentativas", "erro")} for t in self._trab.values()]
+
+    def apagar_ente(self, ente_id: str) -> dict[str, int]:
+        trab = [i for i, t in self._trab.items() if t["ente_id"] == ente_id]
+        for i in trab:
+            self._chaves.discard(self._trab.pop(i)["chave"])
+        transc = [k for k, t in self._transc.items() if t.ente_id == ente_id]
+        for k in transc:
+            del self._transc[k]
+        revisoes = [rv for rv, r in self._revisoes.items() if r.ente_id == ente_id]
+        for rv in revisoes:
+            del self._revisoes[rv]
+        rasc = [k for k, r in self._rasc.items() if r.ente_id == ente_id]
+        for k in rasc:
+            del self._rasc[k]
+        resumos = [k for k, r in self._resumos.items() if r.ente_id == ente_id]
+        for k in resumos:
+            del self._resumos[k]
+        trechos = 0
+        for chave in list(self._indice):
+            fica = [x for x in self._indice[chave] if x[0] != ente_id]
+            trechos += len(self._indice[chave]) - len(fica)
+            if fica:
+                self._indice[chave] = fica
+            else:
+                del self._indice[chave]
+        orcamento = 1 if self._orcamentos.pop(ente_id, None) is not None else 0
+        return {
+            "ia.trabalho": len(trab),
+            "ia.transcricao": len(transc),
+            "ia.revisao_ata": len(revisoes),
+            "ia.rascunho_ata": len(rasc),
+            "ia.rascunho_resumo": len(resumos),
+            "ia.indice_trecho": trechos,
+            "ia.orcamento": orcamento,
+        }

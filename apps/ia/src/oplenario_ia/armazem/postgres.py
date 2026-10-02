@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row, tuple_row
 from psycopg.types.json import Jsonb
 
@@ -598,6 +599,50 @@ class ArmazemPostgres:
                 "SELECT id, tipo, chave, estado, tentativas, ultimo_erro AS erro FROM ia.trabalho ORDER BY id"
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def apagar_ente(self, ente_id: str) -> dict[str, int]:
+        """As tabelas com `ente_id` do schema `ia` são DESCOBERTAS no catálogo (uma tabela nova entra sozinha) e
+        apagadas numa transação, as que apontam por FK antes das apontadas. `ente_id` é comparado como texto (o
+        registro da Camada de Confiança o guarda como texto)."""
+        with self._conectar() as c, c.transaction():
+            tabelas = [
+                r["tabela"]
+                for r in c.execute(
+                    """SELECT c.relname::text AS tabela FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname = 'ia' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
+                          AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'ente_id'
+                                       AND a.attnum > 0 AND NOT a.attisdropped)"""
+                ).fetchall()
+            ]
+            arestas = [
+                (r["filho"], r["pai"])
+                for r in c.execute(
+                    """SELECT f.relname::text AS filho, p.relname::text AS pai FROM pg_constraint con
+                        JOIN pg_class f ON f.oid = con.conrelid JOIN pg_class p ON p.oid = con.confrelid
+                        JOIN pg_namespace n ON n.oid = f.relnamespace
+                       WHERE con.contype = 'f' AND n.nspname = 'ia' AND con.conrelid <> con.confrelid"""
+                ).fetchall()
+            ]
+            apagados: dict[str, int] = {}
+            for t in _ordem_de_apagar(tabelas, arestas):
+                cur = c.execute(
+                    sql.SQL("DELETE FROM ia.{} WHERE ente_id::text = %s").format(sql.Identifier(t)), (ente_id,)
+                )
+                apagados[f"ia.{t}"] = cur.rowcount
+        return apagados
+
+
+def _ordem_de_apagar(tabelas: list[str], arestas: list[tuple[str, str]]) -> list[str]:
+    """Filhas antes dos pais (só as arestas entre as tabelas dadas). Ciclo = erro: a ordem ficaria indefinida."""
+    restantes = sorted(tabelas)
+    ordem: list[str] = []
+    while restantes:
+        livres = [t for t in restantes if not any(p == t and f in restantes for f, p in arestas)]
+        if not livres:
+            raise RuntimeError(f"ciclo de FK no schema ia: {restantes}")
+        ordem.extend(livres)
+        restantes = [t for t in restantes if t not in livres]
+    return ordem
 
 
 __all__ = ["ArmazemPostgres", "migrar"]

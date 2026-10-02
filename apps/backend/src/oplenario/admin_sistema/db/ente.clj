@@ -1,8 +1,8 @@
 (ns oplenario.admin-sistema.db.ente
   "O REGISTRO DE CASAS (12.1, ADR-0016) — a tabela que EMITE o ente_id. SUPRATENANT (sem RLS): o console le todas; o
-  relay ativa a Casa quando o 1o administrador entra. Ciclo: provisionar -> ativo -> suspenso -> ativo (ADR-0018 fatia 1;
-  encerrado e' a fatia 2). Toda transicao e' UPDATE condicional ao estado de origem (CAS): quem chega depois nao
-  transiciona de novo."
+  relay ativa a Casa quando o 1o administrador entra. Ciclo: provisionar -> ativo -> suspenso -> ativo (ADR-0018 fatia 1)
+  e suspenso (encerramento em curso) -> encerrado, sem volta (fatia 2; o banco tambem recusa, mig 0175). Toda transicao
+  e' UPDATE condicional ao estado de origem (CAS): quem chega depois nao transiciona de novo."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]))
@@ -12,14 +12,17 @@
 (def ^:private colunas
   [:ente_id :nome :nome_curto :uf :municipio_ibge :municipio_nome :estado :criado_em :atualizado_em
    :provisionada_por :primeiro_admin_identidade_id :primeiro_admin_email :convite_enviado_em :ativada_em
-   :motivo_restricao :restrita_desde :suspensao_agendada])
+   :motivo_restricao :restrita_desde :suspensao_agendada
+   ;; ADR-0018 (fatia 2): a Casa encerrada
+   :encerrada_em :destino_acervo_url :apagamento])
 
 (defn- ->instant [v] (if (instance? java.sql.Timestamp v) (.toInstant ^java.sql.Timestamp v) v))
 
 (defn- ->casa [r]
   (when r
-    (reduce #(update %1 %2 ->instant) (comum/linha->kebab r)
-            [:criado-em :atualizado-em :convite-enviado-em :ativada-em :restrita-desde])))
+    (-> (reduce #(update %1 %2 ->instant) (comum/linha->kebab r)
+                [:criado-em :atualizado-em :convite-enviado-em :ativada-em :restrita-desde :encerrada-em])
+        (update :apagamento comum/jsonb->kw))))
 
 (defn inserir!
   [conn {:keys [ente-id nome nome-curto uf municipio-ibge municipio-nome provisionada-por primeiro-admin-email]}]
@@ -87,3 +90,20 @@
 (defn cancelar-agendamento!
   [conn ente-id]
   (atualizar-se! conn ente-id [:!= :suspensao_agendada nil] {:suspensao_agendada nil}))
+
+;; ---- ADR-0018 (fatia 2): encerrar ----
+
+(defn encerrar!
+  "`suspenso` com o encerramento em curso -> `encerrado`, com a data e o resumo do apagamento. O motivo sai (so' a Casa
+  suspensa tem motivo). Devolve a Casa, ou nil se ela nao estava com o encerramento em curso."
+  [conn ente-id encerrada-em resumo]
+  (atualizar-se! conn ente-id [:and [:= :estado "suspenso"] [:= :motivo_restricao "encerramento_em_curso"]]
+                 {:estado "encerrado" :motivo_restricao nil :suspensao_agendada nil :encerrada_em encerrada-em
+                  :apagamento (comum/->jsonb resumo)}))
+
+(defn definir-destino-acervo!
+  "Para onde foi o acervo publico (https), ou nil para tirar. So' numa Casa com o encerramento em curso ou encerrada."
+  [conn ente-id url]
+  (atualizar-se! conn ente-id [:or [:= :estado "encerrado"]
+                               [:and [:= :estado "suspenso"] [:= :motivo_restricao "encerramento_em_curso"]]]
+                 {:destino_acervo_url url}))

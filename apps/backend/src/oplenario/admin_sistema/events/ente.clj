@@ -7,6 +7,7 @@
 
 (def suspensa-tipo "admin_sistema.casa.suspensa")
 (def reativada-tipo "admin_sistema.casa.reativada")
+(def encerrada-tipo "admin_sistema.casa.encerrada")
 
 (def SuspensaPayload
   [:map {:closed true}
@@ -20,5 +21,14 @@
    [:motivo-anterior [:maybe :string]]
    [:por [:enum "operador" "incidente_sem_segunda_aprovacao" "suspensao_recusada"]]])
 
+(def EncerradaPayload
+  "ADR-0018 (fatia 2): a Casa encerrada, para sempre. Leva o que fica conosco (Eixo 4.6): quando, o pedido de apagamento
+  que a encerrou e o hash da exportacao entregue — nada de dentro da Casa."
+  [:map {:closed true}
+   [:encerrada-em :string]
+   [:pedido-id :uuid]
+   [:exportacao-sha256 [:re #"^[0-9a-f]{64}$"]]])
+
 (defn suspensa [ente-id payload] (eventos/evento-validado SuspensaPayload suspensa-tipo ente-id payload))
 (defn reativada [ente-id payload] (eventos/evento-validado ReativadaPayload reativada-tipo ente-id payload))
+(defn encerrada [ente-id payload] (eventos/evento-validado EncerradaPayload encerrada-tipo ente-id payload))

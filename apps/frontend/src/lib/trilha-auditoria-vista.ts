@@ -131,7 +131,7 @@ const VERBOS: [RegExp, Verbo][] = [
 export function verbo(r: RegistroTrilha): Verbo {
   if (r.classe === "negacao") return { rotulo: "Negado", tom: "negado" };
   if (r.classe === "entrada") return { rotulo: "Entrou", tom: "entrou" };
-  if (r.acao === "auditoria/exportar") return { rotulo: "Exportou", tom: "exportou" };
+  if (r.acao === "auditoria/exportar" || r.acao === "exportacao-da-casa/baixar") return { rotulo: "Exportou", tom: "exportou" };
   if (r.classe === "leitura_sensivel") return { rotulo: "Consultou", tom: "entrou" };
   if (r.decisao === "falhou") return { rotulo: "Não concluiu", tom: "negado" };
   const nome = r.acao.split("/")[1] ?? r.acao;
@@ -143,6 +143,7 @@ const TIPOS_DE_RECURSO: Record<string, string> = {
   proposicao: "Proposição", sessao: "Sessão", ata: "Ata", vereador: "Vereador(a)", identidade: "Pessoa",
   pedido: "Pedido de e-SIC", manifestacao: "Manifestação", norma: "Norma", documento: "Documento",
   proposta: "Proposta do agente", nota: "Nota técnica", remessa: "Remessa", item: "Item da pauta",
+  exportacao: "Exportação completa",
 };
 
 const NOMES_DE_MODULO: Record<string, string> = Object.fromEntries(OBJETOS.filter((o) => o.valor).map((o) => [o.valor, o.rotulo]));

@@ -453,3 +453,27 @@
 (deftest provisionar-realm-sem-govbr-nao-mexe-em-identity-provider
   (let [chamadas (provisionar-capturando! #{})]
     (is (not-any? #(str/includes? (:caminho %) "identity-provider") chamadas))))
+
+;; ---------------------------------------------------------------------------------------------
+;; ADR-0018 (Eixo 4.5): apagar o realm da Casa encerrada — o inverso de provisionar-realm!.
+;; ---------------------------------------------------------------------------------------------
+
+(defn- apagar-com-status! [status]
+  (let [chamadas (atom [])]
+    [(with-redefs-fn {#'kc/admin-token! (fn [_config _http-client] "fake-token")
+                       #'kc/admin-req!   (fn [_h _t metodo caminho _c _b]
+                                           (swap! chamadas conj [metodo caminho])
+                                           {:status status :corpo nil})}
+       (fn [] (#'kc/apagar-realm-impl {:config config-provisionamento :http-client nil} ente-id)))
+     @chamadas]))
+
+(deftest apagar-realm-faz-delete-no-realm-da-casa
+  (let [[r chamadas] (apagar-com-status! 204)]
+    (is (= [[:delete (str "/admin/realms/" realm-prefixo ente-id)]] chamadas))
+    (is (= {:realm (str realm-prefixo ente-id) :existia? true} r))))
+
+(deftest apagar-realm-inexistente-e-ok-retomada
+  (is (= {:realm (str realm-prefixo ente-id) :existia? false} (first (apagar-com-status! 404)))))
+
+(deftest apagar-realm-falha-de-infra-lanca
+  (is (thrown-with-msg? clojure.lang.ExceptionInfo #"falha ao apagar o realm" (apagar-com-status! 500))))

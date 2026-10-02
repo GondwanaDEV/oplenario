@@ -261,3 +261,9 @@ class Armazem(Protocol):
     def trabalhos(self) -> list[dict[str, Any]]:
         """Visão de operação (estado, tentativas, último erro) — sem conteúdo."""
         ...
+
+    def apagar_ente(self, ente_id: str) -> dict[str, int]:
+        """ADR-0018 (Eixo 4.5): apaga TUDO o que é da Casa encerrada — fila, transcrições, rascunhos, revisões, índice,
+        orçamento e o registro da Camada de Confiança quando ele mora aqui. Devolve {"ia.<tabela>": linhas}.
+        Idempotente: de novo, zeros. As outras Casas não são tocadas."""
+        ...
