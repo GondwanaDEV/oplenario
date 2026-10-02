@@ -348,7 +348,7 @@
   ;; pode ser anonimo sai sem ator; servidores seguem identificados (funcao publica)
   (let [{:keys [st a pa]} (duas-casas!)
         {:keys [cidada pessoa]} pa
-        pseudo-cidada (str "#" (subs (sha256 (.getBytes (str a "|" cidada) "UTF-8")) 0 6))
+        pseudo-cidada (str "#" (subs (sha256 (.getBytes (str a "|" cidada) "UTF-8")) 0 12))
         r (encerramento/exportar-casa! {:ds *pool* :objeto-store st :auditoria (seams)} a (random-uuid))
         zip ^bytes (get @(:m st) (:chave r))
         es (entradas-do-zip zip)
@@ -554,6 +554,37 @@
       (jdbc/with-transaction [tx *pool* {:rollback-only true}]
         (jdbc/execute! tx ["SELECT admin_sistema.apagar_dados_da_casa(?, ?)" a pedido])
         (is (= "origin" (:s (jdbc/execute-one! tx ["SELECT current_setting('session_replication_role') AS s"] opts))))))))
+
+(deftest a-funcao-espera-o-evento-que-o-relay-ja-pegou
+  ;; mig 0177: o relay pegou um evento da Casa (linha travada FOR UPDATE, como em `kernel.outbox/drenar-um!`) e o
+  ;; consumidor ainda vai gravar. A funcao espera essa tx terminar ANTES do primeiro DELETE — sem isso, a linha gravada
+  ;; pelo consumidor sobrevivia ao apagamento (os DELETEs ja' tinham passado pela tabela dela).
+  (let [{:keys [a]} (duas-casas!)
+        {:keys [pedido]} (liberar-apagamento! a)
+        ev (:id (first (sql! "SELECT id FROM shared.outbox WHERE ente_id = ? AND processed_at IS NULL
+                              AND tipo NOT LIKE 'admin\\_sistema.%'" a)))
+        pegou (promise) soltar (promise)
+        relay (future
+                (jdbc/with-transaction [tx *dono*]
+                  (jdbc/execute! tx ["SELECT 1 FROM shared.outbox WHERE id = ? FOR UPDATE" ev])
+                  (deliver pegou true)
+                  @soltar
+                  ;; uma tabela FOLHA (nivel 0) que vem antes de `shared` na ordem do apagamento: sem a espera,
+                  ;; o DELETE dela passava antes de o consumidor commitar
+                  (jdbc/execute! tx ["INSERT INTO auditoria.selo_diario (ente_id, dia, seq, selo)
+                                      VALUES (?, '2026-10-01', 2, 'gravado pelo consumidor')" a])
+                  (jdbc/execute! tx ["UPDATE shared.outbox SET processed_at = now() WHERE id = ?" ev])))
+        _ (deref pegou 5000 nil)
+        apagando (future (jdbc/with-transaction [tx *pool*]
+                           (jdbc/execute! tx ["SELECT admin_sistema.apagar_dados_da_casa(?, ?)" a pedido])))]
+    (is (some? ev))
+    (Thread/sleep 500)
+    (is (not (realized? apagando)) "a funcao esperou o relay")
+    (deliver soltar true)
+    (deref relay 10000 nil)
+    (deref apagando 10000 nil)
+    (is (empty? (sql! "SELECT 1 FROM auditoria.selo_diario WHERE ente_id = ?" a)) "a linha do consumidor saiu junto")
+    (is (empty? (sql! "SELECT 1 FROM shared.outbox WHERE ente_id = ? AND tipo NOT LIKE 'admin\\_sistema.%'" a)))))
 
 (deftest retomada-depois-de-falha-no-realm-e-na-ia
   (let [{:keys [st a b]} (duas-casas!)

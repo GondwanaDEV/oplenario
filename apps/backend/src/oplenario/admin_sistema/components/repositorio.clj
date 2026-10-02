@@ -71,6 +71,10 @@
     "Sela que o apagamento parou no meio. `resumo-parcial` (ou nil) = o que ja' foi apagado ate' aqui (o banco apaga uma vez
     so': a retomada conta zero linhas), somado de volta na conclusao.")
   (apagamento-pendente [this ente-id] "O pedido de apagamento aprovado que ainda nao terminou (retomavel), ou nil.")
+  (reservar-apagamento! [this ente-id operador-id agora]
+    "Reserva a execucao do apagamento (uma por Casa, entre instancias) e fecha a Casa na 1a vez -> a Casa, ou nil se
+    outra execucao esta' rodando.")
+  (liberar-apagamento! [this ente-id] "Solta a reserva de execucao (a Casa segue fechada).")
   (apagamento-efetivado [this ente-id] "O pedido de apagamento que encerrou a Casa, ou nil."))
 
 ;; ---------------------------------------------------------------------------------------------
@@ -362,7 +366,7 @@
           _ (when-not (logic/transicao-permitida? (:estado casa) "encerrado")
               (conflito! "a Casa nao esta' num estado que permita encerrar" "estado-da-casa"))
           conf (or (confirmacao-vigente tx casa) (conflito! "a confirmacao de recebimento sumiu" "sem-confirmacao"))
-          registro (merge (select-keys resumo [:tabelas :linhas-total :objetos :realm-apagado? :ia :exportacoes-apagadas])
+          registro (merge (select-keys resumo [:tabelas :linhas-total :objetos :realm-apagado? :ia :exportacoes-apagadas :varredura])
                           {:pedido (str pedido-id)
                            :exportacao {:id (str (:id conf)) :sha256 (:sha256 conf) :bytes (:bytes conf)
                                         :confirmada-em (str (:confirmada-em conf))
@@ -456,6 +460,16 @@
                                   :detalhe (cond-> {:pedido (str pedido-id) :erro erro}
                                              resumo-parcial (assoc :resumo resumo-parcial))})))))
   (apagamento-pendente [_ ente-id] (restricao/apagamento-aprovado-pendente (:ds datasource) ente-id))
+  (reservar-apagamento! [this ente-id operador-id agora]
+    (transacao this (fn [tx]
+                      (let [antes (ente/por-id tx ente-id)]
+                        (when-let [c (ente/reservar-apagamento! tx ente-id agora)]
+                          ;; a 1a execucao FECHA a Casa: fica selado quando e por quem
+                          (when-not (:apagamento-iniciado-em antes)
+                            (atuacao/registrar! tx {:operador-id operador-id :ente-id ente-id :acao "apagamento-iniciado"
+                                                    :detalhe {:desde (str (:apagamento-iniciado-em c))}}))
+                          c)))))
+  (liberar-apagamento! [this ente-id] (transacao this #(ente/liberar-apagamento! % ente-id)))
   (apagamento-efetivado [_ ente-id] (restricao/apagamento-efetivado (:ds datasource) ente-id)))
 
 (defn ativar-casa-em-tx!

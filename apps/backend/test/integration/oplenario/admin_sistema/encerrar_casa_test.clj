@@ -332,8 +332,10 @@
             (is (= (:sha256 da-casa) (get-in ap [:exportacao :sha256])))
             (is (= "admin_ente" (get-in ap [:exportacao :confirmada-por])))
             (is (nil? (get-in f [:encerramento :apagamento-pendente])))
-            (is (= ["casa-encerrada" "apagamento-interrompido" "apagamento-aprovado" "apagamento-pedido"]
-                   (take 4 (map :acao (:atuacao f)))))
+            (is (= ["casa-encerrada" "apagamento-interrompido" "apagamento-iniciado" "apagamento-aprovado"
+                    "apagamento-pedido"]
+                   (take 5 (map :acao (:atuacao f))))
+                "a 1a execucao sela quando a Casa fechou; a retomada nao sela de novo")
             (is (= ["legislativo.proposicao=3" "sessoes.sessao=2"]
                    (get-in (first (:atuacao f)) [:detalhe :tabelas])) "selado com a lista de tabelas e os totais"))
           (let [[tipo payload] (last (eventos-da-casa ente))]
@@ -455,6 +457,56 @@
           (is (= 3 (get-in ap [:tabelas :legislativo.proposicao])))
           (is (= 2 @chamadas)))))))
 
+(deftest o-apagamento-fecha-a-casa-e-roda-uma-vez-so
+  ;; mig 0177: quando o apagamento comeca, a Casa FECHA (410 em tudo, inclusive a allowlist) em todas as instancias, e
+  ;; uma 2a execucao (outra instancia, outro clique) e' recusada enquanto a 1a roda — o lease esta' no registro
+  (let [svc (servico {}) ana (operador! "Ana") beto (operador! "Beto") ente (casa-ativa! ana)
+        svc91 (atom nil)
+        durante (atom nil)
+        apagar (fn [ente-id _]
+                 (let [s @svc91]
+                   (reset! durante
+                           {:gerar (:status (post-casa s ente-id admin "/administracao/exportacoes" {}))
+                            :ler (:status (get-casa s ente-id admin "/administracao/exportacoes"))
+                            :corpo (ler (get-casa s ente-id admin "/administracao/exportacoes"))
+                            :retomar (post-op s ana (str "/operacao/casas/" ente-id "/apagamento/retomada") {})}))
+                 (throw (ex-info "o Keycloak nao respondeu ao apagar o realm" {})))]
+    (encerramento-em-curso! svc ana beto ente)
+    (let [t0 (Instant/now)
+          svc0 (servico {:agora t0})
+          _ (post-casa svc0 ente admin "/administracao/exportacoes" {})
+          exp (first (:exportacoes (ler (get-casa svc0 ente admin "/administracao/exportacoes"))))
+          _ (post-casa svc0 ente admin (str "/administracao/exportacoes/" (:id exp) "/confirmacao") {:sha256 (:sha256 exp)})
+          _ (reset! svc91 (servico {:agora (.plus t0 (Duration/ofDays 91)) :apagar apagar}))
+          rp (post-op @svc91 ana (str "/operacao/casas/" ente "/apagamento") {:justificativa "Fim da guarda de 90 dias."})
+          _ (is (= 200 (:status rp)) (:body rp))
+          pedido (get-in (ler rp) [:pedido :id])]
+      (testing "antes do apagamento, a Casa com o encerramento em curso ainda gera a exportacao (allowlist)"
+        (is (= 200 (:status (get-casa @svc91 ente admin "/administracao/exportacoes")))))
+      (is (= "apagamento-interrompido" (:efeito (ler (post-op @svc91 beto (str "/operacao/pedidos/" pedido "/aprovacao") {})))))
+      (testing "durante o apagamento: a Casa ja' fechou — 410 na escrita da allowlist e na leitura"
+        (is (= 410 (:gerar @durante)))
+        (is (= 410 (:ler @durante)))
+        (is (= "Câmara Municipal de Baturité" (get-in @durante [:corpo :nome]))))
+      (testing "durante o apagamento: a 2a execucao e' recusada (o lease esta' no registro, nao na instancia)"
+        (is (= 409 (:status (:retomar @durante))))
+        (is (= "apagamento-rodando" (:causa (ler (:retomar @durante))))))
+      (testing "interrompido: o lease sai, mas a Casa segue fechada"
+        (is (= 410 (:status (get-casa @svc91 ente admin "/administracao/exportacoes"))))
+        (let [c (repo/casa-por-id (repo-op) ente)]
+          (is (some? (:apagamento-iniciado-em c)))
+          (is (nil? (:apagamento-em-execucao-desde c))))
+        (is (= 1 (count (filter #{"apagamento-iniciado"} (map :acao (:atuacao (ficha @svc91 ana ente))))))))
+      (testing "o lease de uma instancia que caiu no meio vence: a retomada reserva de novo"
+        (let [agora (.plus t0 (Duration/ofDays 91))]
+          (is (some? (repo/reservar-apagamento! (repo-op) ente (:id ana) agora)))
+          (is (nil? (repo/reservar-apagamento! (repo-op) ente (:id ana) agora)) "vigente: recusa")
+          (is (some? (repo/reservar-apagamento! (repo-op) ente (:id ana) (.plus agora (Duration/ofMinutes 16))))
+              "vencido (15 min): reserva")
+          (repo/liberar-apagamento! (repo-op) ente)
+          (is (= 1 (count (filter #{"apagamento-iniciado"} (map :acao (:atuacao (ficha @svc91 ana ente))))))
+              "fechar a Casa se sela uma vez so'"))))))
+
 ;; ---- de ponta a ponta com o PLANO DE DADOS REAL (`oplenario.encerramento`), sem fake nos seams ----
 
 (def guardados-reais (atom {}))
@@ -537,6 +589,13 @@
               "nenhum blob da Casa sobra, nem a exportacao")
           (let [ap (get-in (ficha svc ana ente) [:encerramento :apagamento])]
             (is (= (:sha256 exp) (get-in ap [:exportacao :sha256])) "o hash da exportacao entregue fica com a gente")
-            (is (map? (:tabelas ap)))))
+            (is (map? (:tabelas ap)))
+            (is (= {:linhas 0 :objetos 0} (:varredura ap)) "a varredura rodou e, sem escrita em voo, nao achou nada")))
+        (testing "o registro da Casa encerrada: a data de quando ela fechou nao muda mais, e nao ha' execucao presa"
+          (let [c (repo/casa-por-id (repo-op) ente)]
+            (is (some? (:apagamento-iniciado-em c)))
+            (is (nil? (:apagamento-em-execucao-desde c))))
+          (is (thrown? Exception (jdbc/execute! *ds* ["UPDATE admin_sistema.ente SET apagamento_iniciado_em = now()
+                                                        WHERE ente_id = ?" ente]))))
         (testing "e a Casa encerrada responde 410 no portal"
           (is (= 410 (:status (pt/response-for svc :get (str "/portal/casa/" ente))))))))))
