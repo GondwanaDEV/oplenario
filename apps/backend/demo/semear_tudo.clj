@@ -19,6 +19,7 @@
   o `-Sdeps` inline do script resolve `:extra-paths [\"demo\"]`, deixando `deps.edn` intocado."
   (:require [acervo]
             [casa]
+            [comunicados]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [compliance :as compliance-demo]
@@ -58,6 +59,10 @@
                 (pr-str (-> participacao-r
                             (dissoc :comentarios)
                             (assoc :n-comentarios (count (:comentarios participacao-r))))))
+              ;; ADR-0020: os setores e os comunicados internos — depois do acervo (o 2º comunicado aponta para uma
+              ;; proposicao dele) e ANTES da reconciliacao (o protocolo COM-AAAA-NNNNNN e' um escopo numerado).
+              (let [comunicados-r (comunicados/semear! sys ente identidades)]
+                (println "==> comunicados:" (comunicados/resumo comunicados-r)))
               ;; 5a etapa: reconciliar `shared.sequencial` com a numeracao que as 4 sementes gravaram.
               ;; NAO e' zelo preventivo — e' reparo. As 4 sementes sao idempotentes POR PULAR (releem em
               ;; vez de reescrever), entao um banco que perdeu os contadores e manteve as linhas numeradas

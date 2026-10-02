@@ -42,6 +42,19 @@
     (jdbc/execute-one! conn
       (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:= :id id]}))))
 
+(defn nomes-por-ids
+  "ADR-0020: ids -> {id nome}, numa consulta so' (leitura ESTREITA como `nome-por-id`: nunca materializa CPF).
+  Supratenant (pool, role id_resolver) — o CHAMADOR ja' restringiu os ids as pessoas da Casa (vinculo, sob RLS).
+  Vazio nao vai ao banco."
+  [conn ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (empty? ids)
+      {}
+      (into {} (map (juxt :id :nome))
+            (comum/linhas->kebab
+              (jdbc/execute! conn
+                (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:in :id ids]})))))))
+
 (defn existe?
   "Leitura ESTREITA (nem :nome, nem :cpf — so' um booleano) — usada pelo guard `identidade-existe?`
   default de `rotas.clj`, que backa `PATCH /cadastros/vereadores/:id/identidade` e so' precisa saber SE

@@ -10,7 +10,8 @@
   protocolo) para manter o metodo 2-arg, do qual o interceptor de auth (Task 4) depende. CARRY: reconciliar
   este default com a config `:sessao :ociosa-min` quando o mint (Task 4) existir — hoje sao DUAS fontes
   do mesmo numero (o mint crava o `ocioso-ate` inicial; este campo crava o deslize) que precisam concordar."
-  (:require [oplenario.identidade.db.concessao-agente :as concessao]
+  (:require [clojure.string :as str]
+            [oplenario.identidade.db.concessao-agente :as concessao]
             [oplenario.identidade.db.credencial-agente :as cred]
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.perfil-juridico :as pj]
@@ -80,6 +81,10 @@
     "ADR-0015: o vinculo de CIDADAO ativo com zero papeis (sessao aberta pelo gov.br) | nil.")
   (garantir-vinculo-cidadao! [this ente-id identidade-id consentimento]
     "ADR-0015: cria o vinculo de cidadao e registra o consentimento da 1a vinculacao, numa tx; ja' existe -> nada.")
+  (pessoas-da-casa [this ente-id]
+    "ADR-0020: as pessoas com vinculo ATIVO de quem trabalha na Casa (nunca cidadao), com o nome: [{:identidade-id
+     :nome :tipos #{..} :papeis #{..}}], por nome. Os vinculos/papeis sob a RLS da Casa; o nome pela leitura estreita
+     supratenant, so' destes ids.")
   (registrar-primeiro-acesso! [this ente-id ator]
     "ADR-0016: na 1a vez que o vinculo entra, grava a data e emite `identidade.vinculo.primeiro_acesso` na MESMA tx.
     Nas seguintes, nada. true = foi o primeiro."))
@@ -163,6 +168,13 @@
           (vinc/registrar-consentimento! tx {:id (random-uuid) :ente-id ente-id :identidade-id identidade-id
                                              :finalidade finalidade :base-legal base-legal
                                              :versao-termo versao-termo})))))
+  (pessoas-da-casa [this ente-id]
+    (let [ps (transacao this ente-id #(vinc/pessoas-ativas % ente-id))
+          nomes (id/nomes-por-ids (:ds datasource) (map :identidade-id ps))]
+      (->> ps
+           (keep (fn [p] (when-let [n (get nomes (:identidade-id p))] (assoc p :nome n))))
+           (sort-by (juxt #(some-> (:nome %) str/lower-case) (comp str :identidade-id)))
+           vec)))
   (registrar-primeiro-acesso! [this ente-id ator] (registrar-primeiro-acesso-impl this ente-id ator)))
 
 ;; o bus do outbox e' sem estado (grava na tx que recebe) — mesmo uso inline do repositorio de transparencia

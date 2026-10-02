@@ -14,8 +14,10 @@
             [oplenario.catalogo :as catalogo]
             [oplenario.cadastros.components.repositorio :as repo-cadastros-comp]
             [oplenario.cadastros.diplomat.http.in :as cadastros-http]
+            [oplenario.comunicacao.diplomat.http.in :as comunicacao-http]
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
+            [oplenario.destinatarios :as destinatarios]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
@@ -298,6 +300,8 @@
            idp-operacao repo-admin-sistema operacao
            ;; ADR-0017: a trilha de auditoria da Casa
            repo-auditoria
+           ;; ADR-0020: os comunicados internos da Casa
+           repo-comunicacao
            ;; ADR-0018: o cache do seam `estado-da-casa` (30 s; os testes passam 0)
            cache-estado-da-casa-ms
            ;; ADR-0018 (fatia 2): o plano de dados do encerramento — os dois trabalhos pesados que cruzam todos os
@@ -437,6 +441,16 @@
         ;; docs/23 Fatia 5: quem congelou cada versao da folha, pelo NOME (so' de quem tem vinculo nesta Casa) —
         ;; sessoes nunca importa identidade (§22.10), mesma inversao de dependencia dos seams acima.
         nome-na-casa-fn (fn [ente-id identidade-id] (nome-na-casa repo-identidade ente-id identidade-id))
+        ;; ADR-0020: QUEM RECEBE — os seams de `oplenario.destinatarios` sobre cadastros + identidade (o dia civil de hoje e
+        ;; o cargo na Mesa de hoje decidem comissao vigente e quem envia a grupo). `comunicacao` nunca importa os dois
+        ;; (§22.10); `sessoes` e `legislativo` recebem so' as identidades a avisar.
+        hoje-civil (fn [] (tempo/hoje relogio-producao tempo/zona-civil-padrao))
+        repos-destinatarios {:repo-cadastros repo-cadastros :repo-identidade repo-identidade
+                             :hoje hoje-civil :cargo-na-mesa cargo-na-mesa-fn}
+        deps-comunicacao {:repo-comunicacao repo-comunicacao :objeto-store objeto-store :relogio relogio-producao
+                          :seams (destinatarios/seams-de-comunicacao repos-destinatarios)}
+        vereadores-a-avisar-fn (fn [ente-id] (destinatarios/vereadores-a-avisar repos-destinatarios ente-id (hoje-civil)))
+        juridicos-a-avisar-fn (fn [ente-id] (destinatarios/pessoas-com-papel repo-identidade ente-id "juridico"))
         serializador-folha-fn (serializador-folha/serializador-folha-html-com-teto)
         renderizador-pdf-fn (renderizador-pdf/renderizador-pdf-guardado)
         ;; Onda B Slice 2: uf/nome-do-municipio do ente, p/ o legislativo computar a URN em protocolar! —
@@ -609,6 +623,8 @@
                                    ;; ADR-0019 fatia 3: os seams de publicar a pauta (avisos e regra de cargo)
                                    :situacao-de-parecer situacao-de-parecer-fn
                                    :cargo-na-mesa cargo-na-mesa-fn
+                                   ;; ADR-0020 fatia 2: o aviso automatico da pauta publicada aos vereadores
+                                   :vereadores-a-avisar vereadores-a-avisar-fn
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
@@ -647,6 +663,8 @@
                                        ;; a nota tecnica da IA so' vai a fila do juridico quando ha' quem a use.
                                        :casa-tem-juridico? (fn [ente-id]
                                                              (repo-identidade-comp/casa-tem-papel-ativo? repo-identidade ente-id "juridico"))
+                                       ;; ADR-0020 fatia 2: o aviso automatico do pedido de parecer as pessoas com `juridico`
+                                       :juridicos-a-avisar juridicos-a-avisar-fn
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
@@ -698,6 +716,14 @@
         (into (compliance-http/rotas {:auth auth :repo-compliance repo-compliance}))
         (into (cadastros-http/rotas {:auth auth :repo-cadastros repo-cadastros :relogio relogio-producao
                                      :identidade-existe? identidade-existe?}))
+        ;; ADR-0020 (Eixo 1): os setores da Casa, na area do admin_ente. As pessoas ativas da Casa (nome e guarda da
+        ;; lotacao) vem da identidade pelo host (cadastros nunca importa identidade, §22.10).
+        (into (cadastros-http/rotas-de-setores
+               {:auth auth :repo-cadastros repo-cadastros
+                :pessoas-da-casa (fn [ente-id] (into {} (map (juxt :identidade-id :nome))
+                                                     (repo-identidade-comp/pessoas-da-casa repo-identidade ente-id)))}))
+        ;; ADR-0020: os comunicados internos da Casa (o modulo `comunicacao`), com os seams de quem recebe
+        (into (comunicacao-http/rotas (assoc deps-comunicacao :auth auth)))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
                                         ;; ADR-0018: o recibo dos protocolos diz que a Casa esta' com o sistema restrito
@@ -791,6 +817,10 @@
                        :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
                        ;; ADR-0019 fatia 3: publicar_pauta (proposta do agente) usa os MESMOS seams da tela
                        :situacao-de-parecer situacao-de-parecer-fn :cargo-na-mesa cargo-na-mesa-fn
+                       ;; ADR-0020: os comunicados (ler a caixa, ler, painel de leitura, PROPOR o envio) e os avisos
+                       ;; automaticos que os atos propostos (publicar a pauta, pedir parecer) emitem na confirmacao
+                       :comunicacao deps-comunicacao
+                       :vereadores-a-avisar vereadores-a-avisar-fn :juridicos-a-avisar juridicos-a-avisar-fn
                        :registrar-chamada (catalogo/registrador repo-integracao-ia)
                        ;; B.5: as normas de referencia — o repositorio (so' a vigente) e a busca por sentido na IA
                        :repo-normas repo-normas

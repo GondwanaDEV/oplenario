@@ -1227,7 +1227,9 @@
            ;; ADR-0019 fatia 3: os seams de publicar a pauta (host). OPCIONAIS de proposito: sem
            ;; `situacao-de-parecer` a tela diz que os avisos por materia nao foram conferidos (aviso nunca bloqueia);
            ;; sem `cargo-na-mesa` a regra de cargo (presidente/1o secretario/Mesa) nao autoriza ninguem (fail-closed).
-           situacao-de-parecer cargo-na-mesa]}]
+           situacao-de-parecer cargo-na-mesa
+           ;; ADR-0020 fatia 2: os vereadores que recebem o aviso da pauta publicada (host). Opcional: sem ele, sem aviso.
+           vereadores-a-avisar]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1264,7 +1266,8 @@
                      :classe (some-> casa-existe? class .getName)})))
   (let [papel-vereador (it/exige-papel "vereador")
         deps-publicacao {:repo-sessoes repo-sessoes :situacao-de-parecer situacao-de-parecer
-                         :cargo-na-mesa cargo-na-mesa :nome-na-casa nome-na-casa}
+                         :cargo-na-mesa cargo-na-mesa :nome-na-casa nome-na-casa
+                         :vereadores-a-avisar vereadores-a-avisar}
         relogio-pub (or relogio (tempo/relogio-sistema))]
    #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
      :route-name :sessoes/agendar]

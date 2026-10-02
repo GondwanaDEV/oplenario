@@ -14,8 +14,10 @@
   `:validacao/invalido` -> 400). A REASSUNCAO (`POST .../reassuncao`) fecha o par de `/licencas`: sem ela
   `mandato_licenca` nao tinha UPDATE nenhum, a janela de exercicio publica congelava para sempre e o mandato
   ficava 'licenciado' bloqueando a proxima licenca."
-  (:require [oplenario.cadastros.adapters.in.vereador :as adapters-in]
+  (:require [oplenario.cadastros.adapters.in.setor :as adapters-in-setor]
+            [oplenario.cadastros.adapters.in.vereador :as adapters-in]
             [oplenario.cadastros.adapters.out.legislatura :as adapters-leg]
+            [oplenario.cadastros.adapters.out.setor :as adapters-setor]
             [oplenario.cadastros.adapters.out.vereador :as adapters]
             [oplenario.cadastros.controllers :as controllers]
             [oplenario.http :as http]
@@ -224,3 +226,83 @@
        :route-name :cadastros/ligar-identidade]
       ["/cadastros/legislatura-vigente" :get [auth papel (legislatura-vigente-handler repo-cadastros)]
        :route-name :cadastros/legislatura-vigente]}))
+
+;; ---------- ADR-0020 (Eixo 1): os setores da Casa, na area do admin_ente ----------
+
+(defn- setores-nomes
+  "{identidade-id nome} das pessoas ATIVAS da Casa, pelo seam do host (cadastros nunca importa identidade, §22.10).
+  Sem o seam (testes de outras verticais), ninguem e' pessoa ativa — fail-closed: a lotacao recusa e os nomes saem nil."
+  [pessoas-da-casa ente-id]
+  (if pessoas-da-casa (pessoas-da-casa ente-id) {}))
+
+(defn- conflito-de-setor [e]
+  (case (:tipo (ex-data e))
+    :conflito/setor-nome-repetido (http/json-resposta 409 {:erro "Já existe um setor com este nome nesta Casa."})
+    :conflito/pessoas-fora-da-casa
+    (http/json-resposta 422 {:erro "Só pessoas com acesso ativo nesta Casa podem ser lotadas num setor."
+                             :identidades (mapv str (:identidades (ex-data e)))})
+    nil))
+
+(defn- auditoria-do-setor
+  "O resumo do efeito para a trilha (ADR-0017): o setor pelo nome e os campos tocados — nunca a lista de pessoas."
+  [resp s campos]
+  (assoc resp :auditoria {:rotulo (str "setor " (:nome s)) :recurso-tipo "setor" :recurso-id (str (:id s))
+                          :campos campos}))
+
+(defn- listar-setores-handler [repo pessoas-da-casa]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))]
+      (http/json-resposta 200 (adapters-setor/lista->wire (setores-nomes pessoas-da-casa ente-id)
+                                                          (controllers/listar-setores repo ente-id))))))
+
+(defn- criar-setor-handler [repo pessoas-da-casa]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          s (adapters-in-setor/criar->dominio (:json-params req))]
+      (try
+        (let [r (controllers/criar-setor! repo ente-id s)]
+          (auditoria-do-setor (http/json-resposta 201 (adapters-setor/setor->wire
+                                                       (setores-nomes pessoas-da-casa ente-id) r))
+                              r [:nome]))
+        (catch clojure.lang.ExceptionInfo e (or (conflito-de-setor e) (throw e)))))))
+
+(defn- atualizar-setor-handler [repo pessoas-da-casa]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (parse-uuid (str (get-in req [:path-params :id])))
+          campos (adapters-in-setor/atualizar->dominio (:json-params req))]
+      (try
+        (if-let [r (and id (controllers/atualizar-setor! repo ente-id id campos))]
+          (auditoria-do-setor (http/json-resposta 200 (adapters-setor/setor->wire
+                                                       (setores-nomes pessoas-da-casa ente-id) r))
+                              r (vec (keys campos)))
+          (http/json-resposta 404 {:erro "setor não encontrado"}))
+        (catch clojure.lang.ExceptionInfo e (or (conflito-de-setor e) (throw e)))))))
+
+(defn- trocar-membros-handler [repo pessoas-da-casa]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))
+          id (parse-uuid (str (get-in req [:path-params :id])))
+          identidades (adapters-in-setor/membros->dominio (:json-params req))
+          nomes (setores-nomes pessoas-da-casa ente-id)]
+      (try
+        (if-let [r (and id (controllers/trocar-membros-do-setor! repo (set (keys nomes)) ente-id id identidades))]
+          (auditoria-do-setor (http/json-resposta 200 (adapters-setor/setor->wire nomes r)) r [:membros])
+          (http/json-resposta 404 {:erro "setor não encontrado"}))
+        (catch clojure.lang.ExceptionInfo e (or (conflito-de-setor e) (throw e)))))))
+
+(defn rotas-de-setores
+  "ADR-0020 (Eixo 1): os setores da Casa em /administracao — so' o `admin_ente` (ADR-0005: a area dele). `pessoas-da-
+  casa` = (fn [ente-id] -> {identidade-id nome}) das pessoas com vinculo ATIVO na Casa (nunca cidadao), injetada pelo
+  host: nomeia os membros e e' a guarda da lotacao."
+  [{:keys [auth repo-cadastros pessoas-da-casa]}]
+  (let [admin (it/exige-papel "admin_ente")]
+    #{["/administracao/setores" :get [auth admin (listar-setores-handler repo-cadastros pessoas-da-casa)]
+       :route-name :cadastros/listar-setores]
+      ["/administracao/setores" :post [auth admin it/corpo-json (criar-setor-handler repo-cadastros pessoas-da-casa)]
+       :route-name :cadastros/criar-setor]
+      ["/administracao/setores/:id" :put [auth admin it/corpo-json (atualizar-setor-handler repo-cadastros pessoas-da-casa)]
+       :route-name :cadastros/atualizar-setor]
+      ["/administracao/setores/:id/membros" :put
+       [auth admin it/corpo-json (trocar-membros-handler repo-cadastros pessoas-da-casa)]
+       :route-name :cadastros/trocar-membros-do-setor]}))

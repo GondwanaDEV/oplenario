@@ -57,6 +57,42 @@
                            [:or [:is :vigencia_fim nil] [:>= :vigencia_fim data]]]
                    :order-by [[:nome :asc]]}))))
 
+(defn- vigente-em [prefixo data]
+  (let [ini (keyword (str prefixo ".vigencia_inicio")) fim (keyword (str prefixo ".vigencia_fim"))]
+    [:and [:or [:is ini nil] [:<= ini data]] [:or [:is fim nil] [:>= fim data]]]))
+
+(defn com-membros-vigentes
+  "ADR-0020: as comissoes vigentes em `data` (INCLUSIVE a Mesa Diretora — a Mesa e' um destino legitimo de comunicado)
+  com os membros VIGENTES em `data`: [{:id :nome :tipo :membros [{:vereador-id :identidade-id :nome}]}], por nome.
+  `comissao-id` (opcional) restringe a uma. Membro = `comissao_membro` vigente; nome de exibicao = o parlamentar, ou o
+  civil. `:identidade-id` nil = o vereador nao tem acesso ao sistema. Duas consultas (comissoes + membros em lote)."
+  ([tx ente-id data] (com-membros-vigentes tx ente-id data nil))
+  ([tx ente-id data comissao-id]
+   (let [cs (comum/linhas->kebab
+             (jdbc/execute! tx
+               (sql/format {:select [:c.id :c.nome :c.tipo] :from [[:cadastros.comissao :c]]
+                            :where (cond-> [:and [:= :c.ente_id ente-id] (vigente-em "c" data)]
+                                     comissao-id (conj [:= :c.id comissao-id]))
+                            ;; a Mesa primeiro, depois por nome
+                            :order-by [[[:case [:= :c.tipo "mesa"] 0 :else 1] :asc] [:c.nome :asc] [:c.id :asc]]})))
+         ms (when (seq cs)
+              (comum/linhas->kebab
+               (jdbc/execute! tx
+                 (sql/format {:select [:cm.comissao_id [:v.id :vereador_id] :v.identidade_id :v.nome :v.nome_parlamentar]
+                              :from [[:cadastros.comissao_membro :cm]]
+                              :join [[:cadastros.vereador :v] [:and [:= :v.ente_id :cm.ente_id] [:= :v.id :cm.vereador_id]]]
+                              :where [:and [:= :cm.ente_id ente-id] [:in :cm.comissao_id (mapv :id cs)]
+                                      (vigente-em "cm" data)]
+                              :order-by [[:v.nome :asc] [:v.id :asc]]}))))
+         por-comissao (group-by :comissao-id ms)]
+     (mapv (fn [c]
+             (assoc c :membros (->> (get por-comissao (:id c))
+                                    (map (fn [m] {:vereador-id (:vereador-id m) :identidade-id (:identidade-id m)
+                                                  :nome (or (not-empty (:nome-parlamentar m)) (:nome m))}))
+                                    (reduce (fn [acc m] (if (some #(= (:vereador-id m) (:vereador-id %)) acc) acc (conj acc m)))
+                                            []))))
+           cs))))
+
 (defn mesa-vigente
   "A Mesa Diretora vigente em `data` (tipo='mesa', dentro da vigencia). Base de quem_exerce_presidencia (F2)."
   [tx data]

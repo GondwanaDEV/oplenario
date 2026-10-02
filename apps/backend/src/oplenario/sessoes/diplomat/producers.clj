@@ -7,10 +7,17 @@
             [oplenario.sessoes.events.ata :as ev-ata]
             [oplenario.sessoes.events.gravacao :as ev-gravacao]
             [oplenario.sessoes.events.incidente :as ev-incidente]
+            [oplenario.sessoes.events.notificacao :as ev-notificacao]
             [oplenario.sessoes.events.pauta :as ev-pauta]
             [oplenario.sessoes.events.presenca :as ev-presenca]
             [oplenario.sessoes.events.sessao :as ev-sessao]
             [oplenario.sessoes.events.tribuna :as ev-tribuna]))
+
+(defn emitir-notificacao-requisitada!
+  "ADR-0020 fatia 2: o aviso automatico da pauta publicada (canal `in_app`) — `notificacao.requisitada` na tx do ATO de
+  publicar; `paineis` projeta na caixa do sistema de cada vereador."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-notificacao/requisitada ente-id payload)))
 
 (defn emitir-sessao-agendada! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-sessao/agendada ente-id payload)))
