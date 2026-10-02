@@ -75,3 +75,8 @@ class RegistroPostgres:
                 (ente_id, desde),
             ).fetchone()
             return Decimal(r["gasto"]) if r else Decimal(0)
+
+    def apagar_ente(self, ente_id: str) -> int:
+        """ADR-0018: a Casa encerrada sai do registro (com o armazém Postgres, ele já apagou estas linhas — zero)."""
+        with self._conectar() as c:
+            return c.execute("DELETE FROM ia.registro_evento WHERE ente_id = %s", (ente_id,)).rowcount
