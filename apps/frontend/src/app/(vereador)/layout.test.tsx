@@ -62,6 +62,36 @@ describe("GuardVereador", () => {
   });
 });
 
+describe("GuardVereador — a aba Avisos é a caixa (ADR-0020)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("leva o número do que está por ler (comunicados + avisos), com a frase para leitor de tela", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (url === "/api/comunicados/caixa") {
+        return { ok: true, json: async () => ({ itens: [], "nao-lidos": 1, "pendentes-ciencia": 0, "proxima-ciencia-ate": null }) } as Response;
+      }
+      if (url === "/api/meu/notificacoes") {
+        return { ok: true, json: async () => ({ notificacoes: [], "nao-lidas": 1, "notificacoes-total": 0 }) } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({}) } as Response;
+    }) as unknown as typeof fetch;
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
+        <TemaProvider>
+          <GuardVereador>
+            <div data-testid="conteudo">home do vereador</div>
+          </GuardVereador>
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const aba = await screen.findByRole("link", { name: "Avisos, 2 por ler" });
+    expect(aba.querySelector(".tab-contagem")?.textContent).toBe("2");
+  });
+});
+
 describe("GuardVereador — aba Perfil", () => {
   afterEach(cleanup);
 
