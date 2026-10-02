@@ -180,3 +180,83 @@ def test_revisao_da_ata_e_uma_por_versao(armazem: Armazem) -> None:
     assert armazem.registrar_revisao(r) is False, "reentrega"
     v2 = RevisaoAta(**{**r.__dict__, "versao_ata": 2})
     assert armazem.registrar_revisao(v2) is True, "retificação é outra versão"
+
+
+def test_apagar_ente_leva_so_a_casa_pedida(armazem: Armazem) -> None:
+    """ADR-0018 (Eixo 4.5): a Casa encerrada sai inteira — fila, transcrição, rascunho, revisão, índice, orçamento —
+    e a outra Casa fica como estava. De novo = zeros (o core retoma o apagamento)."""
+    from decimal import Decimal
+
+    from oplenario_ia.armazem.porta import TrechoIndice
+    from oplenario_ia.confianca.cota import Orcamento
+
+    outra = "20000000-0000-0000-0000-000000000002"
+
+    def semear(ente: str, sufixo: str) -> None:
+        armazem.registrar_feed([NovoTrabalho("transcrever", f"seg-{sufixo}", ente, {})], 1)
+        armazem.registrar_feed([NovoTrabalho("redigir_ata", f"ata-{sufixo}", ente, {})], 1)
+        t = armazem.proximo(AGORA)
+        assert t is not None
+        armazem.concluir_transcricao(
+            t.id,
+            NovaTranscricao(
+                ente,
+                SESSAO,
+                f"4000000{sufixo}-0000-0000-0000-000000000004",
+                "pt",
+                1.0,
+                "a",
+                None,
+                1.0,
+                [Trecho(0.0, 1.0, "Olá", None, None, None)],
+            ),
+            lambda g: NovoTrabalho("notificar", f"aviso-t-{sufixo}", ente, {}),
+        )
+        t2 = armazem.proximo(AGORA)
+        assert t2 is not None
+        g = armazem.concluir_rascunho(
+            t2.id,
+            NovoRascunho(
+                ente,
+                SESSAO,
+                f"9000000{sufixo}-0000-0000-0000-000000000009",
+                "e",
+                "Ata.",
+                [],
+                [],
+                {"nivel": "normal", "motivos": []},
+                "f",
+                "m",
+                "v",
+                [],
+            ),
+            lambda g: NovoTrabalho("notificar", f"aviso-a-{sufixo}", ente, {}),
+        )
+        armazem.registrar_revisao(RevisaoAta(ente, g.id, 1, "editado", 0.1, "sha256:aa", SOLIC))
+        armazem.indexar(
+            ente,
+            "proposicao",
+            f"5000000{sufixo}-0000-0000-0000-000000000005",
+            [TrechoIndice(0, "merenda escolar", {})],
+            [[0.1] * 384],
+            "fake",
+        )
+        armazem.definir_orcamento(
+            ente, Orcamento(mensal=Decimal(10), teto_duro=Decimal(20), moeda="BRL"), AGORA, f"orc-{sufixo}"
+        )
+
+    semear(ENTE, "1")
+    semear(outra, "2")
+    apagados = armazem.apagar_ente(ENTE)
+    assert apagados["ia.trabalho"] == 4, "os 2 trabalhos + os 2 avisos ao core"
+    assert apagados["ia.transcricao"] == 1
+    assert apagados["ia.rascunho_ata"] == 1
+    assert apagados["ia.revisao_ata"] == 1
+    assert apagados["ia.indice_trecho"] == 1
+    assert apagados["ia.orcamento"] == 1
+    assert armazem.orcamento(ENTE) is None
+    assert armazem.transcricoes_da_sessao(ENTE, SESSAO) == []
+    assert all(t["chave"].endswith("-2") for t in armazem.trabalhos()), "a fila da outra Casa ficou"
+    assert len(armazem.transcricoes_da_sessao(outra, SESSAO)) == 1
+    assert armazem.orcamento(outra) is not None
+    assert all(n == 0 for n in armazem.apagar_ente(ENTE).values()), "retomada: zeros"

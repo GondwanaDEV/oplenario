@@ -6,8 +6,9 @@
   e' fluent-builder (hint em cada passo deixaria ilegivel) e tudo aqui e' I/O dominado por rede."
   (:require [com.stuartsierra.component :as component]
             [clojure.tools.logging :as log])
-  (:import (io.minio MinioClient PutObjectArgs GetObjectArgs RemoveObjectArgs
+  (:import (io.minio MinioClient PutObjectArgs GetObjectArgs RemoveObjectArgs ListObjectsArgs Result
                      MakeBucketArgs BucketExistsArgs)
+           (io.minio.messages Item)
            (io.minio.errors ErrorResponseException)
            (java.io ByteArrayInputStream InputStream)))
 
@@ -26,7 +27,11 @@
   (abrir    [this chave]
     "Devolve um InputStream do blob (sem materializar em heap — gravacao de sessao passa de 1 GB), ou nil se
      ausente. O CHAMADOR fecha o stream (ADR-0008: servir a gravacao ao satelite de IA).")
-  (remover! [this chave] "Remove o blob da `chave`."))
+  (remover! [this chave] "Remove o blob da `chave`.")
+  (listar [this prefixo recursivo?]
+    "As chaves sob `prefixo`, em ordem lexicografica (o S3 pagina por dentro, 1000 por pagina). `recursivo?` true =
+     todos os blobs abaixo do prefixo; false = so' o nivel imediato, com as subpastas como chaves terminadas em `/`
+     (ADR-0018: descobrir as pastas `<pasta>/<ente-id>/...` de uma Casa sem varrer o bucket inteiro)."))
 
 (defrecord ObjetoStoreS3 [config client bucket]
   component/Lifecycle
@@ -84,7 +89,14 @@
               (throw e))))))
   (remover! [_ chave]
     (.removeObject client (-> (RemoveObjectArgs/builder) (.bucket bucket) (.object chave) (.build)))
-    chave))
+    chave)
+  (listar [_ prefixo recursivo?]
+    (->> (.listObjects client (-> (ListObjectsArgs/builder) (.bucket bucket)
+                                  (cond-> (seq prefixo) (.prefix prefixo))   ; raiz do bucket = sem prefixo
+                                  (.recursive (boolean recursivo?)) (.build)))
+         (mapv (fn [^Result r] (.objectName ^Item (.get r))))
+         sort
+         vec)))
 
 (defn objeto-store
   "Cria o Component do object store a partir do config (:objeto-store{:endpoint :access-key :secret-key :bucket})."

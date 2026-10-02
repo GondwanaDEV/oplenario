@@ -109,7 +109,8 @@
 
 ;; --- limpeza: o teste provisiona um realm real no Keycloak compartilhado de dev; sem isto
 ;; cada corrida deixa realm+client+user acumulando ate' esgotar o container (ja' aconteceu).
-;; Chamada crua na admin-API (nao existe -- e nao deve existir -- teardown no protocolo IdentityProvider).
+;; Chamada crua na admin-API, de proposito: a limpeza do teste nao passa pelo `idp/apagar-realm!` (ADR-0018), que e'
+;; o apagamento de uma Casa encerrada — nao um teardown de teste.
 (defn- apagar-realm-teste! [^HttpClient http token realm]
   (.send http (-> (HttpRequest/newBuilder)
                   (.uri (URI/create (str base-url "/admin/realms/" realm)))
