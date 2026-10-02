@@ -129,6 +129,8 @@
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
+    ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
+    :comunicacao/ciencia
     ;; o compliance segue (a remessa ao TCE) e a Casa nomeia o encarregado LGPD
     :compliance/validar-remessa :compliance/submeter-remessa :compliance/resposta-remessa
     :participacao/definir-encarregado

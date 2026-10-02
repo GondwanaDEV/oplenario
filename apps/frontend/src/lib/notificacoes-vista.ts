@@ -2,6 +2,11 @@
 // que veio de GET /meu/notificacoes e deriva o estado visual. NENHUM fetch aqui (os hooks
 // use-minhas-notificacoes / use-marcar-lida ficam no page.tsx), mesmo padrão de meu-painel-vista.ts.
 //
+// ADR-0020: a tela deixou de ser só dos avisos — a CAIXA (src/app/caixa-da-casa.tsx) junta comunicados e avisos e tem
+// os quatro filtros fixos da ADR (comunicacao-vista.ts). Daqui ela reusa a régua do tempo (`grupoDe`,
+// `quandoRelativo`, `instanteNaCasa`), a vista de cada aviso (`paraVista`) e as contagens de corte de `derivarInbox`.
+// As abas derivadas abaixo seguem valendo para quem chamar `derivarInbox` com filtro, mas a caixa não as desenha.
+//
 // `agoraIso` é OPCIONAL (default = o relógio real) só para manter a função genuinamente pura — os testes
 // fixam o instante explicitamente, e a PÁGINA também passa o seu (um `agora` de estado, atualizado de
 // minuto em minuto: com o default, "há 5min" congelava no instante da montagem e saltava horas de uma
@@ -157,7 +162,7 @@ function derivarFiltros(itens: NotificacaoVista[]): FiltroVista[] {
   return [...base, ...abas];
 }
 
-const ROTULOS: Record<GrupoTemporal, string> = {
+export const ROTULOS_GRUPO: Record<GrupoTemporal, string> = {
   hoje: "Hoje",
   // "Esta semana" prometia semana de CALENDÁRIO e o código media os últimos 7 dias — numa segunda-feira
   // o título absorvia a semana anterior inteira. O rótulo agora diz o que de fato se mede.
@@ -165,7 +170,7 @@ const ROTULOS: Record<GrupoTemporal, string> = {
   antes: "Antes",
 };
 
-const ORDEM: GrupoTemporal[] = ["hoje", "semana", "antes"];
+export const ORDEM_GRUPOS: GrupoTemporal[] = ["hoje", "semana", "antes"];
 
 const MS_HORA = 3_600_000;
 const MS_DIA = 24 * MS_HORA;
@@ -204,7 +209,7 @@ function distanciaEmDias(diaMaisNovo: string, diaMaisVelho: string): number {
   return Math.round((Date.parse(`${diaMaisNovo}T00:00:00Z`) - Date.parse(`${diaMaisVelho}T00:00:00Z`)) / MS_DIA);
 }
 
-function instanteNaCasa(iso: string): string {
+export function instanteNaCasa(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "";
   return INSTANTE_NA_CASA.format(t).replace(",", " às");
@@ -228,7 +233,7 @@ const ROTAS_POR_TIPO: Record<string, ((objetoId: string) => string) | undefined>
   proposicao: (objetoId) => `/ficha-materia/${objetoId}`,
 };
 
-function hrefDoObjeto(objetoTipo: string, objetoId: string): string {
+export function hrefDoObjeto(objetoTipo: string, objetoId: string): string {
   const rota = ROTAS_POR_TIPO[objetoTipo];
   return rota ? rota(objetoId) : "";
 }
@@ -239,7 +244,7 @@ function hrefDoObjeto(objetoTipo: string, objetoId: string): string {
  * então o rótulo errado custa um dia. Dia do item no futuro (relógio adiantado) cai em "hoje", que é
  * onde o usuário vai procurar; nunca some da tela. Carimbo ilegível cai em "antes" — nunca lança.
  */
-function grupoDe(criadoEm: string, agoraIso: string): GrupoTemporal {
+export function grupoDe(criadoEm: string, agoraIso: string): GrupoTemporal {
   const hoje = diaNaCasa(agoraIso);
   const doItem = diaNaCasa(criadoEm);
   if (hoje === null || doItem === null) return "antes";
@@ -249,7 +254,7 @@ function grupoDe(criadoEm: string, agoraIso: string): GrupoTemporal {
   return "antes";
 }
 
-function quandoRelativo(criadoEm: string, agoraIso: string): string {
+export function quandoRelativo(criadoEm: string, agoraIso: string): string {
   const bruto = Date.parse(agoraIso) - Date.parse(criadoEm);
   if (Number.isNaN(bruto)) return "";
   const delta = Math.max(0, bruto);
@@ -265,7 +270,7 @@ function quandoRelativo(criadoEm: string, agoraIso: string): string {
   return d === 1 ? "há 1 dia" : `há ${d} dias`;
 }
 
-function paraVista(n: NotificacaoOut, agoraIso: string): NotificacaoVista {
+export function paraVista(n: NotificacaoOut, agoraIso: string): NotificacaoVista {
   return {
     id: n.id,
     categoria: n.categoria,
@@ -297,9 +302,9 @@ export function derivarInbox(
   // cai em "tudo". Falhar aberto aqui é o certo — o usuário perde o filtro, não a inbox.
   const filtroAtivo = filtros.some((f) => f.chave === filtro) ? filtro : FILTRO_TUDO;
   const visiveis = aplicarFiltro(itens, filtroAtivo);
-  const grupos: GrupoVista[] = ORDEM.map((chave) => ({
+  const grupos: GrupoVista[] = ORDEM_GRUPOS.map((chave) => ({
     chave,
-    rotulo: ROTULOS[chave],
+    rotulo: ROTULOS_GRUPO[chave],
     itens: visiveis.filter((i) => grupoDe(i.criadoEm, agoraIso) === chave),
   })).filter((g) => g.itens.length > 0);
   const naoLidas = dados?.naoLidas ?? 0;

@@ -1772,3 +1772,37 @@
   [ant]
   (when (and ant (not (:cumprida ant)))
     {:tipo "antecedencia-nao-cumprida" :minimo-horas (:minimo-horas ant) :horas-reais (:horas-reais ant)}))
+
+;; ---------- ADR-0020 fatia 2: o aviso automatico da pauta publicada ----------
+
+(def ^:private rotulo-do-tipo
+  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"})
+
+(defn avisos-de-pauta-publicada
+  "PURO: os payloads de `notificacao.requisitada` (canal `in_app`, a caixa do sistema) para cada vereador quando a pauta
+  da `sessao` e' publicada na `versao` gravada. Um por pessoa; a chave de idempotencia e' (versao, pessoa) — o mesmo
+  ato nunca avisa duas vezes, e cada republicacao avisa de novo (a pauta mudou). O texto so' diz o que a pauta publicada
+  ja' torna publico: a sessao, a data e a versao."
+  [sessao versao identidade-ids]
+  (let [nome (str "sessão " (get rotulo-do-tipo (:tipo-sessao sessao) (:tipo-sessao sessao))
+                  (when-let [n (:numero-sequencial sessao)] (str " nº " n)))
+        quando (when-let [^Instant t (:agendada-para sessao)]
+                 (str " de " (.format (.toLocalDate (.atZone t ^ZoneId tempo/zona-civil-padrao))
+                                      (java.time.format.DateTimeFormatter/ofPattern "dd/MM/yyyy"))))
+        republicada? (= "republicacao" (:tipo-versao versao))
+        assunto (str (if republicada? "Pauta republicada: " "Pauta publicada: ") nome)
+        corpo (str "A pauta da " nome quando " foi " (if republicada? "republicada" "publicada")
+                   " (versão " (:numero-versao versao) ")."
+                   (when (and republicada? (not (str/blank? (:justificativa versao))))
+                     (str " O que mudou: " (:justificativa versao))))]
+    (mapv (fn [iid]
+            {:destinatario-identidade-id (str iid)
+             :canal "in_app"
+             :consent-base "vinculo"
+             :idempotency-key (str "pauta_publicada:" (:id versao) ":" iid)
+             :assunto assunto
+             :corpo corpo
+             :objeto-tipo "sessao"
+             :objeto-id (str (:id sessao))
+             :categoria "pauta_publicada"})
+          (distinct identidade-ids))))

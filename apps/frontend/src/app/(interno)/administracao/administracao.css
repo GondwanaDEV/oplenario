@@ -44,3 +44,18 @@
 .adm-confirmar input[type="checkbox"] { width: 1.15rem; height: 1.15rem; margin-top: 0.15rem; flex: none; accent-color: var(--marca); }
 .adm-confirmar code { font-family: var(--mono); font-size: var(--t-13); }
 .adm-erro { margin: 0; font-size: var(--t-13); color: var(--acento-texto); font-weight: 600; }
+/* ADR-0020: os setores da Casa (endereço de comunicado, não permissão) */
+.adm-setores .adm-lista { align-self: stretch; }
+.adm-setor { display: grid; gap: 0.6rem; }
+.adm-setor .adm-quem span { overflow-wrap: anywhere; }
+.adm-setor-acoes { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.adm-setor-novo { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; align-self: stretch; }
+.adm-campo { display: grid; gap: 0.3rem; min-width: 0; flex: 1 1 16rem; max-width: 28rem; }
+.adm-campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.adm-campo input { font: inherit; min-height: 44px; padding: 0.45rem 0.6rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); box-sizing: border-box; width: 100%; }
+.adm-campo input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.adm-setor-pessoas { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.7rem 0.9rem; margin: 0; display: grid; gap: 0.6rem; min-width: 0; }
+.adm-setor-pessoas legend { font-weight: 600; padding: 0 0.3rem; color: var(--texto); }
+.adm-setor-opcoes { list-style: none; margin: 0; padding: 0; max-height: 18rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0 0.8rem; }
+.adm-setor-opcoes label { display: flex; align-items: center; gap: 0.55rem; min-height: 44px; color: var(--texto); }
+.adm-setor-opcoes input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--marca); }

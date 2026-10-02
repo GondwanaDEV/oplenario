@@ -11,7 +11,9 @@
      inexistente; lanca :sem-rito-de-parecer se a Casa nao configurou o rito de parecer.")
   (designar-relator-do-parecer! [this ente-id parecer-id relator-id por]
     "Define/troca o relator de um parecer nao terminal -> {:id :relator-id}; nil = inexistente ou terminal.")
-  (criar-pedido-juridico! [this ente-id m] "Registra o pedido de parecer juridico; nil = materia inexistente.")
+  (criar-pedido-juridico! [this ente-id m]
+    "Registra o pedido de parecer juridico; nil = materia inexistente. `(:avisar m)` = as identidades que recebem o aviso
+     automatico na caixa do sistema (ADR-0020 fatia 2), emitido na mesma tx.")
   (pedido-juridico [this ente-id id] "O pedido com o parecer corrente (com texto); nil = inexistente nesta Casa.")
   (pedidos-juridicos [this ente-id estado limite] "A fila, os mais antigos primeiro; parecer sem texto.")
   (cancelar-pedido-juridico! [this ente-id id por] "Cancela um pedido pendente -> pedido; nil = inexistente/nao pendente.")

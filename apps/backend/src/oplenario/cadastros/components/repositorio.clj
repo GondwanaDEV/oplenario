@@ -7,6 +7,7 @@
   (:require [oplenario.cadastros.db.comissao :as comissao]
             [oplenario.cadastros.db.estrutura :as estrutura]
             [oplenario.cadastros.db.referencia :as referencia]
+            [oplenario.cadastros.db.setor :as setor]
             [oplenario.cadastros.db.vereador :as vereador]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastro]
             [oplenario.kernel.tenancy :as tenancy])
@@ -113,7 +114,35 @@
   (membros-da-comissao [this ente-id comissao-id])
   (membros-da-casa [this ente-id data]
     "Nº de vereadores com mandato vigente em `data` (relacao ja usada pelo motor de regras — F2; exposta
-     aqui p/ o host injetar em outros modulos via inversao de dependencia, §22.10, FE Onda A1)."))
+     aqui p/ o host injetar em outros modulos via inversao de dependencia, §22.10, FE Onda A1).")
+  ;; ---------- ADR-0020: setores (o endereco interno) e os destinatarios de um comunicado ----------
+  (listar-setores [this ente-id]
+    "Os setores da Casa (ativos e inativos), por nome, cada um com `:membros` [identidade-id ...].")
+  (setor-com-membros [this ente-id id] "O setor com `:membros` [identidade-id ...], ou nil (inexistente nesta Casa).")
+  (criar-setor! [this ente-id setor]
+    "Cria o setor {:id :nome}. Nome repetido na Casa (sem diferenca de caixa) -> :conflito/setor-nome-repetido.")
+  (atualizar-setor! [this ente-id id campos]
+    "Renomeia/ativa/desativa {:nome? :ativo?}; o setor com membros, ou nil (inexistente). Nome repetido -> conflito.")
+  (trocar-membros-do-setor! [this ente-id id identidades]
+    "Troca a lotacao inteira numa tx; o setor com os membros novos, ou nil (inexistente).")
+  (comissoes-com-membros [this ente-id data]
+    "As comissoes vigentes em `data` (com a Mesa) e os membros vigentes de cada uma (ver db/comissao).")
+  (comissao-com-membros [this ente-id id data] "Uma comissao vigente em `data` com os membros vigentes, ou nil.")
+  (identidades-de-vereadores [this ente-id ids]
+    "{vereador-id {:identidade-id :nome}} dos vereadores desta Casa (identidade nil = sem acesso ao sistema).")
+  (identidades-dos-vereadores-vigentes [this ente-id data]
+    "As identidades dos vereadores com mandato VIGENTE em `data` que tem acesso ao sistema — os avisos automaticos a
+     'todos os vereadores' (ADR-0020 fatia 2: a pauta publicada)."))
+
+(defn- com-nome-unico-de-setor
+  "23505 do indice unico (ente, lower(nome)) -> conflito de DOMINIO (409, nunca 500). O catch fica FORA da tx (a
+  excecao a aborta), mesmo padrao de `ligar-identidade!`."
+  [f]
+  (try (f)
+       (catch PSQLException e
+         (if (= "23505" (.getSQLState e))
+           (throw (ex-info "ja existe um setor com este nome nesta Casa" {:tipo :conflito/setor-nome-repetido}))
+           (throw e)))))
 
 (defrecord RepoCadastrosPg [datasource]
   RepoCadastros
@@ -258,7 +287,51 @@
   (criar-cargo! [this ente-id c] (transacao this ente-id #(comissao/inserir-cargo! % c)))
   (criar-membro! [this ente-id m] (transacao this ente-id #(comissao/inserir-membro! % m)))
   (membros-da-comissao [this ente-id com-id] (transacao this ente-id #(comissao/membros % com-id)))
-  (membros-da-casa [this ente-id data] (transacao this ente-id #(rel-cadastro/membros-da-casa % data))))
+  (membros-da-casa [this ente-id data] (transacao this ente-id #(rel-cadastro/membros-da-casa % data)))
+  (listar-setores [this ente-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [ss (setor/listar tx ente-id)
+              ms (setor/membros-por-setor tx ente-id (mapv :id ss))]
+          (mapv #(assoc % :membros (get ms (:id %) [])) ss)))))
+  (setor-com-membros [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (setor/buscar tx ente-id id)]
+          (assoc s :membros (get (setor/membros-por-setor tx ente-id [id]) id []))))))
+  (criar-setor! [this ente-id s]
+    (com-nome-unico-de-setor
+     #(transacao this ente-id
+        (fn [tx] (assoc (setor/inserir! tx (assoc s :ente-id ente-id)) :membros [])))))
+  (atualizar-setor! [this ente-id id campos]
+    (com-nome-unico-de-setor
+     #(transacao this ente-id
+        (fn [tx]
+          (when-let [s (setor/atualizar! tx ente-id id campos)]
+            (assoc s :membros (get (setor/membros-por-setor tx ente-id [id]) id [])))))))
+  (trocar-membros-do-setor! [this ente-id id identidades]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (setor/buscar tx ente-id id)]
+          (setor/trocar-membros! tx ente-id id identidades)
+          (assoc s :membros (get (setor/membros-por-setor tx ente-id [id]) id []))))))
+  (comissoes-com-membros [this ente-id data]
+    (transacao this ente-id #(comissao/com-membros-vigentes % ente-id data)))
+  (comissao-com-membros [this ente-id id data]
+    (transacao this ente-id #(first (comissao/com-membros-vigentes % ente-id data id))))
+  (identidades-de-vereadores [this ente-id ids]
+    (transacao this ente-id #(vereador/identidades-por-id % ente-id ids)))
+  (identidades-dos-vereadores-vigentes [this ente-id data]
+    (transacao this ente-id
+      (fn [tx]
+        (let [vigentes (->> (vereador/roster-da-casa tx ente-id data)
+                            (filter #(= "vigente" (:estado-mandato %)))
+                            (mapv :vereador-id))]
+          (->> (vals (vereador/identidades-por-id tx ente-id vigentes))
+               (keep :identidade-id)
+               distinct
+               vec))))))
+
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
