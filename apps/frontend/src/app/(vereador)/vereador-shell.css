@@ -21,6 +21,9 @@
 .tab[aria-current="page"] { color: var(--marca); }
 .tab[aria-current="page"] svg { stroke-width: 2.4; }
 .tab:disabled { opacity: 0.4; cursor: default; }
+/* ADR-0020: o número do que está por ler na aba "Avisos" (a caixa). Branco sobre --telha-fundo = 5.44 (§5.1). */
+.tab { position: relative; }
+.tab .tab-contagem { position: absolute; top: 0.35rem; left: calc(50% + 0.75rem); min-width: 1.35em; padding: 0 0.35em; border-radius: 999px; background: var(--telha-fundo); color: #fff; font-family: var(--mono); font-size: var(--t-11); font-weight: 600; line-height: 1.5; text-align: center; font-variant-numeric: tabular-nums; }
 
 @media (min-width: 480px) {
   .app-vereador { margin-top: 1.5rem; min-height: calc(100vh - 3rem); border-radius: var(--raio-lg); border: 1px solid var(--linha); overflow: hidden; margin-bottom: 1.5rem; }

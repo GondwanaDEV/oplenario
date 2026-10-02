@@ -32,6 +32,8 @@ function mockar(corpos: unknown[]) {
   const fila = [...corpos];
   const f = vi.fn(async (url: string) => {
     if (String(url).includes("/meu/identidade")) return { ok: true, status: 200, json: async () => ({ nome: "A", papeis: ["admin_ente"] }) } as Response;
+    // o contador da Caixa no topo (ADR-0020) não consome a fila de respostas do painel
+    if (String(url).includes("/comunicados/") || String(url).includes("/meu/notificacoes")) return { ok: false, status: 404, json: async () => ({}) } as Response;
     const corpo = fila.length > 1 ? fila.shift() : fila[0];
     return { ok: true, status: 200, json: async () => corpo } as Response;
   });

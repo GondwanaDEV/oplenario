@@ -2,309 +2,141 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PaginaNotificacoes from "./page";
 
+// A aba "Avisos" do vereador é, desde a ADR-0020, a CAIXA (src/app/caixa-da-casa.tsx): comunicados da Casa + avisos do
+// sistema. Este arquivo guarda o que a antiga inbox já provava sobre os AVISOS (ficha, "marcar como lido", região viva,
+// cortes da lista) e prova o que muda no app do vereador: o comunicado abre DENTRO do app (/notificacoes/:id). O
+// comportamento da caixa em si (ordem, filtros, faixa de ciência, falha parcial) está em src/app/caixa-da-casa.test.tsx.
+
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tok" }) }));
 
-const umaNaoLida = {
-  notificacoes: [
-    {
-      id: "n1",
-      categoria: "norma_publicada",
-      assunto: "A sua proposicao virou lei — Lei 3/2026",
-      corpo: "Ementa: Dispoe sobre as hortas comunitarias.",
-      "objeto-tipo": "proposicao",
-      "objeto-id": "p1",
-      "criado-em": new Date().toISOString(),
-      "lida-em": null,
-    },
-  ],
-  "nao-lidas": 1,
-};
+const agora = () => new Date().toISOString();
 
-describe("PaginaNotificacoes", () => {
-  afterEach(() => {
-    // sem isto, tests 1/2 (item não-lido montado) deixavam a árvore anterior no DOM (este projeto NÃO
-    // liga o auto-cleanup do RTL — todo outro *.test.tsx do shell chama `cleanup()` explicitamente, ex.
-    // vereador/page.test.tsx) e o teste 5 batia em "Marcar como lida" duplicado/travava — achado real via
-    // ciclo red→green, não teatro de timeout.
-    cleanup();
-    vi.restoreAllMocks();
-  });
-
-  it("mostra a notificação, o grupo e o badge de não lidas", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => umaNaoLida }) as Response) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
-    expect(screen.getByRole("heading", { level: 2, name: "Hoje" })).toBeDefined();
-    expect(screen.getByLabelText("1 não lida")).toBeDefined();
-    // A âncora da ficha EXISTE e aponta para a matéria. Isto já foi o contrário: a vista esvaziava o href
-    // "porque a ficha nega 403 ao vereador". Mudou em 70fdd43 — a leitura de ficha passou a aceitar
-    // `vereador` (feat(authz)), e ROTAS_POR_TIPO religou `proposicao` -> /ficha-materia/:id para a
-    // notificação não ser link morto. Aquele commit atualizou notificacoes-vista.test.ts e esqueceu ESTE,
-    // que seguiu exigindo a ausência da âncora: o teste ficou vermelho por estar velho, não por defeito.
-    const ficha = screen.getByRole("link", { name: /Abrir a ficha/ });
-    expect(ficha.getAttribute("href")).toBe("/ficha-materia/p1?token=tok");
-  });
-
-  it("não-lida é sinalizada por mais que cor (ponto com rótulo acessível)", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => umaNaoLida }) as Response) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByRole("img", { name: "Não lida" })).toBeDefined());
-  });
-
-  it("estado vazio é honesto", async () => {
-    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ notificacoes: [], "nao-lidas": 0 }) }) as Response) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/Nenhuma notificação/)).toBeDefined());
-  });
-
-  it("erro de carga não quebra a tela", async () => {
-    global.fetch = vi.fn(async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/Não foi possível carregar/)).toBeDefined());
-  });
-
-  it("marcar como lida chama o POST e revalida", async () => {
-    const chamadas: string[] = [];
-    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      chamadas.push(`${init?.method ?? "GET"} ${url}`);
-      if (init?.method === "POST") {
-        return { ok: true, json: async () => ({ id: "n1", "lida-em": "2026-07-19T13:00:00Z" }) } as Response;
-      }
-      return { ok: true, json: async () => umaNaoLida } as Response;
-    }) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
-    screen.getByRole("button", { name: /Marcar como lida/ }).click();
-    await waitFor(() =>
-      expect(chamadas).toContain("POST /api/meu/notificacoes/n1/lida")
-    );
-    await waitFor(() => expect(chamadas.filter((c) => c.startsWith("GET")).length).toBeGreaterThan(1));
-  });
-
-  // Regressão da revisão adversarial (achado único sobrevivente): a falha do POST era visível na tela
-  // mas MUDA para leitor de tela — parágrafo comum, sem região viva, e o foco fica no botão. WCAG 4.1.3
-  // (Status Messages, AA) — que o "AA nos 2 temas" já medido NÃO cobre: aquilo era contraste.
-  // `role="status"` é a convenção das duas telas irmãs deste shell com a mesma classe
-  // (vereador/page.tsx, parecer/[id]/assinar/page.tsx).
-  it("falha ao marcar como lida é anunciada a leitor de tela (região viva, não só pixel)", async () => {
-    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
-      if (init?.method === "POST") return { ok: false, status: 500 } as Response;
-      return { ok: true, json: async () => umaNaoLida } as Response;
-    }) as unknown as typeof fetch;
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/virou lei/)).toBeDefined());
-    screen.getByRole("button", { name: /Marcar como lida/ }).click();
-    const aviso = await waitFor(() => screen.getByRole("status"));
-    expect(aviso.className).toContain("erro-inline");
-    expect(aviso.textContent).toBeTruthy();
-  });
-});
-
-// -------------------------------------------------------------------------------------------------
-// Fatia 3 — a barra de filtro na tela. O racional de DERIVAR as abas está no topo de
-// src/lib/notificacoes-vista.ts; aqui prova-se o comportamento visível.
-// -------------------------------------------------------------------------------------------------
-
-function item(id: string, categoria: string, lidaEm: string | null = null, assunto = `Assunto ${id}`) {
+function aviso(id: string, lidaEm: string | null = null, assunto = `Aviso ${id}`) {
   return {
     id,
-    categoria,
+    categoria: "norma_publicada",
     assunto,
-    corpo: "Ementa: ...",
+    corpo: "Ementa: Dispõe sobre as hortas comunitárias.",
     "objeto-tipo": "proposicao",
     "objeto-id": `p-${id}`,
-    "criado-em": new Date().toISOString(),
+    "criado-em": agora(),
     "lida-em": lidaEm,
   };
 }
 
-function servindo(corpo: unknown) {
-  global.fetch = vi.fn(async () => ({ ok: true, json: async () => corpo }) as Response) as unknown as typeof fetch;
+const caixaVazia = { itens: [], "nao-lidos": 0, "pendentes-ciencia": 0, "proxima-ciencia-ate": null };
+
+type Rota = { status?: number; corpo: unknown };
+
+function servindo(rotas: { avisos?: unknown; caixa?: unknown; post?: Rota }) {
+  const chamadas: string[] = [];
+  global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    const metodo = init?.method ?? "GET";
+    chamadas.push(`${metodo} ${url}`);
+    if (metodo === "POST") {
+      const r = rotas.post ?? { corpo: { id: "n1", "lida-em": "2026-07-19T13:00:00Z" } };
+      const status = r.status ?? 200;
+      return { ok: status < 300, status, json: async () => r.corpo } as Response;
+    }
+    if (url === "/api/meu/notificacoes") return { ok: true, status: 200, json: async () => rotas.avisos ?? { notificacoes: [], "nao-lidas": 0, "notificacoes-total": 0 } } as Response;
+    if (url === "/api/comunicados/caixa") return { ok: true, status: 200, json: async () => rotas.caixa ?? caixaVazia } as Response;
+    return { ok: false, status: 404, json: async () => ({}) } as Response;
+  }) as unknown as typeof fetch;
+  return chamadas;
 }
 
-describe("PaginaNotificacoes · barra de filtro", () => {
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
-  });
+afterEach(() => {
+  // o projeto NÃO liga o auto-cleanup do RTL (a suíte não usa os globals do Vitest): sem isto a árvore anterior
+  // fica montada e, sob carga, o React ainda tem trabalho agendado quando o jsdom sai ("window is not defined").
+  cleanup();
+  vi.restoreAllMocks();
+});
 
-  it("desenha a barra com Tudo e Não lidas, com as contagens locais", async () => {
+describe("Avisos do vereador = a caixa", () => {
+  it("o comunicado abre DENTRO do app do vereador (/notificacoes/:id), com o remetente e o protocolo", async () => {
     servindo({
-      notificacoes: [item("a", "norma_publicada"), item("b", "norma_publicada", "2026-07-19T10:00:00Z")],
-      "nao-lidas": 1,
+      caixa: {
+        itens: [{ id: "c1", protocolo: "COM-2026-000007", assunto: "Sessão extraordinária na sexta", "remetente-nome": "Rita Campos",
+          "enviado-em": agora(), "exige-ciencia": false, "ciencia-ate": null, vencido: false, "recebido-em": agora(), "lido-em": null, "ciente-em": null }],
+        "nao-lidos": 1, "pendentes-ciencia": 0, "proxima-ciencia-ate": null,
+      },
     });
     render(<PaginaNotificacoes />);
-    const barra = await waitFor(() => screen.getByRole("group", { name: /Filtrar/i }));
-    const abas = Array.from(barra.querySelectorAll("button")).map((b) => b.textContent);
-    expect(abas).toEqual(["Tudo2", "Não lidas1"]);
-    expect(barra.querySelector('button[aria-pressed="true"]')!.textContent).toBe("Tudo2");
+    const link = await screen.findByRole("link", { name: "Sessão extraordinária na sexta" });
+    expect(link.getAttribute("href")).toBe("/notificacoes/c1?token=tok");
+    expect(screen.getByText("De Rita Campos · COM-2026-000007")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Caixa, 1 por ler" })).toBeTruthy();
   });
 
-  it("NÃO desenha aba para categoria que nenhum produtor emite", async () => {
-    servindo({ notificacoes: [item("a", "norma_publicada")], "nao-lidas": 1 });
+  it("o aviso do sistema mantém o atalho para a ficha da matéria", async () => {
+    servindo({ avisos: { notificacoes: [aviso("n1", null, "A sua proposição virou lei — Lei 3/2026")], "nao-lidas": 1, "notificacoes-total": 1 } });
     render(<PaginaNotificacoes />);
-    const barra = await waitFor(() => screen.getByRole("group", { name: /Filtrar/i }));
-    expect(barra.textContent).not.toMatch(/Falha|Prazo|Sess|Tramita/i);
+    await screen.findByText(/virou lei/);
+    expect(screen.getByRole("heading", { level: 2, name: "Hoje" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Abrir a ficha/ }).getAttribute("href")).toBe("/ficha-materia/p-n1?token=tok");
   });
 
-  it("clicar em 'Não lidas' esconde a lida, mantém a não lida e ACENDE a aba clicada", async () => {
+  it("não lido é sinalizado por mais que cor; o lido diz 'Lido' e não tem botão", async () => {
     servindo({
-      notificacoes: [
-        item("a", "norma_publicada", null, "A que ainda nao li"),
-        item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li"),
-      ],
-      "nao-lidas": 1,
+      avisos: { notificacoes: [aviso("a", null, "A que ainda não li"), aviso("b", "2026-07-19T10:00:00Z", "A que já li")], "nao-lidas": 1, "notificacoes-total": 2 },
     });
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
-
-    // Como um item LIDO é renderizado — sem isto, inverter o ternário do ponto ou a classe `nao-lida`
-    // passa despercebido, e o "mais que cor" (ponto + negrito + tinta) migra para o item errado.
-    const artigoLido = screen.getByText("A que ja li").closest("article")!;
-    const artigoNaoLido = screen.getByText("A que ainda nao li").closest("article")!;
-    expect(within(artigoLido).getByText("Lida")).toBeDefined();
-    expect(within(artigoLido).queryByRole("img", { name: "Não lida" })).toBeNull();
-    expect(within(artigoLido).queryByRole("button", { name: /Marcar como lida/ })).toBeNull();
-    expect(artigoLido.className).not.toContain("nao-lida");
-    expect(within(artigoNaoLido).queryByText("Lida")).toBeNull();
-    expect(within(artigoNaoLido).getByRole("img", { name: "Não lida" })).toBeDefined();
-    expect(within(artigoNaoLido).getByRole("button", { name: /Marcar como lida/ })).toBeDefined();
-    expect(artigoNaoLido.className).toContain("nao-lida");
-
-    fireEvent.click(screen.getByRole("button", { name: /^Não lidas/ }));
-    await waitFor(() => expect(screen.queryByText("A que ja li")).toBeNull());
-    expect(screen.getByText("A que ainda nao li")).toBeDefined();
-    // o realce MIGROU: `.segs button[aria-pressed="true"]` é o ÚNICO carregador do destaque da aba ativa
-    // (notificacoes.css) e do anúncio "pressionado" no leitor de tela — filtrar sem acender é filtro
-    // aplicado sem dizer qual.
-    expect(screen.getByRole("button", { name: /^Não lidas/ }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: /^Tudo/ }).getAttribute("aria-pressed")).toBe("false");
+    const lido = (await screen.findByText("A que já li")).closest("article")!;
+    const naoLido = screen.getByText("A que ainda não li").closest("article")!;
+    expect(within(lido).getByText("Lido")).toBeTruthy();
+    expect(within(lido).queryByRole("img", { name: "Não lido" })).toBeNull();
+    expect(within(lido).queryByRole("button", { name: /Marcar como lido/ })).toBeNull();
+    expect(lido.className).not.toContain("cx-nao-lido");
+    expect(within(naoLido).getByRole("img", { name: "Não lido" })).toBeTruthy();
+    expect(within(naoLido).getByRole("button", { name: /Marcar como lido/ })).toBeTruthy();
+    expect(naoLido.className).toContain("cx-nao-lido");
   });
 
-  it("com uma SEGUNDA categoria no dado, a aba dela nasce sozinha e filtra", async () => {
-    servindo({
-      notificacoes: [
-        item("a", "norma_publicada", null, "Virou lei"),
-        item("b", "sistema", null, "Aviso do sistema"),
-      ],
-      "nao-lidas": 2,
-    });
+  it("marcar o aviso como lido chama o POST de paineis e revalida os avisos", async () => {
+    const chamadas = servindo({ avisos: { notificacoes: [aviso("n1")], "nao-lidas": 1, "notificacoes-total": 1 } });
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("Aviso do sistema")).toBeDefined());
-    fireEvent.click(screen.getByRole("button", { name: /^Sistema/ }));
-    await waitFor(() => expect(screen.queryByText("Virou lei")).toBeNull());
-    expect(screen.getByText("Aviso do sistema")).toBeDefined();
-    expect(screen.getByRole("button", { name: /^Sistema/ }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: /^Tudo/ }).getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(await screen.findByRole("button", { name: /Marcar como lido/ }));
+    await waitFor(() => expect(chamadas).toContain("POST /api/meu/notificacoes/n1/lida"));
+    await waitFor(() => expect(chamadas.filter((c) => c === "GET /api/meu/notificacoes").length).toBeGreaterThan(1));
   });
 
-  it("inbox vazia não ganha barra (nada a filtrar)", async () => {
-    servindo({ notificacoes: [], "nao-lidas": 0 });
+  it("falha ao marcar como lido é anunciada a leitor de tela (região viva, não só pixel)", async () => {
+    servindo({ avisos: { notificacoes: [aviso("n1")], "nao-lidas": 1, "notificacoes-total": 1 }, post: { status: 500, corpo: {} } });
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText(/Nenhuma notificação/)).toBeDefined());
-    expect(screen.queryByRole("group", { name: /Filtrar/i })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: /Marcar como lido/ }));
+    const regiao = await waitFor(() => screen.getByRole("status"));
+    expect(regiao.className).toContain("cx-erro");
+    expect(regiao.textContent).toBeTruthy();
   });
 
-  it("filtro sem resultado diz que é o FILTRO, não que a inbox está vazia", async () => {
-    servindo({
-      notificacoes: [item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li")],
-      "nao-lidas": 0,
-    });
+  it("caixa vazia convida, sem fingir lista", async () => {
+    servindo({});
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
-    fireEvent.click(screen.getByRole("button", { name: /^Não lidas/ }));
-    await waitFor(() => expect(screen.getByText(/Nenhuma notificação neste filtro/)).toBeDefined());
-    expect(screen.queryByText("Nenhuma notificação por enquanto.")).toBeNull();
+    expect(await screen.findByText(/Sua caixa está vazia/)).toBeTruthy();
   });
 });
 
-// -------------------------------------------------------------------------------------------------
-// O badge conta TODAS as não lidas (query sem teto do servidor); a lista e as contagens das abas vêm da
-// resposta cortada em 50 linhas pelo SQL (paineis/db/notificacao_caixa.clj). São dois universos, e a
-// tela exibia os dois números lado a lado sem uma linha dizendo isso.
-// -------------------------------------------------------------------------------------------------
-
-describe("PaginaNotificacoes · a lista tem teto, o badge não", () => {
-  afterEach(() => {
-    cleanup();
-    vi.restoreAllMocks();
+describe("Avisos do vereador · a lista tem teto, o número não", () => {
+  it("diz que a lista de avisos foi cortada quando há não lido fora dela", async () => {
+    servindo({ avisos: { notificacoes: [aviso("b", "2026-07-19T10:00:00Z", "A que já li")], "nao-lidas": 10, "notificacoes-total": 1 } });
+    render(<PaginaNotificacoes />);
+    await screen.findByText("A que já li");
+    expect(screen.getByText(/A caixa mostra só os itens mais recentes/).textContent).toContain("10 avisos não lidos mais antigos ficaram fora dela");
   });
 
-  it("diz que a lista está cortada quando há não lida que não coube nela", async () => {
-    // o cenário exato do achado: 10 não lidas no servidor, e as que chegaram na lista estão todas lidas.
+  it("o total cortado nunca fica calado atrás do aviso de não lidos", async () => {
     servindo({
-      notificacoes: [item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li")],
-      "nao-lidas": 10,
+      avisos: { notificacoes: [aviso("a"), aviso("b", "2026-07-19T10:00:00Z"), aviso("c", "2026-07-19T10:00:00Z")], "nao-lidas": 3, "notificacoes-total": 500 },
     });
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
-    expect(screen.getByLabelText("10 não lidas")).toBeDefined();
-
-    const aviso = screen.getByText(/só os avisos mais recentes/);
-    expect(aviso.textContent).toContain("10 avisos não lidos mais antigos fora dela");
-
-    // e o aviso continua de pé no filtro em que a contradição aparece: aba "Não lidas 0" com badge 10.
-    fireEvent.click(screen.getByRole("button", { name: /^Não lidas/ }));
-    await waitFor(() => expect(screen.getByText(/Nenhuma notificação neste filtro/)).toBeDefined());
-    expect(screen.getByText(/só os avisos mais recentes/)).toBeDefined();
+    await screen.findByText("Aviso a");
+    expect(screen.getByText(/497 avisos do sistema mais antigos ficaram fora dela/)).toBeTruthy();
   });
 
-  it("uma só não lida fora da lista é dita no singular", async () => {
-    servindo({
-      notificacoes: [item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li")],
-      "nao-lidas": 1,
-    });
+  it("número e lista concordando: nenhuma linha de corte", async () => {
+    servindo({ avisos: { notificacoes: [aviso("a")], "nao-lidas": 1, "notificacoes-total": 1 } });
     render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
-    expect(screen.getByText(/só os avisos mais recentes/).textContent).toContain(
-      "Há 1 aviso não lido mais antigo fora dela"
-    );
-  });
-
-  it("badge e lista concordando -> nenhuma linha de corte (não se avisa do que não houve)", async () => {
-    servindo({ notificacoes: [item("a", "norma_publicada")], "nao-lidas": 1, "notificacoes-total": 1 });
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("Assunto a")).toBeDefined());
-    expect(screen.getByLabelText("1 não lida")).toBeDefined();
-    expect(screen.queryByText(/só os avisos mais recentes/)).toBeNull();
-    expect(screen.queryByText(/Esta lista mostra só as mais recentes/)).toBeNull();
-  });
-
-  // O falso honesto (achado da fatia "truncamento-familia" sitio b): "nao-lidas" bate exatamente com a
-  // lista (0 fora), então o aviso ACIMA (naoLidasForaDaLista) fica calado — mas a lista tem MENOS itens
-  // que "notificacoes-total". Sem este segundo aviso, notificações LIDAS cortadas somem sem sinal nenhum.
-  it("o falso honesto: nao-lidas bate com a lista, mas ha' lidas cortadas — o segundo aviso denuncia", async () => {
-    servindo({
-      notificacoes: [item("b", "norma_publicada", "2026-07-19T10:00:00Z", "A que ja li")],
-      "nao-lidas": 0,
-      "notificacoes-total": 3,
-    });
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("A que ja li")).toBeDefined());
-    // o aviso de NÃO LIDAS continua calado — é exatamente o caso que ele não cobre.
-    expect(screen.queryByText(/só os avisos mais recentes/)).toBeNull();
-    const aviso = screen.getByText(/Esta lista mostra só as mais recentes/);
-    expect(aviso.textContent).toContain("Há 2 notificações mais antigas fora dela");
-  });
-
-  // Achado da revisão adversarial (as DUAS revisões, independentemente): os dois cortes são
-  // MUTUAMENTE EXCLUSIVOS na tela — quando naoLidasForaDaLista > 0, o segundo aviso (que usa o par
-  // AUTORITATIVO notificacoesTotal) é SUPRIMIDO mesmo quando o corte real é muito maior. O vereador lê
-  // "faltam 2" quando na verdade faltam 497.
-  it("os dois cortes coexistindo: o total nunca fica calado atras do aviso de nao lidas", async () => {
-    servindo({
-      notificacoes: [
-        item("a", "norma_publicada", null, "Ainda nao li"),
-        item("b", "norma_publicada", "2026-07-19T10:00:00Z", "Ja li 1"),
-        item("c", "norma_publicada", "2026-07-19T10:00:00Z", "Ja li 2"),
-      ],
-      "nao-lidas": 3,
-      "notificacoes-total": 500,
-    });
-    render(<PaginaNotificacoes />);
-    await waitFor(() => expect(screen.getByText("Ainda nao li")).toBeDefined());
-    // naoLidasForaDaLista = 3 - 1 = 2 (>0) — o aviso de nao lidas NAO deve mais aparecer sozinho e calar
-    // o corte real: o numero grande (497 fora da lista) precisa estar visivel em algum lugar da tela.
-    expect(screen.getByText(/497 notificações mais antigas fora dela/)).toBeDefined();
+    await screen.findByText("Aviso a");
+    expect(screen.queryByText(/A caixa mostra só os itens mais recentes/)).toBeNull();
   });
 });
