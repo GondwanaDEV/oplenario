@@ -55,6 +55,24 @@
              "GRANT SELECT, INSERT ON teste_encerramento.anexo_remessa, teste_encerramento.anexo_nota TO oplenario_app"]]
     (jdbc/execute! ds [s])))
 
+(def ^:private criados
+  "As Casas e os operadores que cada teste pos no registro supratenant — tirados depois de cada teste, para o console
+  das outras suites (que lista TODAS as Casas e a fila de pedidos) nao ver Casas encerradas e pedidos `apagar` de
+  teste."
+  (atom {:entes #{} :operadores #{}}))
+
+(defn- limpar-registro! [ds]
+  (let [{:keys [entes operadores]} @criados
+        uuids #(into-array java.util.UUID %)]
+    (when (seq entes)
+      (doseq [t ["admin_sistema.pedido_restricao" "admin_sistema.exportacao_casa" "admin_sistema.ente"]]
+        (jdbc/execute! ds [(str "DELETE FROM " t " WHERE ente_id = ANY (?)") (uuids entes)])))
+    (when (seq operadores)
+      (jdbc/execute! ds ["DELETE FROM admin_sistema.operador WHERE id = ANY (?)" (uuids operadores)]))
+    (reset! criados {:entes #{} :operadores #{}})))
+
+(use-fixtures :each (fn [t] (try (t) (finally (limpar-registro! *dono*)))))
+
 (use-fixtures :once
   (fn [t]
     (let [cfg (config/carregar)
@@ -98,6 +116,7 @@
 
 (defn- operador! [nome]
   (let [id (random-uuid)]
+    (swap! criados update :operadores conj id)
     (sql! "INSERT INTO admin_sistema.operador (id, email, nome) VALUES (?, ?, ?)" id (str "op-" id "@oplenario.dev") nome)
     id))
 
@@ -108,6 +127,7 @@
   (let [pessoa (random-uuid) remessa (random-uuid) anexo (random-uuid) seg (random-uuid)
         chave-remessa (str "remessas/" ente "/remessa_mensal_sim/2026-09/" marca ".bin")
         chave-gravacao (str "gravacao/" ente "/" seg)]
+    (swap! criados update :entes conj ente)
     (sql! "INSERT INTO cadastros.municipios (codigo_ibge, nome, uf, capital, populacao)
            VALUES ('2302008', 'Baturité', 'CE', false, 35000) ON CONFLICT DO NOTHING")
     (sql! "INSERT INTO admin_sistema.ente (ente_id, nome, uf, estado) VALUES (?, ?, 'CE', 'ativo')" ente (str "Câmara " marca))
