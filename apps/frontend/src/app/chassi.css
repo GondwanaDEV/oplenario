@@ -374,3 +374,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   .btn:hover { transform: none; }
 }
+
+/* ADR-0018 — a faixa "Sistema da Câmara com acesso restrito desde DD/MM" (interno, vereador, cidadã e portal). Âmbar
+   de aviso (não erro): texto --aviso-texto (AA nos dois temas), traço --amarelo-traco. */
+.faixa-acesso-restrito { background: color-mix(in srgb, var(--amarelo-traco) 14%, var(--surface)); border-bottom: 2px solid var(--amarelo-traco); }
+.faixa-acesso-restrito p { margin: 0 auto; max-width: 1200px; padding: 0.7rem 1.2rem; font-size: var(--t-13); line-height: 1.45; color: var(--texto); }
+.faixa-acesso-restrito b { color: var(--aviso-texto); font-weight: 700; }

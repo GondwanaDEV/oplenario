@@ -212,3 +212,22 @@
 .op-gov b { color: var(--texto); }
 
 @media (max-width: 860px) { .op-ia-grade { grid-template-columns: 1fr; } }
+
+/* ---- ADR-0018: o acesso da câmara (suspender, fila do 2º operador, reativar, encerrar) ---- */
+.op-form-curto { margin: 0; max-width: 640px; gap: 0.9rem; }
+.op-campo textarea { font: 500 var(--t-16) var(--corpo); color: var(--texto); background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--texto-2) 52%, var(--linha)); border-radius: 10px; padding: 0.6rem 0.8rem; resize: vertical; }
+.op-campo textarea:focus { outline: 2px solid var(--foco); outline-offset: 1px; }
+.op-campo textarea[aria-invalid="true"], .op-campo select[aria-invalid="true"] { border-color: var(--telha); }
+.op-pedido { margin-top: 1rem; border-color: var(--amarelo-traco); }
+.op-pedido .op-cartao-top { background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface)); }
+.op-just { margin: 0 0 0.8rem; font-size: var(--t-13); color: var(--texto); line-height: 1.5; }
+.op-encerrar { margin-top: 1rem; }
+.op-encerrar summary { cursor: pointer; padding: 0.9rem 1.3rem; font-weight: 600; font-size: var(--t-13); color: var(--texto); min-height: 24px; }
+.op-fila { margin: 1.4rem 0 0; }
+.op-fila h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.6rem; }
+.op-fila ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.op-fila li { background: var(--surface); border: 1px solid var(--amarelo-traco); border-radius: var(--raio); padding: 0.8rem 1.1rem;
+  font-size: var(--t-13); color: var(--texto-2); display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
+.op-fila li b { color: var(--texto); }
+.op-fila li .op-link { margin-left: auto; }

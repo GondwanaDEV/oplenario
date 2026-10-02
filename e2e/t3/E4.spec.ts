@@ -83,7 +83,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     const relatorio = "Relatório de teste E2E — grupo E4, T1";
     const analise = "Análise de teste E2E — grupo E4, T1";
     await page.getByLabel("Relatório").fill(relatorio);
-    await page.getByLabel("Análise").fill(analise);
+    await page.getByLabel("Análise", { exact: true }).fill(analise);
 
     const [resp] = await Promise.all([
       page.waitForResponse(
@@ -101,7 +101,7 @@ test.describe.serial("E4 - O parecer (servidor + vereador)", () => {
     // (c) F5 — o dado ainda esta la (mesmo token, mesma URL)
     await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
     await expect(page.getByLabel("Relatório")).toHaveValue(relatorio, { timeout: 30_000 });
-    await expect(page.getByLabel("Análise")).toHaveValue(analise);
+    await expect(page.getByLabel("Análise", { exact: true })).toHaveValue(analise);
 
     registrarEscrita({
       escrita: "Editar parecer (rascunho)",

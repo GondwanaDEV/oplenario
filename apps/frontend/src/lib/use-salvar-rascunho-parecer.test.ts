@@ -78,4 +78,16 @@ describe("useSalvarRascunhoParecer", () => {
     await expect(result.current.salvar({ relatorio: "x", analise: "y" })).rejects.toThrow();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it("borda 'meu' (ADR-0019 fatia 2): o relator salva pelo PATCH /api/meu/pareceres/:id, mesmo corpo", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => respostaFake }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useSalvarRascunhoParecer("tok", "p1", "meu"));
+    await act(async () => {
+      await result.current.salvar({ relatorio: "r", analise: "a" });
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/meu/pareceres/p1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ relatorio: "r", analise: "a" }) }),
+    );
+  });
 });

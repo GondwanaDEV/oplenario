@@ -38,6 +38,10 @@
    ;; dentro da ficha da materia).
    ["ObjetoResumoOut" parecer/ObjetoResumoOut]
    ["ParecerEditorOut" parecer/ParecerEditorOut]
+   ;; ADR-0019 fatia 2 (copiloto do relator). A citacao tem a forma de CitacaoCopilotoOut (B.7) e o codegen a nomeia
+   ;; assim por igualdade estrutural — uma interface so' para "de onde veio" nos dois copilotos.
+   ["AnaliseCopilotoOut" parecer/AnaliseCopilotoOut]
+   ["CopilotoAnaliseOut" parecer/CopilotoAnaliseOut]
    ;; Onda B Slice 6 (expediente: documentos + protocolo geral) — schemas PROPRIOS.
    ["DocumentoOut" documento/DocumentoOut]
    ["DocumentoModeloOut" documento-modelo/DocumentoModeloOut]

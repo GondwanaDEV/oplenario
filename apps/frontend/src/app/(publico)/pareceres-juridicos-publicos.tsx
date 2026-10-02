@@ -2,7 +2,8 @@
 
 // "Pareceres jurídicos" na ficha PÚBLICA da matéria (ADR-0019, Eixo 4). A Lei de Acesso permite reservar o parecer até a
 // decisão sobre a matéria (art. 7º §3º); depois dela ele é público. Por isso o servidor só devolve pareceres quando a
-// matéria já foi deliberada — antes disso a lista vem vazia, e a seção NÃO aparece (não há o que dizer, e dizer "ainda
+// matéria já foi deliberada — ou quando a Casa escolheu publicar ao assinar (parâmetro do administrador, ADR-0019
+// fatia 2a); a origem do rascunho (nota técnica da IA) nunca vai ao portal. Antes disso a lista vem vazia, e a seção NÃO aparece (não há o que dizer, e dizer "ainda
 // não há" contaria que existe um pedido reservado). Falha de rede ou resposta estranha também não derruba a ficha: a
 // seção some, como as demais degradam por seção. A consulta avulsa (sem matéria) nunca vai ao portal.
 
@@ -38,7 +39,7 @@ export function PareceresJuridicosPublicos({ ente, proposicaoId }: { ente: strin
       <h2 id="pj-titulo">Pareceres jurídicos</h2>
       <p className="pj-aviso">
         Parecer jurídico é opinativo: orienta a Câmara, mas não decide a matéria. Estes pareceres foram assinados por
-        advogados da Casa e ficam públicos depois que a matéria é deliberada.
+        advogados da Casa.
       </p>
       <ul className="pj-lista">
         {itens.map((p, i) => {
@@ -59,6 +60,12 @@ export function PareceresJuridicosPublicos({ ente, proposicaoId }: { ente: strin
                   <b>{ass.nome}</b>
                   <span>{ass.registro}</span>
                   <span>{ass.quando}</span>
+                  {ass.carimbo && (
+                    <span className="pj-carimbo" title={ass.carimbo.aviso ?? undefined}>
+                      {ass.carimbo.rotulo}: <code>{ass.carimbo.digest}</code>
+                    </span>
+                  )}
+                  {ass.carimbo?.aviso && <span className="pj-carimbo-aviso">{ass.carimbo.aviso}</span>}
                 </footer>
               </article>
             </li>

@@ -19,3 +19,15 @@
 .adm-auditoria { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 .adm-auditoria h2 { font-family: var(--display); font-size: var(--t-16); margin: 0; }
 .adm-auditoria .painel-cad { align-self: stretch; }
+/* ADR-0019 fatia 2a: o parecer juridico no portal (quando publicar) */
+.adm-portal-opcoes { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.adm-portal-opcoes legend { padding: 0; margin-bottom: 0.25rem; }
+.adm-portal-opcoes label { display: flex; align-items: center; gap: 0.5rem; min-height: 44px; color: var(--texto); }
+/* ADR-0019 fatia 3: as regras da pauta */
+.adm-regra-pauta { display: flex; flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+.adm-regra-pauta fieldset { border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.9rem; margin: 0; display: grid; gap: 0.4rem; }
+.adm-regra-pauta legend { font-size: var(--t-13); color: var(--texto-2); padding: 0 0.3rem; }
+.adm-regra-pauta label { display: flex; gap: 0.5rem; align-items: baseline; }
+.adm-regra-pauta small { color: var(--texto-2); }
+.adm-regra-pauta .campo { display: grid; gap: 0.3rem; }
+.adm-regra-pauta input[inputmode] { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); max-width: 12rem; }

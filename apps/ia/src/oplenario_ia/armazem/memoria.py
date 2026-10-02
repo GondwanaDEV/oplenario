@@ -37,7 +37,7 @@ class ArmazemMemoria:
         self._resumos: dict[str, ResumoGuardado] = {}
         self._revisoes: dict[tuple[str, int], RevisaoAta] = {}
         self._indice: dict[tuple[str, str], list[tuple[str, TrechoIndice, list[float], str]]] = {}
-        self._orcamentos: dict[str, tuple[Orcamento, datetime]] = {}
+        self._orcamentos: dict[str, tuple[Orcamento | None, datetime]] = {}
 
     def cursor(self) -> int:
         return self._cursor
@@ -86,7 +86,7 @@ class ArmazemMemoria:
     def pausar(self, trabalho_id: int, motivo: str, ate: datetime) -> None:
         self._trab[trabalho_id].update(estado="pendente", proxima=ate, erro=motivo)
 
-    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento | None, definido_em: datetime, chave: str) -> None:
         atual = self._orcamentos.get(ente_id)
         if atual is None or atual[1] <= definido_em:
             self._orcamentos[ente_id] = (orcamento, definido_em)

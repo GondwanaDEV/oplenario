@@ -5,6 +5,9 @@
 // closure), `tratado` distingue erro do backend (visível, nunca engolido — CRÍTICO corrigido na fatia
 // anterior) de falha de rede crua. `relatorio`/`analise` são strings sempre (nunca opcionais no wire —
 // wire/in.SalvarRascunhoParecer), então o corpo vai cru, sem filtro de `undefined`.
+//
+// ADR-0019 fatia 2: `borda` "meu" = o vereador-relator salvando o PRÓPRIO parecer (PATCH /api/meu/pareceres/:id, mesmo
+// corpo e mesma resposta; o backend confere a posse). O padrão segue sendo a borda da secretaria.
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
@@ -16,7 +19,7 @@ export type SalvarRascunhoParecerIn = { relatorio: string; analise: string };
 
 type Estado = "ocioso" | "enviando" | "erro";
 
-export function useSalvarRascunhoParecer(token: string | null, id: string) {
+export function useSalvarRascunhoParecer(token: string | null, id: string, borda: "legislativo" | "meu" = "legislativo") {
   const [estado, setEstado] = useState<Estado>("ocioso");
   const [erro, setErro] = useState<string | null>(null);
   const vivoRef = useRef(true);
@@ -45,7 +48,7 @@ export function useSalvarRascunhoParecer(token: string | null, id: string) {
     setErro(null);
     let tratado = false;
     try {
-      const r = await apiFetch(`/api/legislativo/pareceres/${id}`, {
+      const r = await apiFetch(`/api/${borda}/pareceres/${id}`, {
         token: token ?? undefined,
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

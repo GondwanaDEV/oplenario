@@ -638,6 +638,41 @@
             (http/json-resposta 503 {:erro mensagem-copiloto-fora})
             (throw e)))))))
 
+;; ========================= ADR-0019, Eixo 5 (fatia 2): o copiloto do relator =========================
+
+(def ^:private mensagem-copiloto-relator-fora
+  "O assistente está indisponível agora. Redija a análise pelo editor — nada do parecer depende dele.")
+
+(defn- copiloto-analise-handler
+  "POST /legislativo/pareceres/:id/copiloto (secretaria) e /meu/pareceres/:id/copiloto (relator): o rascunho da IA
+  para o campo Analise do editor, ja' conferido. Nada e' gravado. `analisar` = (fn [ator id] -> resultado|nil); nil ->
+  404 (parecer inexistente, nao e' do relator ou nao e' sobre proposicao, sem distinguir); IA fora ou seam ausente
+  (integracao desligada) -> 503 com a mensagem R-IA-1."
+  [copiloto analisar]
+  (fn [req]
+    (if-not copiloto
+      (http/json-resposta 503 {:erro mensagem-copiloto-relator-fora})
+      (try
+        (if-let [r (analisar (:ator req) (adapters-in/id-param->uuid (get-in req [:path-params :id])))]
+          (http/json-resposta 200 (adapters-out-parecer/copiloto->wire r))
+          (http/json-resposta 404 {:erro "parecer nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (http/json-resposta 503 {:erro mensagem-copiloto-relator-fora})
+            (throw e)))))))
+
+(defn- meu-salvar-rascunho-parecer-handler
+  "PATCH /meu/pareceres/:id — o relator salva o texto (Relatorio + Analise) como nova versao 'rascunho', pelo MESMO
+  adapter da rota da secretaria. Posse no controller: nao e' o relator -> 404 sem distinguir. Devolve o editor."
+  [repo-leg resolver-vereador resolver-comissoes]
+  (fn [req]
+    (let [ator (:ator req) id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-parecer/salvar-rascunho->dominio ator id (:json-params req))]
+      (if (controllers/meu-salvar-rascunho-parecer repo-leg resolver-vereador ator id m)
+        (http/json-resposta 200 (adapters-out-parecer/editor->wire
+                                   (controllers/meu-parecer-editor repo-leg resolver-vereador resolver-comissoes ator id)))
+        (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
+
 ;; ========================= Fatia 2c: o requerimento COLETIVO (subscricao) =========================
 
 (defn- conflito-subscricao
@@ -1013,12 +1048,15 @@
 ;; ========================= Faixa B / B.8: a nota tecnica de conferencia (secretaria) =========================
 
 (defn- notas-tecnicas-handler
-  "GET /legislativo/notas-tecnicas?estado=pendente|aproveitada|descartada|todas — a fila da secretaria."
-  [repo-leg]
+  "GET /legislativo/notas-tecnicas?estado=pendente|aproveitada|descartada|todas — a fila da secretaria e, na Casa com
+  juridico ativo, tambem a do juridico (ADR-0019 Eixo 5). `casa-tem-juridico?` e' o seam do host."
+  [repo-leg casa-tem-juridico?]
   (fn [req]
-    (let [estado (adapters-in-nota/estado-da-fila (:query-params req))]
+    (let [estado (adapters-in-nota/estado-da-fila (:query-params req))
+          ente-id (:ente-id (:ator req))]
       (http/json-resposta 200 (adapters-out-nota/notas->wire
-                               (controllers/notas-tecnicas repo-leg (:ente-id (:ator req)) estado))))))
+                               (controllers/notas-tecnicas repo-leg ente-id estado)
+                               (casa-tem-juridico? ente-id))))))
 
 (defn- nota-tecnica-handler
   "GET /legislativo/notas-tecnicas/:id — o rascunho inteiro, para a revisao."
@@ -1084,7 +1122,11 @@
    :sem-assinado         [409 "Não há parecer assinado para substituir, ou já há um substituto em curso."]
    :nao-pendente         [409 "Só se cancela um pedido pendente."]
    :incompleto           [400 "Para assinar, preencha o relatório, a fundamentação e a conclusão."]
-   :sem-perfil-juridico  [403 "Seu acesso não tem qualificação e OAB cadastradas; peça ao administrador da Casa."]})
+   :sem-perfil-juridico  [403 "Seu acesso não tem qualificação e OAB cadastradas; peça ao administrador da Casa."]
+   ;; ADR-0019 fatia 2a — usar a nota tecnica da IA como rascunho
+   :nota-decidida        [409 "Esta nota já foi decidida (aproveitada ou descartada)."]
+   :ja-ha-rascunho       [409 "Já há um rascunho em curso para esta matéria: abra o pedido e continue de onde parou."]
+   :sem-juridico-ativo   [409 "Esta Casa não tem jurídico ativo."]})
 
 (defn- resposta-juridico
   "{:pedido} -> 200 (ou `sucesso`); {:erro :nao-encontrado} -> 404; demais erros pela tabela."
@@ -1132,12 +1174,38 @@
 
 (defn- assinar-parecer-juridico-handler [repo-leg perfil-juridico nome-na-casa]
   (fn [req]
-    (resposta-juridico (controllers/assinar-parecer-juridico! repo-leg perfil-juridico nome-na-casa
-                                                               (:ator req) (id-do-path req)))))
+    (resposta-juridico (controllers/assinar-parecer-juridico! repo-leg (assinador-icp/assinador-stub) perfil-juridico
+                                                               nome-na-casa (:ator req) (id-do-path req)))))
 
 (defn- substituir-parecer-juridico-handler [repo-leg nome-na-casa]
   (fn [req]
     (resposta-juridico (controllers/substituir-parecer-juridico! repo-leg nome-na-casa (:ator req) (id-do-path req)))))
+
+(defn- usar-nota-como-rascunho-handler
+  "POST /legislativo/notas-tecnicas/:id/rascunho-juridico — o advogado usa a nota tecnica da IA como RASCUNHO do parecer
+  (ADR-0019 Eixo 5). 201 com o pedido e o rascunho; 404 nota inexistente; 409 nota ja' decidida ou pedido da materia ja'
+  com rascunho em curso. Nada assina: o texto da IA continua sendo so' um rascunho que o advogado revisa e assume."
+  [repo-leg casa-tem-juridico? nome-na-casa]
+  (fn [req]
+    (let [r (controllers/usar-nota-como-rascunho! repo-leg casa-tem-juridico? nome-na-casa (:ator req) (id-do-path req))]
+      (if (= :nao-encontrado (:erro r))
+        (http/json-resposta 404 {:erro "nota tecnica nao encontrada"})
+        (resposta-juridico r 201)))))
+
+(defn- parametros-parecer-juridico-handler
+  "GET /legislativo/parametros-parecer-juridico — o parametro da Casa (`admin_ente`)."
+  [repo-leg]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-juridico/parametros->wire
+                              (controllers/parametros-parecer-juridico repo-leg (:ente-id (:ator req)))))))
+
+(defn- salvar-parametros-parecer-juridico-handler
+  "PUT /legislativo/parametros-parecer-juridico {publicar-ao-assinar} — antecipa (ou nao) o parecer ao portal."
+  [repo-leg]
+  (fn [req]
+    (let [m (adapters-in-juridico/parametros->dominio (:json-params req))]
+      (http/json-resposta 200 (adapters-out-juridico/parametros->wire
+                                (controllers/salvar-parametros-parecer-juridico! repo-leg (:ator req) m))))))
 
 (defn- meu-pedido-juridico-handler
   "POST /meu/pareceres/:id/pedido-juridico {assunto?} — o relator pede o parecer juridico da materia que relata."
@@ -1188,7 +1256,7 @@
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
            registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
-           comissoes-vigentes nomes-de-vereadores perfil-juridico]}]
+           comissoes-vigentes nomes-de-vereadores perfil-juridico casa-tem-juridico? copiloto-analise normas-publicadas?]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
@@ -1196,7 +1264,14 @@
         comissoes-vigentes (or comissoes-vigentes (constantly []))
         nomes-de-vereadores (or nomes-de-vereadores (constantly {}))
         perfil-juridico (or perfil-juridico (constantly nil))
+        ;; ADR-0019 fatia 2a: sem o seam, a Casa nao tem juridico ativo (fail-closed: a nota nao vai a fila do juridico)
+        casa-tem-juridico? (or casa-tem-juridico? (constantly false))
+        ;; ADR-0019 fatia 2: sem o seam, a Casa conta como sem normas publicadas (o rascunho diz isso, nunca inventa)
+        normas-publicadas? (or normas-publicadas? (constantly false))
         papel (it/exige-papel "secretario")
+        papel-admin-ente (it/exige-papel "admin_ente")
+        ;; a fila de notas tecnicas da IA: a secretaria confere; na Casa com juridico ativo, ele tambem le' e usa
+        papel-notas (it/exige-algum-papel #{"secretario" "juridico"})
         papel-vereador (it/exige-papel "vereador")
         papel-juridico (it/exige-papel "juridico")
         ;; a fila e o detalhe do pedido: a secretaria acompanha, o juridico trabalha
@@ -1251,9 +1326,9 @@
                                                 (fn [_ _] (throw (ex-info "sem IA" {:tipo :ia/indisponivel})))))]
        :route-name :legislativo/rascunho-resumo]
       ;; Faixa B / B.8 — a fila das notas tecnicas do agente institucional (a secretaria aproveita ou descarta)
-      ["/legislativo/notas-tecnicas" :get [auth papel (notas-tecnicas-handler repo-legislativo)]
+      ["/legislativo/notas-tecnicas" :get [auth papel-notas (notas-tecnicas-handler repo-legislativo casa-tem-juridico?)]
        :route-name :legislativo/notas-tecnicas]
-      ["/legislativo/notas-tecnicas/:id" :get [auth papel (nota-tecnica-handler repo-legislativo)]
+      ["/legislativo/notas-tecnicas/:id" :get [auth papel-notas (nota-tecnica-handler repo-legislativo)]
        :route-name :legislativo/nota-tecnica]
       ["/legislativo/notas-tecnicas/:id/decisao" :post
        [auth papel it/corpo-json (decidir-nota-tecnica-handler repo-legislativo)]
@@ -1281,6 +1356,14 @@
       ["/legislativo/pareceres/:id" :patch
        [auth papel it/corpo-json (salvar-rascunho-parecer-handler repo-legislativo resolver-comissoes)]
        :route-name :legislativo/salvar-rascunho-parecer]
+      ;; ADR-0019 fatia 2: o rascunho da analise pela IA, no editor da secretaria (nada e' gravado)
+      ["/legislativo/pareceres/:id/copiloto" :post
+       [auth papel
+        (copiloto-analise-handler copiloto-analise
+                                  (fn [ator id] (controllers/copiloto-analise-parecer repo-legislativo resolver-comissoes
+                                                                                      copiloto-analise normas-publicadas?
+                                                                                      ator id)))]
+       :route-name :legislativo/copiloto-analise-parecer]
       ["/legislativo/pareceres/:id/emissao" :post
        [auth papel it/corpo-json (emitir-parecer-handler repo-legislativo resolver-comissoes registro relogio)]
        :route-name :legislativo/emitir-parecer]
@@ -1349,6 +1432,16 @@
       ["/legislativo/pedidos-parecer-juridico/:id/parecer/substituicao" :post
        [auth papel-juridico it/corpo-json (substituir-parecer-juridico-handler repo-legislativo nome-na-casa)]
        :route-name :legislativo/substituir-parecer-juridico]
+      ;; ADR-0019 fatia 2a — a nota tecnica da IA como rascunho do advogado; o portal antecipado (admin_ente)
+      ["/legislativo/notas-tecnicas/:id/rascunho-juridico" :post
+       [auth papel-juridico it/corpo-json (usar-nota-como-rascunho-handler repo-legislativo casa-tem-juridico? nome-na-casa)]
+       :route-name :legislativo/usar-nota-como-rascunho]
+      ["/legislativo/parametros-parecer-juridico" :get
+       [auth papel-admin-ente (parametros-parecer-juridico-handler repo-legislativo)]
+       :route-name :legislativo/parametros-parecer-juridico]
+      ["/legislativo/parametros-parecer-juridico" :put
+       [auth papel-admin-ente it/corpo-json (salvar-parametros-parecer-juridico-handler repo-legislativo)]
+       :route-name :legislativo/salvar-parametros-parecer-juridico]
       ["/legislativo/proposicoes/:id/pareceres-juridicos" :get
        [auth papel-leitura-juridica (pareceres-juridicos-da-materia-handler repo-legislativo)]
        :route-name :legislativo/pareceres-juridicos-da-materia]
@@ -1362,6 +1455,17 @@
        :route-name :legislativo/acusar-ciencia]
       ["/meu/pareceres/:id" :get [auth papel-vereador (meu-parecer-editor-handler repo-legislativo resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-parecer-editor]
+      ;; ADR-0019 fatia 2: o relator salva o texto do parecer (nova versao 'rascunho') e pede o rascunho da analise a IA
+      ["/meu/pareceres/:id" :patch
+       [auth papel-vereador it/corpo-json (meu-salvar-rascunho-parecer-handler repo-legislativo resolver-vereador resolver-comissoes)]
+       :route-name :legislativo/meu-salvar-rascunho-parecer]
+      ["/meu/pareceres/:id/copiloto" :post
+       [auth papel-vereador
+        (copiloto-analise-handler copiloto-analise
+                                  (fn [ator id] (controllers/meu-copiloto-analise-parecer repo-legislativo resolver-vereador
+                                                                                          resolver-comissoes copiloto-analise
+                                                                                          normas-publicadas? ator id)))]
+       :route-name :legislativo/meu-copiloto-analise-parecer]
       ["/meu/pareceres/:id/emissao" :post
        [auth papel-vereador it/corpo-json (meu-emitir-parecer-handler repo-legislativo registro relogio resolver-vereador resolver-comissoes)]
        :route-name :legislativo/meu-emitir-parecer]
@@ -1421,8 +1525,8 @@
 
 (defn pareceres-juridicos-publicos-wire
   "Ponto de entrada IN-PROCESS do portal (transparencia) para os pareceres juridicos PUBLICOS da materia — gemeo nao-HTTP,
-  como `relatores-pendentes-wire`. So' o vigente e so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4); materia
-  ainda em curso devolve `{:pareceres []}`. Passa pelo controller e pelo gate adapters/out.
+  como `relatores-pendentes-wire`. So' o vigente e so' DEPOIS da deliberacao (LAI art. 7 §3, ADR-0019 Eixo 4), ou ja' ao
+  assinar, se a Casa antecipou (`parametros-parecer-juridico`); materia ainda em curso, sem antecipar, devolve `{:pareceres []}`. Passa pelo controller e pelo gate adapters/out.
 
   CONVENCAO DE AUTHZ (a mesma das outras `*-wire`): NAO verifica papel — o ENDPOINT COMPONHEDOR e' publico (portal), e
   o proprio filtro de `db/publicos-da-materia` e' a regra de o que se publica. Quem chamar de novo DEVE garantir que a

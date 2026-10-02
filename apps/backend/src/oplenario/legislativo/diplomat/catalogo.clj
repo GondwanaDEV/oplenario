@@ -6,13 +6,16 @@
   (:require [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.catalogo :as catalogo]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.juridico :as adapters-in-juridico]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
+            [oplenario.legislativo.adapters.out.juridico :as adapters-out-juridico]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
             [oplenario.legislativo.adapters.out.requerimento :as adapters-out-requerimento]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.wire.out.juridico :as wire-jur]
             [oplenario.legislativo.wire.out.proposicao :as wire]
             [oplenario.legislativo.wire.out.requerimento :as wire-req])
   (:import (java.time ZoneId)))
@@ -175,4 +178,213 @@
                  (when-let [n (controllers/registrar-nota-tecnica! repo-legislativo ator m)]
                    {:nota-id (str (:id n)) :estado (:estado n) :mensagem mensagem-nota}))})])
 
-(def entradas (into [] cat [entradas-materia entradas-requerimento entradas-conferencia]))
+;; ---------- ADR-0019 fatia 2: o caminho da materia — o agente propoe, a secretaria confirma ----------
+;;
+;; O agente da secretaria PODE PROPOR o pedido de parecer juridico, o encaminhamento as comissoes e a designacao do
+;; relator: sao atos administrativos da secretaria que a pessoa le e confirma em `/propostas/:id`, e a MESMA entrada roda
+;; como ela (o ator do pedido e' a pessoa, nunca o agente). NAO entram: salvar, assinar e substituir o parecer juridico —
+;; assinar e' ato pessoal e intransferivel do advogado (nome, OAB e qualificacao do perfil dele), e o texto de maquina
+;; nunca vira parecer (a rascunho-IA do advogado e' a fatia 2 do satelite, na tela dele). Ficam em `fora-do-catalogo.edn`.
+
+(defn- materia-ref
+  "`PL 012/2026` da materia (o que a pessoa le), ou nil se a materia nao existe nesta Casa."
+  [repo-legislativo ente-id proposicao-id]
+  (when-let [p (repo/buscar-proposicao repo-legislativo ente-id proposicao-id)]
+    {:ref (logic/numero-exibicao p) :ementa (:ementa p)}))
+
+(defn- invalido! [msg campo] (throw (ex-info msg {:tipo :validacao/invalido :campo campo})))
+
+(def PedirParecerJuridico
+  [:and
+   [:map {:closed true}
+    [:proposicao-id {:optional true
+                     :description "A materia sobre a qual se pede o parecer. Sem ela, e' uma CONSULTA AVULSA (decoro, contas, prazo regimental...) e o assunto e' obrigatorio."}
+     :uuid]
+    [:assunto {:optional true :description "O que se pede ao juridico, de 5 a 300 caracteres. Com materia, o padrao e' a analise juridica da materia."}
+     [:string {:min 5 :max 300}]]
+    [:prazo {:optional true :description "Ate' quando (AAAA-MM-DD). Opcional: nao ha' relogio legal, e' combinado."}
+     [:re #"^\d{4}-\d{2}-\d{2}$"]]
+    [:em-nome-de {:optional true :description "Em nome de quem a secretaria pede (ex.: Presidencia)."}
+     [:string {:min 1 :max 80}]]]
+   [:fn {:error/message "a consulta avulsa (sem proposicao-id) precisa de um assunto"}
+    (fn [m] (or (some? (:proposicao-id m)) (some? (:assunto m))))]])
+
+(defn- pedido->json
+  "A entrada validada do agente como o corpo JSON da tela: a mesma validacao de `adapters/in` vale nos dois caminhos."
+  [{:keys [proposicao-id assunto prazo em-nome-de]}]
+  (cond-> {}
+    proposicao-id (assoc "proposicao-id" (str proposicao-id))
+    assunto (assoc "assunto" assunto)
+    prazo (assoc "prazo" prazo)
+    em-nome-de (assoc "em-nome-de" em-nome-de)))
+
+(def ComissoesDoEncaminhamento
+  [:vector {:min 1 :max 10 :description "As comissoes que vao dar parecer, com o relator de cada uma se ja' se sabe."}
+   [:map {:closed true}
+    [:comissao-id {:description "Id da comissao (vem de GET /legislativo/comissoes, na tela)."} :uuid]
+    [:relator-id {:optional true :description "Id do vereador relator; se omitido, a Mesa designa depois."} :uuid]]])
+
+(def EncaminharAsComissoes
+  [:map {:closed true}
+   [:proposicao-id {:description "A materia a encaminhar."} :uuid]
+   [:comissoes ComissoesDoEncaminhamento]])
+
+(def DesignarRelator
+  [:map {:closed true}
+   [:parecer-id {:description "O parecer de comissao em curso (o parecer da comissao sobre a materia), nao o parecer juridico."} :uuid]
+   [:relator-id {:description "O vereador que passa a relatar."} :uuid]])
+
+(defn- comissoes->json [comissoes]
+  {"comissoes" (mapv (fn [{:keys [comissao-id relator-id]}]
+                       (cond-> {"comissao-id" (str comissao-id)}
+                         relator-id (assoc "relator-id" (str relator-id))))
+                     comissoes)})
+
+(def ^:private entradas-juridico
+  [(catalogo/entrada
+    {:nome "vereadores_da_casa"
+     :descricao (str "Lista os vereadores com mandato vigente na Casa: id, nome de exibicao e partido. Use para achar "
+                     "o vereador-id de quem sera relator antes de propor designar_relator ou encaminhar_as_comissoes "
+                     "(ex.: 'a vereadora Ana Prado'). Nao traz CPF nem contato.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador"}
+     :entrada [:map {:closed true}]
+     :saida wire-jur/VereadoresDaCasaOut
+     :rotas #{}
+     :executar (fn [{:keys [colegas-da-casa]} ator _]
+                 (adapters-out-juridico/vereadores->wire ((or colegas-da-casa (constantly [])) (:ente-id ator))))})
+   (catalogo/entrada
+    {:nome "comissoes_da_casa"
+     :descricao (str "Lista as comissoes vigentes da Casa (sem a Mesa), com o id de cada uma. Use antes de propor "
+                     "encaminhar_as_comissoes, para saber o comissao-id de 'Comissao de Justica e Redacao' e das demais.")
+     :classe :leitura
+     :papeis #{"secretario"}
+     :entrada [:map {:closed true}]
+     :saida wire-jur/ComissoesOut
+     :rotas #{:legislativo/comissoes}
+     :executar (fn [{:keys [comissoes-vigentes]} ator _]
+                 (adapters-out-juridico/comissoes->wire
+                   (controllers/comissoes-da-casa (or comissoes-vigentes (constantly [])) (:ente-id ator))))})
+   (catalogo/entrada
+    {:nome "pareceres_juridicos_da_materia"
+     :descricao (str "Lista os pareceres juridicos ASSINADOS sobre uma proposicao (com relatorio, fundamentacao, "
+                     "conclusao, quem assinou com a OAB e o hash do texto) e os pedidos de parecer ainda abertos. O "
+                     "parecer juridico e' OPINATIVO: orienta a Casa, nao decide a materia. Use para 'o juridico ja' "
+                     "opinou sobre o PL 12/2026?'. Nunca chame de parecer o texto de uma IA.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador" "juridico"}
+     :entrada IdentificacaoMateria
+     :saida wire-jur/PareceresDaMateriaOut
+     :rotas #{:legislativo/pareceres-juridicos-da-materia}
+     :executar (fn [{:keys [repo-legislativo]} ator m]
+                 (let [ente-id (:ente-id ator)]
+                   (when-let [id (resolver-id repo-legislativo ente-id m)]
+                     (when (repo/buscar-proposicao repo-legislativo ente-id id)
+                       (adapters-out-juridico/da-materia->wire
+                         (controllers/pareceres-juridicos-da-materia repo-legislativo ente-id id))))))})
+   (catalogo/entrada
+    {:nome "pedir_parecer_juridico"
+     :descricao (str "Prepara o pedido de parecer juridico da Casa, sobre uma proposicao ou como consulta avulsa da "
+                     "Presidencia. Voce NAO pede: isto cria uma PROPOSTA, e a secretaria le e confirma na tela "
+                     "Propostas — so' entao o pedido entra na fila do advogado. O parecer e' opinativo e assinado "
+                     "pelo advogado; voce nao redige nem assina parecer.")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario"}
+     :entrada PedirParecerJuridico
+     :saida wire-jur/PedidoJuridicoOut
+     :rotas #{:legislativo/pedir-parecer-juridico}
+     :apresentar (fn [{:keys [repo-legislativo]} ator m]
+                   (let [ente-id (:ente-id ator)
+                         {:keys [assunto prazo em-nome-de proposicao-id]} (adapters-in-juridico/pedido->dominio (pedido->json m))
+                         materia (some->> proposicao-id (materia-ref repo-legislativo ente-id))]
+                     (when (or (nil? proposicao-id) materia)
+                       {:titulo (if materia
+                                  (str "Pedir parecer jurídico sobre " (:ref materia))
+                                  "Pedir parecer jurídico (consulta avulsa)")
+                        :texto (str (if materia
+                                      (str "A secretaria pede ao jurídico da Casa o parecer sobre " (:ref materia)
+                                           " — " (:ementa materia) ".")
+                                      "A secretaria faz uma consulta avulsa ao jurídico da Casa, sem matéria.")
+                                    "\nAssunto: " assunto
+                                    (when prazo (str "\nPrazo: " prazo))
+                                    (when em-nome-de (str "\nEm nome de: " em-nome-de))
+                                    "\nO parecer jurídico é opinativo e será assinado pelo advogado da Casa.")})))
+     :executar (fn [{:keys [repo-legislativo nome-na-casa]} ator m]
+                 (some-> (controllers/pedir-parecer-juridico! repo-legislativo (or nome-na-casa (constantly nil)) ator
+                                                              (adapters-in-juridico/pedido->dominio (pedido->json m)))
+                         adapters-out-juridico/pedido->wire))})
+   (catalogo/entrada
+    {:nome "encaminhar_as_comissoes"
+     :descricao (str "Prepara o encaminhamento de uma proposicao as comissoes: abre um parecer por comissao, com o "
+                     "relator de cada uma se ja' se sabe. Voce NAO encaminha: isto cria uma PROPOSTA, e a secretaria "
+                     "le e confirma na tela Propostas. Os ids das comissoes vem do cadastro da Casa; comissao ou "
+                     "relator que nao sao desta Casa invalidam o pedido.")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario"}
+     :entrada EncaminharAsComissoes
+     :saida wire-jur/PareceresAbertosOut
+     :rotas #{:legislativo/encaminhar-comissoes}
+     :apresentar (fn [{:keys [repo-legislativo resolver-comissoes nomes-de-vereadores vereador-vinculado?]} ator
+                      {:keys [proposicao-id comissoes]}]
+                   (let [ente-id (:ente-id ator)
+                         itens (adapters-in-juridico/comissoes->dominio (comissoes->json comissoes))]
+                     (when-let [materia (materia-ref repo-legislativo ente-id proposicao-id)]
+                       (let [nomes-comissao ((or resolver-comissoes (constantly {})) ente-id (mapv :comissao-id itens))
+                             nomes-relator ((or nomes-de-vereadores (constantly {})) ente-id (keep :relator-id itens))]
+                         (doseq [{:keys [comissao-id relator-id]} itens]
+                           (when-not (contains? nomes-comissao comissao-id) (invalido! "comissao inexistente nesta Casa" :comissoes))
+                           (when (and relator-id (not ((or vereador-vinculado? (constantly false)) ente-id relator-id)))
+                             (invalido! "relator nao e' vereador desta Casa" :relator-id)))
+                         {:titulo (str "Encaminhar " (:ref materia) " às comissões")
+                          :texto (str "A secretaria encaminha " (:ref materia) " — " (:ementa materia)
+                                      ", abrindo um parecer em cada comissão:\n"
+                                      (apply str (for [{:keys [comissao-id relator-id]} itens]
+                                                   (str "• " (get nomes-comissao comissao-id)
+                                                        (if relator-id
+                                                          (str " — relator: " (or (get nomes-relator relator-id) "vereador da Casa"))
+                                                          " — relator a designar")
+                                                        "\n")))
+                                      "O encaminhamento usa o rito de parecer configurado pela Casa.")}))))
+     :executar (fn [{:keys [repo-legislativo resolver-comissoes vereador-vinculado? nomes-de-vereadores]} ator
+                    {:keys [proposicao-id comissoes]}]
+                 (some-> (controllers/encaminhar-as-comissoes! repo-legislativo (or resolver-comissoes (constantly {}))
+                                                               (or vereador-vinculado? (constantly false))
+                                                               (or nomes-de-vereadores (constantly {}))
+                                                               ator proposicao-id
+                                                               (adapters-in-juridico/comissoes->dominio (comissoes->json comissoes)))
+                         adapters-out-juridico/pareceres-abertos->wire))})
+   (catalogo/entrada
+    {:nome "designar_relator"
+     :descricao (str "Prepara a designacao (ou troca) do relator de um parecer de comissao em curso. Voce NAO "
+                     "designa: isto cria uma PROPOSTA, e a secretaria le e confirma na tela Propostas. Vale so' "
+                     "para parecer de comissao ainda nao terminal e vereador desta Casa.")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario"}
+     :entrada DesignarRelator
+     :saida wire-jur/RelatorDesignadoOut
+     :rotas #{:legislativo/designar-relator}
+     :apresentar (fn [{:keys [repo-legislativo resolver-comissoes nomes-de-vereadores vereador-vinculado?]} ator
+                      {:keys [parecer-id relator-id]}]
+                   (let [ente-id (:ente-id ator)]
+                     (when ((or vereador-vinculado? (constantly false)) ente-id relator-id)
+                       (when-let [pc (repo/buscar-parecer repo-legislativo ente-id parecer-id)]
+                         (let [comissao (get ((or resolver-comissoes (constantly {})) ente-id [(:comissao-id pc)]) (:comissao-id pc))
+                               relator (get ((or nomes-de-vereadores (constantly {})) ente-id [relator-id]) relator-id)
+                               materia (when (= "proposicao" (:objeto-tipo pc))
+                                         (materia-ref repo-legislativo ente-id (:objeto-id pc)))]
+                           {:titulo (str "Designar " (or relator "o vereador") " relator")
+                            :texto (str "A secretaria designa " (or relator "o vereador indicado")
+                                        " relator do parecer da " (or comissao "comissão")
+                                        (when materia (str " sobre " (:ref materia) " — " (:ementa materia)))
+                                        ".")})))))
+     :executar (fn [{:keys [repo-legislativo vereador-vinculado? nomes-de-vereadores]} ator {:keys [parecer-id relator-id]}]
+                 (some-> (controllers/designar-relator-do-parecer! repo-legislativo
+                                                                   (or vereador-vinculado? (constantly false))
+                                                                   (or nomes-de-vereadores (constantly {}))
+                                                                   ator parecer-id relator-id)
+                         adapters-out-juridico/relator->wire))})])
+
+(def entradas (into [] cat [entradas-materia entradas-requerimento entradas-conferencia entradas-juridico]))

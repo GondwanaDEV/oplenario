@@ -59,28 +59,44 @@
 (defn- nega! [ctx status razao]
   (chain/terminate (assoc ctx :response (http/json-resposta status {:erro razao}))))
 
+(defn- com-restricao
+  "Aplica a `restricao` da Casa (ADR-0018) depois que a autenticacao resolveu o ator: (fn [ctx] -> ctx), que pode
+  terminar a cadeia (423). So' roda com o ator resolvido e a cadeia viva — 401 continua 401."
+  [restricao ctx]
+  (if (and restricao (nil? (:response ctx)) (get-in ctx [:request :ator]))
+    (restricao ctx)
+    ctx))
+
 (defn autenticacao
   "Interceptor de AUTENTICACAO (§22.5 eixo D). PRECEDENCIA: sessao de COOKIE primeiro (login real, Onda D
   Slice 2); senao BEARER (dev-token/servico — mantido vivo). Sem credencial / invalido / sem vinculo -> 401
   (fail-closed). Sucesso -> `ator` em (:request :ator). A sessao de cookie roda `resolver-sessao` A CADA
-  request (authz viva: vinculo revogado derruba a sessao na hora, nao espera a expiracao do cookie)."
-  [idp repo-identidade]
-  {:name  ::autenticacao
-   :enter (fn [ctx]
-            (if-let [seg (cookie-sessao (:request ctx))]
-              (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id [:vinculo-tipo]} ou nil
-                (if-let [ator (auten/resolver-sessao repo-identidade claims)]
-                  (assoc-in ctx [:request :ator] ator)
-                  (nega! ctx 401 "sem vinculo ativo"))
-                (nega! ctx 401 "sessao invalida"))
-              (if-let [tok (bearer (:request ctx))]
-                (if-let [claims (idp/verificar-token idp tok)]
-                  ;; resolver-claims: login pelo gov.br resolve pelo CPF e so' como cidadao (ADR-0015)
-                  (if-let [ator (auten/resolver-claims repo-identidade claims)]
+  request (authz viva: vinculo revogado derruba a sessao na hora, nao espera a expiracao do cookie).
+
+  `restricao` (opcional, ADR-0018 Eixo 3): o que o host aplica com o ator ja' resolvido — a Casa suspensa recusa a
+  escrita fora da allowlist com 423 (`oplenario.restricao-da-casa`). Mora AQUI, e nao entre os globais, porque e' o
+  primeiro ponto da cadeia em que a rota (o router ja' rodou) e a Casa (o ator) sao conhecidas; os globais rodam antes
+  do router. A trilha de auditoria (global, :leave) ve o 423 com o ator, como ve um 403."
+  ([idp repo-identidade] (autenticacao idp repo-identidade nil))
+  ([idp repo-identidade restricao]
+   {:name  ::autenticacao
+    :enter (fn [ctx]
+             (com-restricao
+              restricao
+              (if-let [seg (cookie-sessao (:request ctx))]
+                (if-let [claims (repo/resolver-sessao-por-segredo repo-identidade seg)]  ; {:identidade-id :ente-id [:vinculo-tipo]} ou nil
+                  (if-let [ator (auten/resolver-sessao repo-identidade claims)]
                     (assoc-in ctx [:request :ator] ator)
                     (nega! ctx 401 "sem vinculo ativo"))
-                  (nega! ctx 401 "token invalido"))
-                (nega! ctx 401 "sem credencial"))))})
+                  (nega! ctx 401 "sessao invalida"))
+                (if-let [tok (bearer (:request ctx))]
+                  (if-let [claims (idp/verificar-token idp tok)]
+                    ;; resolver-claims: login pelo gov.br resolve pelo CPF e so' como cidadao (ADR-0015)
+                    (if-let [ator (auten/resolver-claims repo-identidade claims)]
+                      (assoc-in ctx [:request :ator] ator)
+                      (nega! ctx 401 "sem vinculo ativo"))
+                    (nega! ctx 401 "token invalido"))
+                  (nega! ctx 401 "sem credencial")))))}))
 
 (defn autenticacao-operador
   "Interceptor do CONSOLE DO OPERADOR (ADR-0016, §22.5 eixo E). Cookie `sessao_operacao` primeiro; senao Bearer do
@@ -292,12 +308,15 @@
   cada execucao) e' aceita — nem cookie de sessao, nem token do IdP. O ator e' resolvido A CADA chamada
   (`identidade/resolver-agente`: a pessoa como esta' agora + `:via`). Usado SO' nas rotas do catalogo (o adaptador
   MCP, B.3): a credencial de agente nao abre nenhuma outra rota, porque o interceptor `autenticacao` das telas nao a
-  reconhece."
-  [repo-identidade]
-  {:name  ::autenticacao-agente
-   :enter (fn [ctx]
-            (if-let [seg (bearer (:request ctx))]
-              (if-let [ator (auten/resolver-agente repo-identidade seg)]
-                (assoc-in ctx [:request :ator] ator)
-                (nega! ctx 401 "credencial de agente invalida"))
-              (nega! ctx 401 "sem credencial")))})
+  reconhece. `restricao`: a mesma da Casa (ADR-0018) — a Casa suspensa nao tem agente (a IA dela esta' pausada)."
+  ([repo-identidade] (autenticacao-agente repo-identidade nil))
+  ([repo-identidade restricao]
+   {:name  ::autenticacao-agente
+    :enter (fn [ctx]
+             (com-restricao
+              restricao
+              (if-let [seg (bearer (:request ctx))]
+                (if-let [ator (auten/resolver-agente repo-identidade seg)]
+                  (assoc-in ctx [:request :ator] ator)
+                  (nega! ctx 401 "credencial de agente invalida"))
+                (nega! ctx 401 "sem credencial"))))}))

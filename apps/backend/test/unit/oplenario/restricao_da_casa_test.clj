@@ -1,0 +1,60 @@
+(ns oplenario.restricao-da-casa-test
+  "ADR-0018 (Eixos 2 e 3), puro: leitura passa, escrita fora da allowlist numa Casa suspensa recebe 423 com o motivo
+  publico; o cache do seam expira e invalida; a faixa so' mostra o motivo ao interno."
+  (:require [clojure.test :refer [deftest is testing]]
+            [jsonista.core :as json]
+            [oplenario.restricao-da-casa :as r])
+  (:import (java.time Instant)))
+
+(def desde (Instant/parse "2026-09-30T12:00:00Z"))
+(def suspensa {:estado "suspenso" :motivo "inadimplencia" :desde desde})
+
+(defn- ctx [metodo rota ente] {:request {:request-method metodo :ator {:ente-id ente}} :route {:route-name rota}})
+
+(deftest leitura-e-allowlist
+  (is (r/escrita-permitida? :get :legislativo/criar-proposicao) "o metodo de leitura passa sempre")
+  (is (r/escrita-permitida? :head :qualquer/rota))
+  (is (r/escrita-permitida? :post :participacao/protocolar-esic) "o protocolo do cidadao segue")
+  (is (r/escrita-permitida? :post :participacao/responder-pedido) "o servidor responde o e-SIC")
+  (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")
+  (is (not (r/escrita-permitida? :post :rota/que-ainda-nao-existe)) "escrita nova nasce bloqueada (fail-closed)"))
+
+(deftest a-restricao-no-interceptor
+  (let [estados {:susp suspensa :ativa {:estado "ativo"}}
+        guarda (r/restricao (fn [ente] (get estados ente)))]
+    (testing "Casa suspensa, escrita fora da allowlist: 423 com o motivo publico"
+      (let [res (:response (guarda (ctx :post :legislativo/criar-proposicao :susp)))
+            corpo (json/read-value (:body res) json/keyword-keys-object-mapper)]
+        (is (= 423 (:status res)))
+        (is (= {:erro "acesso restrito" :desde "2026-09-30T12:00:00Z"} corpo))
+        (is (not (re-find #"inadimplencia" (:body res))) "o motivo comercial nao vai ao fio")
+        (is (= {:rotulo "recusado: Casa com acesso restrito"} (:auditoria res)) "a trilha rotula a recusa")))
+    (is (nil? (:response (guarda (ctx :get :legislativo/listar :susp)))) "leitura passa")
+    (is (nil? (:response (guarda (ctx :post :participacao/protocolar-manifestacao :susp)))))
+    (is (nil? (:response (guarda (ctx :post :legislativo/criar-proposicao :ativa)))) "Casa ativa escreve")
+    (is (nil? (:response (guarda (ctx :post :legislativo/criar-proposicao :fora-do-registro)))) "sem registro, sem restricao")))
+
+(deftest o-seam-nao-consulta-o-registro-na-leitura
+  (let [chamadas (atom 0)
+        guarda (r/restricao (fn [_] (swap! chamadas inc) suspensa))]
+    (guarda (ctx :get :legislativo/listar :susp))
+    (is (zero? @chamadas))))
+
+(deftest o-cache-do-estado
+  (let [leituras (atom 0)
+        {:keys [estado-da-casa invalidar!]} (r/com-cache (fn [_] (swap! leituras inc) suspensa) 60000)]
+    (estado-da-casa :a) (estado-da-casa :a)
+    (is (= 1 @leituras) "dentro do prazo, do cache")
+    (invalidar! :a)
+    (estado-da-casa :a)
+    (is (= 2 @leituras) "invalidado, le de novo"))
+  (let [leituras (atom 0)
+        {:keys [estado-da-casa]} (r/com-cache (fn [_] (swap! leituras inc) nil) 0)]
+    (estado-da-casa :a) (estado-da-casa :a)
+    (is (= 2 @leituras) "ttl 0 = sem cache")))
+
+(deftest a-faixa
+  (is (= {:desde "2026-09-30T12:00:00Z" :motivo "inadimplencia"} (r/visao suspensa true)) "o interno ve o motivo")
+  (is (= {:desde "2026-09-30T12:00:00Z"} (r/visao suspensa false)) "a cidada so' ve desde quando")
+  (is (nil? (r/visao {:estado "ativo"} true)))
+  (is (nil? (r/visao nil false))))

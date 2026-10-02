@@ -103,6 +103,17 @@
                                      :motivo "converge o realm da Casa com a config atual (ex.: gov.br ligado depois)"}
  :admin-sistema/observabilidade-ia {:categoria :supratenant
                                     :motivo "a saude da IA em todas as Casas (volume, latencia, custo), so' contagens, para a Operacao"}
+ ;; ---------- ADR-0018 (fatia 1): suspender, reativar, iniciar o encerramento ----------
+ :admin-sistema/pedir-suspensao {:categoria :supratenant
+                                 :motivo "a Operacao pede a suspensao de uma Casa (motivo fechado + justificativa); outro operador aprova"}
+ :admin-sistema/iniciar-encerramento {:categoria :supratenant
+                                      :motivo "a Operacao pede o encerramento de uma Casa (fim de contrato ou oficio); dois operadores"}
+ :admin-sistema/reativar-casa {:categoria :supratenant
+                               :motivo "um operador devolve a Casa suspensa a ativa, com motivo, selado na atuacao"}
+ :admin-sistema/aprovar-pedido {:categoria :supratenant
+                                :motivo "o 2o operador aprova o pedido de suspensao/encerramento (two-person rule, ADR-0018)"}
+ :admin-sistema/recusar-pedido {:categoria :supratenant
+                                :motivo "o 2o operador recusa (ou quem pediu retira) o pedido de suspensao/encerramento"}
  ;; ---------- Onda E: o livro de atas no portal ----------
  :sessoes/livro-atas-publico {:categoria :so-tela
                               :motivo "o livro de atas do portal do cidadao (anonimo); o agente le atas por ata_da_sessao"}
@@ -122,30 +133,48 @@
                       :motivo "exportar a trilha e' ato do auditor registrado na propria trilha; nao e' ferramenta"}
  :auditoria/selos-publicos {:categoria :so-tela
                             :motivo "os selos do dia publicados no portal: a ancora publica da corrente, sem registro nenhum"}
- ;; ---------- ADR-0019 fatia 1: o caminho da comissao e o parecer juridico (o agente propoe na fatia 2) ----------
- :legislativo/comissoes {:categoria :so-tela
-                         :motivo "a lista de comissoes que a secretaria escolhe ao encaminhar a materia, na tela"}
- :legislativo/encaminhar-comissoes {:categoria :so-tela
-                                    :motivo "encaminhar a materia as comissoes e' ato da secretaria, na tela; a proposta de ato do agente entra na fatia 2 (ADR-0019)"}
- :legislativo/designar-relator {:categoria :so-tela
-                                :motivo "designar o relator e' ato da Mesa/secretaria, na tela; a proposta de ato do agente entra na fatia 2 (ADR-0019)"}
- :legislativo/pedir-parecer-juridico {:categoria :so-tela
-                                      :motivo "pedir o parecer juridico e' ato da secretaria em nome da Presidencia; a proposta do agente entra na fatia 2 (ADR-0019)"}
+ ;; ---------- ADR-0019 fatia 1 + 2: o caminho da comissao e o parecer juridico ----------
+;; Viraram ACAO do catalogo (o agente propoe, a pessoa confirma em /propostas): comissoes (comissoes_da_casa),
+;; encaminhar-comissoes, designar-relator, pedir-parecer-juridico e pareceres-juridicos-da-materia. Ficam aqui so' as
+;; que nao podem ou nao precisam ser ferramenta:
  :legislativo/fila-juridica {:categoria :so-tela
                              :motivo "a fila de trabalho do advogado da Casa; o agente le o parecer pela ficha da materia"}
  :legislativo/pedido-juridico {:categoria :so-tela
                                :motivo "o detalhe do pedido, onde o advogado escreve o parecer"}
  :legislativo/cancelar-pedido-juridico {:categoria :so-tela
-                                        :motivo "cancelar o pedido e' ato da secretaria, na tela"}
+                                        :motivo "cancelar o pedido e' ato da secretaria, na tela; nao ha' demanda para o agente cancelar (so' se pede)"}
  :legislativo/salvar-parecer-juridico {:categoria :so-tela
-                                       :motivo "escrever o parecer e' ato do advogado; o rascunho de IA e' da fatia 2 e nunca assina (ADR-0019 Eixo 5)"}
+                                       :motivo "escrever o parecer e' ato do advogado; o rascunho de IA (fatia 2 do satelite) e' do advogado, na tela dele, e nunca assina (ADR-0019 Eixo 5)"}
  :legislativo/assinar-parecer-juridico {:categoria :so-tela
-                                        :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB); o agente nunca assina"}
+                                        :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB e nome do perfil dele): o agente nem propoe; nao e' voto, presenca nem conducao, por isso nao vai em :pessoal"}
  :legislativo/substituir-parecer-juridico {:categoria :so-tela
-                                           :motivo "corrigir o parecer assinado e' ato do advogado, na tela"}
- :legislativo/pareceres-juridicos-da-materia {:categoria :so-tela
-                                              :motivo "a aba de pareceres juridicos da ficha da materia; o agente entra na fatia 2 (ADR-0019)"}
+                                           :motivo "corrigir o parecer assinado e' ato do advogado, na tela; o agente nem propoe (mesmo motivo de assinar)"}
  :legislativo/meu-pedido-juridico {:categoria :so-tela
-                                   :motivo "o relator pede o parecer juridico da materia que relata, na tela; a proposta do agente entra na fatia 2"}
+                                   :motivo "o relator pede o parecer juridico da materia que relata, na tela do vereador; o agente da secretaria tem pedir_parecer_juridico"}
  :transparencia/pareceres-juridicos {:categoria :so-tela
-                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}}
+                                     :motivo "os pareceres juridicos no portal do cidadao (anonimo), so' depois da deliberacao"}
+ ;; ---------- ADR-0019 fatia 2a: a nota tecnica da IA como rascunho do advogado + antecipar o portal ----------
+ :legislativo/usar-nota-como-rascunho {:categoria :so-tela
+                                       :motivo "usar a nota tecnica da IA como rascunho e' ato do advogado: ele a le', assume e assina; a IA nao abre parecer em nome de ninguem (ADR-0019 Eixo 5)"}
+ :legislativo/parametros-parecer-juridico {:categoria :so-tela
+                                           :motivo "parametro da Casa (quando o portal mostra o parecer): so' o admin_ente decide, na tela de administracao"}
+ :legislativo/salvar-parametros-parecer-juridico {:categoria :so-tela
+                                                  :motivo "antecipar o parecer ao portal e' decisao institucional do admin_ente, nao acao do agente"}
+ ;; ---------- ADR-0019 fatia 2 (Eixo 5): o copiloto do relator ----------
+ :legislativo/copiloto-analise-parecer {:categoria :so-tela
+                                        :motivo "a tela do editor pede a IA um rascunho da analise do parecer (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-copiloto-analise-parecer {:categoria :so-tela
+                                            :motivo "o relator pede, no editor, o rascunho da analise a IA (nada grava); a IA nao chama a IA"}
+ :legislativo/meu-salvar-rascunho-parecer {:categoria :so-tela
+                                           :motivo "o relator salva o texto do proprio parecer no editor; texto de parecer e' de quem assina, o agente nao redige"}
+ ;; ---------- ADR-0019 fatia 3: publicar a pauta (o ATO e' entrada do catalogo, publicar_pauta; o resto e' tela) ----------
+ :sessoes/publicacao-da-pauta {:categoria :so-tela
+                               :motivo "a tela de publicar (regra, avisos, historico); o agente le a pauta por pauta_da_sessao e propoe publicar_pauta"}
+ :sessoes/regra-da-pauta {:categoria :so-tela
+                          :motivo "a configuracao da Casa (quem publica, antecedencia) lida na administracao e na tela da pauta"}
+ :sessoes/definir-regra-da-pauta {:categoria :so-tela
+                                  :motivo "configurar quem publica a pauta e' do admin_ente, na tela; o agente nunca muda regra da Casa"}
+ :sessoes/pautas-publicas {:categoria :so-tela
+                           :motivo "a lista de pautas oficiais no portal do cidadao (anonimo)"}
+ :sessoes/pauta-oficial-publica {:categoria :so-tela
+                                 :motivo "a pauta oficial de uma sessao no portal do cidadao (anonimo)"}}

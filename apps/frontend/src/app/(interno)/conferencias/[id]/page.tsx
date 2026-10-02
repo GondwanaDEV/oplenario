@@ -9,7 +9,6 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
-import { paragrafosDoRascunho, rotuloDaCitacao } from "@/lib/rascunho-ata-vista";
 import {
   TETO_TEXTO_NOTA,
   avisoDaNota,
@@ -22,6 +21,7 @@ import { decidirNota, useNotaTecnica } from "@/lib/use-conferencias";
 import type { NotaTecnicaOut } from "@/lib/contrato-legislativo.gen";
 import { GuardSecretaria } from "../../guard-secretaria";
 import { TopoInterno } from "../../topo";
+import { LeituraDaNota } from "../leitura-nota";
 import "../conferencias.css";
 
 export default function PaginaNota() {
@@ -89,7 +89,6 @@ function Nota({ n, token, modo, texto, enviando, erro, setTexto, aproveitar, des
   decidir: (d: "aproveitada" | "descartada", t?: string) => void;
 }) {
   const aviso = avisoDaNota(n.incerteza, n.motivosIncerteza);
-  const paragrafos = paragrafosDoRascunho(n.texto, n.citacoes, n.paragrafosSemFonte);
   const falta = faltaParaAproveitar(texto);
   return (
     <>
@@ -109,39 +108,7 @@ function Nota({ n, token, modo, texto, enviando, erro, setTexto, aproveitar, des
       )}
       {n.estado === "pendente" && aviso && <p className="conf-aviso" role="note">{aviso}</p>}
 
-      {n.estado === "pendente" && modo !== "editar" && (
-        <article className="conf-papel conf-rascunho" aria-label="Nota técnica em rascunho">
-          {paragrafos.map((p, i) => (
-            <p key={i} className={p.semFonte ? "conf-sem-fonte" : undefined}>
-              {p.semFonte && <span className="conf-selo">sem fonte — confira</span>}
-              {p.partes.map((x, j) =>
-                x.tipo === "citacao" ? (
-                  <sup key={j} className={x.citacao?.status === "conferida" ? "conf-cita" : "conf-cita conf-cita-falha"}
-                    title={rotuloDaCitacao(x.citacao, "o texto da norma")}>
-                    {x.n}
-                  </sup>
-                ) : (
-                  <span key={j}>{x.texto}</span>
-                ),
-              )}
-            </p>
-          ))}
-        </article>
-      )}
-
-      {n.estado === "pendente" && modo !== "editar" && n.citacoes.length > 0 && (
-        <section className="conf-fontes" aria-label="Dispositivos citados">
-          <h2>Dispositivos citados</h2>
-          <ol>
-            {n.citacoes.map((c, i) => (
-              <li key={i} className={c.status === "conferida" ? undefined : "conf-cita-falha"}>
-                <b>{rotuloDaCitacao(c, "o texto da norma")}</b>
-                {c.trecho && <span> — “{c.trecho}”</span>}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
+      {n.estado === "pendente" && modo !== "editar" && <LeituraDaNota n={n} />}
 
       {n.estado !== "pendente" && (
         <section aria-label={n.estado === "aproveitada" ? "Nota aproveitada" : "Nota descartada"}>

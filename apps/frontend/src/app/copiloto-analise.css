@@ -1,0 +1,23 @@
+/* O copiloto do relator (ADR-0019, Eixo 5): mesmo vocabulário visual do copiloto do requerimento (B.7) — moldura cobalto,
+   selo em caixa alta, aviso com filete âmbar (--aviso-texto) e "De onde veio" recolhido. */
+.cop-analise { display: grid; gap: 0.55rem; margin-top: 0.7rem; padding: 0.8rem 0.9rem; border: 1px solid var(--cobalto);
+  border-radius: var(--raio); background: color-mix(in srgb, var(--cobalto) 8%, transparent); }
+.cop-analise-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; }
+.cop-analise-aj { margin: 0; flex: 1 1 16rem; font-size: var(--t-12); color: var(--texto-2); }
+.cop-analise-msg { margin: 0; font-size: var(--t-13); color: var(--texto); }
+.cop-analise-rascunho { display: grid; gap: 0.45rem; }
+.cop-analise-selo { font-size: var(--t-11); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--cobalto-texto); }
+.cop-analise-aviso { margin: 0; padding: 0.45rem 0.7rem; border: 1px solid var(--linha); border-left: 3px solid var(--aviso-texto);
+  border-radius: 8px; font-size: var(--t-12); color: var(--texto); }
+.cop-analise-pontos { font-size: var(--t-12); color: var(--texto); }
+.cop-analise-pontos ul { margin: 0.25rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.2rem; }
+.cop-analise-texto { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 22rem; overflow: auto; padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--campo-borda); border-radius: 8px; background: var(--surface); color: var(--texto);
+  font-size: var(--t-13); line-height: 1.5; }
+.cop-analise-fontes { font-size: var(--t-12); color: var(--texto-2); }
+.cop-analise-fontes summary { cursor: pointer; font-weight: 700; color: var(--texto); }
+.cop-analise-fontes ol { margin: 0.4rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.3rem; }
+.cop-analise-fontes b { color: var(--texto); }
+.cop-analise-falha { color: var(--aviso-texto); }
+.cop-analise-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }

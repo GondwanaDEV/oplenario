@@ -1645,3 +1645,130 @@
       ;; A chave `:detalhe` ou vem COMPLETA ou NAO VEM — nunca um vetor vazio, que leria como "nenhuma
       ;; linha no periodo" e nao como "esta apresentacao nao pede detalhe".
       com-detalhe? (assoc :detalhe detalhe-out))))
+
+;; ---------- ADR-0019 fatia 3 (Eixo 7): PUBLICAR A PAUTA ----------
+;; "Publicar a pauta" e' um ato UNICO sobre a pauta inteira: congela a versao (`db/pauta/publicar-versao!`), entra na
+;; trilha e passa a ser o que o portal e a TV mostram como pauta OFICIAL. Quem publica e' regra da Casa; a antecedencia
+;; minima e os avisos por materia sao AVISO, nunca bloqueio (os Regimentos deixam a materia ir a plenario com o prazo da
+;; comissao vencido, ADR-0019 Eixo 7).
+
+(def quem-publica-pauta
+  "Quem publica a pauta, por Casa. Espelha o CHECK de `sessoes.regra_pauta.quem_publica` (mig 20260930000120)."
+  #{"secretaria" "presidente" "primeiro_secretario" "mesa"})
+
+(def regra-pauta-padrao
+  "A regra de uma Casa que nunca configurou: a secretaria publica, sem antecedencia minima — o fluxo de antes desta
+  fatia, que nao pode quebrar (a demo, as Casas em uso)."
+  {:quem-publica "secretaria" :antecedencia-minima-horas nil :configurada false})
+
+(def teto-antecedencia-horas
+  "30 dias. Espelha o CHECK da mig 20260930000120: acima disso nao e' antecedencia regimental, e' erro de digitacao."
+  720)
+
+(def cargos-de-primeiro-secretario
+  "Os textos de cargo na Mesa que sao o 1o Secretario. `cadastros.comissao_cargo.cargo` e' texto aberto: a demo grava
+  `1_secretario`; `primeiro_secretario` e' a grafia por extenso. `secretario` sozinho NAO entra — numa Mesa com um
+  secretario so' ele e' o secretario, mas numa com dois nao se sabe qual e'; fail-closed."
+  #{"1_secretario" "primeiro_secretario"})
+
+(defn regra-da-pauta
+  "A regra efetiva da Casa: a linha gravada, ou o padrao. PURO."
+  [linha]
+  (if linha
+    {:quem-publica (:quem-publica linha)
+     :antecedencia-minima-horas (:antecedencia-minima-horas linha)
+     :configurada true
+     :atualizado-em (:atualizado-em linha)}
+    regra-pauta-padrao))
+
+(def ^:private rotulo-de-quem-publica
+  {"secretaria" "a secretaria legislativa"
+   "presidente" "o Presidente da Câmara"
+   "primeiro_secretario" "o 1º Secretário da Mesa"
+   "mesa" "um membro da Mesa Diretora"})
+
+(defn pode-publicar-pauta
+  "Decide se QUEM ESTA' AGINDO publica a pauta pela regra da Casa. `papeis` = os papeis do ator; `cargo-mesa` = o cargo
+  dele na Mesa VIGENTE hoje (nil quando nao tem, ou quando nao e' vereador com mandato vigente). PURO. Devolve
+  {:pode bool :a-titulo (a regra que autoriza) :motivo (texto para a tela quando nao pode)}.
+
+  A regra e' EXCLUSIVA: com 'presidente', a secretaria prepara a pauta mas nao a publica — e' o que os Regimentos dizem
+  quando mandam o Presidente publicar a Ordem do Dia (ADR-0019, pesquisa item 1)."
+  [{:keys [quem-publica]} papeis cargo-mesa]
+  (let [pode (case quem-publica
+               "secretaria"          (contains? (set papeis) "secretario")
+               "presidente"          (= "presidente" cargo-mesa)
+               "primeiro_secretario" (contains? cargos-de-primeiro-secretario cargo-mesa)
+               "mesa"                (some? cargo-mesa)
+               false)]
+    {:pode (boolean pode)
+     :a-titulo quem-publica
+     :motivo (when-not pode
+               (str "Pela regra desta Casa, quem publica a pauta é "
+                    (get rotulo-de-quem-publica quem-publica "quem a Casa definir") "."))}))
+
+(defn- chave-do-item
+  "O que um item E' para efeito de 'a pauta mudou': a identidade, a fase e o conteudo. A `ordem` numerica fica de fora —
+  reordenar muda o numero e a SEQUENCIA, e a sequencia ja' esta' na ordem do vetor."
+  [it]
+  [(some-> (:id it) str) (:fase it) (:tipo-item it) (some-> (:proposicao-id it) str) (:texto-descricao it)])
+
+(defn alterada-desde-a-publicacao?
+  "A pauta VIVA (itens ativos em ordem) difere do snapshot da versao publicada? PURO. Sem versao publicada -> false (nao
+  ha' 'desde')."
+  [versao itens-vivos]
+  (boolean (and versao (not= (mapv chave-do-item (:snapshot versao)) (mapv chave-do-item itens-vivos)))))
+
+(defn tipo-da-proxima-publicacao
+  "A primeira publicacao e' `publicacao_inicial`; toda outra e' `republicacao` (que exige justificativa, CHECK da mig
+  0028). So' conta versao PUBLICA (a `execucao_final` e' da ata, nao publicacao). PURO."
+  [versoes]
+  (if (some #(and (:publica %) (#{"publicacao_inicial" "republicacao"} (:tipo-versao %))) versoes)
+    "republicacao"
+    "publicacao_inicial"))
+
+(defn inicio-da-sessao
+  "O instante de referencia da antecedencia: a abertura real, se a sessao ja' abriu; senao a data agendada. nil sem
+  nenhum dos dois."
+  [sessao]
+  (or (:aberta-em sessao) (:agendada-para sessao)))
+
+(defn antecedencia
+  "A antecedencia da publicacao em `agora` frente a regra da Casa. nil quando a Casa nao tem regra ou a sessao nao tem
+  data (nao ha' o que medir — nunca um aviso inventado). {:minimo-horas N :horas-reais H :cumprida bool}: `horas-reais`
+  e' o piso das horas que faltam para o inicio (negativo = ja' comecou); `cumprida` compara em MINUTOS, para 23h59 nao
+  passar por 24h."
+  [{:keys [antecedencia-minima-horas]} sessao ^Instant agora]
+  (let [inicio ^Instant (inicio-da-sessao sessao)]
+    (when (and antecedencia-minima-horas inicio agora)
+      (let [minutos (.toMinutes (Duration/between agora inicio))]
+        {:minimo-horas antecedencia-minima-horas
+         :horas-reais (long (Math/floorDiv (long minutos) 60))
+         :cumprida (>= minutos (* 60 (long antecedencia-minima-horas)))}))))
+
+(def tipos-aviso-de-pauta
+  "Os avisos da publicacao. Por materia: `sem-parecer-comissao` (nenhum parecer de comissao emitido) e
+  `pedido-juridico-pendente` (ha' pedido de parecer juridico em aberto). Da pauta: `antecedencia-nao-cumprida`."
+  #{"sem-parecer-comissao" "pedido-juridico-pendente" "antecedencia-nao-cumprida"})
+
+(defn avisos-das-materias
+  "Para cada item de PROPOSICAO da pauta, os avisos que a situacao da materia pede. `situacao` = {proposicao-id
+  {:pareceres-emitidos n :pareceres-em-andamento n :pedidos-juridicos-pendentes n}} (do legislativo, pelo seam do host).
+  Materia ausente do mapa (nao existe no legislativo) nao ganha aviso inventado. PURO; ordem = a da pauta."
+  [itens situacao]
+  (vec (mapcat (fn [{:keys [id proposicao-id]}]
+                 (when-let [s (and proposicao-id (get situacao proposicao-id))]
+                   (cond-> []
+                     (zero? (long (or (:pareceres-emitidos s) 0)))
+                     (conj {:tipo "sem-parecer-comissao" :item-id id :proposicao-id proposicao-id
+                            :pareceres-em-andamento (long (or (:pareceres-em-andamento s) 0))})
+                     (pos? (long (or (:pedidos-juridicos-pendentes s) 0)))
+                     (conj {:tipo "pedido-juridico-pendente" :item-id id :proposicao-id proposicao-id
+                            :pedidos-pendentes (long (:pedidos-juridicos-pendentes s))}))))
+               itens)))
+
+(defn aviso-de-antecedencia
+  "O aviso da pauta quando a antecedencia minima nao foi cumprida, ou nil."
+  [ant]
+  (when (and ant (not (:cumprida ant)))
+    {:tipo "antecedencia-nao-cumprida" :minimo-horas (:minimo-horas ant) :horas-reais (:horas-reais ant)}))

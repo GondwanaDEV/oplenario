@@ -237,7 +237,7 @@ describe("FichaMateriaTabs", () => {
     const assinado = (extra = {}) => ({
       id: "pj1", "pedido-id": "ped1", numero: 3, ano: 2026, estado: "assinado", relatorio: "Analisei a matéria.",
       fundamentacao: "Art. 30 da CF.", conclusao: "com_ressalvas",
-      assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:00:00Z" },
+      assinatura: { nome: "Lúcia Prado", oab: "CE 12345", qualificacao: "contratado", em: "2026-09-30T14:00:00Z", algoritmo: "STUB-ICP-v0", sha256: `sha256:${"ef56".repeat(16)}` },
       "substitui-id": null, substituido: false, ...extra,
     });
     const rota = (corpo: unknown, status = 200) => {
@@ -268,6 +268,7 @@ describe("FichaMateriaTabs", () => {
       expect(screen.getAllByText("Com ressalvas").length).toBeGreaterThan(0);
       expect(screen.getAllByText("Lúcia Prado").length).toBe(2); // um por parecer assinado (o substituído também fica)
       expect(screen.getAllByText(/OAB\/CE 12345 · Advogado\(a\) contratado\(a\)/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText("ef56".repeat(16))).toHaveLength(2); // o carimbo (SHA-256) de cada parecer assinado
       const link = screen.getByRole("link", { name: "Abrir na fila do jurídico" });
       expect(link.getAttribute("href")).toBe("/juridico/ped2?token=tk");
     });

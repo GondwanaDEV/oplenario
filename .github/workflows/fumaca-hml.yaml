@@ -236,6 +236,26 @@ jobs:
                   `pedidos=${pedidos.length} atendido=${!!atendido} vereador-na-fila=${ver.status} comissoes=${com.body?.comissoes?.length ?? '-'} portal=${pub.status}:${pub.body?.pareceres?.length ?? '-'}`);
             } catch (e) { rec('/juridico', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // ADR-0019 fatia 3: a pauta oficial publicada (a demo publica a v1 da sessao agendada) — portal anonimo +
+            // a tela de publicar da secretaria
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const lst = await api(anon, `/api/portal/casa/${E}/pautas`);
+              const sess = Array.isArray(lst.body?.sessoes) ? lst.body.sessoes : [];
+              const pub = sess.find(x => x['pauta-oficial']);
+              const det = pub ? await api(anon, `/api/portal/casa/${E}/pautas/${pub['sessao-id']}`) : { status: 0, body: null };
+              const pg = await anon.newPage();
+              await pg.goto(`${B}/portal/casa/${E}/pautas`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await pg.waitForTimeout(3000);
+              const tp = (await pg.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await anon.close();
+              const pubSec = pub ? await api(cSec, `/api/sessoes/${pub['sessao-id']}/pauta/publicacao`) : { status: 0, body: null };
+              const ok = lst.status === 200 && !!pub && det.status === 200 && (det.body?.vigente?.itens?.length ?? 0) >= 1
+                && pubSec.status === 200 && (pubSec.body?.versoes?.length ?? 0) >= 1 && /Pauta oficial/.test(tp);
+              rec('/portal/.../pautas', ok ? 'OK' : 'ERRO',
+                  `sessoes=${sess.length} publicada=${!!pub} vigente-itens=${det.body?.vigente?.itens?.length ?? '-'} publicacao-sec=${pubSec.status}:${pubSec.body?.versoes?.length ?? '-'}`);
+            } catch (e) { rec('/portal/.../pautas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

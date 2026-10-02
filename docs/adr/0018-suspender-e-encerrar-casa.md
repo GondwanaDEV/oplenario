@@ -1,8 +1,7 @@
 # ADR-0018 — Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados
 
-- **Status:** ✅ **Aceito, implementação adiada** (30/09/2026 — "gostei do plano e vamos manter", as recomendações
-  dos cinco eixos como escritas). O código **não** começa agora: uma demanda do stakeholder passou na frente. Ao
-  retomar, a fatia 1 é a da seção "Proposta de primeira fatia".
+- **Status:** ✅ **Aceito** (30/09/2026 — "gostei do plano e vamos manter", as recomendações dos cinco eixos como
+  escritas). **Fatia 1 implementada em 30/09/2026** — ver *Materialização — fatia 1* no fim.
 - **Contexto de decisão:**
   - `produto/13` 12.1: ciclo `provisionar → ativo → suspenso → encerrado`;
   - 9.6: portabilidade / saída do contrato — o ciclo `encerrado` não tinha feature de saída (G18);
@@ -148,3 +147,60 @@ confirmação de recebimento. Sem confirmação, não apaga.
 | 5 | Voltar | suspensa volta com um operador; encerrada **nunca** (Casa nova + importação) |
 
 Depois do "Confirmo" (com as correções), esta ADR vira **Aceita** e a fatia 1 começa.
+
+## Materialização — fatia 1 (30/09/2026)
+
+**O que existe:**
+
+- **Transições em `admin_sistema`** (mig `…160`):
+  - **Suspender** é pedido de um operador e aprovação de outro. Quem pede não aprova, e o banco também recusa.
+    Os motivos são os 4 fechados do Eixo 1.
+  - **Incidente de segurança:**
+    - um operador só já suspende;
+    - se o 2º operador não confirmar em 24 h, a Casa volta a ativa. A verificação é preguiçosa: acontece na leitura
+      do estado, sem job.
+  - **Reativar** pede um operador, com motivo.
+  - **Iniciar o encerramento** é pedido e aprovação, por dois operadores. A Casa fica `suspenso` com o motivo
+    `encerramento_em_curso`.
+  - Toda atuação fica selada na corrente da Operação (ADR-0016). Os eventos `admin_sistema.casa.suspensa` e
+    `.reativada` saem pelo outbox.
+- **Sessão ao vivo:** a suspensão aprovada com sessão em curso fica **agendada** até o encerramento da sessão. Ordem
+  judicial e incidente cortam na hora.
+- **Onde a regra vale (Eixo 3):**
+  - o seam `estado-da-casa` no host, com cache de 30 s, e a restrição no interceptor de autenticação da Casa e no do
+    agente (`oplenario.restricao-da-casa`);
+  - escrita fora da allowlist recebe **423** "acesso restrito" (o motivo público, nunca o comercial);
+  - a leitura passa sempre;
+  - a trilha (ADR-0017) registra a recusa.
+- **A allowlist (Eixo 2)** fica escrita por nome no código e é revisada em PR. Toda escrita nova nasce bloqueada. O que
+  passa:
+  - os protocolos do cidadão: e-SIC, recurso, ouvidoria, LGPD, comentário e seguir;
+  - os servidores respondendo a esses protocolos, com o prazo legal correndo;
+  - a remessa ao TCE: validar, submeter e registrar a resposta (o compliance segue);
+  - nomear o encarregado de dados (LGPD art. 41);
+  - marcar a notificação como lida.
+
+  Conceder acesso a gente nova **fica bloqueado**, de propósito. O teste de vazamento da 3ª dimensão (estado) percorre
+  todas as rotas montadas e compara com uma allowlist escrita à mão.
+- **Cota de IA zerada** enquanto a Casa está suspensa, pelo orçamento da ADR-0014.
+  - A reativação devolve o que valia antes.
+  - Se antes era "só mede", volta a ser "só mede": mig `…161`, orçamento sem valor, aceito também pelo satélite.
+- **Console e telas:**
+  - Na ficha da Casa em `/operacao`: "Acesso da Câmara", com Suspender (motivo e justificativa), a fila "aguardando 2º
+    operador" (aprovar, recusar, retirar), Reativar e Iniciar encerramento.
+  - A faixa "acesso restrito desde DD/MM", sem motivo, aparece:
+    - no interno, no app do vereador e na área da cidadã;
+    - no portal e nos formulários do portal.
+  - O recibo do protocolo do cidadão diz que o pedido foi recebido e que o prazo legal está correndo.
+
+**O que ficou para a fatia 2 (nada disso foi esquecido):**
+
+- **Exportação completa (9.6) e apagamento:** são o pré-requisito de sair de `encerramento_em_curso` para `encerrado`.
+  Hoje o encerramento para em "suspensa, com encerramento em curso".
+- **Aviso por e-mail** (15 dias na inadimplência, aviso da suspensão): depende do SMTP de produção (`[GAP]` de infra).
+  O aviso de hoje é a faixa.
+- **Anexo do ofício** no pedido de encerramento vindo da Casa: o pedido registra a origem e a justificativa, sem
+  arquivo.
+- **A allowlist é uma primeira leitura do Eixo 2**, revisável quando uma Casa real passar por isso. Por exemplo:
+  publicar um ato já aprovado antes da suspensão hoje fica bloqueado.
+

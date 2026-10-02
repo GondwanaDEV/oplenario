@@ -50,6 +50,8 @@
   (mudar-estado-vinculo! [this ente-id id estado])
   (adicionar-papel! [this ente-id papel])
   (papeis-de [this ente-id identidade-id])
+  (casa-tem-papel-ativo? [this ente-id papel]
+    "ADR-0019 Eixo 5: a Casa tem alguem com o `papel` e vinculo ATIVO de pessoa da Casa (ex.: 'juridico')?")
   (registrar-consentimento! [this ente-id consentimento])
   (revogar-consentimento! [this ente-id id])
   (consentimentos-ativos [this ente-id identidade-id])
@@ -107,6 +109,7 @@
   (mudar-estado-vinculo! [this ente-id id estado] (transacao this ente-id #(vinc/mudar-estado! % id estado)))
   (adicionar-papel! [this ente-id p] (transacao this ente-id #(vinc/adicionar-papel! % p)))
   (papeis-de [this ente-id ident] (transacao this ente-id #(vinc/papeis-de % ente-id ident)))
+  (casa-tem-papel-ativo? [this ente-id papel] (transacao this ente-id #(vinc/casa-tem-papel-ativo? % ente-id papel)))
   (registrar-consentimento! [this ente-id c] (transacao this ente-id #(vinc/registrar-consentimento! % c)))
   (revogar-consentimento! [this ente-id id] (transacao this ente-id #(vinc/revogar-consentimento! % id)))
   (consentimentos-ativos [this ente-id ident] (transacao this ente-id #(vinc/consentimentos-ativos % ente-id ident)))

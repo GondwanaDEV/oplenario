@@ -186,8 +186,9 @@ class Armazem(Protocol):
         """Devolve o trabalho à fila para depois de `ate` SEM contar tentativa: não é falha (a cota da Casa, B.9)."""
         ...
 
-    def definir_orcamento(self, ente_id: str, orcamento: Orcamento, definido_em: datetime, chave: str) -> None:
-        """O orçamento de IA da Casa (B.9), vindo do core; o mais recente substitui o anterior."""
+    def definir_orcamento(self, ente_id: str, orcamento: Orcamento | None, definido_em: datetime, chave: str) -> None:
+        """O orçamento de IA da Casa (B.9), vindo do core; o mais recente substitui o anterior. `None` = a Casa volta a
+        só medir (ADR-0018), e também não volta atrás por um evento atrasado."""
         ...
 
     def orcamento(self, ente_id: str) -> Orcamento | None: ...

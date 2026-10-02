@@ -8,4 +8,6 @@
 (def EnteOut
   [:map {:closed true}
    [:nome-oficial :string]
-   [:nome-curto {:optional true} [:maybe :string]]])
+   [:nome-curto {:optional true} [:maybe :string]]
+   ;; ADR-0018: a Casa com o sistema restrito (suspensa) — so' desde quando; o motivo nao e' publico
+   [:acesso-restrito-desde {:optional true} [:maybe :string]]])

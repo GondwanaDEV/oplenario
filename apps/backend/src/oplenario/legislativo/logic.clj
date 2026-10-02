@@ -70,6 +70,12 @@
   `promover!` recusa promover texto de parecer já terminal — erro inspecionável antes de bater no trigger)."
   #{"aprovado" "rejeitado" "prejudicado" "prazo_vencido"})
 
+(def estados-parecer-emitidos
+  "ADR-0019 fatia 3: os desfechos em que a COMISSAO SE MANIFESTOU — os terminais menos `prazo_vencido`, que e' justamente
+  a comissao NAO ter emitido parecer no prazo (e e' o caso em que os Regimentos deixam a materia ir a plenario assim
+  mesmo). A tela de publicar a pauta avisa 'sem parecer da comissao' quando a materia nao tem nenhum destes."
+  (disj estados-parecer-terminais "prazo_vencido"))
+
 ;; --- eixo F (F3.6b): proveniencia da versao de texto do PARECER. Espelha o CHECK da migration 0020
 ;; (mesma estrategia do eixo B, vocabulario proprio do parecer). estado_versao reusa `estados-versao`. ---
 (def origens-parecer-versao #{"redacao" "substitutivo" "importacao_legado"})
@@ -435,5 +441,14 @@
   (let [sem (str/replace (or texto "") marca-de-citacao "")
         linhas (map #(str/trimr (str/replace % #"[ \t]{2,}" " ")) (str/split sem #"\n" -1))]
     (str/trim (str/replace (str/join "\n" linhas) #" +([.,;:])" "$1"))))
+
+(def ^:private ponto-a-confirmar
+  "O mesmo `PONTO_A_CONFIRMAR` do satelite (`ata/redacao.py`): [confirmar: o que a pessoa precisa verificar]."
+  #"(?i)\[\s*confirmar\s*:\s*([^\]]+?)\s*\]")
+
+(defn pontos-a-confirmar
+  "Os `[confirmar: ...]` de um rascunho da IA, na ordem — o que a pessoa precisa resolver antes de usar o texto."
+  [texto]
+  (mapv second (re-seq ponto-a-confirmar (or texto ""))))
 
 (def desfechos-nota-tecnica #{"aproveitada" "descartada"})

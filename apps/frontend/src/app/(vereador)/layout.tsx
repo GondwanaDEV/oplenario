@@ -18,6 +18,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth, usePapeis } from "@/lib/auth";
 import { TemaProvider, useTema } from "@/lib/tema";
 import { comToken } from "@/lib/nav";
+import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import "./vereador-shell.css";
 
 export default function LayoutVereador({ children }: { children: React.ReactNode }) {
@@ -33,10 +34,17 @@ function LeitorToken({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider tokenQuery={searchParams.get("token")}>
       <TemaProvider>
+        <FaixaDaSessao />
         <GuardVereador>{children}</GuardVereador>
       </TemaProvider>
     </AuthProvider>
   );
+}
+
+// ADR-0018: a Casa suspensa avisa no app do vereador também (votar e protocolar ficam parados; ler, não).
+function FaixaDaSessao() {
+  const { token } = useAuth();
+  return <FaixaAcessoRestritoDaSessao token={token} />;
 }
 
 export function GuardVereador({ children }: { children: React.ReactNode }) {

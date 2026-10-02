@@ -12,13 +12,15 @@ export default async function Pagina({
   params: Promise<{ ente: string }>;
 }) {
   const { ente } = await params;
-  const nomeCasa = (await buscarNomeCasa(ente))?.nomeOficial ?? ente;
+  const casa = await buscarNomeCasa(ente);
+  const nomeCasa = casa?.nomeOficial ?? ente;
   return (
     <>
       <a className="pular" href="#conteudo">
         Pular para o conteúdo
       </a>
-      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} />
+      {/* ADR-0018: a Casa suspensa segue recebendo o pedido — a faixa diz que o sistema está restrito */}
+      <BarraInstitucional ente={ente} nomeCasa={nomeCasa} acessoRestritoDesde={casa?.acessoRestritoDesde} />
       <main id="conteudo" className="envelope">
         <Hero
           rotulo="Acesso à informação"

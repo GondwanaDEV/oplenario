@@ -16,4 +16,6 @@
 (defn ->wire
   "Perfil de ente (dominio, de cadastros/buscar-ente injetado pelo host) -> EnteOut."
   [e]
-  (validar! wire/EnteOut {:nome-oficial (:nome-oficial e) :nome-curto (:nome-curto e)} "EnteOut"))
+  (validar! wire/EnteOut (cond-> {:nome-oficial (:nome-oficial e) :nome-curto (:nome-curto e)}
+                           (:acesso-restrito-desde e) (assoc :acesso-restrito-desde (str (:acesso-restrito-desde e))))
+            "EnteOut"))
