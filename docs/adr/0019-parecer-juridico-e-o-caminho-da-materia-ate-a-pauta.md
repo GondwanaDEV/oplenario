@@ -325,9 +325,50 @@ A autorização fina (só o presidente da comissão designa) fica para a autoriz
 | 8 | Etapa obrigatória | fato `tem_parecer_juridico_assinado` + guarda no rito; desligado por padrão; só sob demanda |
 
 
-## Para validar com o Rigoni (não bloqueia a fatia 1)
+## As perguntas ao Rigoni — decididas pela pesquisa (02/10/2026)
 
-1. De qual Câmara é o fluxo que ele descreveu, e está no Regimento ou é costume?
-2. Onde entram as comissões entre o parecer jurídico e a pauta?
-3. Quais requerimentos vão ao procurador: nenhum, só CPI, ou consultas do Presidente?
-4. "Presidente autoriza" é mandar publicar a pauta, despachar cada matéria ou assinar?
+A validação com o Rigoni foi dispensada pelo decisor: "decisão minha, faça de acordo com o que aprendemos das nossas pesquisas"
+(`docs/29`). O relato dele é uma das quatro topologias de rito, e o produto atende as quatro por configuração, sem
+código por Casa. O que já está construído responde às quatro perguntas; nada muda no código.
+
+1. **De qual Câmara é o fluxo, e está no Regimento?**
+   - **Não importa para o produto.** O fluxo dele é a 3ª topologia, o jurídico obrigatório logo após o protocolo
+     (Jaguaribara, Crato, Palmácia, Varjota).
+   - Uma Casa assim liga a etapa no rito: estado `em_analise_juridica` e guarda com o fato
+     `tem_parecer_juridico_assinado` (fatia 4).
+   - As outras três topologias funcionam sem configurar nada:
+     - sem passo jurídico, como Baturité, que é o padrão;
+     - jurídico facultativo, em que a comissão ou o relator pede;
+     - jurídico só em ritos especiais.
+2. **Onde entram as comissões?**
+   - **Entre o protocolo e a pauta, sempre.** O parecer da comissão é o requisito regimental quase universal (Baturité
+     art. 100; Fortaleza).
+   - O jurídico, onde existe, **instrui** a comissão e não a substitui. O parecer é opinativo, com no máximo o tipo
+     "obrigatório não vinculante" do MS 24.631.
+   - No sistema:
+     - a secretaria encaminha às comissões e designa o relator;
+     - o pedido jurídico pode existir em paralelo;
+     - a pauta **avisa** quando falta o parecer da comissão ou há pedido jurídico pendente, e nunca bloqueia, porque o
+       RI deixa ir a Plenário com o prazo vencido.
+   - Parecer contrário não trava nada.
+3. **Quais requerimentos vão ao procurador?**
+   - **Nenhum, por padrão.** Nenhum RI lido manda requerimento, indicação ou moção ao jurídico no rito ordinário.
+   - As duas exceções reais entram pela **consulta avulsa**, que a secretaria pede em nome da Presidência:
+     - a admissibilidade de **CPI**, ouvida em 5 dias úteis (Aquiraz, Jaguaretama, Varjota);
+     - as consultas da Presidência sem proposição.
+   - O pedido sobre proposição cobre os projetos.
+4. **"Presidente autoriza" é o quê?**
+   - **Organizar e mandar publicar a pauta inteira**, num ato só. Não é um visto por matéria nem uma assinatura: nenhum
+     RI exige assinatura na pauta, e o SAPL trata a pauta como um booleano `publicar_pauta`.
+   - É a fatia 3: "Publicar a pauta", com quem publica configurável por Casa (`secretaria`, `presidente`,
+     `primeiro_secretario` ou `mesa`).
+   - O padrão é `secretaria`, quem opera o sistema, até a Casa configurar. As capitais tendem a `presidente`, as Casas
+     pequenas do CE a `primeiro_secretario` ou `mesa` (Pacoti, Aquiraz, Quixadá, Baturité).
+
+**Fica sob demanda** (aparece na pesquisa, mas nenhuma Casa cliente pediu):
+
+- o jurídico **suspendendo o relógio da comissão** (Varjota, art. 89 §2º);
+- prazo próprio do jurídico (Patos-PB 48 h, Curitiba 30 dias);
+- o jurídico em **dois níveis** (ALE-RR).
+
+Tudo isso é dado de rito ou de prazo no motor declarativo quando houver a Casa.

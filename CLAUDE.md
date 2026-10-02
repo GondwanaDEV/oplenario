@@ -160,7 +160,7 @@ deliberação, e o caminho da comissão por tela (encaminhar às comissões, des
   `STUB-ICP-v0` do parecer.
 - **Falta, de propósito:** pedido sobre emenda, autorização fina do relator e verificação de vigência do dispositivo
   citado. Ver *Materialização* na ADR.
-- **Esperam o Daouda:** as perguntas ao Rigoni no fim da ADR.
+- **As perguntas ao Rigoni foram decididas pela pesquisa (02/10/2026):** o código já atende; ver o fim da ADR.
 
 **Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
 [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma
