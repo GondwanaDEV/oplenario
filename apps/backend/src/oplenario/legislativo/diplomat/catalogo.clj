@@ -310,8 +310,9 @@
                                     (when prazo (str "\nPrazo: " prazo))
                                     (when em-nome-de (str "\nEm nome de: " em-nome-de))
                                     "\nO parecer jurídico é opinativo e será assinado pelo advogado da Casa.")})))
-     :executar (fn [{:keys [repo-legislativo nome-na-casa]} ator m]
-                 (some-> (controllers/pedir-parecer-juridico! repo-legislativo (or nome-na-casa (constantly nil)) ator
+     :executar (fn [{:keys [repo-legislativo nome-na-casa juridicos-a-avisar]} ator m]
+                 (some-> (controllers/pedir-parecer-juridico! repo-legislativo (or nome-na-casa (constantly nil))
+                                                              juridicos-a-avisar ator
                                                               (adapters-in-juridico/pedido->dominio (pedido->json m)))
                          adapters-out-juridico/pedido->wire))})
    (catalogo/entrada

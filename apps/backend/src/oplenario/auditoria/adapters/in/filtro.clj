@@ -13,7 +13,7 @@
 (def objetos
   "O modulo da acao (o prefixo do route-name): o \"Objeto\" do filtro da tela."
   #{"legislativo" "sessoes" "cadastros" "identidade" "participacao" "transparencia" "compliance" "normas"
-    "integracao-ia" "paineis" "auditoria"})
+    "integracao-ia" "paineis" "auditoria" "comunicacao"})
 
 (defn- invalido! [campo]
   (throw (ex-info (str "filtro invalido: " (name campo)) {:tipo :validacao/invalido :campo campo})))

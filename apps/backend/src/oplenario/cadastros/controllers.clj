@@ -55,3 +55,31 @@
   "A legislatura vigente da Casa (p/ o seletor do form de mandato), ou nil."
   [repo-cadastros ente-id]
   (repo/legislatura-vigente repo-cadastros ente-id))
+
+;; ---------- ADR-0020 (Eixo 1): os setores da Casa ----------
+
+(defn listar-setores
+  "Os setores da Casa (ativos e inativos) com a lotacao. A borda ja' exigiu `admin_ente`."
+  [repo-cadastros ente-id]
+  (repo/listar-setores repo-cadastros ente-id))
+
+(defn criar-setor!
+  "Cria o setor. Nome repetido -> :conflito/setor-nome-repetido (409)."
+  [repo-cadastros ente-id setor]
+  (repo/criar-setor! repo-cadastros ente-id setor))
+
+(defn atualizar-setor!
+  "Renomeia e/ou desativa; nil = inexistente nesta Casa (404). Nome repetido -> 409."
+  [repo-cadastros ente-id id campos]
+  (repo/atualizar-setor! repo-cadastros ente-id id campos))
+
+(defn trocar-membros-do-setor!
+  "Troca a lotacao inteira. `pessoas` = o conjunto de identidades ATIVAS da Casa (seam do host — cadastros nunca importa
+  identidade, §22.10): quem nao esta' nele (cidadao, vinculo suspenso, pessoa de outra Casa, id inventado) recusa o
+  pedido inteiro com `:conflito/pessoas-fora-da-casa` (422), nomeando os ids — nunca lota em silencio so' uma parte.
+  nil = setor inexistente (404)."
+  [repo-cadastros pessoas ente-id id identidades]
+  (let [fora (vec (remove pessoas identidades))]
+    (when (seq fora)
+      (throw (ex-info "pessoas sem vinculo ativo nesta Casa" {:tipo :conflito/pessoas-fora-da-casa :identidades fora})))
+    (repo/trocar-membros-do-setor! repo-cadastros ente-id id identidades)))

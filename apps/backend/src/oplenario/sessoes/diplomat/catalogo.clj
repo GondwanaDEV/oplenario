@@ -29,7 +29,8 @@
 (defn- sessao-publica? [repo-sessoes ator sid]
   (publica? (repo/buscar-sessao repo-sessoes (:ente-id ator) sid)))
 
-(defn- deps-publicacao [deps] (select-keys deps [:repo-sessoes :situacao-de-parecer :cargo-na-mesa :nome-na-casa]))
+(defn- deps-publicacao [deps]
+  (select-keys deps [:repo-sessoes :situacao-de-parecer :cargo-na-mesa :nome-na-casa :vereadores-a-avisar]))
 
 (defn- agora [{:keys [relogio]}] (tempo/agora (or relogio (tempo/relogio-sistema))))
 

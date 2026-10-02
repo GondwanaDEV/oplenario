@@ -88,6 +88,32 @@
                                 [:= :v.estado "ativo"] [:<> :v.tipo "cidadao"]]
                         :limit 1}))))
 
+;; ---- ADR-0020: as pessoas da Casa (destinatarios de comunicado e de aviso automatico) ----
+(def teto-de-pessoas
+  "Teto da leitura das pessoas da Casa (servidores, vereadores, administradores — nunca cidadaos). Uma Camara tem
+  dezenas a poucas centenas; o teto e' a rede contra uma Casa que importou cidadaos como servidores por engano."
+  5000)
+
+(defn pessoas-ativas
+  "As pessoas com vinculo ATIVO de quem trabalha na Casa (nao o de cidadao), cada uma com os tipos de vinculo e os
+  papeis: [{:identidade-id :tipos #{..} :papeis #{..}}]. Vinculo suspenso/encerrado nao conta (a pessoa nao entra no
+  sistema, entao nao recebe)."
+  [tx ente-id]
+  (let [vs (jdbc/execute! tx
+             (sql/format {:select [:identidade_id :tipo] :from [:identidade.vinculo]
+                          :where [:and [:= :ente_id ente-id] [:= :estado "ativo"] [:<> :tipo "cidadao"]]
+                          :order-by [[:identidade_id :asc]]
+                          :limit teto-de-pessoas}))
+        ids (vec (distinct (map :vinculo/identidade_id vs)))
+        ps (when (seq ids)
+             (jdbc/execute! tx
+               (sql/format {:select [:identidade_id :papel] :from [:identidade.usuario_papel]
+                            :where [:and [:= :ente_id ente-id] [:in :identidade_id ids]]})))
+        papeis (reduce (fn [m r] (update m (:usuario_papel/identidade_id r) (fnil conj #{}) (:usuario_papel/papel r)))
+                       {} ps)
+        tipos (reduce (fn [m r] (update m (:vinculo/identidade_id r) (fnil conj #{}) (:vinculo/tipo r))) {} vs)]
+    (mapv (fn [i] {:identidade-id i :tipos (get tipos i #{}) :papeis (get papeis i #{})}) ids)))
+
 ;; ---- consentimento (LGPD, §22.5.2 eixo G) ----
 (defn registrar-consentimento! [tx {:keys [id ente-id identidade-id finalidade base-legal versao-termo]}]
   (jdbc/execute-one! tx

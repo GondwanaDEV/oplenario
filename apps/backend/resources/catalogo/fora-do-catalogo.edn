@@ -198,4 +198,21 @@
  :sessoes/pautas-publicas {:categoria :so-tela
                            :motivo "a lista de pautas oficiais no portal do cidadao (anonimo)"}
  :sessoes/pauta-oficial-publica {:categoria :so-tela
-                                 :motivo "a pauta oficial de uma sessao no portal do cidadao (anonimo)"}}
+                                 :motivo "a pauta oficial de uma sessao no portal do cidadao (anonimo)"}
+ ;; ---------- ADR-0020: comunicados internos e setores ----------
+ :cadastros/listar-setores {:categoria :so-tela
+                            :motivo "a tela de setores do admin_ente; o agente endereca setor pela ferramenta enviar_comunicado"}
+ :cadastros/criar-setor {:categoria :so-tela
+                         :motivo "criar setor e' cadastro da Casa, do admin_ente, na tela de administracao; o agente nao administra"}
+ :cadastros/atualizar-setor {:categoria :so-tela
+                             :motivo "renomear ou desativar setor e' do admin_ente, na tela de administracao"}
+ :cadastros/trocar-membros-do-setor {:categoria :so-tela
+                                     :motivo "a lotacao das pessoas e' do admin_ente, na tela de administracao; o agente nunca lota ninguem"}
+ :comunicacao/destinos {:categoria :so-tela
+                        :motivo "as opcoes do formulario de envio; o agente endereca pelo id na ferramenta enviar_comunicado"}
+ :comunicacao/enviados {:categoria :so-tela
+                        :motivo "a lista da tela de enviados; o agente le o painel de um comunicado por ler_leitura_do_comunicado"}
+ :comunicacao/anexar {:categoria :so-tela
+                      :motivo "subir um arquivo (multipart) e' da tela, junto do envio; o agente nao anexa arquivo"}
+ :comunicacao/baixar-anexo {:categoria :so-tela
+                            :motivo "o download binario do anexo, na tela de quem pode ver o comunicado"}}
