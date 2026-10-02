@@ -19,6 +19,12 @@ export function dataHora(iso: string): string {
   return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Só a data, com o ano (DD/MM/AAAA) — o prazo da guarda e a data do encerramento atravessam a virada do ano. */
+export function dataLonga(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
 export function atividade(c: Casa, agora: Date = new Date()): string {
   if (c.estado === "ativo" && c.suspensaoAgendada) return "suspensão agendada para o fim da sessão";
   if (c.estado === "ativo") return c.ativadaEm ? `ativa ${haQuanto(c.ativadaEm, agora)}` : "ativa";
@@ -26,5 +32,6 @@ export function atividade(c: Casa, agora: Date = new Date()): string {
     return c.conviteEnviadoEm ? `convite enviado ${haQuanto(c.conviteEnviadoEm, agora)}` : "convite não saiu";
   }
   if (c.estado === "suspenso") return c.restricao ? `acesso restrito ${haQuanto(c.restricao.desde, agora)}` : "acesso restrito";
+  if (c.estado === "encerrado") return c.encerradaEm ? `encerrada em ${dataLonga(c.encerradaEm)}` : "encerrada";
   return "";
 }

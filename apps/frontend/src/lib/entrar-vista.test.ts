@@ -60,6 +60,18 @@ describe("derivarVistaEntrada", () => {
     });
   });
 
+  it("410 (ADR-0018 fatia 2) -> câmara encerrada: sem botão, com o nome e só um destino https", () => {
+    expect(derivarVistaEntrada({ status: 410, corpo: { nome: "Câmara Municipal de Baturité",
+      "destino-acervo-url": "https://camarabaturite.ce.gov.br/acervo" } })).toEqual({
+      estado: "encerrada", enteId: null, nome: "Câmara Municipal de Baturité",
+      destinoAcervoUrl: "https://camarabaturite.ce.gov.br/acervo",
+    });
+    expect(derivarVistaEntrada({ status: 410, corpo: { "destino-acervo-url": "http://x" } })).toEqual({
+      estado: "encerrada", enteId: null, nome: null, destinoAcervoUrl: null,
+    });
+    expect(derivarVistaEntrada({ status: 410, corpo: null }).estado).toBe("encerrada");
+  });
+
   it("400 (uuid malformado) -> erro genérico, NÃO confundido com 404", () => {
     expect(derivarVistaEntrada({ status: 400, corpo: null })).toEqual({
       estado: "erro",

@@ -96,7 +96,8 @@ export function AcessoDaCamara({ casa, pedidoAberto, token, aoMudar }: {
         </div>
       </div>
 
-      {pedidoAberto && (
+      {/* o pedido de APAGAMENTO aparece no bloco do encerramento, na etapa dele */}
+      {pedidoAberto && pedidoAberto.acao !== "apagar" && (
         <PedidoAberto pedido={pedidoAberto} token={token} aoConcluir={concluir}
           aoFalhar={(m) => setAviso({ tipo: "erro", texto: m })} />
       )}
@@ -106,8 +107,9 @@ export function AcessoDaCamara({ casa, pedidoAberto, token, aoMudar }: {
           <summary>Iniciar encerramento</summary>
           <div className="op-cartao-corpo">
             <p className="aj">
-              O fim do contrato. Dois operadores aprovam e a câmara fica com acesso restrito até a entrega da exportação
-              completa — a exportação e a janela de guarda são a próxima etapa, ainda não disponível aqui.
+              O fim do contrato. Dois operadores aprovam e a câmara fica com acesso restrito. Depois vêm a exportação
+              completa, a confirmação de recebimento, 90 dias de guarda e, só então, o apagamento — cada etapa aparece em
+              “Encerramento”, logo abaixo.
             </p>
             <FormEncerrar casa={casa} token={token} aoConcluir={concluir} aoFalhar={(m) => setAviso({ tipo: "erro", texto: m })} />
           </div>
@@ -256,15 +258,18 @@ function FormJustificativa({ rotulo, dica, botao, enviar, aoConcluir, aoFalhar }
   );
 }
 
+const ACAO_DO_PEDIDO = { suspender: "Suspensão", encerrar: "Encerramento", apagar: "Apagamento" } as const;
+const APROVAR = { suspender: "Aprovar suspensão", encerrar: "Aprovar encerramento", apagar: "Aprovar e apagar os dados" } as const;
+
 /** A fila "aguardando 2º operador" desta câmara. Quem pediu não aprova — só retira; o servidor confere de novo. */
-function PedidoAberto({ pedido, token, aoConcluir, aoFalhar }: {
+export function PedidoAberto({ pedido, token, aoConcluir, aoFalhar }: {
   pedido: Pedido; token: string | null; aoConcluir: (t: string) => void; aoFalhar: (m: string) => void;
 }) {
   const { operador } = useOperador(token);
   const [ocupado, setOcupado] = useState<"aprovar" | "recusar" | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const meu = operador?.id === pedido.pedidoPorId;
-  const encerrar = pedido.acao === "encerrar";
+  const apagar = pedido.acao === "apagar";
 
   async function decidir(tipo: "aprovar" | "recusar") {
     if (ocupado) return;
@@ -273,6 +278,10 @@ function PedidoAberto({ pedido, token, aoConcluir, aoFalhar }: {
     setOcupado(null);
     if (!r.ok) return aoFalhar(r.mensagem);
     if (tipo === "recusar") return aoConcluir(meu ? "Pedido retirado." : "Pedido recusado.");
+    if (r.dados.efeito === "encerrada") return aoConcluir("Dados apagados. A câmara está encerrada.");
+    if (r.dados.efeito === "apagamento-interrompido") {
+      return aoFalhar(`Aprovado, mas o apagamento parou no meio${r.dados.erro ? ` (${r.dados.erro})` : ""}. Use “Retomar o apagamento”.`);
+    }
     aoConcluir(r.dados.efeito === "agendado"
       ? "Aprovado. Há sessão plenária em curso: a suspensão entra quando ela encerrar."
       : "Aprovado. A câmara está com acesso restrito.");
@@ -284,13 +293,19 @@ function PedidoAberto({ pedido, token, aoConcluir, aoFalhar }: {
         <div className="estado">
           <b id="titulo-pedido">Aguardando o 2º operador</b>
           <span>
-            {encerrar ? "Encerramento" : "Suspensão"} · {rotuloMotivo(pedido.motivo)} · pedido por {pedido.pedidoPor ?? "—"}
+            {ACAO_DO_PEDIDO[pedido.acao]} · {rotuloMotivo(pedido.motivo)} · pedido por {pedido.pedidoPor ?? "—"}
             {" "}em {dataHora(pedido.pedidoEm)}
           </span>
         </div>
       </div>
       <div className="op-cartao-corpo">
         <p className="op-just">“{pedido.justificativa}”</p>
+        {apagar && (
+          <p className="aj">
+            <b>Isto não tem volta.</b> Aprovar apaga agora os dados desta câmara do banco, dos arquivos, do login e da IA.
+            Fica conosco só o registro: a data, este pedido e o código da exportação que a câmara recebeu.
+          </p>
+        )}
         {pedido.confirmarAte && (
           <p className="aj">
             A câmara já está com acesso restrito (incidente de segurança). Sem a 2ª aprovação até{" "}
@@ -314,7 +329,7 @@ function PedidoAberto({ pedido, token, aoConcluir, aoFalhar }: {
             <div className="op-acoes">
               <button className="btn btn-primaria" type="button" onClick={() => decidir("aprovar")} disabled={!!ocupado}
                 aria-busy={ocupado === "aprovar"}>
-                {ocupado === "aprovar" ? "Aprovando…" : encerrar ? "Aprovar encerramento" : "Aprovar suspensão"}
+                {ocupado === "aprovar" ? (apagar ? "Apagando…" : "Aprovando…") : APROVAR[pedido.acao]}
               </button>
               <button className="btn btn-contorno" type="button" onClick={() => decidir("recusar")} disabled={!!ocupado}
                 aria-busy={ocupado === "recusar"}>

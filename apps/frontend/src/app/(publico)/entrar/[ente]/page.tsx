@@ -27,6 +27,8 @@ const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
 async function buscarDescoberta(ente: string): Promise<{ status: number; corpo: RespostaDescoberta | null }> {
   try {
     const r = await fetch(`${backend}/auth/descoberta/${encodeURIComponent(ente)}`, { cache: "no-store" });
+    // ADR-0018 (fatia 2): a Câmara encerrada responde 410 com o nome e o destino do acervo
+    if (r.status === 410) return { status: 410, corpo: (await r.json().catch(() => null)) as RespostaDescoberta | null };
     if (!r.ok) return { status: r.status, corpo: null };
     return { status: r.status, corpo: (await r.json()) as RespostaDescoberta };
   } catch {
@@ -83,6 +85,22 @@ export default async function PaginaEntrarComEnte({
                 <p>
                   Este link não corresponde a nenhuma Câmara cadastrada. Confira o endereço recebido da
                   sua Câmara e tente novamente.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {vista.estado === "encerrada" && (
+            <div role="status">
+              <div className="entrar-titulo">
+                <h1>{vista.nome ? `${vista.nome} não usa mais O Plenário` : "Esta Câmara não usa mais O Plenário"}</h1>
+                <p>
+                  O acesso por aqui foi encerrado.{" "}
+                  {vista.destinoAcervoUrl ? (
+                    <>Os documentos públicos da Câmara estão em <a href={vista.destinoAcervoUrl} rel="noopener noreferrer">{vista.destinoAcervoUrl}</a>.</>
+                  ) : (
+                    <>Para consultar os documentos públicos, procure diretamente a Câmara.</>
+                  )}
                 </p>
               </div>
             </div>
