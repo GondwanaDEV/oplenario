@@ -318,6 +318,16 @@
         (estrutura/inserir-ente! tx {:ente-id ente-id :municipio-ibge (:codigo-ibge municipio)
                                       :nome-oficial "Câmara Municipal de Fortaleza"
                                       :nome-curto "CM Fortaleza"})))
+    ;; o REGISTRO DE CASAS (ADR-0016) tambem conhece a Casa demo — e' ele que sustenta o console, a suspensao e a
+    ;; exportacao (ADR-0018). Idempotente; sem permissao no registro, segue (a demo nao depende dele para semear).
+    (try
+      (jdbc/execute! ds ["INSERT INTO admin_sistema.ente (ente_id, nome, uf, estado, nome_curto, municipio_ibge,
+                                                          municipio_nome, ativada_em)
+                          VALUES (?, ?, ?, 'ativo', ?, ?, ?, now()) ON CONFLICT (ente_id) DO NOTHING"
+                         ente-id "Câmara Municipal de Fortaleza" (:uf municipio) "CM Fortaleza"
+                         (:codigo-ibge municipio) (:nome municipio)])
+      (catch Exception e
+        (log/warn e "casa/semear!: a Casa demo nao entrou no registro de Casas (seguindo)")))
     (let [identidades (criar-identidades! ds)
           cadastro (if (ja-semeada? ds) (ler-cadastro ds) (criar-cadastro! ds identidades))
           resultado {:ente ente-id :legislatura (:legislatura-id cadastro)

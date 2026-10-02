@@ -18,6 +18,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.test :refer [deftest is testing]]
+            [next.jdbc :as jdbc]
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.config :as config]
@@ -48,6 +49,10 @@
       (testing "17 vereadores, todos com mandato vigente na data de hoje"
         (is (= 17 (count (:vereadores r1))))
         (is (every? :mandato-id (:vereadores r1))))
+      (testing "a Casa demo esta' no registro de Casas (ADR-0016), ativa — e' ele que sustenta console e exportacao"
+        (is (= ["ativo"]
+               (mapv :ente/estado (jdbc/execute! (get-in s [:datasource :ds])
+                                                 ["SELECT estado FROM admin_sistema.ente WHERE ente_id = ?" (:ente r1)])))))
       (testing "nenhum nome duplicado no roster"
         (is (= 17 (count (distinct (map :nome (:vereadores r1)))))))
       (testing "o artefato de ids foi REALMENTE gravado, e nao só tentado"
