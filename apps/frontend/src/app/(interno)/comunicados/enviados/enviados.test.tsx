@@ -36,7 +36,7 @@ afterEach(() => {
 describe("enviados", () => {
   it("cada comunicado com lidos x de y, cientes e os vencidos em destaque", async () => {
     mockar({
-      "/api/comunicados/enviados": {
+      "/api/meu/comunicados/enviados": {
         corpo: { itens: [item("c1", { "exige-ciencia": true, cientes: 9, "pendentes-vencidos": 2 }), item("c2")] },
       },
     });
@@ -53,8 +53,8 @@ describe("enviados", () => {
 
   it("secretaria alterna para 'Da Casa' (?escopo=casa) e vê quem enviou", async () => {
     const chamadas = mockar({
-      "/api/comunicados/enviados": { corpo: { itens: [] } },
-      "/api/comunicados/enviados?escopo=casa": { corpo: { itens: [item("c3", { "remetente-nome": "Sérgio Lopes" })] } },
+      "/api/meu/comunicados/enviados": { corpo: { itens: [] } },
+      "/api/meu/comunicados/enviados?escopo=casa": { corpo: { itens: [item("c3", { "remetente-nome": "Sérgio Lopes" })] } },
     });
     render(<PaginaEnviados />);
     expect(await screen.findByText(/Você ainda não enviou comunicados/)).toBeTruthy();
@@ -62,12 +62,12 @@ describe("enviados", () => {
     fireEvent.click(within(grupo).getByRole("button", { name: "Da Casa" }));
     expect(await screen.findByText("Enviado por Sérgio Lopes")).toBeTruthy();
     expect(within(grupo).getByRole("button", { name: "Da Casa" }).getAttribute("aria-pressed")).toBe("true");
-    expect(chamadas).toContain("/api/comunicados/enviados?escopo=casa");
+    expect(chamadas).toContain("/api/meu/comunicados/enviados?escopo=casa");
   });
 
   it("o vereador não vê a alternância (só os dele)", async () => {
     auth.papeis = ["vereador"];
-    const chamadas = mockar({ "/api/comunicados/enviados": { corpo: { itens: [item("c1")] } } });
+    const chamadas = mockar({ "/api/meu/comunicados/enviados": { corpo: { itens: [item("c1")] } } });
     render(<PaginaEnviados />);
     await screen.findByText("Assunto c1");
     expect(screen.queryByRole("group", { name: "De quem" })).toBeNull();
@@ -75,10 +75,10 @@ describe("enviados", () => {
   });
 
   it("falha vira frase com 'Tentar de novo'", async () => {
-    const chamadas = mockar({ "/api/comunicados/enviados": { status: 500 } });
+    const chamadas = mockar({ "/api/meu/comunicados/enviados": { status: 500 } });
     render(<PaginaEnviados />);
     const alerta = await screen.findByRole("alert");
     fireEvent.click(within(alerta).getByRole("button", { name: "Tentar de novo" }));
-    await waitFor(() => expect(chamadas.filter((u) => u === "/api/comunicados/enviados")).toHaveLength(2));
+    await waitFor(() => expect(chamadas.filter((u) => u === "/api/meu/comunicados/enviados")).toHaveLength(2));
   });
 });

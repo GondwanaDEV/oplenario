@@ -136,7 +136,7 @@ describe("TopoInterno — o número da Caixa (ADR-0020)", () => {
   it("soma comunicados não lidos e avisos não lidos no link da Caixa, com a frase para leitor de tela", async () => {
     montarCom({
       "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] },
-      "/api/comunicados/caixa": { itens: [], "nao-lidos": 2, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
+      "/api/meu/comunicados/contagem": { itens: [], "nao-lidos": 2, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
       "/api/meu/notificacoes": { notificacoes: [], "nao-lidas": 1, "notificacoes-total": 0 },
     });
     const link = await screen.findByRole("link", { name: "Caixa, 3 por ler" });
@@ -147,7 +147,7 @@ describe("TopoInterno — o número da Caixa (ADR-0020)", () => {
   it("uma fonte fora conta a outra; as duas fora, nenhum número (nunca um zero que mente)", async () => {
     montarCom({
       "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] },
-      "/api/comunicados/caixa": { itens: [], "nao-lidos": 4, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
+      "/api/meu/comunicados/contagem": { itens: [], "nao-lidos": 4, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
     });
     expect(await screen.findByRole("link", { name: "Caixa, 4 por ler" })).toBeTruthy();
     cleanup();

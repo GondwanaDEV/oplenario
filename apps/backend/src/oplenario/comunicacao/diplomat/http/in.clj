@@ -72,6 +72,10 @@
   (fn [req]
     (http/json-resposta 200 (adapters-out/caixa->wire (controllers/caixa! deps (:ator req)) (controllers/hoje deps)))))
 
+(defn- contagem-handler [deps]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out/contagem->wire (controllers/contagem deps (:ator req)) (controllers/hoje deps)))))
+
 (defn- ler-handler [deps]
   (fn [req]
     (let [ator (:ator req)]
@@ -194,6 +198,7 @@
   #{["/meu/comunicados/destinos" :get [auth (destinos-handler deps)] :route-name :comunicacao/destinos]
     ["/comunicados" :post [auth it/corpo-json (enviar-handler deps)] :route-name :comunicacao/enviar]
     ["/meu/comunicados" :get [auth (caixa-handler deps)] :route-name :comunicacao/caixa]
+    ["/meu/comunicados/contagem" :get [auth (contagem-handler deps)] :route-name :comunicacao/contagem]
     ["/meu/comunicados/enviados" :get [auth (enviados-handler deps)] :route-name :comunicacao/enviados]
     ["/comunicados/:id" :get [auth (ler-handler deps)] :route-name :comunicacao/ler]
     ["/comunicados/:id/ciencia" :post [auth (ciencia-handler deps)] :route-name :comunicacao/ciencia]

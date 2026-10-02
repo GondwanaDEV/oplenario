@@ -131,6 +131,12 @@
   (exige-pessoa-da-casa! ator)
   (repo/caixa! repo-comunicacao (:ente-id ator) (:identidade-id ator) (marcar? ator)))
 
+(defn contagem
+  "O numero do topo: os totais da caixa SEM gravar `recebido` (a marca so' nasce quando a pessoa abre a caixa)."
+  [{:keys [repo-comunicacao]} ator]
+  (exige-pessoa-da-casa! ator)
+  (:resumo (repo/caixa! repo-comunicacao (:ente-id ator) (:identidade-id ator) false)))
+
 (defn registrar-ciencia!
   "\"Estou ciente\": so' o destinatario, so' em comunicado que pede ciencia. Idempotente (a primeira vale). Devolve
   {:comunicado :marcas}; nil = inexistente/sem direito de ver (404). Quem ve mas nao e' destinatario -> 403; comunicado

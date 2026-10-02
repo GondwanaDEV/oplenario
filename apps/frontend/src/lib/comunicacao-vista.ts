@@ -46,11 +46,33 @@ import {
 const FUSO_DA_CASA = "America/Fortaleza";
 const DIA_MES = new Intl.DateTimeFormat("pt-BR", { timeZone: FUSO_DA_CASA, day: "2-digit", month: "2-digit" });
 
-/** "05/10" no fuso da Casa. "" se o carimbo vier ilegível. */
+const DIA = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** O prazo de ciência é um DIA ("2026-10-07", vale o dia inteiro, como o backend o guarda), não um instante: lido
+ *  com `Date.parse` ele viraria meia-noite UTC e recuaria um dia no fuso da Casa. Por isso o dia é lido pelos dígitos. */
+export function ehDia(v: string | null | undefined): v is string {
+  return !!v && DIA.test(v);
+}
+
+/** O dia de hoje no fuso da Casa, "AAAA-MM-DD" — o `min` do campo de prazo e a régua do "já passou". */
+export function hojeNaCasa(ms: number): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: FUSO_DA_CASA, year: "numeric", month: "2-digit", day: "2-digit" }).format(ms);
+}
+
+/** "05/10" no fuso da Casa (um dia "AAAA-MM-DD" é lido pelos dígitos). "" se o carimbo vier ilegível. */
 export function diaMes(iso: string | null | undefined): string {
   if (!iso) return "";
+  const d = DIA.exec(iso);
+  if (d) return `${d[3]}/${d[2]}`;
   const t = Date.parse(iso);
   return Number.isNaN(t) ? "" : DIA_MES.format(t);
+}
+
+/** O prazo por extenso curto: "07/10/2026" (dia) ou "07/10/2026 às 18:00" (um instante, se algum dia vier um). */
+export function prazoLegivel(v: string | null | undefined): string {
+  if (!v) return "";
+  const d = DIA.exec(v);
+  return d ? `${d[3]}/${d[2]}/${d[1]}` : instante(v);
 }
 
 /** "02/10/2026 às 14:05" no fuso da Casa. */
@@ -168,8 +190,11 @@ export function faixaDeCiencia(caixa: CaixaOut | null | undefined, agoraIso: str
   if (n === 0) return null;
   const vencidos = caixa.itens.filter((i) => i.exigeCiencia && !i.cienteEm && i.vencido).length;
   let frase = `Você tem ${plural(n, "comunicado aguardando", "comunicados aguardando")} ciência`;
+  // o backend só devolve como "mais próximo" um prazo que ainda não passou (o dia de hoje inclusive)
   const proxima = caixa.proximaCienciaAte;
-  if (proxima && instanteMs(proxima) > instanteMs(agoraIso)) frase += ` — o mais próximo vence em ${diaMes(proxima)}`;
+  if (proxima && (ehDia(proxima) ? proxima >= hojeNaCasa(instanteMs(agoraIso)) : instanteMs(proxima) > instanteMs(agoraIso))) {
+    frase += proxima === hojeNaCasa(instanteMs(agoraIso)) ? " — o mais próximo vence hoje" : ` — o mais próximo vence em ${diaMes(proxima)}`;
+  }
   if (vencidos > 0) frase += `; ${vencidos === 1 ? "1 já passou do prazo" : `${vencidos} já passaram do prazo`}`;
   return `${frase}.`;
 }
@@ -338,7 +363,7 @@ export type FormDoComunicado = {
   corpo: string;
   destinos: DestinoEscolhido[];
   exigeCiencia: boolean;
-  /** O valor de um <input type="datetime-local"> ("2026-10-05T18:00"), no fuso do aparelho; "" = sem prazo. */
+  /** O valor de um <input type="date"> ("2026-10-05"): o prazo vale até o fim desse dia; "" = sem prazo. */
   prazo: string;
   objetoTipo: TipoObjeto | "";
   /** O identificador ou o link colado. */
@@ -361,18 +386,9 @@ export function extrairIdDoObjeto(texto: string): string | null {
   return /^[A-Za-z0-9_-]+$/.test(t) ? t : null;
 }
 
-/** O instante no formato do <input type="datetime-local"> ("2026-10-02T14:05"), no fuso do aparelho — para o `min`. */
-export function paraDatetimeLocal(ms: number): string {
-  const d = new Date(ms);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-/** O prazo do datetime-local para ISO (UTC). `null` se vazio ou ilegível. */
-export function prazoParaIso(valor: string): string | null {
-  if (!valor) return null;
-  const t = new Date(valor).getTime();
-  return Number.isNaN(t) ? null : new Date(t).toISOString();
+/** O prazo do campo de data como vai no fio ("AAAA-MM-DD"). `null` se vazio ou ilegível. */
+export function prazoParaDia(valor: string): string | null {
+  return ehDia(valor) ? valor : null;
 }
 
 export function validarComunicado(f: FormDoComunicado, agoraMs: number): ErrosDoForm {
@@ -383,9 +399,9 @@ export function validarComunicado(f: FormDoComunicado, agoraMs: number): ErrosDo
   else if (assunto.length > LIMITE_DO_ASSUNTO) e.assunto = `O assunto passa de ${LIMITE_DO_ASSUNTO} caracteres. Resuma e deixe o detalhe no texto.`;
   if (!f.corpo.trim()) e.corpo = "Escreva o texto do comunicado.";
   if (f.exigeCiencia && f.prazo) {
-    const iso = prazoParaIso(f.prazo);
-    if (!iso) e.prazo = "Informe a data e a hora do prazo, ou deixe em branco para pedir ciência sem prazo.";
-    else if (Date.parse(iso) <= agoraMs) e.prazo = "O prazo precisa ser depois de agora.";
+    const dia = prazoParaDia(f.prazo);
+    if (!dia) e.prazo = "Informe o dia do prazo, ou deixe em branco para pedir ciência sem prazo.";
+    else if (dia < hojeNaCasa(agoraMs)) e.prazo = "O prazo não pode ser um dia que já passou.";
   }
   if (f.objetoTipo && !extrairIdDoObjeto(f.objetoRef)) {
     e.objeto = "Cole o endereço da página do item (o link do navegador) ou o identificador dele.";
@@ -426,7 +442,7 @@ export function entradaDoForm(f: FormDoComunicado, substituiId: string | null): 
     assunto: f.assunto,
     corpo: f.corpo,
     exigeCiencia: f.exigeCiencia,
-    cienciaAte: f.exigeCiencia ? prazoParaIso(f.prazo) : null,
+    cienciaAte: f.exigeCiencia ? prazoParaDia(f.prazo) : null,
     substituiId,
     objeto: f.objetoTipo && id ? { tipo: f.objetoTipo, id } : null,
     destinos: f.destinos.map((d) => ({ tipo: d.tipo, alvoId: d.tipo === "todos" ? null : d.alvoId })),
@@ -493,7 +509,10 @@ export function estadoDaCiencia(c: ComunicadoOut, agoraMs: number): EstadoDaCien
   if (!c.exigeCiencia) return "nao-exige";
   if (!c.minhasMarcas) return "nao-destinatario";
   if (c.minhasMarcas.cienteEm) return "dada";
-  if (c.cienciaAte && Date.parse(c.cienciaAte) < agoraMs) return "vencida";
+  // o backend diz se o prazo venceu (`prazoVencido`, calculado no dia da Casa); sem ele, a mesma conta aqui
+  if (c.prazoVencido ?? (ehDia(c.cienciaAte) ? c.cienciaAte < hojeNaCasa(agoraMs) : !!c.cienciaAte && Date.parse(c.cienciaAte) < agoraMs)) {
+    return "vencida";
+  }
   return "pendente";
 }
 

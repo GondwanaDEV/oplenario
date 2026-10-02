@@ -70,7 +70,7 @@ describe("GuardVereador — a aba Avisos é a caixa (ADR-0020)", () => {
 
   it("leva o número do que está por ler (comunicados + avisos), com a frase para leitor de tela", async () => {
     global.fetch = vi.fn(async (url: string) => {
-      if (url === "/api/comunicados/caixa") {
+      if (url === "/api/meu/comunicados/contagem") {
         return { ok: true, json: async () => ({ itens: [], "nao-lidos": 1, "pendentes-ciencia": 0, "proxima-ciencia-ate": null }) } as Response;
       }
       if (url === "/api/meu/notificacoes") {

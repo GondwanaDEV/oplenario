@@ -17,8 +17,9 @@ import {
   marcaCurta,
   opcoesDoTipo,
   ordenarLinhasDeLeitura,
-  paraDatetimeLocal,
-  prazoParaIso,
+  hojeNaCasa,
+  prazoLegivel,
+  prazoParaDia,
   resumoDaLeitura,
   rotuloDoEscolhido,
   tamanhoLegivel,
@@ -104,20 +105,22 @@ describe("a ciência", () => {
   it("o chip de cada item", () => {
     expect(cienciaDoItem(itemCaixa())).toBeNull();
     expect(cienciaDoItem(itemCaixa({ exigeCiencia: true }))).toEqual({ estado: "pendente", rotulo: "Pede ciência" });
-    expect(cienciaDoItem(itemCaixa({ exigeCiencia: true, cienciaAte: "2026-10-05T20:00:00Z" }))).toEqual({ estado: "pendente", rotulo: "Ciência até 05/10" });
-    expect(cienciaDoItem(itemCaixa({ exigeCiencia: true, cienciaAte: "2026-09-30T20:00:00Z", vencido: true }))?.rotulo).toBe("Ciência vencida em 30/09");
+    expect(cienciaDoItem(itemCaixa({ exigeCiencia: true, cienciaAte: "2026-10-05" }))).toEqual({ estado: "pendente", rotulo: "Ciência até 05/10" });
+    expect(cienciaDoItem(itemCaixa({ exigeCiencia: true, cienciaAte: "2026-09-30", vencido: true }))?.rotulo).toBe("Ciência vencida em 30/09");
     expect(cienciaDoItem(itemCaixa({ exigeCiencia: true, cienteEm: "x" }))!.estado).toBe("dada");
   });
 
   it("a faixa do topo: quantos, o mais próximo no futuro e os já vencidos", () => {
     const c = caixa(
-      [itemCaixa({ id: "a", exigeCiencia: true, cienciaAte: "2026-10-05T20:00:00Z" }), itemCaixa({ id: "b", exigeCiencia: true, cienciaAte: "2026-09-30T20:00:00Z", vencido: true })],
-      { pendentesCiencia: 2, proximaCienciaAte: "2026-10-05T20:00:00Z" },
+      [itemCaixa({ id: "a", exigeCiencia: true, cienciaAte: "2026-10-05" }), itemCaixa({ id: "b", exigeCiencia: true, cienciaAte: "2026-09-30", vencido: true })],
+      { pendentesCiencia: 2, proximaCienciaAte: "2026-10-05" },
     );
     expect(faixaDeCiencia(c, AGORA)).toBe("Você tem 2 comunicados aguardando ciência — o mais próximo vence em 05/10; 1 já passou do prazo.");
     expect(faixaDeCiencia(caixa([itemCaixa({ exigeCiencia: true })], { pendentesCiencia: 1 }), AGORA)).toBe("Você tem 1 comunicado aguardando ciência.");
     // um "mais próximo" que já passou não vira "vence em": a frase seria falsa
-    expect(faixaDeCiencia(caixa([], { pendentesCiencia: 1, proximaCienciaAte: "2026-09-30T20:00:00Z" }), AGORA)).toBe("Você tem 1 comunicado aguardando ciência.");
+    expect(faixaDeCiencia(caixa([], { pendentesCiencia: 1, proximaCienciaAte: "2026-09-30" }), AGORA)).toBe("Você tem 1 comunicado aguardando ciência.");
+    // o prazo é um DIA: hoje ainda vale (e não recua um dia por virar meia-noite UTC)
+    expect(faixaDeCiencia(caixa([], { pendentesCiencia: 1, proximaCienciaAte: "2026-10-02" }), AGORA)).toBe("Você tem 1 comunicado aguardando ciência — o mais próximo vence hoje.");
     expect(faixaDeCiencia(caixa([]), AGORA)).toBeNull();
     expect(faixaDeCiencia(null, AGORA)).toBeNull();
   });
@@ -127,7 +130,9 @@ describe("a ciência", () => {
     expect(estadoDaCiencia({ ...base, exigeCiencia: false }, AGORA_MS)).toBe("nao-exige");
     expect(estadoDaCiencia({ ...base, minhasMarcas: null }, AGORA_MS)).toBe("nao-destinatario");
     expect(estadoDaCiencia(base, AGORA_MS)).toBe("pendente");
-    expect(estadoDaCiencia({ ...base, cienciaAte: "2026-10-01T12:00:00Z" }, AGORA_MS)).toBe("vencida");
+    expect(estadoDaCiencia({ ...base, cienciaAte: "2026-10-01" }, AGORA_MS)).toBe("vencida");
+    expect(estadoDaCiencia({ ...base, cienciaAte: "2026-10-02" }, AGORA_MS)).toBe("pendente"); // hoje ainda vale
+    expect(estadoDaCiencia({ ...base, cienciaAte: "2026-10-09", prazoVencido: true }, AGORA_MS)).toBe("vencida"); // o backend manda
     expect(estadoDaCiencia({ ...base, minhasMarcas: { recebidoEm: "x", lidoEm: "x", cienteEm: "y" } }, AGORA_MS)).toBe("dada");
   });
 });
@@ -193,10 +198,11 @@ describe("o formulário", () => {
 
   it("o prazo da ciência é opcional, mas no futuro", () => {
     expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "" }, AGORA_MS)).toEqual({});
-    expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "2026-10-01T10:00" }, AGORA_MS).prazo).toBe("O prazo precisa ser depois de agora.");
-    expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "2026-10-05T18:00" }, AGORA_MS)).toEqual({});
+    expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "2026-10-01" }, AGORA_MS).prazo).toBe("O prazo não pode ser um dia que já passou.");
+    expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "2026-10-02" }, AGORA_MS)).toEqual({}); // hoje vale
+    expect(validarComunicado({ ...valido, exigeCiencia: true, prazo: "2026-10-05" }, AGORA_MS)).toEqual({});
     // sem "exige ciência", o prazo esquecido no campo não reprova nem viaja
-    expect(validarComunicado({ ...valido, prazo: "2026-10-01T10:00" }, AGORA_MS)).toEqual({});
+    expect(validarComunicado({ ...valido, prazo: "2026-10-01" }, AGORA_MS)).toEqual({});
   });
 
   it("o link do item: o último uuid do endereço colado, ou o identificador simples", () => {
@@ -219,20 +225,23 @@ describe("o formulário", () => {
     const f: FormDoComunicado = {
       ...valido,
       destinos: [...valido.destinos, { tipo: "todos", alvoId: null, nome: null, membros: null }],
-      exigeCiencia: true, prazo: "2026-10-05T18:00", objetoTipo: "proposicao", objetoRef: "/ficha-materia/0f8fad5b-d9cb-469f-a165-70867728950e",
+      exigeCiencia: true, prazo: "2026-10-05", objetoTipo: "proposicao", objetoRef: "/ficha-materia/0f8fad5b-d9cb-469f-a165-70867728950e",
     };
     const e = entradaDoForm(f, "orig-1");
-    expect(e.cienciaAte).toBe(prazoParaIso("2026-10-05T18:00"));
-    expect(e.cienciaAte).toBe("2026-10-05T21:00:00.000Z"); // 18h em Fortaleza
+    expect(e.cienciaAte).toBe(prazoParaDia("2026-10-05"));
+    expect(e.cienciaAte).toBe("2026-10-05"); // um DIA, como o backend guarda
     expect(corpoDoNovoComunicado(e)).toEqual({
-      assunto: "Sessão", corpo: "Texto", "exige-ciencia": true, "ciencia-ate": "2026-10-05T21:00:00.000Z", "substitui-id": "orig-1",
+      assunto: "Sessão", corpo: "Texto", "exige-ciencia": true, "ciencia-ate": "2026-10-05", "substitui-id": "orig-1",
       objeto: { tipo: "proposicao", id: "0f8fad5b-d9cb-469f-a165-70867728950e" },
       destinos: [{ tipo: "pessoa", "alvo-id": "i1" }, { tipo: "todos", "alvo-id": null }],
     });
   });
 
-  it("o min do datetime-local é o agora no formato do campo", () => {
-    expect(paraDatetimeLocal(AGORA_MS)).toBe("2026-10-02T12:00");
+  it("o min do campo de data é hoje no fuso da Casa, e o prazo se lê pelos dígitos", () => {
+    expect(hojeNaCasa(AGORA_MS)).toBe("2026-10-02");
+    expect(hojeNaCasa(Date.parse("2026-10-03T02:30:00Z"))).toBe("2026-10-02"); // 23:30 em Fortaleza ainda é dia 2
+    expect(prazoLegivel("2026-10-07")).toBe("07/10/2026");
+    expect(prazoParaDia("07/10/2026")).toBeNull();
   });
 
   it("quem ficou de fora por não ter acesso", () => {

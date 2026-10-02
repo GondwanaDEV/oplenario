@@ -1,7 +1,7 @@
 # ADR-0020 — Comunicados internos da Casa, com setores e prova de leitura
 
 - **Status:** ✅ **Aceita** (02/10/2026). As oito recomendações foram apresentadas ao Daouda eixo a eixo e
-  confirmadas ("confirmo"). A implementação segue as fatias abaixo.
+  confirmadas ("confirmo"). As três fatias foram implementadas no mesmo dia (ver *Materialização*).
 - **Origem:** pedido do Daouda (02/10/2026). A Câmara precisa de uma caixa, dentro do sistema e sem servidor de
   e-mail, para mandar comunicados: aviso de sessão, documento, requerimento, um passo a passo. O destino pode ser uma
   pessoa, um setor, todos os setores, um vereador ou uma comissão. E a Câmara precisa **responder por eles**: saber o
@@ -193,3 +193,50 @@ allowlist, como "marcar notificação como lida". A Casa encerrada responde 410,
 - A caixa do vereador deixa de ser só dele: a mesma tela serve ao interno.
 - O comunicado vale como registro de que a Casa **comunicou**. A ciência vale como registro de que a pessoa
   **reconheceu**. Nenhum dos dois é assinatura ICP-Brasil.
+
+## Materialização — fatias 1, 2 e 3 (02/10/2026)
+
+O que entrou e o que mudou em relação ao contrato acima:
+
+- **As coleções ficaram em `/meu/comunicados*`.** No roteador do Pedestal, `/comunicados/:id` capturava
+  `/comunicados/caixa`, `/enviados` e `/destinos`. Ficou assim:
+  - `GET /meu/comunicados` (a caixa, grava `recebido`);
+  - `GET /meu/comunicados/enviados[?escopo=casa]`;
+  - `GET /meu/comunicados/destinos`;
+  - **`GET /meu/comunicados/contagem`** (nova): o número do topo. Ela **não** grava `recebido`, porque o topo mostrar
+    "3 por ler" não é a caixa chegando à pessoa.
+
+  As rotas com `:id` seguem em `/comunicados/:id…`.
+- **O prazo de ciência é um dia** (`AAAA-MM-DD`), que vale até o fim desse dia no fuso da Casa. Hoje é aceito.
+  `vencido` e `prazo-vencido` são calculados na leitura.
+- **O 201 do envio é o próprio comunicado**, com `destinatarios` e `sem-acesso` dentro. `sem-acesso` conta os
+  vereadores da comissão que ainda não têm acesso ao sistema; a tela avisa que eles não vão receber.
+- **Erros:**
+  - lista vazia, destino inexistente ou setor inativo → 422;
+  - comunicado já substituído → 409;
+  - ciência em comunicado que não pede ciência → 409;
+  - ciência por quem não é destinatário → 403;
+  - anexo fora dos 10 minutos ou além de 5 → 409; arquivo grande demais → 413.
+- **Agente:** ler pelo agente não grava marca, porque a marca é a pessoa abrindo. `enviar_comunicado` só é proposto
+  (ADR-0012), e `registrar_ciencia` não está em nenhum conjunto de ferramentas do agente.
+- **Avisos automáticos:** quem publica a pauta e quem pede o parecer não recebem o próprio aviso. Se a resolução dos
+  destinatários falhar, o ato não cai: a falha é logada.
+- **Demo:**
+  - 3 setores: Secretaria Legislativa, Jurídico e Protocolo;
+  - 3 comunicados enviados pelo mesmo caminho da tela;
+  - o primeiro pede ciência à Mesa, à vereadora e ao Jurídico, com marcas variadas para o painel de leitura mostrar
+    os três estados.
+- **Telas:**
+  - `/caixa` (interno) e `/notificacoes` (vereador), com um componente só;
+  - `/comunicados/novo` (com revisão antes de enviar), `/comunicados/[id]` e `/notificacoes/[id]` no app do vereador,
+    e `/comunicados/enviados`;
+  - "Setores" em `/administracao`;
+  - "Caixa" na navegação de toda pessoa interna, com o número por ler.
+
+**Falta, de propósito:**
+
+- e-mail e push, quando houver SMTP;
+- a convocação oficial de sessão (4.15), quando houver resposta jurídica sobre a prova;
+- responder dentro do comunicado;
+- validar a existência do item ligado (`objeto`), que hoje é guardado como foi informado;
+- medir o contraste AA em pixel composto no navegador (GUIDELINES §8). Os tokens usados já foram medidos antes.

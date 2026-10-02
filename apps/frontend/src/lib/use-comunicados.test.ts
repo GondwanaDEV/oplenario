@@ -38,7 +38,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const caixaFio = { itens: [{ id: "c1", protocolo: "COM-2026-000001", assunto: "A", "remetente-nome": "Rita", "enviado-em": "2026-10-02T14:00:00Z",
+const caixaFio = { itens: [{ id: "c1", protocolo: "COM-2026-000001", assunto: "A", remetente: { "identidade-id": "i9", nome: "Rita" }, via: "direto", "enviado-em": "2026-10-02T14:00:00Z",
   "exige-ciencia": true, "ciencia-ate": null, vencido: false, "recebido-em": null, "lido-em": null, "ciente-em": null }],
   "nao-lidos": 1, "pendentes-ciencia": 1, "proxima-ciencia-ate": null };
 
@@ -95,7 +95,7 @@ describe("pedirComunicacao", () => {
 
 describe("as leituras", () => {
   it("a caixa chega camelizada, e recarregar refaz sem piscar", async () => {
-    const c = mockar({ "GET /api/comunicados/caixa": { corpo: caixaFio } });
+    const c = mockar({ "GET /api/meu/comunicados": { corpo: caixaFio } });
     const { result } = renderHook(() => useCaixaDeComunicados("tok"));
     expect(result.current.estado.fase).toBe("carregando");
     await waitFor(() => expect(result.current.estado.fase).toBe("pronto"));
@@ -108,7 +108,7 @@ describe("as leituras", () => {
   });
 
   it("caixa fora de forma vira erro, nunca meio-dado", async () => {
-    mockar({ "GET /api/comunicados/caixa": { corpo: { itens: "nao" } } });
+    mockar({ "GET /api/meu/comunicados": { corpo: { itens: "nao" } } });
     const { result } = renderHook(() => useCaixaDeComunicados("tok"));
     await waitFor(() => expect(result.current.estado.fase).toBe("erro"));
   });
@@ -139,13 +139,13 @@ describe("as leituras", () => {
 
   it("enviados: o escopo da Casa vai na querystring", async () => {
     const c = mockar({
-      "GET /api/comunicados/enviados": { corpo: { itens: [] } },
-      "GET /api/comunicados/enviados?escopo=casa": { corpo: { itens: [] } },
+      "GET /api/meu/comunicados/enviados": { corpo: { itens: [] } },
+      "GET /api/meu/comunicados/enviados?escopo=casa": { corpo: { itens: [] } },
     });
     const { result, rerender } = renderHook(({ e }: { e: "meus" | "casa" }) => useEnviados("tok", e), { initialProps: { e: "meus" } });
     await waitFor(() => expect(result.current.estado.fase).toBe("pronto"));
     rerender({ e: "casa" });
-    await waitFor(() => expect(c.map((x) => x.url)).toContain("/api/comunicados/enviados?escopo=casa"));
+    await waitFor(() => expect(c.map((x) => x.url)).toContain("/api/meu/comunicados/enviados?escopo=casa"));
   });
 });
 
@@ -166,8 +166,13 @@ describe("as escritas", () => {
   });
 
   it("ciência: POST /comunicados/:id/ciencia devolve a marca", async () => {
-    mockar({ "POST /api/comunicados/c1/ciencia": { corpo: { "ciente-em": "2026-10-02T15:00:00Z" } } });
-    expect(await registrarCiencia("tok", "c1")).toEqual({ ok: true, dado: { cienteEm: "2026-10-02T15:00:00Z" } });
+    // o fio real: {id, protocolo, minhas-marcas}; `doFio.ciencia` expõe o `cienteEm`
+    mockar({
+      "POST /api/comunicados/c1/ciencia": {
+        corpo: { id: "c1", protocolo: "COM-2026-000001", "minhas-marcas": { "recebido-em": "x", "lido-em": "x", "ciente-em": "2026-10-02T15:00:00Z", vencido: false } },
+      },
+    });
+    expect(await registrarCiencia("tok", "c1")).toMatchObject({ ok: true, dado: { cienteEm: "2026-10-02T15:00:00Z" } });
   });
 });
 
@@ -175,7 +180,7 @@ describe("useContagemDaCaixa — o número do topo", () => {
   it("soma comunicados e avisos não lidos e se refaz quando a caixa avisa", async () => {
     let n = 2;
     mockar({
-      "GET /api/comunicados/caixa": () => ({ corpo: { ...caixaFio, "nao-lidos": n } }),
+      "GET /api/meu/comunicados/contagem": () => ({ corpo: { ...caixaFio, "nao-lidos": n } }),
       "GET /api/meu/notificacoes": { corpo: { notificacoes: [], "nao-lidas": 1, "notificacoes-total": 0 } },
     });
     const { result } = renderHook(() => useContagemDaCaixa("tok"));

@@ -30,11 +30,11 @@ import {
   formDoSubstituto,
   fraseDoAlcance,
   fraseSemAcesso,
-  instante,
   opcoesDoTipo,
-  paraDatetimeLocal,
+  hojeNaCasa,
   plural,
-  prazoParaIso,
+  prazoLegivel,
+  prazoParaDia,
   rotuloDoDestino,
   rotuloDoEscolhido,
   tamanhoLegivel,
@@ -286,7 +286,7 @@ function Formulario({
   }
 
   if (fase === "revisar") {
-    const iso = form.exigeCiencia ? prazoParaIso(form.prazo) : null;
+    const dia = form.exigeCiencia ? prazoParaDia(form.prazo) : null;
     const idObjeto = form.objetoTipo ? extrairIdDoObjeto(form.objetoRef) : null;
     return (
       <section className="com-revisao" aria-labelledby="com-revisao-t">
@@ -299,7 +299,7 @@ function Formulario({
           <dt>Assunto</dt>
           <dd>{form.assunto.trim()}</dd>
           <dt>Ciência</dt>
-          <dd>{form.exigeCiencia ? (iso ? `Pedida, até ${instante(iso)}` : "Pedida, sem prazo") : "Não pedida"}</dd>
+          <dd>{form.exigeCiencia ? (dia ? `Pedida, até ${prazoLegivel(dia)}` : "Pedida, sem prazo") : "Não pedida"}</dd>
           {form.anexos.length > 0 && (
             <>
               <dt>Anexos</dt>
@@ -474,9 +474,9 @@ function Formulario({
             <label htmlFor="com-prazo">Prazo para a ciência (opcional)</label>
             <input
               id="com-prazo"
-              type="datetime-local"
+              type="date"
               value={form.prazo}
-              min={paraDatetimeLocal(agora)}
+              min={hojeNaCasa(agora)}
               onChange={(e) => mudar("prazo", e.target.value)}
               aria-invalid={!!erros.prazo}
               aria-describedby={descreve("prazo")}

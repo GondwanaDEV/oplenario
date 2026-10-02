@@ -17,7 +17,7 @@ afterEach(() => {
 describe("/caixa", () => {
   it("topo na área Caixa e o comunicado abre em /comunicados/:id", async () => {
     global.fetch = vi.fn(async (url: string) => {
-      if (url === "/api/comunicados/caixa") {
+      if (url === "/api/meu/comunicados") {
         return {
           ok: true, status: 200,
           json: async () => ({

@@ -49,7 +49,7 @@ function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean 
     if (method === "GET" && url === "/api/administracao/setores") {
       return { ok: true, status: 200, json: async () => ({ setores: [] }) } as Response;
     }
-    if (method === "GET" && url === "/api/comunicados/destinos") {
+    if (method === "GET" && url === "/api/meu/comunicados/destinos") {
       return { ok: true, status: 200, json: async () => destinosFake } as Response;
     }
     if (method === "GET" && url === "/api/meu/identidade") {

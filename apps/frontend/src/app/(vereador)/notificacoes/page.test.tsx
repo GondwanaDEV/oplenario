@@ -39,7 +39,7 @@ function servindo(rotas: { avisos?: unknown; caixa?: unknown; post?: Rota }) {
       return { ok: status < 300, status, json: async () => r.corpo } as Response;
     }
     if (url === "/api/meu/notificacoes") return { ok: true, status: 200, json: async () => rotas.avisos ?? { notificacoes: [], "nao-lidas": 0, "notificacoes-total": 0 } } as Response;
-    if (url === "/api/comunicados/caixa") return { ok: true, status: 200, json: async () => rotas.caixa ?? caixaVazia } as Response;
+    if (url === "/api/meu/comunicados") return { ok: true, status: 200, json: async () => rotas.caixa ?? caixaVazia } as Response;
     return { ok: false, status: 404, json: async () => ({}) } as Response;
   }) as unknown as typeof fetch;
   return chamadas;

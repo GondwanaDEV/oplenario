@@ -30,6 +30,7 @@ import {
   estadoDaCiencia,
   hrefDoObjetoLigado,
   instante,
+  prazoLegivel,
   linhaPara,
   marcaCurta,
   ordenarLinhasDeLeitura,
@@ -181,7 +182,7 @@ function Ciencia({ c, token, aoMudar }: { c: ComunicadoOut; token: string | null
   if (estado === "nao-destinatario") {
     return (
       <p className="com-nota" role="note">
-        Este comunicado pede ciência aos destinatários{c.cienciaAte ? ` até ${instante(c.cienciaAte)}` : ""}.
+        Este comunicado pede ciência aos destinatários{c.cienciaAte ? ` até ${prazoLegivel(c.cienciaAte)}` : ""}.
       </p>
     );
   }
@@ -215,10 +216,10 @@ function Ciencia({ c, token, aoMudar }: { c: ComunicadoOut; token: string | null
       <h2 id="com-ciencia-t">Ciência pedida</h2>
       <p>
         Quem enviou pediu que você confirme que tomou conhecimento deste comunicado
-        {c.cienciaAte && estado === "pendente" ? `, até ${instante(c.cienciaAte)}` : ""}.
+        {c.cienciaAte && estado === "pendente" ? `, até ${prazoLegivel(c.cienciaAte)}` : ""}.
       </p>
       {estado === "vencida" && c.cienciaAte && (
-        <p className="com-vencida">O prazo para a ciência venceu em {instante(c.cienciaAte)}.</p>
+        <p className="com-vencida">O prazo para a ciência venceu em {prazoLegivel(c.cienciaAte)}.</p>
       )}
       <div className="com-acoes">
         <button type="button" className="btn btn-primaria" onClick={() => void darCiencia()} disabled={enviando}>

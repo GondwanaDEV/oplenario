@@ -35,7 +35,7 @@ function servindo(caixa: Resp | (() => Resp), avisos: Resp | (() => Resp)) {
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     chamadas.push(`${init?.method ?? "GET"} ${url}`);
     if (init?.method === "POST") return { ok: true, status: 200, json: async () => ({ id: "a1", "lida-em": iso(0) }) } as Response;
-    const r = url === "/api/comunicados/caixa" ? caixa : url === "/api/meu/notificacoes" ? avisos : { status: 404, corpo: {} };
+    const r = url === "/api/meu/comunicados" ? caixa : url === "/api/meu/notificacoes" ? avisos : { status: 404, corpo: {} };
     const { status, corpo } = typeof r === "function" ? r() : r;
     return { ok: status < 300, status, json: async () => corpo } as Response;
   }) as unknown as typeof fetch;
@@ -198,7 +198,7 @@ describe("CaixaDaCasa — cada fonte falha sozinha", () => {
     falhar = false;
     fireEvent.click(within(alerta).getByRole("button", { name: "Tentar de novo" }));
     expect(await screen.findByText("Comunicado c1")).toBeTruthy();
-    expect(chamadas.filter((c) => c === "GET /api/comunicados/caixa").length).toBe(2);
+    expect(chamadas.filter((c) => c === "GET /api/meu/comunicados").length).toBe(2);
   });
 });
 

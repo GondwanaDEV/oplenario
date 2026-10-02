@@ -18,7 +18,7 @@ function mockar(estado: { setores: unknown[] }, extra: Record<string, { status?:
       return { ok: status < 300, status, json: async () => r.corpo ?? {} } as Response;
     }
     if (c.metodo === "GET" && c.url === "/api/administracao/setores") return { ok: true, status: 200, json: async () => ({ setores: estado.setores }) } as Response;
-    if (c.metodo === "GET" && c.url === "/api/comunicados/destinos") {
+    if (c.metodo === "GET" && c.url === "/api/meu/comunicados/destinos") {
       return {
         ok: true, status: 200,
         json: async () => ({ "pode-enviar-a-grupos": true, setores: [], comissoes: [], vereadores: [],

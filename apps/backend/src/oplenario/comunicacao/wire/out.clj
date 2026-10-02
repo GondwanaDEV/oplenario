@@ -94,6 +94,14 @@
    [:pendentes-ciencia :int]
    [:proxima-ciencia-ate [:maybe Dia]]])
 
+(def ContagemOut
+  "GET /meu/comunicados/contagem: so' os totais da caixa, para o numero do topo. NAO grava `recebido`: o topo mostrar
+  \"3 por ler\" nao e' a caixa chegando a pessoa — a marca so' nasce quando ela abre a caixa."
+  [:map {:closed true}
+   [:nao-lidos :int]
+   [:pendentes-ciencia :int]
+   [:proxima-ciencia-ate [:maybe Dia]]])
+
 (def ItemEnviadoOut
   [:map {:closed true}
    [:id :string]

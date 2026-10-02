@@ -59,6 +59,11 @@
    :pendentes-ciencia (count (:pendentes resumo))
    :proxima-ciencia-ate (s (logic/proxima-ciencia-ate (:pendentes resumo) hoje))})
 
+(defn contagem->wire [resumo hoje]
+  {:nao-lidos (long (:nao-lidos resumo 0))
+   :pendentes-ciencia (count (:pendentes resumo))
+   :proxima-ciencia-ate (s (logic/proxima-ciencia-ate (:pendentes resumo) hoje))})
+
 (defn enviados->wire [escopo cs hoje]
   {:escopo escopo
    :itens (mapv (fn [c]

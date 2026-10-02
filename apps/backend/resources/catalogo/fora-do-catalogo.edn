@@ -210,6 +210,8 @@
                                      :motivo "a lotacao das pessoas e' do admin_ente, na tela de administracao; o agente nunca lota ninguem"}
  :comunicacao/destinos {:categoria :so-tela
                         :motivo "as opcoes do formulario de envio; o agente endereca pelo id na ferramenta enviar_comunicado"}
+ :comunicacao/contagem {:categoria :so-tela
+                        :motivo "o numero do topo da tela; o agente le a caixa por ler_caixa (que nao grava marca)"}
  :comunicacao/enviados {:categoria :so-tela
                         :motivo "a lista da tela de enviados; o agente le o painel de um comunicado por ler_leitura_do_comunicado"}
  :comunicacao/anexar {:categoria :so-tela

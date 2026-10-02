@@ -23,10 +23,10 @@ const destinos = (grupos = true) => ({
   pessoas: [{ "identidade-id": "i1", nome: "Rita Campos" }, { "identidade-id": "i2", nome: "Ana Lima" }],
 });
 
+// o 201 REAL do backend: o próprio comunicado, com `destinatarios` e `sem-acesso` dentro (ver `doFio.envio`)
 const criado = (extra: Record<string, unknown> = {}) => ({
-  comunicado: { id: "c9", protocolo: "COM-2026-000009", assunto: "Sessão", corpo: "x", destinos: [], "exige-ciencia": true, ...extra },
-  destinatarios: 7,
-  "sem-acesso": 1,
+  id: "c9", protocolo: "COM-2026-000009", assunto: "Sessão", corpo: "x", destinos: [], "exige-ciencia": true,
+  remetente: { "identidade-id": "i0", nome: "Marina" }, destinatarios: 7, "sem-acesso": 1, ...extra,
 });
 
 type Resp = { status?: number; corpo?: unknown };
@@ -67,7 +67,7 @@ afterEach(() => {
 
 describe("escrever comunicado", () => {
   it("quem não pode enviar a grupos só vê pessoa e vereador, e a tela diz por quê", async () => {
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos(false) } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos(false) } });
     render(<PaginaNovoComunicado />);
     const tipo = await screen.findByLabelText("Tipo de destinatário");
     expect(Array.from((tipo as HTMLSelectElement).options).map((o) => o.textContent)).toEqual(["Uma pessoa", "Um vereador"]);
@@ -75,13 +75,13 @@ describe("escrever comunicado", () => {
   });
 
   it("sem acesso para enviar (403 nas opções) a tela diz em frase", async () => {
-    mockar({ "GET /api/comunicados/destinos": { status: 403 } });
+    mockar({ "GET /api/meu/comunicados/destinos": { status: 403 } });
     render(<PaginaNovoComunicado />);
     expect((await screen.findByRole("alert")).textContent).toContain("Seu acesso não permite enviar comunicados.");
   });
 
   it("enviar vazio aponta o que falta e põe o foco no primeiro campo com erro", async () => {
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos() } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos() } });
     render(<PaginaNovoComunicado />);
     await screen.findByLabelText("Tipo de destinatário");
     fireEvent.click(screen.getByRole("button", { name: "Revisar o envio" }));
@@ -93,7 +93,7 @@ describe("escrever comunicado", () => {
   });
 
   it("adicionar sem escolher na lista explica; repetir destino explica; remover tira", async () => {
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos() } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos() } });
     render(<PaginaNovoComunicado />);
     await screen.findByLabelText("Tipo de destinatário");
     await adicionar("setor");
@@ -109,7 +109,7 @@ describe("escrever comunicado", () => {
 
   it("o fluxo inteiro: alcance, revisão, POST no formato do fio, anexos um a um, e quem ficou sem acesso", async () => {
     const chamadas = mockar({
-      "GET /api/comunicados/destinos": { corpo: destinos() },
+      "GET /api/meu/comunicados/destinos": { corpo: destinos() },
       "POST /api/comunicados": { status: 201, corpo: criado() },
       "POST /api/comunicados/c9/anexos": [{ status: 201, corpo: {} }, { status: 413 }],
     });
@@ -121,7 +121,7 @@ describe("escrever comunicado", () => {
     fireEvent.change(screen.getByLabelText("Assunto"), { target: { value: "Reunião da comissão" } });
     fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "Linha 1\nLinha 2" } });
     fireEvent.click(screen.getByLabelText(/Pedir ciência/));
-    fireEvent.change(screen.getByLabelText("Prazo para a ciência (opcional)"), { target: { value: "2099-10-05T18:00" } });
+    fireEvent.change(screen.getByLabelText("Prazo para a ciência (opcional)"), { target: { value: "2099-10-05" } });
     const a = new File(["a"], "pauta.pdf", { type: "application/pdf" });
     const b = new File(["b"], "planilha.xlsx");
     fireEvent.change(screen.getByLabelText(/Escolher arquivos/), { target: { files: [a, b] } });
@@ -144,7 +144,7 @@ describe("escrever comunicado", () => {
     const post = chamadas.find((c) => c.chave === "POST /api/comunicados")!;
     expect(post.corpo).toEqual({
       assunto: "Reunião da comissão", corpo: "Linha 1\nLinha 2", "exige-ciencia": true,
-      "ciencia-ate": new Date("2099-10-05T18:00").toISOString(), "substitui-id": null,
+      "ciencia-ate": "2099-10-05", "substitui-id": null,
       objeto: { tipo: "proposicao", id: "0f8fad5b-d9cb-469f-a165-70867728950e" },
       destinos: [{ tipo: "comissao", "alvo-id": "k1" }, { tipo: "pessoa", "alvo-id": "i1" }],
     });
@@ -162,7 +162,7 @@ describe("escrever comunicado", () => {
   });
 
   it("'todos os setores' não pede alvo e o alcance é dito por extenso", async () => {
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos() } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos() } });
     render(<PaginaNovoComunicado />);
     await screen.findByLabelText("Tipo de destinatário");
     escolher("Tipo de destinatário", "todos");
@@ -173,7 +173,7 @@ describe("escrever comunicado", () => {
 
   it("a recusa do servidor no envio fica na revisão, com a causa", async () => {
     mockar({
-      "GET /api/comunicados/destinos": { corpo: destinos() },
+      "GET /api/meu/comunicados/destinos": { corpo: destinos() },
       "POST /api/comunicados": { status: 422, corpo: { erro: "a lista de destinatários resolveu vazia" } },
     });
     render(<PaginaNovoComunicado />);
@@ -189,16 +189,16 @@ describe("escrever comunicado", () => {
   });
 
   it("prazo no passado não passa", async () => {
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos() } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos() } });
     render(<PaginaNovoComunicado />);
     await screen.findByLabelText("Tipo de destinatário");
     await adicionar("pessoa", "i2");
     fireEvent.change(screen.getByLabelText("Assunto"), { target: { value: "A" } });
     fireEvent.change(screen.getByLabelText("Texto"), { target: { value: "B" } });
     fireEvent.click(screen.getByLabelText(/Pedir ciência/));
-    fireEvent.change(screen.getByLabelText("Prazo para a ciência (opcional)"), { target: { value: "2020-01-01T10:00" } });
+    fireEvent.change(screen.getByLabelText("Prazo para a ciência (opcional)"), { target: { value: "2020-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Revisar o envio" }));
-    expect(screen.getByText("O prazo precisa ser depois de agora.")).toBeTruthy();
+    expect(screen.getByText("O prazo não pode ser um dia que já passou.")).toBeTruthy();
     expect(document.activeElement?.id).toBe("com-prazo");
   });
 });
@@ -207,7 +207,7 @@ describe("corrigir um comunicado (?substitui=)", () => {
   it("o substituto vem preenchido do original e o POST leva substitui-id", async () => {
     nav.busca = "substitui=c1";
     const chamadas = mockar({
-      "GET /api/comunicados/destinos": { corpo: destinos() },
+      "GET /api/meu/comunicados/destinos": { corpo: destinos() },
       "GET /api/comunicados/c1": {
         corpo: { id: "c1", protocolo: "COM-2026-000001", assunto: "Sessão na sexta", corpo: "Texto antigo", "exige-ciencia": false, destinos: [{ tipo: "setor", "alvo-id": "s1", "alvo-nome": "Jurídico" }] },
       },
@@ -233,7 +233,7 @@ describe("corrigir um comunicado (?substitui=)", () => {
 
   it("o comunicado a substituir não abre: a tela diz e não mostra formulário", async () => {
     nav.busca = "substitui=c404";
-    mockar({ "GET /api/comunicados/destinos": { corpo: destinos() } });
+    mockar({ "GET /api/meu/comunicados/destinos": { corpo: destinos() } });
     render(<PaginaNovoComunicado />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível abrir o comunicado a substituir/);
     expect(screen.queryByLabelText("Assunto")).toBeNull();

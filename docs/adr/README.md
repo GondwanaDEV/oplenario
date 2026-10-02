@@ -32,4 +32,4 @@ Enforcement · Consequências · Alternativas descartadas). Complementa a SSOT (
 | [0017](0017-trilha-de-auditoria-da-casa.md) | A trilha de auditoria da Casa: o que registra, quem vê, quanto tempo, LGPD e o selo | ✅ Aceito |
 | [0018](0018-suspender-e-encerrar-casa.md) | Suspender e encerrar uma Casa: o que cada estado faz, quem decide e o que acontece com os dados | ✅ Aceito (fatias 1 e 2 implementadas: suspender, reativar e encerrar com exportação e apagamento) |
 | [0019](0019-parecer-juridico-e-o-caminho-da-materia-ate-a-pauta.md) | Parecer jurídico e o caminho da matéria até a pauta (comissão, jurídico, IA como rascunho, publicar a pauta) | ✅ Aceito (fatias 1–4 implementadas; a etapa obrigatória fica desligada por padrão) |
-| [0020](0020-comunicados-internos-e-setores.md) | Comunicados internos da Casa, com setores e prova de leitura (recebido, lido, ciente) | ✅ Aceito (em implementação) |
+| [0020](0020-comunicados-internos-e-setores.md) | Comunicados internos da Casa, com setores e prova de leitura (recebido, lido, ciente) | ✅ Aceito (fatias 1–3 implementadas: setores, comunicados, caixa para todos, anexos, avisos automáticos, prazo de ciência) |

@@ -23,9 +23,11 @@ import {
   CAMPO_DO_ANEXO,
   ROTAS_COMUNICACAO as R,
   corpoDoNovoComunicado,
+  doFio,
   formaValida,
   type AnexoOut,
   type CaixaOut,
+  type ContagemOut,
   type CienciaOut,
   type ComunicadoOut,
   type DestinosOut,
@@ -116,6 +118,7 @@ export async function pedirComunicacao<T>(
   acao: AcaoComunicacao,
   init: Init = {},
   valido: (dado: unknown) => boolean = () => true,
+  adaptar: (dado: unknown) => unknown = (d) => d,
 ): Promise<Resultado<T>> {
   if (semCredencial(token)) return { ok: false, status: 401, mensagem: mensagemDeErroComunicacao(401, acao) };
   try {
@@ -133,7 +136,7 @@ export async function pedirComunicacao<T>(
       const erro = (corpo as { erro?: unknown })?.erro;
       return { ok: false, status: r.status, mensagem: mensagemDeErroComunicacao(r.status, acao, typeof erro === "string" ? erro : undefined) };
     }
-    const dado = camelizarChaves(corpo);
+    const dado = adaptar(camelizarChaves(corpo));
     if (!valido(dado)) return { ok: false, status: 500, mensagem: mensagemDeErroComunicacao(500, acao) };
     return { ok: true, dado: dado as T };
   } catch {
@@ -149,6 +152,7 @@ export function useCarregarComunicacao<T>(
   acao: AcaoComunicacao,
   valido?: (dado: unknown) => boolean,
   transformar403?: () => T,
+  adaptar?: (dado: unknown) => unknown,
 ) {
   const [carga, setCarga] = useState<{ caminho: string | null; estado: Carga<T> }>({ caminho: null, estado: { fase: "carregando" } });
   const [rev, setRev] = useState(0);
@@ -156,7 +160,7 @@ export function useCarregarComunicacao<T>(
     if (!caminho || semCredencial(token)) return;
     let vivo = true;
     (async () => {
-      const r = await pedirComunicacao<T>(token, caminho, acao, {}, valido);
+      const r = await pedirComunicacao<T>(token, caminho, acao, {}, valido, adaptar);
       if (!vivo) return;
       if (r.ok) setCarga({ caminho, estado: { fase: "pronto", dado: r.dado } });
       else if (r.status === 403 && transformar403) setCarga({ caminho, estado: { fase: "pronto", dado: transformar403() } });
@@ -165,7 +169,7 @@ export function useCarregarComunicacao<T>(
     return () => {
       vivo = false;
     };
-    // `acao`, `valido` e `transformar403` são constantes do chamador; refazer só por token, caminho ou pedido explícito
+    // `acao`, `valido`, `transformar403` e `adaptar` são constantes do chamador; refazer só por token, caminho ou pedido explícito
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, caminho, rev]);
   const estado: Carga<T> = !caminho
@@ -183,7 +187,7 @@ export function useCarregarComunicacao<T>(
 // ---- leituras ----
 
 export function useCaixaDeComunicados(token: string | null) {
-  return useCarregarComunicacao<CaixaOut>(token, R.caixa, "caixa", formaValida.caixa);
+  return useCarregarComunicacao<CaixaOut>(token, R.caixa, "caixa", formaValida.caixa, undefined, doFio.caixa);
 }
 
 const SEM_AVISOS = (): MinhasNotificacoesOut => ({ notificacoes: [], naoLidas: 0, notificacoesTotal: 0 });
@@ -199,11 +203,11 @@ export function useComunicado(token: string | null, id: string | null) {
 
 /** O painel de leitura. `id` nulo = não buscar (quem não pode ver a leitura nem pede). */
 export function useLeituraDoComunicado(token: string | null, id: string | null) {
-  return useCarregarComunicacao<LeituraOut>(token, id ? R.leitura(id) : null, "leitura", formaValida.leitura);
+  return useCarregarComunicacao<LeituraOut>(token, id ? R.leitura(id) : null, "leitura", formaValida.leitura, undefined, doFio.leitura);
 }
 
 export function useEnviados(token: string | null, escopo: "meus" | "casa") {
-  return useCarregarComunicacao<EnviadosOut>(token, R.enviados(escopo), "enviados", formaValida.enviados);
+  return useCarregarComunicacao<EnviadosOut>(token, R.enviados(escopo), "enviados", formaValida.enviados, undefined, doFio.enviados);
 }
 
 export function useDestinos(token: string | null) {
@@ -213,7 +217,7 @@ export function useDestinos(token: string | null) {
 // ---- escritas ----
 
 export function enviarComunicado(token: string | null, entrada: NovoComunicadoIn) {
-  return pedirComunicacao<EnvioOut>(token, R.enviar, "enviar", { method: "POST", corpo: corpoDoNovoComunicado(entrada) }, formaValida.envio);
+  return pedirComunicacao<EnvioOut>(token, R.enviar, "enviar", { method: "POST", corpo: corpoDoNovoComunicado(entrada) }, formaValida.envio, doFio.envio);
 }
 
 /** Um anexo por chamada, DEPOIS do 201 (a rota pede o comunicado já existente). A resposta não é lida. */
@@ -222,7 +226,7 @@ export function enviarAnexo(token: string | null, comunicadoId: string, arquivo:
 }
 
 export function registrarCiencia(token: string | null, id: string) {
-  return pedirComunicacao<CienciaOut>(token, R.ciencia(id), "ciencia", { method: "POST", corpo: {} }, formaValida.ciencia);
+  return pedirComunicacao<CienciaOut>(token, R.ciencia(id), "ciencia", { method: "POST", corpo: {} }, formaValida.ciencia, doFio.ciencia);
 }
 
 /** Modo DEV (token no header): o link cru não leva o `Authorization`, então baixa pelos bytes e dispara o download
@@ -288,7 +292,7 @@ export function useContagemDaCaixa(token: string | null): number | null {
     let vivo = true;
     (async () => {
       const [comunicados, avisos] = await Promise.all([
-        contar<CaixaOut>(token, CAMINHO_CONTAGEM_DA_CAIXA, formaValida.caixa, (d) => d.naoLidos),
+        contar<ContagemOut>(token, CAMINHO_CONTAGEM_DA_CAIXA, formaValida.contagem, (d) => d.naoLidos),
         contar<MinhasNotificacoesOut>(token, R.avisos, formaValida.avisos, (d) => d.naoLidas),
       ]);
       if (!vivo) return;

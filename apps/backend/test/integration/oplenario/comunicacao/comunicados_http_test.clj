@@ -155,6 +155,16 @@
       (is (true? (get-in r [:corpo :pode-ver-leitura])))
       (is (true? (get-in r [:corpo :pode-anexar])))
       (is (= ["setor" "pessoa" "pessoa"] (mapv :tipo (get-in r [:corpo :destinos])))))
+    (testing "o numero do topo conta sem marcar: o contador nao e' a caixa chegando a pessoa"
+      (let [ct (:corpo (pedir c :get "/meu/comunicados/contagem" ana))]
+        (valida! wire/ContagemOut ct)
+        (is (= {:nao-lidos 1 :pendentes-ciencia 1 :proxima-ciencia-ate "2026-10-09"} ct)))
+      ;; sob a RLS da Casa (sem o tenant, a consulta voltaria vazia de qualquer jeito)
+      (is (zero? (:n (tenancy/com-tenant* (:ds *c*) (:ente c)
+                       #(jdbc/execute-one! % ["SELECT count(*)::int AS n FROM comunicacao.marca WHERE comunicado_id = ?::uuid"
+                                              cid-id]
+                                           {:builder-fn rs/as-unqualified-maps}))))
+          "nenhuma marca nasceu da contagem"))
     (testing "a caixa grava `recebido` (a primeira vez vale)"
       (let [cx (:corpo (pedir c :get "/meu/comunicados" ana))
             [item] (:itens cx)]
