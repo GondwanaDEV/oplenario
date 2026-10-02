@@ -281,10 +281,21 @@ A allowlist ganhou gerar e confirmar a exportação pelo `admin_ente`.
 
 **Riscos e o que ficou de fora:**
 
-- **Evento atrasado:** um evento da Casa que o relay já pegou antes do apagamento pode recriar linhas. O apagamento
-  remove do outbox o que não foi processado.
-- **Concorrência do apagamento:** ele roda na requisição; duas execuções da mesma Casa só são barradas dentro de uma
-  mesma instância. A função do banco é idempotente.
+- **Escrita e evento atrasados — fechados (migration `…177`, 02/10/2026):**
+  - **a Casa fecha quando o apagamento começa** (`apagamento_iniciado_em`, selado na atuação como "apagamento
+    iniciado"). Dali em diante toda rota dela responde 410, inclusive a allowlist do cidadão e a trilha. O estado de
+    uma Casa com o encerramento em curso não entra no cache de 30 s: cada requisição lê o registro, e todas as
+    instâncias fecham na hora;
+  - **a função do banco espera o relay** antes do primeiro DELETE: o evento que o relay já pegou termina antes, e o que
+    o consumidor gravou sai junto. O teste falha sem a espera;
+  - **a varredura:** depois do realm e do satélite, o host roda a função e os blobs da convenção de novo. Ela pega a
+    escrita que estava em voo quando a Casa fechou. O resumo diz quanto a varredura achou (`varredura`).
+  - Sobra só uma requisição que passou pelo portão antes de a Casa fechar e demorou mais que o apagamento inteiro.
+- **Concorrência do apagamento — fechada:** uma execução por Casa **entre instâncias**, por um lease no registro
+  (`apagamento_em_execucao_desde`, vence em 15 min para que uma instância que caiu não trave a retomada). A 2ª recebe
+  409 `apagamento-rodando`. O `encerrado` solta o lease na mesma transação.
+- **Pseudônimo do cidadão:** 12 caracteres hex (48 bits); com 6, dois cidadãos se confundiam com poucos milhares numa
+  Casa. A exportação **recusa** a colisão em vez de fundir duas pessoas no arquivo.
 - **Blob fora da convenção** `<pasta>/<ente>/`: é relatado no resumo e não é apagado.
 - **Ainda não existem:**
   - o aviso por e-mail (SMTP, `[GAP]` de infra);

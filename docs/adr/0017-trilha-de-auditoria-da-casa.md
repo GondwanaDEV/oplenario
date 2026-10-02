@@ -229,7 +229,7 @@ Decidido em 29/09/2026: as cinco recomendações, sem correção.
   - nenhum conteúdo, só nomes de campos;
   - IP completo no banco, truncado na tela e no CSV;
   - anulado quando o primeiro registro de um dia novo chega e o IP tem mais de 6 meses;
-  - cidadão pseudonimizado por Casa (`#a1b2c3`).
+  - cidadão pseudonimizado por Casa (`#a1b2c3d4e5f6`, 48 bits — eram 6 caracteres até 02/10/2026, ver ADR-0018).
 - **O selo** é `sha256` do selo anterior da mesma Casa mais os campos canônicos, com o IP fora. A escrita é serializada
   por advisory lock por Casa.
   - O primeiro registro de um dia novo fecha o anterior: grava o selo do dia, ancora-o na corrente da Operação

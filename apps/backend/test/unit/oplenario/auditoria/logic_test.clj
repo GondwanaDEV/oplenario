@@ -85,7 +85,7 @@
 (deftest pseudonimo-estavel-por-casa
   (is (= (logic/pseudonimo ente maria) (logic/pseudonimo ente maria)))
   (is (not= (logic/pseudonimo ente maria) (logic/pseudonimo (random-uuid) maria)) "outra Casa, outro pseudonimo")
-  (is (re-matches #"#[0-9a-f]{6}" (logic/pseudonimo ente maria))))
+  (is (re-matches #"#[0-9a-f]{12}" (logic/pseudonimo ente maria))))
 
 (deftest filtros-da-tela
   (let [f (filtro/query->filtro {:desde "2026-09-01" :ate "2026-09-29" :ator "cidadao" :classe "negacao"

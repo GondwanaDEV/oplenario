@@ -420,6 +420,7 @@ const ACOES: Record<string, string> = {
   "apagamento-pedido": "Apagamento pedido",
   "apagamento-aprovado": "Apagamento aprovado pelo 2º operador",
   "apagamento-recusado": "Apagamento recusado pelo 2º operador",
+  "apagamento-iniciado": "Apagamento iniciado: a câmara fechou",
   "apagamento-interrompido": "O apagamento parou no meio",
   "casa-encerrada": "Câmara encerrada: dados apagados",
 };

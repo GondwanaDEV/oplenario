@@ -349,7 +349,8 @@
             m (with-open [zos (ZipOutputStream. (io/output-stream tmp))]
                 (regs! (entrada-texto! zos "LEIA-ME.txt" (leia-me ente-id gerado-em)))
                 (let [{:keys [contagens refs]} (escrever-dados! zos regs! ds tabelas ente-id
-                                                                (partial (:pseudonimo auditoria) ente-id))
+                                                                (protecao/sem-colisao
+                                                                 (partial (:pseudonimo auditoria) ente-id)))
                       ausentes (escrever-arquivos! zos regs! objeto-store ente-id refs)
                       v (escrever-auditoria! zos regs! auditoria ente-id gerado-em)
                       m (manifesto ente-id exportacao-id gerado-em @entradas contagens ausentes v)]

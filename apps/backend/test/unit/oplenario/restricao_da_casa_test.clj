@@ -95,3 +95,26 @@
   (is (= {:desde "2026-09-30T12:00:00Z"} (r/visao suspensa false)) "a cidada so' ve desde quando")
   (is (nil? (r/visao {:estado "ativo"} true)))
   (is (nil? (r/visao nil false))))
+
+(deftest o-apagamento-comecado-fecha-a-casa
+  ;; mig 0177: o apagamento comecou (`:apagando?`) -> a Casa ainda esta' `suspenso`, mas ja' responde 410 em tudo —
+  ;; inclusive a allowlist do cidadao — e o estado de uma Casa com o encerramento em curso nao fica no cache
+  (let [apagando {:estado "suspenso" :motivo "encerramento_em_curso" :apagando? true :nome "Câmara Municipal de Baturité"}
+        guarda (r/restricao (fn [_] apagando))]
+    (doseq [[metodo rota] [[:get :legislativo/listar] [:post :participacao/protocolar-esic]
+                           [:post :exportacao-da-casa/gerar]]]
+      (let [c (guarda (ctx metodo rota :ap))]
+        (is (= 410 (get-in c [:response :status])) (str rota))
+        (is (nil? (get-in c [:request :ator])) "sem ator: nada novo na trilha"))))
+  (testing "a Casa com o encerramento em curso e' lida a cada requisicao; as outras, do cache"
+    (let [leituras (atom 0)
+          {:keys [estado-da-casa]} (r/com-cache (fn [_] (swap! leituras inc)
+                                                  {:estado "suspenso" :motivo "encerramento_em_curso"})
+                                                60000)]
+      (estado-da-casa :a) (estado-da-casa :a)
+      (is (= 2 @leituras)))
+    (let [leituras (atom 0)
+          {:keys [estado-da-casa]} (r/com-cache (fn [_] (swap! leituras inc) {:estado "suspenso" :motivo "inadimplencia"})
+                                                60000)]
+      (estado-da-casa :a) (estado-da-casa :a)
+      (is (= 1 @leituras)))))

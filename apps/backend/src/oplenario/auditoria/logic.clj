@@ -133,9 +133,11 @@
 ;; ---- quem aparece como quem ----
 
 (defn pseudonimo
-  "O cidadao na trilha da Casa aparece pseudonimizado (ADR-0017 4c): \"#a1b2c3\", estavel por Casa."
+  "O cidadao na trilha da Casa aparece pseudonimizado (ADR-0017 4c): \"#a1b2c3d4e5f6\", estavel por Casa. 48 bits: com
+  6 caracteres (24 bits) dois cidadaos ja' se confundiam com poucos milhares numa Casa; com 12, a chance numa Casa de
+  100 mil cidadaos fica em ~2 em 100 mil (e a exportacao recusa a colisao, `encerramento.protecao/sem-colisao`)."
   [ente-id identidade-id]
-  (str "#" (subs (segredo/sha256-hex (str ente-id "|" identidade-id)) 0 6)))
+  (str "#" (subs (segredo/sha256-hex (str ente-id "|" identidade-id)) 0 12)))
 
 ;; ---- escopo de leitura (ADR-0017 Eixo 2-B) ----
 
