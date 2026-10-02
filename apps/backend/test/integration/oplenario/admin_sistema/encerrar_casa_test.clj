@@ -454,3 +454,89 @@
           (is (= 7 (:objetos ap)))
           (is (= 3 (get-in ap [:tabelas :legislativo.proposicao])))
           (is (= 2 @chamadas)))))))
+
+;; ---- de ponta a ponta com o PLANO DE DADOS REAL (`oplenario.encerramento`), sem fake nos seams ----
+
+(def guardados-reais (atom {}))
+
+(def store-com-listar
+  (reify os/ObjetoStore
+    (guardar! [_ k b _] (swap! guardados-reais assoc k b) k)
+    (guardar-stream! [_ k in _] (swap! guardados-reais assoc k (.readAllBytes ^java.io.InputStream in)) k)
+    (obter [_ k] (get @guardados-reais k))
+    (abrir [_ k] (some-> (get @guardados-reais k) java.io.ByteArrayInputStream.))
+    (remover! [_ k] (swap! guardados-reais dissoc k) nil)
+    (listar [_ prefixo _] (->> (keys @guardados-reais) (filter #(str/starts-with? % prefixo)) sort vec))))
+
+(def ia-apagou (atom []))
+
+(defn- sha256-bytes [^bytes b]
+  (.formatHex (java.util.HexFormat/of) (.digest (java.security.MessageDigest/getInstance "SHA-256") b)))
+
+(def ia-fake
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify oplenario.integracao-ia.diplomat.http.out/PlataformaIA
+    (apagar-ente [_ ente] (swap! ia-apagou conj ente) {:ente_id (str ente) :apagados {} :total 0})))
+
+(defn- servico-real
+  "`rotas/montar` SEM as chaves dos seams: o host liga `oplenario.encerramento` de verdade (exportar + apagar)."
+  [agora]
+  (-> (http/servico (config/carregar)
+                    (rotas/montar {:idp (idp-dev/idp-dev)
+                                   :repo-identidade (fake-identidade)
+                                   :idp-operacao (idp-admin/idp-operacao-dev)
+                                   :repo-admin-sistema (repo-op)
+                                   :repo-auditoria (assoc (repo-aud/repositorio) :datasource {:ds *ds*})
+                                   :objeto-store store-com-listar
+                                   :plataforma-ia ia-fake
+                                   :relogio (tempo/relogio-fixo agora)
+                                   :cache-estado-da-casa-ms 0
+                                   :info-ente (constantly {:nome-oficial "Câmara Municipal de Baturité"})
+                                   :executar-exportacao exportacao/agora-mesmo
+                                   :operacao {:realm "operacao" :client-id "oplenario-console"
+                                              :sessao {:absoluta-h 8 :ociosa-min 15}}})
+                    it/globais)
+      ph/create-server ::ph/service-fn))
+
+(deftest o-encerramento-com-o-plano-de-dados-real
+  (let [ana (operador! "Ana") beto (operador! "Beto") ente (casa-ativa! ana)
+        ;; a funcao do banco confere a guarda com now(): a confirmacao precisa estar 90+ dias no passado de verdade
+        antes (.minus (Instant/now) (Duration/ofDays 100))
+        svc-antes (servico-real antes)]
+    (encerramento-em-curso! svc-antes ana beto ente)
+    ;; `restrita_desde` vem do now() do banco; aqui o encerramento "comecou" ha' 100 dias de verdade
+    (jdbc/execute! *ds* ["UPDATE admin_sistema.ente SET restrita_desde = ? WHERE ente_id = ?"
+                         (java.sql.Timestamp/from antes) ente])
+    (let [svc0 (servico-real (.plus antes (Duration/ofMinutes 1)))
+          r (post-casa svc0 ente admin "/administracao/exportacoes" {})
+          exp (ler r)
+          zip (get @guardados-reais (str "exportacoes/" ente "/" (:id exp) ".zip"))]
+      (testing "a exportacao REAL sobe o ZIP na chave do contrato, com o hash do arquivo"
+        (is (= 202 (:status r)) (:body r))
+        (is (= "pronta" (:estado exp)) (:erro exp))
+        (is (some? zip))
+        (is (= (:sha256 exp) (sha256-bytes zip))))
+      (testing "o admin_ente baixa os mesmos bytes e confirma"
+        (let [r (get-casa svc0 ente admin (str "/administracao/exportacoes/" (:id exp) "/arquivo"))]
+          (is (= 200 (:status r)))
+          (is (= "application/zip" (get-in r [:headers "Content-Type"]))))
+        (is (= 200 (:status (post-casa svc0 ente admin (str "/administracao/exportacoes/" (:id exp) "/confirmacao")
+                                       {:sha256 (:sha256 exp)})))))
+      (let [svc (servico-real (Instant/now))
+            rp (post-op svc ana (str "/operacao/casas/" ente "/apagamento") {:justificativa "Fim da guarda de 90 dias."})
+            _ (is (= 200 (:status rp)) (:body rp))
+            pedido (get-in (ler rp) [:pedido :id])
+            ra (post-op svc beto (str "/operacao/pedidos/" pedido "/aprovacao") {})
+            _ (is (= 200 (:status ra)) (:body ra))
+            b (ler ra)]
+        (testing "o apagamento REAL (funcao do banco + store + realm + IA) encerra a Casa, com a prova"
+          (is (= "encerrada" (:efeito b)) (pr-str b))
+          (is (= "encerrado" (get-in b [:casa :estado])))
+          (is (= [ente] @ia-apagou) "o satelite foi chamado para esta Casa")
+          (is (empty? (filter #(str/includes? % (str ente)) (keys @guardados-reais)))
+              "nenhum blob da Casa sobra, nem a exportacao")
+          (let [ap (get-in (ficha svc ana ente) [:encerramento :apagamento])]
+            (is (= (:sha256 exp) (get-in ap [:exportacao :sha256])) "o hash da exportacao entregue fica com a gente")
+            (is (map? (:tabelas ap)))))
+        (testing "e a Casa encerrada responde 410 no portal"
+          (is (= 410 (:status (pt/response-for svc :get (str "/portal/casa/" ente))))))))))
