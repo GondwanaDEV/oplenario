@@ -185,7 +185,7 @@
                                                                            {:tipo "admin_ente"
                                                                             :id (get-in req [:ator :identidade-id])}
                                                                            (ente-do-ator req) (agora relogio))))
-                   (assoc :auditoria {:rotulo "pediu a exportacao completa da Camara"})))))
+                   (assoc :auditoria {:rotulo "pediu a exportação completa da Câmara"})))))
 
 (defn- baixar-exportacao-handler [repo-op store]
   (com-erros (fn [req]
@@ -202,7 +202,7 @@
                                              repo-op deps (:ator req) (ente-do-ator req) (exportacao-do-path req)
                                              (in-ente/confirmar-recebimento->sha256 (:json-params req))
                                              (agora relogio))))
-                   (assoc :auditoria {:rotulo "confirmou o recebimento da exportacao completa"})))))
+                   (assoc :auditoria {:rotulo "confirmou o recebimento da exportação completa"})))))
 
 (defn rotas-da-casa
   "ADR-0018 (fatia 2): a exportacao completa (9.6) vista pela Casa — `auth` e' o interceptor da CASA (o host o passa) e

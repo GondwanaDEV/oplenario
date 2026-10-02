@@ -16,6 +16,8 @@
             [oplenario.admin-sistema.components.idp-admin :as idp-admin]
             [oplenario.admin-sistema.components.repositorio :as repo]
             [oplenario.admin-sistema.db.atuacao :as atuacao]
+            [oplenario.auditoria.components.repositorio :as repo-aud]
+            [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.components.repositorio :as repo-id]
@@ -25,6 +27,7 @@
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.segredo :as segredo]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
             [oplenario.rotas :as rotas])
   (:import (java.time Duration Instant)))
@@ -89,9 +92,10 @@
                  resumo-do-apagamento))}))
 
 (defn- servico
-  "O sistema de verdade (`rotas/montar`), no relogio `agora`, com os seams dados (nil = indisponivel)."
-  [{:keys [agora exportar apagar executar]
-    :or {exportar exportar-fake executar exportacao/agora-mesmo}}]
+  "O sistema de verdade (`rotas/montar`), no relogio `agora`, com os seams dados (nil = indisponivel). `globais` = a
+  cadeia global (com a trilha de auditoria, quando o teste olha a trilha)."
+  [{:keys [agora exportar apagar executar globais]
+    :or {exportar exportar-fake executar exportacao/agora-mesmo globais it/globais}}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (idp-dev/idp-dev)
                                    :repo-identidade (fake-identidade)
@@ -106,7 +110,7 @@
                                    :executar-exportacao executar
                                    :operacao {:realm "operacao" :client-id "oplenario-console"
                                               :sessao {:absoluta-h 8 :ociosa-min 15}}})
-                    it/globais)
+                    globais)
       ph/create-server ::ph/service-fn))
 
 (defn- ler [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
@@ -394,3 +398,19 @@
           (let [r (post-op svc91 ana (str "/operacao/casas/" ente "/reativacao") {:justificativa "Contrato renovado afinal."})]
             (is (= 200 (:status r)))
             (is (= "ativo" (get-in (ler r) [:casa :estado])))))))))
+
+(deftest a-trilha-da-casa-registra-gerar-confirmar-e-baixar
+  (let [rp-aud (repo-aud/map->RepoAuditoriaPg {:datasource {:ds *ds*}})
+        svc (servico {:globais (it/globais-com [(auditoria-http/interceptor rp-aud {})])})
+        ana (operador! "Ana") ente (casa-ativa! ana)
+        e (ler (post-casa svc ente admin "/administracao/exportacoes" {}))]
+    (post-casa svc ente admin (str "/administracao/exportacoes/" (:id e) "/confirmacao") {:sha256 (:sha256 e)})
+    (is (= 200 (:status (get-casa svc ente admin (str "/administracao/exportacoes/" (:id e) "/arquivo")))))
+    (let [regs (tenancy/com-tenant* *ds* ente
+                 #(jdbc/execute! % ["SELECT acao, classe, rotulo, recurso_tipo FROM auditoria.registro
+                                     WHERE ente_id = ? ORDER BY seq" ente]))]
+      (is (= [["exportacao-da-casa/gerar" "escrita" "pediu a exportação completa da Câmara"]
+              ["exportacao-da-casa/confirmar-recebimento" "escrita" "confirmou o recebimento da exportação completa"]
+              ["exportacao-da-casa/baixar" "leitura_sensivel" "baixou a exportação completa da Câmara"]]
+             (mapv (juxt :registro/acao :registro/classe :registro/rotulo) regs)))
+      (is (= "exportacao" (:registro/recurso_tipo (last regs))) "o recurso e' a exportacao (do caminho)"))))

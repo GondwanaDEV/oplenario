@@ -75,7 +75,7 @@
                                         "-" (subs (str (:sha256 e)) 0 12) ".zip\"")
              "X-Content-SHA256" (str (:sha256 e))}
    :body in
-   :auditoria {:classe "leitura_sensivel" :rotulo "baixou a exportacao completa da Camara"}})
+   :auditoria {:classe "leitura_sensivel" :rotulo "baixou a exportação completa da Câmara"}})
 
 (defn- encerramento [e]
   (when e
