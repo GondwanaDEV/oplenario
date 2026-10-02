@@ -28,6 +28,7 @@
             [oplenario.encerramento.arquivos :as arquivos]
             [oplenario.encerramento.csv :as csv]
             [oplenario.encerramento.inventario :as inventario]
+            [oplenario.encerramento.protecao :as protecao]
             [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.tenancy :as tenancy])
   (:import (java.io BufferedWriter File FileInputStream FileOutputStream InputStream OutputStream OutputStreamWriter)
@@ -94,7 +95,7 @@
 
 (defn- escrever-tabela!
   "Streaming: SELECT das linhas da Casa (predicado do inventario, ordenado pela PK) -> CSV. Devolve quantas linhas."
-  [^Connection tx t ^UUID ente-id ^OutputStream o]
+  [^Connection tx t ^UUID ente-id {:keys [proteger pseudonimo]} ^OutputStream o]
   (let [[pred n] (inventario/com-parametro (:predicado t))
         pk (inventario/chave-primaria tx t)
         sql (str "SELECT t.* FROM " (inventario/tabela-sql t) " AS t WHERE " pred
@@ -107,12 +108,15 @@
         (let [^ResultSetMetaData md (.getMetaData r)
               nc (.getColumnCount md)
               cols (range 1 (inc nc))
-              tipos (mapv #(.getColumnTypeName md (int %)) cols)]
-          (.write w (csv/linha (map #(.getColumnName md (int %)) cols)))
+              tipos (mapv #(.getColumnTypeName md (int %)) cols)
+              nomes (mapv #(.getColumnName md (int %)) cols)
+              proteger-linha (protecao/protetor-de-linha (inventario/nome t) nomes proteger pseudonimo)]
+          (.write w (csv/linha nomes))
           (let [linhas (loop [k 0]
                          (if (.next r)
-                           (do (.write w (csv/linha (map (fn [i] (csv/->texto (.getObject r (int i)) (tipos (dec i))))
-                                                         cols)))
+                           (do (.write w (csv/linha (proteger-linha
+                                                     (mapv (fn [i] (csv/->texto (.getObject r (int i)) (tipos (dec i))))
+                                                           cols))))
                                (recur (inc k)))
                            k))]
             (.flush w)
@@ -133,13 +137,29 @@
                     (loop [acc []] (if (.next rs) (recur (conj acc (.getObject rs 1))) acc))))]
           v)))
 
+(defn- so-cidadaos
+  "Na tx do tenant: os ids (texto minusculo) de quem, nesta Casa, so' e' CIDADAO — vinculo de cidadao e nenhum outro
+  vinculo nem papel. E' o conjunto que a exportacao pseudonimiza (ver `encerramento.protecao`)."
+  [^Connection tx ^UUID ente-id]
+  (with-open [ps (.prepareStatement tx "SELECT DISTINCT v.identidade_id::text FROM identidade.vinculo v
+                                         WHERE v.ente_id = ? AND v.tipo = 'cidadao'
+                                           AND NOT EXISTS (SELECT 1 FROM identidade.vinculo o
+                                                            WHERE o.ente_id = v.ente_id AND o.identidade_id = v.identidade_id
+                                                              AND o.tipo <> 'cidadao')
+                                           AND NOT EXISTS (SELECT 1 FROM identidade.usuario_papel p
+                                                            WHERE p.ente_id = v.ente_id AND p.identidade_id = v.identidade_id)")]
+    (.setObject ps 1 ente-id)
+    (with-open [rs (.executeQuery ps)]
+      (loop [acc #{}] (if (.next rs) (recur (conj acc (str/lower-case (.getString rs 1)))) acc)))))
+
 (def ^:private tabela-pessoas {:esquema "identidade" :tabela "identidade"})
 
 (defn- escrever-pessoas!
   "As pessoas da Casa: so' os ids que as linhas DELA referenciam (lidos sob RLS), entao nunca alguem so' de outra
   Casa. Lidas com o role do pool (o resolvedor de identidade le esta tabela supratenant)."
-  [ds ids ^OutputStream o]
+  [ds ids cidadaos ^OutputStream o]
   (let [w (escritor o)
+        ids (remove #(contains? cidadaos (str/lower-case (str %))) ids)   ; quem so' e' cidadao: nem nome, nem CPF
         linhas (when (seq ids)
                  (jdbc/execute! ds ["SELECT id, cpf, nome, criado_em FROM identidade.identidade
                                      WHERE id = ANY (?) ORDER BY id" (into-array UUID ids)]
@@ -174,10 +194,23 @@
        "- Campo vazio sem aspas = sem valor (NULL); \"\" = texto vazio.\r\n"
        "- Datas e horas em ISO-8601, em UTC (ex.: 2026-10-02T14:33:20Z); datas sem hora como AAAA-MM-DD.\r\n"
        "- Campos JSON e listas aparecem como JSON; conteúdo binário aparece em base64.\r\n\r\n"
+       "PROTEÇÃO DO CIDADÃO\r\n"
+       "- Quem, nesta Câmara, é só cidadão (sem vínculo de servidor, vereador ou administrador) aparece com um\r\n"
+       "  pseudônimo (ex.: #a1b2c3) no lugar do identificador, em todos os arquivos — o mesmo que a tela da trilha\r\n"
+       "  de auditoria mostra —, e não está em dados/identidade/identidade.csv (nem nome, nem CPF). Servidores,\r\n"
+       "  vereadores e agentes seguem identificados: são atos da função pública.\r\n"
+       "- Na trilha de auditoria, os atos feitos como cidadão saem com o pseudônimo e sem o IP, e o registro do\r\n"
+       "  protocolo de manifestação à ouvidoria sai sem autor: a manifestação pode ter sido anônima e o horário\r\n"
+       "  bastaria para reidentificar quem a fez. Fundamento: LGPD (Lei 13.709/2018) e Lei 13.460/2017, art. 10, § 7º.\r\n"
+       "- Os protocolos identificados (e-SIC, LGPD, ouvidoria identificada) continuam com o texto do pedido: a Câmara\r\n"
+       "  responde ao requerente. A manifestação anônima não guarda quem a fez em coluna alguma.\r\n\r\n"
        "COMO CONFERIR A INTEGRIDADE\r\n"
        "- Calcule o SHA-256 de cada arquivo e compare com o manifesto.json.\r\n"
        "- O SHA-256 do arquivo ZIP inteiro é o que ficou registrado no O Plenário como prova da entrega.\r\n"
-       "- auditoria/verificacao.json explica como recalcular a corrente da trilha de auditoria.\r\n"))
+       "- A corrente da trilha de auditoria foi conferida sobre os dados ORIGINAIS no momento da geração\r\n"
+       "  (auditoria/verificacao.json) e está ancorada nos selos do dia públicos (auditoria/selos-do-dia.csv).\r\n"
+       "  Como os identificadores de cidadão foram trocados por pseudônimos, recalcular o selo de uma linha com\r\n"
+       "  pseudônimo NÃO reproduz o original; as linhas sem pseudônimo seguem a fórmula de verificacao.json.\r\n"))
 
 (def ^:private como-conferir-a-corrente
   (str "Cada registro de dados/auditoria/registro.csv sela o anterior da mesma Casa: selo = sha256 hexadecimal de "
@@ -218,21 +251,24 @@
 (defn- escrever-dados!
   "dados/ + dicionario.csv. UMA transacao de tenant, REPEATABLE READ e so' leitura (um snapshot unico sob RLS).
   Devolve {:contagens :refs} (as chaves que as linhas apontam)."
-  [zos regs! ds tabelas ente-id]
+  [zos regs! ds tabelas ente-id pseudonimo]
   (let [contagens (atom (sorted-map))
         dicionario (atom [])
-        {:keys [refs pessoas]}
+        {:keys [refs pessoas cidadaos]}
         (tenancy/com-tenant* ds ente-id {:isolation :repeatable-read :read-only true}
           (fn [tx]
-            (doseq [t tabelas]
-              (let [n (regs! (entrada! zos (str "dados/" (:esquema t) "/" (:tabela t) ".csv")
-                                       #(escrever-tabela! tx t ente-id %)))]
-                (swap! contagens assoc (inventario/nome t) n)
-                (swap! dicionario into (map #(assoc % :esquema (:esquema t) :tabela (:tabela t))
-                                            (inventario/colunas tx t)))))
-            {:refs (arquivos/referencias tx tabelas ente-id)
-             :pessoas (pessoas-referenciadas tx tabelas ente-id)}))
-        n (regs! (entrada! zos "dados/identidade/identidade.csv" #(escrever-pessoas! ds pessoas %)))]
+            (let [cidadaos (so-cidadaos tx ente-id)
+                  protege {:proteger (protecao/protetor cidadaos pseudonimo) :pseudonimo pseudonimo}]
+              (doseq [t tabelas]
+                (let [n (regs! (entrada! zos (str "dados/" (:esquema t) "/" (:tabela t) ".csv")
+                                         #(escrever-tabela! tx t ente-id protege %)))]
+                  (swap! contagens assoc (inventario/nome t) n)
+                  (swap! dicionario into (map #(assoc % :esquema (:esquema t) :tabela (:tabela t))
+                                              (inventario/colunas tx t)))))
+              {:refs (arquivos/referencias tx tabelas ente-id)
+               :pessoas (pessoas-referenciadas tx tabelas ente-id)
+               :cidadaos cidadaos})))
+        n (regs! (entrada! zos "dados/identidade/identidade.csv" #(escrever-pessoas! ds pessoas cidadaos %)))]
     (swap! contagens assoc (inventario/nome tabela-pessoas) n)
     (swap! dicionario into (map #(assoc % :esquema "identidade" :tabela "identidade")
                                 (filter (comp #{"id" "cpf" "nome" "criado_em"} :coluna)
@@ -305,14 +341,15 @@
         chave (chave-do-zip ente-id exportacao-id)
         tmp (File/createTempFile "exportacao-casa-" ".zip")]
     (try
-      (when-not (and ds objeto-store (:verificar auditoria))
-        (throw (ex-info "faltam dependencias (:ds, :objeto-store, :auditoria {:verificar ...})" {})))
+      (when-not (and ds objeto-store (:verificar auditoria) (:pseudonimo auditoria))
+        (throw (ex-info "faltam dependencias (:ds, :objeto-store, :auditoria {:verificar :pseudonimo ...})" {})))
       (let [tabelas (vec (sort-by inventario/nome (filter :exporta? (inventario/inventario ds))))
             entradas (atom [])
             regs! (fn [e] (swap! entradas conj (dissoc e :valor)) (:valor e))
             m (with-open [zos (ZipOutputStream. (io/output-stream tmp))]
                 (regs! (entrada-texto! zos "LEIA-ME.txt" (leia-me ente-id gerado-em)))
-                (let [{:keys [contagens refs]} (escrever-dados! zos regs! ds tabelas ente-id)
+                (let [{:keys [contagens refs]} (escrever-dados! zos regs! ds tabelas ente-id
+                                                                (partial (:pseudonimo auditoria) ente-id))
                       ausentes (escrever-arquivos! zos regs! objeto-store ente-id refs)
                       v (escrever-auditoria! zos regs! auditoria ente-id gerado-em)
                       m (manifesto ente-id exportacao-id gerado-em @entradas contagens ausentes v)]

@@ -1,10 +1,12 @@
 (ns oplenario.encerramento.formato-test
   "Unit (puro): o formato aberto da exportacao (ADR-0018, Eixo 4.2) — como cada valor do Postgres vira campo de CSV,
   o escape RFC 4180 — e as regras puras dos blobs da Casa (coluna de ponteiro, convencao `<pasta>/<ente>/`)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [oplenario.encerramento.arquivos :as arquivos]
             [oplenario.encerramento.csv :as csv]
-            [oplenario.encerramento.inventario :as inventario])
+            [oplenario.encerramento.inventario :as inventario]
+            [oplenario.encerramento.protecao :as protecao])
   (:import (java.sql Timestamp)
            (java.time Instant LocalDate)
            (org.postgresql.util PGobject)))
@@ -50,3 +52,28 @@
   (is (= ["(EXISTS (SELECT 1 FROM x p1 WHERE p1.id = t.pai AND p1.ente_id = ?))" 1]
          (inventario/com-parametro "(EXISTS (SELECT 1 FROM x p1 WHERE p1.id = t.pai AND p1.ente_id = $1))")))
   (is (= "\"a\"\"b\"" (inventario/ident "a\"b")) "identificador escapado"))
+
+(deftest protecao-do-cidadao
+  (let [c "aaaaaaaa-0000-0000-0000-000000000001"
+        s "bbbbbbbb-0000-0000-0000-000000000002"
+        pseudo #(str "#p-" (subs % 0 4))
+        proteger (protecao/protetor #{c} pseudo)]
+    (testing "o id do cidadao vira pseudonimo em qualquer campo (uuid, texto, JSON, maiusculas); o resto passa"
+      (is (= "#p-aaaa" (proteger c)))
+      (is (= "{\"quem\": \"#p-aaaa\", \"servidor\": \"bbbbbbbb-0000-0000-0000-000000000002\"}"
+             (proteger (str "{\"quem\": \"" (str/upper-case c) "\", \"servidor\": \"" s "\"}"))))
+      (is (= s (proteger s)))
+      (is (nil? (proteger nil))))
+    (let [cols ["ente_id" "ator_tipo" "identidade_id" "acao" "ip"]
+          linha (protecao/protetor-de-linha "auditoria.registro" cols proteger pseudo)]
+      (testing "na trilha: ato como cidadao -> pseudonimo e sem IP, mesmo para quem tambem e' servidor"
+        (is (= ["e" "cidadao" "#p-bbbb" "transparencia/seguir" nil]
+               (linha ["e" "cidadao" s "transparencia/seguir" "10.0.0.1"]))))
+      (testing "o ato que pode ser anonimo sai sem ator"
+        (is (= ["e" "cidadao" nil "participacao/protocolar-manifestacao" nil]
+               (linha ["e" "cidadao" c "participacao/protocolar-manifestacao" "10.0.0.1"]))))
+      (testing "o servidor agindo como servidor segue identificado, com IP"
+        (is (= ["e" "pessoa" s "legislativo/protocolar" "10.0.0.1"]
+               (linha ["e" "pessoa" s "legislativo/protocolar" "10.0.0.1"])))))
+    (testing "fora da trilha, so' a troca de ids"
+      (is (= ["#p-aaaa" "cidadao"] ((protecao/protetor-de-linha "x.y" ["a" "ator_tipo"] proteger pseudo) [c "cidadao"]))))))

@@ -171,7 +171,23 @@
                                            :canal "web" :ip "10.0.0.1" :detalhe {:marca marca}}))
     (doseq [k [chave-remessa chave-gravacao (str "folhas/" ente "/sessao/folha.pdf")]]
       (store/guardar! st k (.getBytes (str "conteudo " marca " " k)) "application/octet-stream"))
-    {:pessoa pessoa}))
+    ;; a CIDADA (so' vinculo de cidadao): segue uma materia e faz uma manifestacao ANONIMA a ouvidoria
+    (let [cidada (random-uuid)]
+      (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, ?)" cidada (str "3333" (rand-int 99999))
+            (str "Cidadã da " marca))
+      (sql! "INSERT INTO identidade.vinculo (id, ente_id, identidade_id, tipo) VALUES (?, ?, ?, 'cidadao')" (random-uuid) ente cidada)
+      (sql! "INSERT INTO transparencia.acompanhamento (ente_id, proposicao_id, seguidor_identidade_id, created_by, efetivado_em)
+             VALUES (?, ?, ?, ?, now())" ente (random-uuid) cidada cidada)
+      (sql! "INSERT INTO participacao.manifestacao_ouvidoria (ente_id, ano, sequencial, protocolo, tipo, assunto, descricao,
+             anonima, recibo_em, efetivado_em) VALUES (?, 2026, 1, 'OUV-2026-000001', 'denuncia', 'Denúncia anônima',
+             'Relato.', true, now(), now())" ente)
+      (doseq [[quem acao] [[cidada "transparencia/seguir"] [cidada "participacao/protocolar-manifestacao"]
+                           ;; a servidora tambem pode agir COMO cidada (sessao do gov.br): ali ela e' cidada
+                           [pessoa "participacao/protocolar-manifestacao"]]]
+        (repo-auditoria/registrar! repo-aud {:ente-id ente :ator-tipo "cidadao" :identidade-id quem :papeis []
+                                             :acao acao :classe "escrita" :decisao "permitido" :status-http 200
+                                             :canal "web" :ip "200.1.2.3" :detalhe {:marca marca :quem (str quem)}}))
+      {:pessoa pessoa :cidada cidada})))
 
 (defn- liberar-apagamento!
   "Tudo o que o Eixo 4.5 exige: Casa suspensa com encerramento em curso, exportacao pronta confirmada ha' `dias`, e o
@@ -274,7 +290,7 @@
       (is (str/includes? (texto (es "dados/cadastros/vereador.csv")) "\"Vereadora Casa-A \"\"Aspas\"\", vírgula\nquebra\""))
       (is (str/includes? (texto (es "dados/cadastros/ente.csv")) (str a)))
       (is (str/includes? (texto (es "dados/normas/norma.csv")) "Regimento da Casa-A"))
-      (is (= 2 (get-in manifesto ["tabelas" "auditoria.registro"])))
+      (is (= 5 (get-in manifesto ["tabelas" "auditoria.registro"])))
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_remessa"])) "a filha sem ente_id, pela FK")
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_nota"])) "e a neta")
       (is (str/includes? (texto (es "dados/teste_encerramento/anexo_nota.csv")) "nota Casa-A")))
@@ -310,10 +326,57 @@
              (get-in manifesto ["totais" "arquivos_da_casa"]))))
     (testing "a trilha: a corrente conferida na hora (ADR-0017) e os selos do dia"
       (let [v (json/read-value (texto (es "auditoria/verificacao.json")))]
-        (is (= [true 2] [(v "integra") (v "total")]))
+        (is (= [true 5] [(v "integra") (v "total")]))
         (is (str/includes? (v "como_conferir") "selo_anterior")))
       (is (str/includes? (texto (es "auditoria/selos-do-dia.csv")) "selo-Casa-A"))
       (is (str/includes? (texto (es "LEIA-ME.txt")) "dicionario.csv")))))
+
+(deftest exportacao-protege-o-cidadao
+  ;; Lei 13.460 art. 10 §7o + LGPD + ADR-0017 4c: quem e' so' cidadao sai pseudonimizado em TODO arquivo; o ato que
+  ;; pode ser anonimo sai sem ator; servidores seguem identificados (funcao publica)
+  (let [{:keys [st a pa]} (duas-casas!)
+        {:keys [cidada pessoa]} pa
+        pseudo-cidada (str "#" (subs (sha256 (.getBytes (str a "|" cidada) "UTF-8")) 0 6))
+        r (encerramento/exportar-casa! {:ds *pool* :objeto-store st :auditoria (seams)} a (random-uuid))
+        zip ^bytes (get @(:m st) (:chave r))
+        es (entradas-do-zip zip)
+        tudo (apply str (map texto (vals es)))
+        trilha (let [[cab & ls] (ler-csv (texto (es "dados/auditoria/registro.csv")))] (mapv #(zipmap cab %) ls))]
+    (testing "o id da cidada nao aparece em byte nenhum do ZIP (nem comprimido, nem em arquivo algum)"
+      (is (not (str/includes? tudo (str cidada))))
+      (is (not (str/includes? (str/lower-case tudo) (str/lower-case (str cidada)))))
+      (is (not (str/includes? (String. zip "ISO-8859-1") (str cidada))))
+      (is (not (str/includes? tudo "Cidadã da Casa-A")) "nem o nome")
+      (is (nil? (es "dados/identidade/sessao.csv"))))
+    (testing "no lugar, o MESMO pseudonimo da tela da trilha — inclusive dentro de JSON"
+      (is (= pseudo-cidada ((:pseudonimo (seams)) a cidada)) "a funcao da tela, pelo seam")
+      (let [seg (first (filter #(= "transparencia/seguir" (% "acao")) trilha))]
+        (is (= pseudo-cidada (seg "identidade_id")))
+        (is (nil? (seg "ip")) "ato como cidadao sai sem IP")
+        (is (str/includes? (seg "detalhe") pseudo-cidada)))
+      (let [[l] (rest (ler-csv (texto (es "dados/transparencia/acompanhamento.csv"))))]
+        (is (some #{pseudo-cidada} l))))
+    (testing "o protocolo de manifestacao (pode ter sido anonimo) sai SEM autor — mesmo o da servidora agindo como cidada"
+      (let [prot (filter #(= "participacao/protocolar-manifestacao" (% "acao")) trilha)]
+        (is (= 2 (count prot)))
+        (is (every? #(nil? (% "identidade_id")) prot))
+        (is (every? #(nil? (% "ip")) prot))))
+    (testing "a manifestacao anonima esta' la', sem identidade em coluna alguma"
+      (let [[cab & ls] (ler-csv (texto (es "dados/participacao/manifestacao_ouvidoria.csv")))
+            m (zipmap cab (first ls))]
+        (is (= "true" (m "anonima")))
+        (is (nil? (m "manifestante_identidade_id")))
+        (is (nil? (m "created_by")))))
+    (testing "a servidora segue identificada (funcao publica): id real na trilha e no identidade.csv; a cidada nao"
+      (is (some #(and (= (str pessoa) (% "identidade_id")) (= "legislativo/protocolar" (% "acao"))) trilha))
+      (is (= "10.0.0.1" ((first (filter #(= "legislativo/protocolar" (% "acao")) trilha)) "ip")))
+      (let [p (texto (es "dados/identidade/identidade.csv"))]
+        (is (str/includes? p (str pessoa)))
+        (is (not (str/includes? p pseudo-cidada)))))
+    (testing "a corrente foi conferida sobre os dados REAIS, e o LEIA-ME explica a troca"
+      (is (= [true 5] ((juxt #(% "integra") #(% "total")) (json/read-value (texto (es "auditoria/verificacao.json"))))))
+      (is (str/includes? (texto (es "LEIA-ME.txt")) "pseudônimo"))
+      (is (str/includes? (texto (es "LEIA-ME.txt")) "art. 10, § 7º")))))
 
 ;; ---------------------------------------------------------------------------------------------
 ;; APAGAMENTO
@@ -433,7 +496,7 @@
         federais (sql! "SELECT id FROM normas.norma WHERE ente_id IS NULL")
         r (encerramento/apagar-casa! (deps st) a pedido)]
     (testing "a Casa tinha dado nas tabelas append-only/imutaveis e no staging"
-      (is (= 2 (a-antes "auditoria.registro")))
+      (is (= 5 (a-antes "auditoria.registro")))
       (is (= 1 (a-antes "auditoria.selo_diario")))
       (is (= 1 (a-antes "legislativo.protocolo_geral")))
       (is (= 2 (a-antes "sessoes.gravacao_segmento")) "inclusive o staging"))
@@ -460,10 +523,10 @@
     (testing "os triggers e o FORCE RLS seguem exatamente como estavam"
       (is (= protecoes (estado-das-protecoes))))
     (testing "o resumo"
-      (is (= 2 (get-in r [:tabelas "auditoria.registro"])))
+      (is (= 5 (get-in r [:tabelas "auditoria.registro"])))
       (is (= 2 (get-in r [:tabelas "sessoes.gravacao_segmento"])))
       (is (= 1 (get-in r [:tabelas "teste_encerramento.anexo_nota"])))
-      (is (= 1 (get-in r [:tabelas "identidade.identidade"])))
+      (is (= 2 (get-in r [:tabelas "identidade.identidade"])) "a servidora so' de A e a cidada")
       (is (= 1 (get-in r [:tabelas "identidade.identidade_externa"])))
       (is (contains? (:tabelas r) "paineis.pendencia") "a lista inteira do inventario, zeros inclusive")
       (is (= (reduce + (vals (:tabelas r))) (:linhas-total r)))
@@ -566,7 +629,7 @@
                   b-antes (contagens b)
                   protecoes (estado-das-protecoes)
                   r (encerramento/apagar-casa! (deps st) a pedido)]
-              (is (= 2 (get-in r [:tabelas "auditoria.registro"])) "append-only apagado (trigger contornado)")
+              (is (= 5 (get-in r [:tabelas "auditoria.registro"])) "append-only apagado (trigger contornado)")
               (is (= 2 (get-in r [:tabelas "sessoes.gravacao_segmento"])) "o staging tambem (a RLS forcada contornada)")
               (is (= {"shared.outbox" 1} (into {} (filter (comp pos? val)) (contagens a))))
               (is (= b-antes (contagens b)))
