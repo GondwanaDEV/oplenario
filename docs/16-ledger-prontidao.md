@@ -2591,6 +2591,41 @@ forçado a verde: o único "não resolvido" é uma decisão de design (SSE), exp
 
 ---
 
+### A Trilha 3 vira gate (02/10/2026) — `t3-e2e` sem `continue-on-error`, voto e presença fora da quarentena
+
+**O que mudou no produto e destravou a quarentena.** O cockpit `/votar` passou a hidratar o placar da votação
+aberta por SNAPSHOT no page-load (`hidratarVotacao`, GET `/votacao-aberta`, com os votos nominais), e
+`ja-votou` tem precedência sobre a presença em `meu-voto-vista`. Com isso os 3 casos que dependiam do replay de
+5 min da CanalStore deixam de depender: o `beforeAll` do E6 e o do E5 grupo B criam a votação e a presença
+FRESCAS que cada caso usa. Saíram do `E2E_T3_SSE`: E6 "votar Sim no cockpit ao vivo", E5 "confirmar a própria
+presença" e E5 "[ACHADO] confirmar já presente". Seguem opt-in só as 3 sondas de cockpit ao vivo da
+`sonda-precondicoes` — instáveis porque E5/E6 mutam a MESMA sessão em paralelo, não pela janela; a asserção
+real delas é feita pelos E5/E6.
+
+**Quatro bugs de instrumento achados no caminho, todos em stack zerada (DB recriado, valkey limpo, semente
+cheia, `preparar.sh`, `next dev` frio — o mesmo roteiro do job):**
+
+| Onde | Sintoma | Causa | Conserto |
+|---|---|---|---|
+| `preparar.mjs`, alvo sem-texto do E3 | POST 400 → E3 "editar só a ementa" **pulado em silêncio** no CI | desde o PR #64 indicação/requerimento/moção exigem o campo da espécie, e `autor-texto` é obrigatório junto do `autor-tipo` | fabrica um `projeto_lei` com `autor-texto` |
+| E6 "votar duas vezes" | 201 em vez de 409 | o `beforeAll` do E5 grupo B abre OUTRA votação na mesma sessão; o cockpit vota na mais nova e o spec conferia a antiga | o id da votação sai da URL da resposta que a tela de fato chamou |
+| E6 caminho feliz | timeout de 15 s, ~1 em 6 | `isVisible()` instantâneo antes do cockpit decidir entre "Confirmar presença" e o grupo de voto | espera `grupo.or(botão)` e tolera o pedido sumir antes do clique |
+| E3 "ementa só com espaços" e "abas concorrentes" | waitForResponse até 90 s, ~1 em 6 (passava no retry) | `fill` antes do React hidratar: a ementa é campo controlado, o estado fica `""`, o `required` barra e o POST nunca sai | espera a fibra do React no `#f-ementa` antes de preencher |
+
+**LIMITE DE PRODUTO que fica registrado (não é instrumento):** a presença do PRÓPRIO vereador ainda não é
+hidratada por snapshot — só o placar é. Um vereador já presente que abre o cockpit mais de 5 min depois da sua
+presença volta a ver "Confirme sua presença" (o voto em si não se perde: `ja-votou` vence). O conserto é um
+snapshot da própria presença no page-load, irmão do `hidratarVotacao`; até lá o E5 cobre a confirmação e a
+2ª visita DENTRO da janela, e diz isso no comentário.
+
+**Medição (local, roteiro do job, cada rodada com DB recriado e `next dev` frio):** antes do conserto do E3,
+6 rodadas deram 5 × 90 passed e 1 × 89 passed + 1 flaky (o E3 da hidratação, salvo pelo `retries: 2` do
+describe — que esconde o flake mas não o explica). Depois: **3 rodadas seguidas, 90 passed · 0 flaky · 9
+skipped** (os 6 `test.fixme` documentais + as 3 sondas opt-in), ~1,7 min cada. O run do CI deste PR é a
+prova de que o mesmo vale na máquina do GitHub.
+
+---
+
 ### Gate de segurança #1 FECHADO — denominador de quórum resolvido server-side (Fatia 1)
 
 Um dos dois gates que a verificação de prontidão marcou como bloqueadores de demo externa. **Era:** o

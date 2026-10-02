@@ -1611,7 +1611,7 @@
   Os avisos (materia sem parecer da comissao, pedido juridico pendente, antecedencia nao cumprida) sao calculados e
   GRAVADOS na versao, e NUNCA bloqueiam. O Repo decide numa tx travada: vazia, sem mudanca, mudou no meio, falta de
   justificativa na republicacao -> `:conflito/publicacao-pauta` (409). Devolve {:sessao-id :versao :antecedencia}."
-  [{:keys [repo-sessoes situacao-de-parecer cargo-na-mesa]} ator {:keys [sessao-id justificativa]} agora]
+  [{:keys [repo-sessoes situacao-de-parecer cargo-na-mesa vereadores-a-avisar]} ator {:keys [sessao-id justificativa]} agora]
   (when-let [s (repo/buscar-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver s logic/pode-ver-sessao?)
     (exigir-sessao-aberta! s)
@@ -1623,11 +1623,26 @@
       (let [{:keys [itens]} (repo-pub/publicacao-da-pauta repo-sessoes ente sessao-id)
             {:keys [situacao]} (situacao-das-materias situacao-de-parecer ente itens)
             ant (logic/antecedencia regra s agora)
+            ;; ADR-0020 fatia 2: quem recebe o aviso automatico (os vereadores da Casa com acesso) e' resolvido ANTES da tx
+            ;; pelo seam do host (sessoes nunca importa cadastros/identidade, §22.10); o aviso e' emitido NA tx do ato.
+            ;; Enriquecimento: o seam falhar nunca impede publicar a pauta (fica no log).
+            avisados (if vereadores-a-avisar
+                       (try (vec (vereadores-a-avisar ente))
+                            ;; Throwable (menos falha da JVM): um seam sem a implementacao (AbstractMethodError) tambem
+                            ;; nao derruba o ato
+                            (catch Throwable e
+                              (when (instance? VirtualMachineError e) (throw e))
+                              (log/warn e "aviso da pauta publicada: vereadores indisponiveis; a pauta segue sem aviso")
+                              []))
+                       [])
             v   (repo-pub/publicar-pauta! repo-sessoes ente
                   {:sessao-id sessao-id :justificativa justificativa :created-by (:identidade-id ator)
                    :a-titulo (:a-titulo decisao)
                    :proposicoes-conferidas (into #{} (keep :proposicao-id) itens)
-                   :avisos-de (fn [itens-da-tx] (avisos-da-publicacao itens-da-tx situacao ant))})]
+                   :avisos-de (fn [itens-da-tx] (avisos-da-publicacao itens-da-tx situacao ant))
+                   :avisar (when (seq avisados)
+                             (fn [versao] (logic/avisos-de-pauta-publicada s versao
+                                                                           (remove #{(:identidade-id ator)} avisados))))})]
         {:sessao-id sessao-id :versao v :antecedencia ant}))))
 
 (defn resumos-das-materias

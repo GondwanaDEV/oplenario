@@ -1,0 +1,85 @@
+/* A caixa da pessoa da Casa (ADR-0020) — porte de produto/design-system/o-plenario/telas/notificacoes.html (.pg-cab,
+   .segs, .grupo, .lista, .nt…), servindo às DUAS superfícies: o interno (largo, grade de 3 colunas do original) e o
+   app do vereador (coluna de ~460px: a grade de mobile do original, que lá era o @media 620px). Prefixo cx-: o CSS do
+   app é global depois de carregado, e `.lista`/`.grupo`/`.segs` já existem noutras telas.
+
+   Pares de cor (sem cor nova; os mesmos já medidos na inbox do vereador, notificacoes.css, e no chassi):
+   - texto secundário `--texto-2` sobre `--surface`: 7.11 claro / 6.86 escuro;
+   - aba apertada `--acao`/`--acao-texto`: 9.02 / 5.63;
+   - badge: branco sobre `--telha-fundo` (5.44) — NUNCA sobre `--telha` (4.0, §5.1);
+   - faixa de ciência: `--aviso-texto` sobre `--surface-2` (7.46 / 6.95) com traço `--amarelo-traco` (3.63 / 6.95),
+     o par de aviso do sistema (o mesmo de `.nt-truncada`);
+   - vencido: traço `--telha` como SINAL GRÁFICO (≥3:1 sobre `--surface`), e o texto do chip vem do `.chip-risco` do
+     chassi (`--acento-texto`) — a cor nunca é o único sinal: o chip diz "Ciência vencida".
+   Fundo dos itens é `--surface` puro (sem color-mix sob texto), então o cálculo token-a-token é o pixel composto. */
+
+.cx { min-width: 0; }
+.cx-cab { padding: 0.4rem 0 0; display: grid; grid-template-columns: 1fr auto; gap: 0.8rem 1.4rem; align-items: end; }
+.cx-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; display: flex; align-items: center; gap: 0.6rem; }
+.cx-badge { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: #fff; background: var(--telha-fundo); border-radius: 999px; padding: 0.1rem 0.55rem; }
+.cx-sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; }
+.cx-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.cx-faixa { display: flex; align-items: flex-start; gap: 0.55rem; font-size: var(--t-13); font-weight: 600; color: var(--aviso-texto); background: var(--surface-2); border: 1px solid var(--linha); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); padding: 0.65rem 0.85rem; margin: 1rem 0 0; line-height: 1.45; }
+.cx-faixa svg { flex: 0 0 auto; margin-top: 1px; }
+.cx-faixa-ver { background: none; border: none; padding: 0; min-height: 24px; font: inherit; font-weight: 600; color: var(--texto); text-decoration: underline; cursor: pointer; }
+.cx-parcial, .cx-corte { font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); padding: 0.6rem 0.8rem; margin: 0.8rem 0 0; line-height: 1.45; }
+.cx-parcial { border-left: 3px solid var(--telha); }
+.cx-corte { color: var(--aviso-texto); border-left: 3px solid var(--amarelo-traco); }
+
+/* barra de filtro — porte do `.segs` do original (flex-wrap: no app do vereador a coluna é estreita) */
+.cx-segs { display: flex; flex-wrap: wrap; gap: 3px; width: fit-content; max-width: 100%; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 3px; margin: 1.2rem 0 0; }
+.cx-segs button { display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--corpo); font-size: var(--t-13); font-weight: 600; color: var(--texto-2); background: none; border: none; border-radius: 999px; padding: 0.4rem 0.95rem; min-height: 44px; cursor: pointer; }
+.cx-segs button[aria-pressed="true"] { background: var(--acao); color: var(--acao-texto); }
+.cx-qt { font-family: var(--mono); font-size: var(--t-12); font-weight: 500; }
+
+.cx-grupo { margin: 1.6rem 0 0; }
+.cx-grupo > h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 0.5rem; }
+.cx-lista { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); overflow: hidden; }
+
+.cx-item { display: grid; grid-template-columns: 40px 1fr auto; gap: 0.3rem 0.9rem; align-items: start; padding: 0.9rem 1.1rem; border-top: 1px solid var(--linha); position: relative; }
+.cx-item:first-child { border-top: none; }
+.cx-item.cx-nao-lido::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--marca); }
+.cx-item.cx-vencido::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--telha); }
+
+.cx-ic { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: var(--marca); background: var(--surface-2); border: 1px solid var(--linha); }
+.cx-ic-sistema { color: var(--texto-2); }
+
+.cx-mid { min-width: 0; }
+.cx-origem { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); margin: 0 0 0.15rem; }
+.cx-mid h3 { font-family: var(--corpo); font-weight: 500; font-size: var(--t-16); color: var(--texto); margin: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.cx-nao-lido .cx-mid h3 { font-weight: 700; }
+.cx-mid h3 a { color: inherit; text-decoration: none; }
+.cx-mid h3 a:hover { text-decoration: underline; }
+.cx-detalhe { font-size: var(--t-13); color: var(--texto-2); margin: 0.25rem 0 0; line-height: 1.4; overflow-wrap: anywhere; }
+.cx-chip { margin-top: 0.45rem; }
+.cx-ir { display: inline-flex; align-items: center; min-height: 24px; font-weight: 600; font-size: var(--t-13); color: var(--marca); text-decoration: none; margin-top: 0.5rem; }
+.cx-ir:hover { text-decoration: underline; }
+
+.cx-dir { display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem; }
+.cx-quando { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); white-space: nowrap; }
+.cx-ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--marca); flex: 0 0 auto; }
+.cx-lido-marca { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.cx-marcar { background: none; border: 1px solid var(--linha); color: var(--texto-2); border-radius: 999px; padding: 0.3rem 0.85rem; min-height: 44px; font-family: var(--corpo); font-size: var(--t-12); font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cx-marcar:hover:not(:disabled) { color: var(--marca); border-color: var(--marca); }
+.cx-marcar:disabled { opacity: 0.6; cursor: default; }
+
+.cx-erro { font-size: var(--t-13); color: var(--acento-texto); margin: 0.6rem 0 0; }
+.cx-vazio { font-size: var(--t-13); color: var(--texto-2); margin: 1.2rem 0 0; max-width: 60ch; }
+.cx-estado { margin: 1.5rem 0 0; display: grid; gap: 0.5rem; justify-items: start; color: var(--texto-2); }
+.cx-estado p { margin: 0; }
+
+/* a grade de mobile do original (era o @media max-width:620px): sempre no app do vereador, e no interno estreito */
+.cx-vereador .cx-cab, .cx-vereador .cx-item { grid-template-columns: 36px 1fr; }
+.cx-vereador .cx-cab { grid-template-columns: 1fr; }
+.cx-vereador .cx-ic { width: 36px; height: 36px; }
+.cx-vereador .cx-dir { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+@media (max-width: 620px) {
+  .cx-cab { grid-template-columns: 1fr; }
+  .cx-item { grid-template-columns: 36px 1fr; }
+  .cx-ic { width: 36px; height: 36px; }
+  .cx-dir { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; width: 100%; }
+}
+
+/* a página /caixa (interno) */
+.cx-pagina { padding-top: 1.2rem; padding-bottom: 3rem; }

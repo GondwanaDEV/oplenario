@@ -7,13 +7,11 @@ import { resolve } from "node:path";
 // que "preparei" nao seja alegacao: se a precondicao nao vingou, isto reprova aqui, nao no spec.
 const ids = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-ids.json"), "utf8"));
 
-// [QUARENTENA SSE — opt-in E2E_T3_SSE] As 3 sondas de SESSAO AO VIVO abaixo observam estado que (a) depende
-// de evento SSE dentro da janela de 5min (o cockpit nao hidrata placar/presenca por snapshot — achado
-// janela-sse-5min) e (b) e' MUTADO em paralelo pelos specs reais (E5 grupo A conduz a chamada -> "Registrar
-// a chamada" some; E6/E5-B abrem votacao). Como sondas de precondicao correndo em paralelo com quem muta a
-// mesma sessao, sao intrinsecamente instaveis no CI e derrubam a fila. As assercoes reais vivem nos specs
-// E5/E6 (tambem opt-in). Rodam LOCALMENTE dentro da janela com E2E_T3_SSE=1. As sondas DETERMINISTICAS
-// (E2/E7/E8/E1/E3/E4) seguem sempre ligadas — sao a prova barata de que a prep vingou.
+// [OPT-IN E2E_T3_SSE] As 3 sondas de SESSAO AO VIVO abaixo observam estado que e' MUTADO em paralelo pelos specs
+// reais (E5 grupo A conduz a chamada -> "Registrar a chamada" some; E6/E5-B abrem votacao e votam). Sondas de
+// precondicao correndo ao lado de quem muta a mesma sessao sao instaveis por construcao — por isso ficam fora do
+// gate. As assercoes reais vivem nos specs E5/E6, que RODAM no CI desde 02/10/2026 (o placar passou a vir por
+// snapshot). As sondas DETERMINISTICAS (E2/E7/E8/E1/E3/E4) seguem sempre ligadas.
 const SSE = !!process.env.E2E_T3_SSE;
 
 test("E5 — a sessao de chamada esta ABERTA e com o roster inteiro sem marcacao", async ({ page }) => {
@@ -24,13 +22,13 @@ test("E5 — a sessao de chamada esta ABERTA e com o roster inteiro sem marcacao
 });
 
 test("E5 — /votar com :vereador oferece 'Confirmar presenca'", async ({ page }) => {
-  test.skip(!SSE, "sonda de cockpit ao vivo (janela SSE 5min) — opt-in E2E_T3_SSE");
+  test.skip(!SSE, "sonda de cockpit ao vivo (E5/E6 mutam a mesma sessao em paralelo) — opt-in E2E_T3_SSE");
   await page.goto(ids.e5.confirmarPresenca.url, { timeout: 90_000 });
   await expect(page.getByRole("button", { name: "Confirmar presença" })).toBeVisible({ timeout: 30_000 });
 });
 
 test("E6 — /votar com :presidente oferece os tres botoes de voto", async ({ page }) => {
-  test.skip(!SSE, "sonda de cockpit ao vivo (janela SSE 5min) — opt-in E2E_T3_SSE");
+  test.skip(!SSE, "sonda de cockpit ao vivo (E5/E6 mutam a mesma sessao em paralelo) — opt-in E2E_T3_SSE");
   await page.goto(ids.e6.url, { timeout: 90_000 });
   await expect(page.getByRole("button", { name: "Sim", exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Não", exact: true })).toBeVisible();
@@ -42,9 +40,9 @@ test("E2 — /expediente lista os modelos e o botao de gerar deixa de ser inalca
   await expect(page.getByText("Ofício padrão da Mesa")).toBeVisible({ timeout: 30_000 });
 });
 
-test("E8 — /notificacoes com :vereador tem item nao-lido com 'Marcar como lida'", async ({ page }) => {
+test("E8 — /notificacoes (a caixa, ADR-0020) com :vereador tem aviso nao-lido com 'Marcar como lido'", async ({ page }) => {
   await page.goto(ids.e8.url, { timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Marcar como lida" }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Marcar como lido" }).first()).toBeVisible({ timeout: 30_000 });
 });
 
 test("E7 — /pos-aprovacao oferece gerar autografo", async ({ page }) => {

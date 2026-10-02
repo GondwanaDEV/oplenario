@@ -34,6 +34,8 @@ const agente = (ligado: boolean) => ({
     "ligado-em": ligado ? "2026-09-27T12:00:00Z" : null }],
 });
 
+const destinosFake = { "pode-enviar-a-grupos": true, setores: [], comissoes: [], vereadores: [], pessoas: [] };
+
 function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean } = {}) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -42,6 +44,13 @@ function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean 
     }
     if (method === "PUT" && url === "/api/identidade/agentes-institucionais/conferencia-normativa/concessao") {
       return { ok: true, status: 200, json: async () => agente(true) } as Response;
+    }
+    // ADR-0020: o bloco "Setores" carrega os setores e as pessoas da Casa (as opções de destino dos comunicados)
+    if (method === "GET" && url === "/api/administracao/setores") {
+      return { ok: true, status: 200, json: async () => ({ setores: [] }) } as Response;
+    }
+    if (method === "GET" && url === "/api/meu/comunicados/destinos") {
+      return { ok: true, status: 200, json: async () => destinosFake } as Response;
     }
     if (method === "GET" && url === "/api/meu/identidade") {
       return { ok: true, status: 200, json: async () => ({ nome: "Ana Moreira", papeis: ["admin_ente"] }) } as Response;

@@ -160,10 +160,9 @@ jobs:
   # EFEMERA: a mutacao da Casa que a MAPA.json alerta nao colide com nada aqui (DB descartado no fim).
   t3-e2e:
     runs-on: ubuntu-latest
-    # INFORMATIVO ate' a Trilha 3 ser fresh-seed-portavel (fixtures.sql crava ids congelados — ver
-    # docs/16, Onda T1). Nao bloqueia o run: o gate real e' `test` + `browser-e2e` (ambos verdes/estaveis).
-    # Remover o continue-on-error quando os 8 specs passarem no seed fresco do CI.
-    continue-on-error: true
+    # GATE desde 02/10/2026 (docs/16, "A Trilha 3 vira gate"): os specs passam no seed fresco do CI, o voto e
+    # a presenca ao vivo sairam da quarentena SSE (o placar hidrata por snapshot), e um vermelho aqui bloqueia
+    # o merge como o `test` e o `browser-e2e`. Seguem opt-in (`E2E_T3_SSE`) so' as 3 sondas de cockpit ao vivo.
     steps:
       - uses: actions/checkout@v4
 
@@ -221,10 +220,9 @@ jobs:
         working-directory: apps/backend
         run: docker compose logs app frontend --tail 160
 
-  # M3 (docs/20, Onda T1) — GATE de regressao da AUTORIZACAO DE LEITURA por papel (spec E9). Diferente do
-  # t3-e2e (informativo: os specs E1-E8 cravam ids congelados via fixtures.sql/preparar.mjs), esta e'
-  # PORTAVEL — a E9 constroi os dev-tokens a partir do demo-ids.edn que `demo/semear-tudo.sh` escreve —
-  # entao BLOQUEIA. Guarda o conserto feat(authz): vereador/presidente LEEM proposicoes/tramitacao/paineis
+  # M3 (docs/20, Onda T1) — GATE de regressao da AUTORIZACAO DE LEITURA por papel (spec E9), sozinha e sem
+  # o preparar.sh do t3-e2e: a E9 constroi os dev-tokens a partir do demo-ids.edn que `demo/semear-tudo.sh`
+  # escreve, entao BLOQUEIA. Guarda o conserto feat(authz): vereador/presidente LEEM proposicoes/tramitacao/paineis
   # (era 403 pelo gate grosso so'-secretario). NAO roda preparar.sh: a E9 nao depende das fixtures dos E1-E8.
   t3-autz-leitura-e2e:
     runs-on: ubuntu-latest

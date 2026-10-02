@@ -41,6 +41,21 @@
                 (sql/format {:select [:id :nome :nome_parlamentar] :from [:cadastros.vereador]
                              :where [:and [:= :ente_id ente-id] [:in :id ids]]})))))))
 
+(defn identidades-por-id
+  "ADR-0020: ids -> {vereador-id {:identidade-id :nome}} (nome de exibicao: o parlamentar, ou o civil), numa consulta
+  so'. `:identidade-id` nil = o vereador nao tem acesso ao sistema (nao recebe comunicado). Vazio nao vai ao banco."
+  [tx ente-id ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (empty? ids)
+      {}
+      (into {}
+            (map (fn [{:keys [id identidade-id nome nome-parlamentar]}]
+                   [id {:identidade-id identidade-id :nome (or (not-empty nome-parlamentar) nome)}]))
+            (comum/linhas->kebab
+              (jdbc/execute! tx
+                (sql/format {:select [:id :identidade_id :nome :nome_parlamentar] :from [:cadastros.vereador]
+                             :where [:and [:= :ente_id ente-id] [:in :id ids]]})))))))
+
 (defn por-identidade
   "O vereador vinculado a uma identidade (CPF) neste ente — base da autorizacao por relacao (F2)."
   [tx ente-id identidade-id]

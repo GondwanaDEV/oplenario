@@ -226,14 +226,12 @@ if (sessaoVotar) {
   };
   console.log(`   votacao NOMINAL aberta: ${rec.id} sobre ${objeto.id} (${objeto.tipo} ${objeto.sequencial}/${objeto.ano})`);
   bloqueio("janela-sse-5min",
-    "DUAS coisas do cockpit /votar nao vem de snapshot nenhum, so do SSE: (a) o PLACAR — `estadoInicial()` " +
-    "(plenario-reducer.ts:167) nasce com placar=null; (b) a PRESENCA — `hidratarQuorum` " +
-    "(plenario-reducer.ts:289) so preenche os NUMEROS do quorum, nunca `presentes`. A CanalStore Valkey " +
-    "guarda 5 min (tempo_real/components.clj:39). Consequencia medida em browser: passada a janela, " +
-    "/votar mostra 'Nenhuma votacao aberta' e/ou trata como AUSENTE quem esta presente no banco ha horas. " +
-    "Logo E5-confirmar/E6-votar tem de abrir a pagina DENTRO DE ~5 MIN desta preparacao; fora disso, " +
-    "re-rode e2e/t3/preparar.sh (ou o proprio spec reabre a votacao: corpo em e6.reabrirVotacao) e, para " +
-    "votar, clique 'Confirmar presenca' antes (e6.preambuloObrigatorio).");
+    "A PRESENCA do proprio vereador no cockpit /votar ainda so vem do SSE: `hidratarQuorum` " +
+    "(plenario-reducer.ts) preenche os NUMEROS do quorum, nunca `presentes`, e a CanalStore Valkey guarda " +
+    "5 min (tempo_real/components.clj). Passada a janela, quem esta presente no banco volta a ver " +
+    "'Confirme sua presenca' (o voto nao se perde: `ja-votou` vence). O PLACAR ja vem por snapshot " +
+    "(`hidratarVotacao`, GET /votacao-aberta) desde 02/10/2026. E5/E6 criam a presenca fresca no beforeAll; " +
+    "para votar a mao fora disso, clique 'Confirmar presenca' antes (e6.preambuloObrigatorio).");
 }
 
 // ---- 3. E2: os modelos de documento (fixtures.sql) ---------------------------------------
@@ -502,10 +500,13 @@ const alvoComTexto =
 let alvoSemTexto = editaveis.find((e) => !e.temTexto && !reservadosE3.has(e.id)) ?? null;
 if (!alvoSemTexto && vereadorIdDoVereador) {
   try {
-    const tipoValido = editaveis[0]?.tipo ?? listaProps.itens[0]?.tipo ?? "requerimento";
+    // projeto_lei: espécie SEM campo próprio (indicação, requerimento e moção exigem o dado da espécie desde o
+    // PR #64). E `autor-texto` junto do `autor-tipo` — o nome de exibição é obrigatório na mesma escrita. Sem
+    // os dois, o POST dava 400 e o E3 "editar só a ementa" ficava pulado no CI sem ninguém ver.
+    const tipoValido = "projeto_lei";
     const nova = exigir(await api(TOK.secretaria, "POST", "/legislativo/proposicoes", {
       tipo: tipoValido, ano: new Date().getFullYear(), ementa: `T3-E3 alvo sem-texto ${carimbo}`,
-      "autor-tipo": "vereador", "autor-id": vereadorIdDoVereador,
+      "autor-tipo": "vereador", "autor-id": vereadorIdDoVereador, "autor-texto": "Vereador da demo (T3)",
     }), "POST /legislativo/proposicoes (E3 alvo sem-texto)");
     alvoSemTexto = { id: nova.id, tipo: tipoValido, ano: nova.ano ?? new Date().getFullYear(), estado: "em_elaboracao", lockVersion: 0, temTexto: false };
     console.log(`   E3 alvo sem-texto FABRICADO: ${nova.id}`);

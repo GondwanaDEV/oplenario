@@ -50,6 +50,22 @@ function linhaDaTabela(page: import("@playwright/test").Page, id: string) {
   return page.locator(`a[href*="/editor-proposicao/${id}"]`).locator("xpath=ancestor::tr");
 }
 
+// Corrida de hidratação (flake do CI local, 02/10/2026): `domcontentloaded` dispara ANTES do React hidratar,
+// e a ementa é um campo CONTROLADO. Um `fill` que chega antes fica só no DOM — o estado do form segue "" —,
+// o submit sai sem ementa e o `required` barra no navegador: nenhum POST, o waitForResponse espera até o
+// timeout. Na edição o `not.toHaveValue("")` já cobre (o pré-preenchimento vem de um fetch do cliente); na
+// criação não há nada para esperar, então espera-se o React ter ligado o próprio campo (a fibra no nó).
+async function esperarFormHidratado(page: import("@playwright/test").Page) {
+  await page.waitForFunction(
+    () => {
+      const el = document.getElementById("f-ementa");
+      return !!el && Object.keys(el).some((k) => k.startsWith("__reactFiber$"));
+    },
+    undefined,
+    { timeout: 60_000 },
+  );
+}
+
 test.describe("E3 - A matéria nasce (servidor)", () => {
   // Robustez de flake (achado do CI, PR #4): sob `next dev` a rota /editor-proposicao e /proposicoes
   // compilam SOB DEMANDA no 1o acesso; sob contenção do runner isso empurra o ciclo criar->POST->
@@ -111,6 +127,7 @@ test.describe("E3 - A matéria nasce (servidor)", () => {
     // Este teste PROVA o gap (não o esconde): se um dia isto reprovar com 4xx, o achado foi corrigido —
     // ajustar o teste então, não antes.
     await page.goto(urlEditorNovo, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await esperarFormHidratado(page);
     await page.getByLabel(/^ementa$/i).fill("   ");
 
     const respostaPost = page.waitForResponse(
@@ -161,6 +178,7 @@ test.describe("E3 - A matéria nasce (servidor)", () => {
       pageA.goto(urlEditorNovo, { waitUntil: "domcontentloaded", timeout: 90_000 }),
       pageB.goto(urlEditorNovo, { waitUntil: "domcontentloaded", timeout: 90_000 }),
     ]);
+    await Promise.all([esperarFormHidratado(pageA), esperarFormHidratado(pageB)]);
     await pageA.getByLabel(/^ementa$/i).fill(marcador);
     await pageB.getByLabel(/^ementa$/i).fill(marcador);
 

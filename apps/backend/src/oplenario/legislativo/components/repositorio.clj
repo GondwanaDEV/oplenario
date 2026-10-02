@@ -1177,7 +1177,14 @@
   (designar-relator-do-parecer! [this ente-id parecer-id relator-id por]
     (transacao this ente-id #(distribuicao/designar-relator! % ente-id parecer-id relator-id por)))
   (criar-pedido-juridico! [this ente-id m]
-    (transacao this ente-id #(parecer-juridico/criar-pedido! % (assoc m :ente-id ente-id))))
+    (transacao this ente-id
+      (fn [tx]
+        (let [p (parecer-juridico/criar-pedido! tx (-> m (dissoc :avisar) (assoc :ente-id ente-id)))]
+          ;; ADR-0020 fatia 2: o aviso automatico as pessoas com `juridico`, NA MESMA tx do pedido (outbox)
+          (when (and p bus (seq (:avisar m)))
+            (doseq [aviso (logic-notif/avisos-de-pedido-juridico p (:avisar m))]
+              (producers/emitir-notificacao-requisitada! bus tx ente-id aviso)))
+          p))))
   (pedido-juridico [this ente-id id] (transacao this ente-id #(parecer-juridico/pedido-completo % ente-id id)))
   (pedidos-juridicos [this ente-id estado limite]
     (transacao this ente-id #(parecer-juridico/fila % ente-id estado limite)))

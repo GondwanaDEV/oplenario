@@ -5,6 +5,7 @@
   `consultar-sessao` INJETADA pelo host — legislativo NAO importa sessoes, §22.10), e as escritas usam o Repo do
   PROPRIO modulo (que casa ato + emissao do evento de tempo real na MESMA tx, Slice 1)."
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
@@ -1117,19 +1118,34 @@
   (let [nomes (into {} (map (fn [id] [id (nome-na-casa ente-id id)])) (distinct (keep :pedido-por pedidos)))]
     (mapv #(assoc % :pedido-por-nome (get nomes (:pedido-por %))) pedidos)))
 
+(defn- juridicos
+  "ADR-0020 fatia 2: quem recebe o aviso automatico do pedido (as pessoas com `juridico`, pelo seam do host — legislativo
+  nunca importa identidade, §22.10), menos quem pediu. Enriquecimento: o seam falhar nunca impede o pedido (fica no log)."
+  [juridicos-a-avisar ente-id ator]
+  (if juridicos-a-avisar
+    (try (vec (remove #{(:identidade-id ator)} (juridicos-a-avisar ente-id)))
+         ;; Throwable (menos falha da JVM): um seam sem a implementacao (AbstractMethodError) tambem nao derruba o ato
+         (catch Throwable e
+           (when (instance? VirtualMachineError e) (throw e))
+           (log/warn e "aviso do pedido de parecer juridico: juridicos indisponiveis; o pedido segue sem aviso")
+           []))
+    []))
+
 (defn pedir-parecer-juridico!
-  "A secretaria pede o parecer (sobre uma materia, ou consulta avulsa). nil = materia inexistente (-> 404)."
-  [repo-legislativo nome-na-casa ator m]
+  "A secretaria pede o parecer (sobre uma materia, ou consulta avulsa). nil = materia inexistente (-> 404).
+  `juridicos-a-avisar` (fn [ente-id] -> [identidade-id]) | nil: o aviso automatico na caixa do sistema (ADR-0020)."
+  [repo-legislativo nome-na-casa juridicos-a-avisar ator m]
   (let [ente-id (:ente-id ator)]
     (when-let [p (repo-juridico/criar-pedido-juridico! repo-legislativo ente-id
-                                              (assoc m :origem "secretaria" :pedido-por (:identidade-id ator)))]
+                                              (assoc m :origem "secretaria" :pedido-por (:identidade-id ator)
+                                                     :avisar (juridicos juridicos-a-avisar ente-id ator)))]
       (first (nomear-quem-pediu nome-na-casa ente-id [p])))))
 
 (defn pedir-parecer-juridico-do-relator!
   "O relator do parecer de comissao pede o parecer juridico sobre a materia que relata. GATE DE POSSE (mesmo contrato de
   `meu-parecer-editor`): so' o relator do parecer; qualquer outro caso (ator sem cadastro, nao e' o relator, parecer
   inexistente ou sobre emenda) -> nil (-> 404)."
-  [repo-legislativo resolver-vereador nome-na-casa ator parecer-id {:keys [assunto]}]
+  [repo-legislativo resolver-vereador nome-na-casa juridicos-a-avisar ator parecer-id {:keys [assunto]}]
   (let [ente-id (:ente-id ator)]
     (when-let [vereador-id (resolver-vereador ente-id (:identidade-id ator))]
       (when (repo/relator-do-parecer? repo-legislativo ente-id vereador-id parecer-id)
@@ -1137,7 +1153,8 @@
           (when (= "proposicao" (:objeto-tipo pc))
             (when-let [p (repo-juridico/criar-pedido-juridico! repo-legislativo ente-id
                                                       {:proposicao-id (:objeto-id pc) :assunto assunto
-                                                       :origem "relator" :pedido-por (:identidade-id ator)})]
+                                                       :origem "relator" :pedido-por (:identidade-id ator)
+                                                       :avisar (juridicos juridicos-a-avisar ente-id ator)})]
               (first (nomear-quem-pediu nome-na-casa ente-id [p])))))))))
 
 (defn- ocultar-rascunho

@@ -762,7 +762,8 @@
   ;; O ATO. Tudo o que decide a versao (vazia? mudou desde a ultima? inicial ou republicacao?) roda DEPOIS da trava e
   ;; sobre a leitura DESTA tx — nunca sobre a leitura que o controller fez para a tela: dois cliques em 'Publicar'
   ;; geram UMA versao (o segundo ve a do primeiro e cai em :sem-alteracao), nunca duas iguais.
-  (publicar-pauta! [this ente-id {:keys [sessao-id justificativa created-by a-titulo avisos-de proposicoes-conferidas]}]
+  (publicar-pauta! [this ente-id {:keys [sessao-id justificativa created-by a-titulo avisos-de proposicoes-conferidas
+                                         avisar]}]
     (transacao this ente-id
       (fn [tx]
         (pauta/travar-publicacao! tx ente-id sessao-id)
@@ -786,8 +787,13 @@
                                                          :tipo-versao tipo :publica true
                                                          :justificativa (when (= "republicacao" tipo) justificativa)
                                                          :created-by created-by :a-titulo a-titulo
-                                                         :avisos (vec (when avisos-de (avisos-de itens)))})]
-            (pauta/buscar-versao tx ente-id id))))))
+                                                         :avisos (vec (when avisos-de (avisos-de itens)))})
+                v (pauta/buscar-versao tx ente-id id)]
+            ;; ADR-0020 fatia 2: o aviso automatico aos vereadores, NA MESMA tx do ato (outbox) — so' existe se a versao
+            ;; existe; `avisar` = (fn [versao] -> payloads), chave de idempotencia por (versao, pessoa)
+            (when (and avisar bus)
+              (doseq [p (avisar v)] (producers/emitir-notificacao-requisitada! bus tx ente-id p)))
+            v)))))
   (pautas-publicas [this ente-id] (transacao this ente-id #(pauta/pautas-publicas % ente-id)))
   (pauta-oficial [this ente-id sessao-id]
     (transacao this ente-id

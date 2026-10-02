@@ -48,13 +48,15 @@ test.describe.serial("E8 — Notificações (vereador)", () => {
     // 1o goto desta rota nesta corrida do next dev: compilação sob demanda pode passar de 20s.
     await page.goto(URL_NOTIFICACOES, { waitUntil: "domcontentloaded", timeout: 90_000 });
 
-    const cabecalho = page.getByRole("heading", { name: /Notificações/, level: 1 });
+    // ADR-0020: a aba Avisos do vereador virou a CAIXA (comunicados + avisos do sistema, numa lista só). O aviso do
+    // sistema segue com "marcar como lido" pelo MESMO POST de sempre; mudaram só o título, as classes e o rótulo.
+    const cabecalho = page.getByRole("heading", { name: /Caixa/, level: 1 });
     await expect(cabecalho).toBeVisible({ timeout: 30_000 });
 
     // badge de não-lidas: existe (>=1) ANTES do clique — prova que a fixture chegou até a tela, não só
     // até o banco. O texto exato do número não é fixado aqui de propósito: outra corrida desta mesma
     // suíte pode já ter consumido as outras 2 fixtures antes desta rodar.
-    const badge = cabecalho.locator(".badge");
+    const badge = cabecalho.locator(".cx-badge");
     await expect(badge).toBeVisible({ timeout: 15_000 });
     const badgeAntes = await badge.textContent();
     expect(Number(badgeAntes)).toBeGreaterThanOrEqual(1);
@@ -63,9 +65,9 @@ test.describe.serial("E8 — Notificações (vereador)", () => {
     // tela não usa data-testid, ver notificacoes/page.tsx).
     const artigo = page.locator("article", { hasText: ASSUNTO_FIXTURE });
     await expect(artigo).toBeVisible({ timeout: 15_000 });
-    await expect(artigo).toHaveClass(/nao-lida/);
+    await expect(artigo).toHaveClass(/cx-nao-lido/);
 
-    const botaoMarcar = artigo.getByRole("button", { name: "Marcar como lida" });
+    const botaoMarcar = artigo.getByRole("button", { name: "Marcar como lido" });
     await expect(botaoMarcar).toBeVisible();
 
     // b) a escrita SAIU — captura o POST real, não presume que o clique "deu certo".
@@ -84,25 +86,25 @@ test.describe.serial("E8 — Notificações (vereador)", () => {
     expect(corpoResposta["lida-em"]).toBeTruthy();
     lidaEmDaPrimeiraChamada = corpoResposta["lida-em"];
 
-    // a) a tela diz que gravou — o botão vira "Lida", o ponto de não-lida some, e o badge decresce
-    // (useMinhasNotificacoes.recarregar() refaz o GET depois do POST — page.tsx marcarLida()).
-    await expect(artigo.getByText("Lida", { exact: true })).toBeVisible({ timeout: 15_000 });
+    // a) a tela diz que gravou — o botão vira "Lido", o ponto de não-lido some, e o badge decresce
+    // (a caixa refaz o GET dos avisos depois do POST — caixa-da-casa.tsx marcarLido()).
+    await expect(artigo.getByText("Lido", { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(botaoMarcar).toBeHidden();
-    await expect(artigo.locator(".nt-ponto")).toHaveCount(0);
-    await expect(artigo).not.toHaveClass(/nao-lida/);
+    await expect(artigo.locator(".cx-ponto")).toHaveCount(0);
+    await expect(artigo).not.toHaveClass(/cx-nao-lido/);
     if (badgeAntes && Number(badgeAntes) > 1) {
       await expect(badge).toHaveText(String(Number(badgeAntes) - 1), { timeout: 15_000 });
     } else {
       // se a fixture era a última não-lida do vereador, o badge inteiro some do heading (só renderiza
-      // quando vista.naoLidas > 0 — page.tsx).
+      // quando há algo por ler — caixa-da-casa.tsx Contador).
       await expect(badge).toHaveCount(0, { timeout: 15_000 });
     }
 
     // c) F5 — o estado sobrevive a reload (prova que não é otimismo só-de-cliente: lida_em é do servidor).
     await page.reload({ waitUntil: "domcontentloaded" });
     const artigoDepoisDoReload = page.locator("article", { hasText: ASSUNTO_FIXTURE });
-    await expect(artigoDepoisDoReload.getByText("Lida", { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(artigoDepoisDoReload.getByRole("button", { name: "Marcar como lida" })).toHaveCount(0);
+    await expect(artigoDepoisDoReload.getByText("Lido", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(artigoDepoisDoReload.getByRole("button", { name: "Marcar como lido" })).toHaveCount(0);
 
     registrarProva({
       escrita: "marcar notificação como lida (vereador)",

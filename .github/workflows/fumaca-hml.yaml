@@ -256,6 +256,37 @@ jobs:
                   `sessoes=${sess.length} publicada=${!!pub} vigente-itens=${det.body?.vigente?.itens?.length ?? '-'} publicacao-sec=${pubSec.status}:${pubSec.body?.versoes?.length ?? '-'}`);
             } catch (e) { rec('/portal/.../pautas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 9) COMUNICADOS (ADR-0020) — a demo semeia 3: a secretaria enviou 2 (um pedindo ciencia, a Mesa + a vereadora +
+            //    o Juridico), o painel de leitura dela responde, a contagem do topo nao marca; a vereadora tem o comunicado
+            //    da sessao extraordinaria na caixa e NAO ve os enviados da Casa (403); as telas /caixa e /comunicados/enviados
+            try {
+              const env = await api(cSec, '/api/meu/comunicados/enviados');
+              const itens = Array.isArray(env.body?.itens) ? env.body.itens : [];
+              const comCiencia = itens.find(x => x['exige-ciencia'] && /^COM-\d{4}-\d{6}$/.test(x.protocolo || ''));
+              const leitura = comCiencia ? await api(cSec, `/api/comunicados/${comCiencia.id}/leitura`) : { status: 0, body: null };
+              const cont = await api(cSec, '/api/meu/comunicados/contagem');
+              const setores = await api(cSec, '/api/meu/comunicados/destinos');
+              const cxVer = await api(cVer, '/api/meu/comunicados');
+              const daCasaVer = await api(cVer, '/api/meu/comunicados/enviados?escopo=casa');
+              const p = await cSec.newPage();
+              await p.goto(`${B}/caixa`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const tc = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.goto(`${B}/comunicados/enviados`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const te = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.close();
+              const naCaixaVer = (cxVer.body?.itens || []).some(x => /Sess[aã]o extraordin/.test(x.assunto || ''));
+              const ok = env.status === 200 && itens.length >= 2 && !!comCiencia
+                && leitura.status === 200 && (leitura.body?.linhas?.length ?? 0) >= 2
+                && cont.status === 200 && typeof cont.body?.['nao-lidos'] === 'number'
+                && setores.status === 200 && (setores.body?.setores?.length ?? 0) >= 3 && setores.body?.['pode-enviar-a-grupos'] === true
+                && cxVer.status === 200 && naCaixaVer && daCasaVer.status === 403
+                && /Caixa/.test(tc) && /Escrever comunicado/.test(tc) && /Enviados/.test(te) && /COM-\d{4}-\d{6}/.test(te);
+              rec('/caixa + comunicados', ok ? 'OK' : 'ERRO',
+                  `enviados=${env.status}:${itens.length} com-ciencia=${comCiencia?.protocolo ?? '-'} leitura=${leitura.status}:${leitura.body?.linhas?.length ?? '-'} contagem=${cont.status} setores=${setores.body?.setores?.length ?? '-'} caixa-vereadora=${cxVer.status}:${naCaixaVer} enviados-casa-vereadora=${daCasaVer.status}`);
+            } catch (e) { rec('/caixa + comunicados', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

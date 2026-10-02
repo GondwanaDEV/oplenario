@@ -1140,10 +1140,10 @@
 
 (defn- pedir-juridico-handler
   "POST /legislativo/pedidos-parecer-juridico — a secretaria pede o parecer (materia ou consulta avulsa)."
-  [repo-leg nome-na-casa]
+  [repo-leg nome-na-casa juridicos-a-avisar]
   (fn [req]
     (let [m (adapters-in-juridico/pedido->dominio (:json-params req))]
-      (if-let [p (controllers/pedir-parecer-juridico! repo-leg nome-na-casa (:ator req) m)]
+      (if-let [p (controllers/pedir-parecer-juridico! repo-leg nome-na-casa juridicos-a-avisar (:ator req) m)]
         (http/json-resposta 201 (adapters-out-juridico/pedido->wire p))
         (http/json-resposta 404 {:erro "proposicao nao encontrada"})))))
 
@@ -1209,10 +1209,10 @@
 
 (defn- meu-pedido-juridico-handler
   "POST /meu/pareceres/:id/pedido-juridico {assunto?} — o relator pede o parecer juridico da materia que relata."
-  [repo-leg resolver-vereador nome-na-casa]
+  [repo-leg resolver-vereador nome-na-casa juridicos-a-avisar]
   (fn [req]
     (let [m (adapters-in-juridico/pedido-do-relator->dominio (:json-params req))]
-      (if-let [p (controllers/pedir-parecer-juridico-do-relator! repo-leg resolver-vereador nome-na-casa
+      (if-let [p (controllers/pedir-parecer-juridico-do-relator! repo-leg resolver-vereador nome-na-casa juridicos-a-avisar
                                                                   (:ator req) (id-do-path req) m)]
         (http/json-resposta 201 (adapters-out-juridico/pedido->wire p))
         (http/json-resposta 404 {:erro "parecer nao encontrado"})))))
@@ -1256,7 +1256,9 @@
   [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
            registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
-           comissoes-vigentes nomes-de-vereadores perfil-juridico casa-tem-juridico? copiloto-analise normas-publicadas?]}]
+           comissoes-vigentes nomes-de-vereadores perfil-juridico casa-tem-juridico? copiloto-analise normas-publicadas?
+           ;; ADR-0020 fatia 2: as pessoas com `juridico` que recebem o aviso do pedido de parecer (host). Opcional.
+           juridicos-a-avisar]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
@@ -1412,7 +1414,7 @@
        [auth papel it/corpo-json (designar-relator-handler repo-legislativo vereador-vinculado? nomes-de-vereadores)]
        :route-name :legislativo/designar-relator]
       ["/legislativo/pedidos-parecer-juridico" :post
-       [auth papel it/corpo-json (pedir-juridico-handler repo-legislativo nome-na-casa)]
+       [auth papel it/corpo-json (pedir-juridico-handler repo-legislativo nome-na-casa juridicos-a-avisar)]
        :route-name :legislativo/pedir-parecer-juridico]
       ["/legislativo/pedidos-parecer-juridico" :get
        [auth papel-fila-juridica (fila-juridica-handler repo-legislativo nome-na-casa)]
@@ -1446,7 +1448,7 @@
        [auth papel-leitura-juridica (pareceres-juridicos-da-materia-handler repo-legislativo)]
        :route-name :legislativo/pareceres-juridicos-da-materia]
       ["/meu/pareceres/:id/pedido-juridico" :post
-       [auth papel-vereador it/corpo-json (meu-pedido-juridico-handler repo-legislativo resolver-vereador nome-na-casa)]
+       [auth papel-vereador it/corpo-json (meu-pedido-juridico-handler repo-legislativo resolver-vereador nome-na-casa juridicos-a-avisar)]
        :route-name :legislativo/meu-pedido-juridico]
       ["/meu/painel" :get [auth papel-vereador (meu-painel-handler repo-legislativo resolver-vereador)]
        :route-name :legislativo/meu-painel]

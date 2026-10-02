@@ -19,6 +19,7 @@ import { AuthProvider, useAuth, usePapeis } from "@/lib/auth";
 import { TemaProvider, useTema } from "@/lib/tema";
 import { comToken } from "@/lib/nav";
 import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
+import { useContagemDaCaixa } from "@/lib/use-comunicados";
 import "./vereador-shell.css";
 
 export default function LayoutVereador({ children }: { children: React.ReactNode }) {
@@ -120,9 +121,10 @@ function Brasao() {
 // uma rota `(vereador)/materias` própria, ou promover /proposicoes a layout-agnostic. "Votar" (Onda C3)
 // ganhou rota real (cockpit ao vivo — confirma presença + vota do próprio celular).
 // Onda E fatia 1: "Matérias" (placeholder, sem rota própria dentro do shell mobile) cede o lugar a
-// "Avisos" — a inbox ganhou rota real (/notificacoes). NÃO leva contador: o sino/badge de contagem é dos
-// PENDÊNCIAS (dedup §5.1 da tela de design), não das notificações — misturar os dois quebraria a dedup
-// que a própria tela documenta.
+// "Avisos" — a inbox ganhou rota real (/notificacoes). ADR-0020 (Eixo 7): "Avisos" passa a ser a CAIXA (comunicados
+// da Casa + avisos do sistema) e LEVA o número do que está por ler — o mesmo do topo interno (`useContagemDaCaixa`).
+// A antiga objeção (o badge era das pendências, dedup §5.1) caiu com a ADR: o comunicado que pede ciência é, ele mesmo,
+// o acionável, e mora na caixa. O comunicado aberto (/notificacoes/:id) mantém a aba acesa.
 const TABS = [
   { rotulo: "Início", href: "/vereador", ativo: true },
   { rotulo: "Pauta", href: null, ativo: false },
@@ -135,6 +137,7 @@ const TABS = [
 function TabbarVereador() {
   const pathname = usePathname();
   const { token } = useAuth();
+  const porLer = useContagemDaCaixa(token);
   return (
     <nav className="tabbar" aria-label="Navegação do app">
       <div className="tabbar-in">
@@ -144,9 +147,15 @@ function TabbarVereador() {
               key={t.rotulo}
               className="tab"
               href={comToken(t.href, token)}
-              aria-current={pathname === t.href ? "page" : undefined}
+              aria-current={pathname === t.href || (t.href === "/notificacoes" && pathname?.startsWith("/notificacoes/")) ? "page" : undefined}
             >
               <span>{t.rotulo}</span>
+              {t.href === "/notificacoes" && porLer !== null && porLer > 0 && (
+                <>
+                  <span className="tab-contagem" aria-hidden="true">{porLer > 99 ? "99+" : porLer}</span>
+                  <span className="sr-only">, {porLer === 1 ? "1 por ler" : `${porLer} por ler`}</span>
+                </>
+              )}
             </Link>
           ) : (
             <button key={t.rotulo} className="tab" type="button" disabled aria-label={`${t.rotulo} (em breve)`}>

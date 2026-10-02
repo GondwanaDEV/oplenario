@@ -83,24 +83,76 @@ describe("destinosVisiveis — a nav por papel", () => {
   });
 
   it("quem é SÓ administrador da Casa vê só a área dele — nada que o leve a 'Acesso restrito' (ADR-0005)", () => {
-    expect(rotulos(["admin_ente"])).toEqual(["IA da Casa", "Administração", "Auditoria"]);
+    expect(rotulos(["admin_ente"])).toEqual(["Caixa", "IA da Casa", "Administração", "Auditoria"]);
   });
 
   it("o controle interno (auditor) vê só a trilha de auditoria (ADR-0017)", () => {
-    expect(rotulos(["auditor"])).toEqual(["Auditoria"]);
+    expect(rotulos(["auditor"])).toEqual(["Caixa", "Auditoria"]);
     expect(rotulos(["secretario"])).toContain("Auditoria");
   });
 
   it("o jurídico (juridico) vê só a fila de pareceres — nada das telas da secretaria (ADR-0019)", () => {
-    expect(rotulos(["juridico"])).toEqual(["Jurídico"]);
+    expect(rotulos(["juridico"])).toEqual(["Caixa", "Jurídico"]);
     expect(rotulos(["secretario"])).toContain("Jurídico");
     expect(rotulos(["admin_ente"])).not.toContain("Jurídico");
     expect(rotulos(["vereador"])).not.toContain("Jurídico");
+  });
+
+  it("a Caixa (ADR-0020) é de TODA pessoa interna — logo depois da Central", () => {
+    for (const papeis of [["secretario"], ["vereador"], ["admin_ente"], ["auditor"], ["juridico"], ["secretario", "admin_ente"], []]) {
+      expect(rotulos(papeis)).toContain("Caixa");
+    }
+    expect(rotulos(["secretario"]).slice(0, 2)).toEqual(["Central", "Caixa"]);
   });
 
   it("quem acumula secretaria e administração vê as duas", () => {
     const r = rotulos(["secretario", "admin_ente"]);
     expect(r).toContain("Proposições");
     expect(r).toContain("Administração");
+  });
+});
+
+describe("TopoInterno — o número da Caixa (ADR-0020)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  function montarCom(rotas: Record<string, unknown>) {
+    global.fetch = vi.fn(async (url: string) => {
+      const corpo = rotas[String(url)];
+      if (corpo === undefined) return { ok: false, status: 404, json: async () => ({}) } as Response;
+      return { ok: true, status: 200, json: async () => corpo } as Response;
+    }) as unknown as typeof fetch;
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["auditor"]}'>
+        <TemaProvider>
+          <TopoInterno area="Auditoria" />
+        </TemaProvider>
+      </AuthProvider>
+    );
+  }
+
+  it("soma comunicados não lidos e avisos não lidos no link da Caixa, com a frase para leitor de tela", async () => {
+    montarCom({
+      "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] },
+      "/api/meu/comunicados/contagem": { itens: [], "nao-lidos": 2, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
+      "/api/meu/notificacoes": { notificacoes: [], "nao-lidas": 1, "notificacoes-total": 0 },
+    });
+    const link = await screen.findByRole("link", { name: "Caixa, 3 por ler" });
+    expect(link.getAttribute("href")?.startsWith("/caixa?token=")).toBe(true);
+    expect(link.querySelector(".nav-contagem")?.textContent).toBe("3");
+  });
+
+  it("uma fonte fora conta a outra; as duas fora, nenhum número (nunca um zero que mente)", async () => {
+    montarCom({
+      "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] },
+      "/api/meu/comunicados/contagem": { itens: [], "nao-lidos": 4, "pendentes-ciencia": 0, "proxima-ciencia-ate": null },
+    });
+    expect(await screen.findByRole("link", { name: "Caixa, 4 por ler" })).toBeTruthy();
+    cleanup();
+    montarCom({ "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] } });
+    await waitFor(() => expect(screen.getByText("Renata")).toBeTruthy());
+    expect(screen.getByRole("link", { name: "Caixa" }).querySelector(".nav-contagem")).toBeNull();
   });
 });
