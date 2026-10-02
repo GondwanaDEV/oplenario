@@ -45,12 +45,15 @@
   (jdbc/execute-one! tx ["SET LOCAL ROLE oplenario_app"]))
 
 (defn com-tenant*
-  "Roda (f tx) numa tx ISOLADA pelo tenant `ente-id`: vira oplenario_app + seta app.ente_id."
-  [ds ente-id f]
-  (jdbc/with-transaction [tx ds]
-    (entrar-app! tx)
-    (set-tenant! tx ente-id)
-    (f tx)))
+  "Roda (f tx) numa tx ISOLADA pelo tenant `ente-id`: vira oplenario_app + seta app.ente_id. `opts` (opcional) vai ao
+  `with-transaction` — ex. {:isolation :repeatable-read :read-only true} para uma leitura longa com snapshot unico
+  (a exportacao da Casa, ADR-0018)."
+  ([ds ente-id f] (com-tenant* ds ente-id {} f))
+  ([ds ente-id opts f]
+   (jdbc/with-transaction [tx ds opts]
+     (entrar-app! tx)
+     (set-tenant! tx ente-id)
+     (f tx))))
 
 (defn com-reconciliacao*
   "Como com-tenant*, mas ABRE a visao do `lote-id` nao-efetivado (reconciliacao/staging, fundacao #2).

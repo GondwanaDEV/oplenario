@@ -55,7 +55,8 @@
 ;; ---------------------------------------------------------------------------------------------
 ;; realm-habilita-passkey-e-smtp (Task 2) — inspecao CRUA da realm representation via admin-API.
 ;; Nao existe (e nao deve existir) port pra isto no protocolo IdentityProvider: e' so' verificacao de
-;; teste, no mesmo espirito do `apagar-realm-teste!` de ponta_a_ponta_test.clj.
+;; teste, no mesmo espirito do `apagar-realm-teste!` de ponta_a_ponta_test.clj (o `idp/apagar-realm!` e' o apagamento
+;; de uma Casa encerrada, ADR-0018 — nao a limpeza de teste).
 ;; ---------------------------------------------------------------------------------------------
 
 (defn- http! [] (HttpClient/newHttpClient))

@@ -68,3 +68,16 @@
     (fn [url visto]
       (is (= "Resumo." (:texto (out/ler-rascunho-resumo (out/plataforma-ia {:url url :segredo "s"}) "e1" "r1"))))
       (is (= "/v1/entes/e1/resumos/rascunhos/r1" (:path @visto))))))
+
+(deftest apagar-a-casa-no-satelite-e-delete-com-segredo
+  ;; ADR-0018 (Eixo 4.5): o core pede ao satelite que apague o que e' da Casa; o schema `ia` e' so' dele
+  (com-servidor 200 "{\"ente_id\":\"e1\",\"apagados\":{\"ia.trabalho\":3},\"total\":3}"
+    (fn [url visto]
+      (let [r (out/apagar-ente (out/plataforma-ia {:url url :segredo "s"}) "e1")]
+        (is (= 3 (:total r)))
+        (is (= {:path "/v1/entes/e1" :auth "Bearer s" :metodo "DELETE"} (select-keys @visto [:path :auth :metodo]))))))
+  (com-servidor 404 "{}" (fn [url _] (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url url :segredo "s"}) "e")))
+                           "404 nao e' 'nada a apagar': a rota existe sempre; sem ela, o passo fica pendente"))
+  (com-servidor 503 "{}" (fn [url _] (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url url :segredo "s"}) "e")))))
+  (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url "http://127.0.0.1:9" :segredo "s"}) "e")) "IA fora do ar")
+  (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url nil :segredo nil}) "e")) "nao configurada"))

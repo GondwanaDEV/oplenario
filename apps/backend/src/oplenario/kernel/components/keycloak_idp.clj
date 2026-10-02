@@ -610,6 +610,19 @@
         (throw (ex-info "keycloak-idp: falha ao enviar convite (infra)" {:status status :corpo corpo})))
       true)))
 
+(defn- apagar-realm-impl
+  "ADR-0018 (Eixo 4.5): DELETE do realm da Casa encerrada. 204 = apagado; 404 = ja' nao existia (retomada do
+  apagamento: o passo e' idempotente). Qualquer outro status LANCA — o apagamento marca o realm como pendente."
+  [{:keys [config http-client]} ente-id]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        {:keys [status corpo]} (admin-req! http-client token :delete (str "/admin/realms/" realm) nil base-url)]
+    (case (long status)
+      204 {:realm realm :existia? true}
+      404 {:realm realm :existia? false}
+      (throw (ex-info "keycloak-idp: falha ao apagar o realm (infra)" {:status status :corpo corpo :realm realm})))))
+
 (defrecord KeycloakIdp [config jwks-provider-fn jwks-cache http-client]
   component/Lifecycle
   (start [this]
@@ -624,7 +637,8 @@
   (provisionar-realm! [this ente-id] (provisionar-realm-impl this ente-id))
   (criar-usuario! [this ente-id usuario] (criar-usuario-impl this ente-id usuario))
   (convidar! [this ente-id identidade-id] (convidar-impl this ente-id identidade-id))
-  (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id)))
+  (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id))
+  (apagar-realm! [this ente-id] (apagar-realm-impl this ente-id)))
 
 (defn keycloak-idp
   "Cria o Component KeycloakIdp (NAO-iniciado — chame component/start). `config` = o mapa `:keycloak` do

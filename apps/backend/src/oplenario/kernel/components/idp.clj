@@ -23,7 +23,11 @@
     invalida o codigo anterior. O e-mail sai do IdP, NAO da aplicacao — nao confundir com o carry F6
     (e-mail transacional da app). Erro de infra LANCA (borda -> 500), nunca devolve false.")
   (resetar-mfa! [idp ente-id identidade-id]
-    "Reset de fator (ato auditado, nunca autoatendido p/ servidor/vereador — §22.5.2 eixo F)."))
+    "Reset de fator (ato auditado, nunca autoatendido p/ servidor/vereador — §22.5.2 eixo F).")
+  (apagar-realm! [idp ente-id]
+    "O INVERSO de `provisionar-realm!` (ADR-0018, Eixo 4.5): apaga o realm da Casa encerrada — usuarios, credenciais,
+    clients e o IdP gov.br vao junto. Idempotente: realm ja' inexistente = ok. Devolve {:realm :existia?}. Erro de
+    infra LANCA (o apagamento da Casa marca o passo como pendente e e' retomado), nunca devolve sucesso falso."))
 
 ;; CLAIMS minimas que a resolucao de sessao espera do token verificado (o resto e' opcional/provider).
 ;; sub = subject do IdP; ente-id presente p/ tenant, AUSENTE p/ operador supratenant (§22.5.2 eixo E).
