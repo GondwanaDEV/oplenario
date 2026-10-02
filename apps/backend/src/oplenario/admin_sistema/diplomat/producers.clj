@@ -9,3 +9,4 @@
 
 (defn emitir-suspensa! [tx ente-id payload] (eventos/emitir! bus tx (ev/suspensa ente-id payload)))
 (defn emitir-reativada! [tx ente-id payload] (eventos/emitir! bus tx (ev/reativada ente-id payload)))
+(defn emitir-encerrada! [tx ente-id payload] (eventos/emitir! bus tx (ev/encerrada ente-id payload)))

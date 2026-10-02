@@ -15,6 +15,7 @@
             [oplenario.admin-sistema.controllers :as controllers]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.components.objeto-store :as objeto-store]
             [oplenario.kernel.tempo :as tempo])
   (:import (java.time Duration Instant)))
 
@@ -61,15 +62,19 @@
 ;; ---- registro de Casas (12.1) ----
 
 (defn- com-erros
-  "Os erros do registro que viram resposta: Casa inexistente -> 404; estado que nao permite -> 409 (com o porque)."
+  "Os erros do registro que viram resposta: Casa inexistente -> 404; estado que nao permite -> 409 (com o porque e, quando
+  ha', a `causa` estavel que a tela le); o seam pesado que esta instalacao nao tem (exportar, apagar) -> 503 NOMEADO."
   [f]
   (fn [req]
     (try (f req)
          (catch clojure.lang.ExceptionInfo e
-           (case (:tipo (ex-data e))
-             :admin-sistema/nao-encontrada (http/json-resposta 404 {:erro (ex-message e)})
-             :admin-sistema/conflito (http/json-resposta 409 {:erro (ex-message e)})
-             (throw e)))
+           (let [{:keys [tipo causa extra]} (ex-data e)]
+             (case tipo
+               :admin-sistema/nao-encontrada (http/json-resposta 404 {:erro (ex-message e)})
+               :admin-sistema/conflito (http/json-resposta 409 (cond-> (merge {:erro (ex-message e)} extra)
+                                                                 causa (assoc :causa causa)))
+               :admin-sistema/indisponivel (http/json-resposta 503 {:erro (ex-message e) :causa (or causa "indisponivel")})
+               (throw e))))
          (catch org.postgresql.util.PSQLException e
            ;; a corrida que o banco segura (dois pedidos abertos na mesma Casa; a mesma pessoa nas duas pontas)
            (if (#{"23505" "23514"} (.getSQLState e))
@@ -121,9 +126,10 @@
                                                           (in-ente/iniciar-encerramento->dominio (:json-params req))
                                                           (agora relogio)))))
 
-(defn- aprovar-handler [repo-op deps]
+(defn- aprovar-handler [repo-op deps relogio]
   (transicao (fn [req] (controllers/aprovar-pedido! repo-op deps (:ator req) (pedido-do-path req)
-                                                    (in-ente/decisao->justificativa (:json-params req))))))
+                                                    (in-ente/decisao->justificativa (:json-params req))
+                                                    (agora relogio)))))
 
 (defn- recusar-handler [repo-op deps]
   (transicao (fn [req] (controllers/recusar-pedido! repo-op deps (:ator req) (pedido-do-path req)
@@ -132,6 +138,90 @@
 (defn- reativar-handler [repo-op deps]
   (transicao (fn [req] (controllers/reativar! repo-op deps (:ator req) (ente-do-path req)
                                               (in-ente/reativar->justificativa (:json-params req))))))
+
+;; ---- ADR-0018 (fatia 2): encerrar — no console (supratenant) ----
+
+(defn- exportacao-do-path [req] (in-ente/ente-param->uuid (get-in req [:path-params :exportacao])))
+
+(defn- gerar-exportacao-operador-handler [repo-op deps relogio]
+  (com-erros (fn [req]
+               (http/json-resposta 202 (out-ente/exportacao->wire
+                                        (controllers/gerar-exportacao! repo-op deps {:tipo "operador"
+                                                                                     :id (get-in req [:ator :operador-id])}
+                                                                       (ente-do-path req) (agora relogio)))))))
+
+(defn- registrar-oficio-handler [repo-op deps relogio]
+  (com-erros (fn [req]
+               (http/json-resposta 200 (out-ente/exportacao->wire
+                                        (controllers/registrar-oficio! repo-op deps (:ator req) (exportacao-do-path req)
+                                                                       (in-ente/oficio->texto (:json-params req))
+                                                                       (agora relogio)))))))
+
+(defn- destino-acervo-handler [repo-op deps]
+  (transicao (fn [req] (controllers/definir-destino-acervo! repo-op deps (:ator req) (ente-do-path req)
+                                                            (in-ente/destino-acervo->url (:json-params req))))))
+
+(defn- pedir-apagamento-handler [repo-op deps relogio]
+  (transicao (fn [req] (controllers/pedir-apagamento! repo-op deps (:ator req) (ente-do-path req)
+                                                      (in-ente/pedir-apagamento->justificativa (:json-params req))
+                                                      (agora relogio)))))
+
+(defn- retomar-apagamento-handler [repo-op deps relogio]
+  (transicao (fn [req] (controllers/retomar-apagamento! repo-op deps (:ator req) (ente-do-path req) (agora relogio)))))
+
+;; ---- ADR-0018 (fatia 2): a exportacao vista pela CASA (o admin_ente, interceptor da Casa) ----
+
+(defn- ente-do-ator [req] (get-in req [:ator :ente-id]))
+
+(defn- exportacoes-da-casa-handler [repo-op deps]
+  (fn [req]
+    (http/json-resposta 200 (out-ente/da-casa->wire
+                             (controllers/exportacoes-para-a-casa repo-op deps (ente-do-ator req))))))
+
+(defn- gerar-exportacao-casa-handler [repo-op deps relogio]
+  (com-erros (fn [req]
+               (-> (http/json-resposta 202 (out-ente/exportacao->wire
+                                            (controllers/gerar-exportacao! repo-op deps
+                                                                           {:tipo "admin_ente"
+                                                                            :id (get-in req [:ator :identidade-id])}
+                                                                           (ente-do-ator req) (agora relogio))))
+                   (assoc :auditoria {:rotulo "pediu a exportacao completa da Camara"})))))
+
+(defn- baixar-exportacao-handler [repo-op store]
+  (com-erros (fn [req]
+               (let [e (controllers/arquivo-para-baixar! repo-op (ente-do-ator req) (exportacao-do-path req))]
+                 (if-let [in (objeto-store/abrir store (:chave-objeto e))]
+                   (out-ente/exportacao->download e in)
+                   (http/json-resposta 404 {:erro "o arquivo desta exportacao nao esta' mais disponivel"
+                                            :causa "arquivo-ausente"}))))))
+
+(defn- confirmar-recebimento-handler [repo-op deps relogio]
+  (com-erros (fn [req]
+               (-> (http/json-resposta 200 (out-ente/exportacao->wire
+                                            (controllers/confirmar-recebimento!
+                                             repo-op deps (:ator req) (ente-do-ator req) (exportacao-do-path req)
+                                             (in-ente/confirmar-recebimento->sha256 (:json-params req))
+                                             (agora relogio))))
+                   (assoc :auditoria {:rotulo "confirmou o recebimento da exportacao completa"})))))
+
+(defn rotas-da-casa
+  "ADR-0018 (fatia 2): a exportacao completa (9.6) vista pela Casa — `auth` e' o interceptor da CASA (o host o passa) e
+  so' o `admin_ente` entra. Supratenant no armazenamento (a linha sobrevive ao apagamento), mas o ator e' da Casa: a
+  Casa e' a do ator, nunca a do caminho. Gerar e confirmar passam numa Casa suspensa (allowlist de
+  `oplenario.restricao-da-casa`); na Casa encerrada, tudo e' 410."
+  [{:keys [auth repo-admin-sistema relogio objeto-store deps-registro]}]
+  (let [papel (it/exige-papel "admin_ente")]
+    #{["/administracao/exportacoes" :get [auth papel (exportacoes-da-casa-handler repo-admin-sistema deps-registro)]
+       :route-name :exportacao-da-casa/listar]
+      ["/administracao/exportacoes" :post
+       [auth papel (gerar-exportacao-casa-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :exportacao-da-casa/gerar]
+      ["/administracao/exportacoes/:exportacao/arquivo" :get
+       [auth papel (baixar-exportacao-handler repo-admin-sistema objeto-store)]
+       :route-name :exportacao-da-casa/baixar]
+      ["/administracao/exportacoes/:exportacao/confirmacao" :post
+       [auth papel it/corpo-json (confirmar-recebimento-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :exportacao-da-casa/confirmar-recebimento]}))
 
 ;; ---- observabilidade da IA (Onda E, §22.8) ----
 
@@ -191,8 +281,26 @@
        :route-name :admin-sistema/iniciar-encerramento]
       ["/operacao/casas/:ente/reativacao" :post [auth papel it/corpo-json (reativar-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/reativar-casa]
-      ["/operacao/pedidos/:pedido/aprovacao" :post [auth papel it/corpo-json (aprovar-handler repo-admin-sistema deps-registro)]
+      ["/operacao/pedidos/:pedido/aprovacao" :post
+       [auth papel it/corpo-json (aprovar-handler repo-admin-sistema deps-registro relogio)]
        :route-name :admin-sistema/aprovar-pedido]
+      ;; ADR-0018 (fatia 2): encerrar — exportacao, oficio, destino do acervo, apagamento (o pedido; a aprovacao e' a
+      ;; mesma fila "aguardando 2o operador" acima)
+      ["/operacao/casas/:ente/exportacoes" :post
+       [auth papel (gerar-exportacao-operador-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/gerar-exportacao]
+      ["/operacao/exportacoes/:exportacao/oficio" :post
+       [auth papel it/corpo-json (registrar-oficio-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/registrar-oficio-de-recebimento]
+      ["/operacao/casas/:ente/destino-acervo" :post
+       [auth papel it/corpo-json (destino-acervo-handler repo-admin-sistema deps-registro)]
+       :route-name :admin-sistema/definir-destino-acervo]
+      ["/operacao/casas/:ente/apagamento" :post
+       [auth papel it/corpo-json (pedir-apagamento-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/pedir-apagamento]
+      ["/operacao/casas/:ente/apagamento/retomada" :post
+       [auth papel (retomar-apagamento-handler repo-admin-sistema deps-registro relogio)]
+       :route-name :admin-sistema/retomar-apagamento]
       ["/operacao/pedidos/:pedido/recusa" :post [auth papel it/corpo-json (recusar-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/recusar-pedido]
       ["/operacao/casas/:ente/convite" :post [auth papel (reenviar-convite-handler repo-admin-sistema deps-registro)]

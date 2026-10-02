@@ -1,6 +1,7 @@
 (ns oplenario.admin-sistema.wire.out.ente
   "Representacao externa (wire) do registro de Casas no console do operador (ADR-0016). Metadado da Casa e da
-  atuacao da Operacao — nunca dado de dentro da Casa (a Operacao nao ve' os dados dela sem acesso de suporte).")
+  atuacao da Operacao — nunca dado de dentro da Casa (a Operacao nao ve' os dados dela sem acesso de suporte)."
+  (:require [oplenario.admin-sistema.wire.out.exportacao :as exportacao]))
 
 (def ^:private Instante [:maybe :string])
 
@@ -17,7 +18,10 @@
    [:ativada-em Instante]
    ;; ADR-0018: a restricao vigente (so' numa Casa suspensa) e a suspensao aprovada que espera a sessao em curso
    [:restricao [:maybe [:map {:closed true} [:motivo :string] [:desde :string]]]]
-   [:suspensao-agendada :boolean]])
+   [:suspensao-agendada :boolean]
+   ;; ADR-0018 (fatia 2): a Casa encerrada (quando) e para onde foi o acervo publico
+   [:encerrada-em Instante]
+   [:destino-acervo-url [:maybe :string]]])
 
 (def PedidoOut
   "Um pedido de suspensao/encerramento (ADR-0018). `pedido-por-id` deixa a tela saber se quem olha e' quem pediu (quem
@@ -26,7 +30,7 @@
    [:id :string]
    [:ente-id :string]
    [:casa-nome [:maybe :string]]
-   [:acao [:enum "suspender" "encerrar"]]
+   [:acao [:enum "suspender" "encerrar" "apagar"]]
    [:motivo :string]
    [:justificativa :string]
    [:estado [:enum "aguardando" "aprovado" "recusado" "expirado" "retirado"]]
@@ -39,7 +43,8 @@
 (def ListaDeCasasOut
   [:map {:closed true}
    [:casas [:vector CasaOut]]
-   [:resumo [:map {:closed true} [:total :int] [:ativas :int] [:aguardando-admin :int] [:suspensas :int]]]
+   [:resumo [:map {:closed true} [:total :int] [:ativas :int] [:aguardando-admin :int] [:suspensas :int]
+             [:encerradas :int]]]
    [:pendentes [:vector PedidoOut]]])
 
 (def AtuacaoOut
@@ -51,11 +56,29 @@
    [:detalhe [:map-of :keyword :any]]
    [:selo :string]])
 
+(def EncerramentoOut
+  "ADR-0018 (fatia 2): a sequencia do encerramento na ficha — exportacao -> confirmacao -> guarda -> destino do acervo ->
+  apagamento -> encerrada. `pode-pedir-apagamento` ja' diz se a salvaguarda passou (o backend confere de novo)."
+  [:map {:closed true}
+   [:em-curso :boolean]
+   [:desde Instante]
+   [:exportacoes [:vector exportacao/ExportacaoOut]]
+   [:confirmacao [:maybe exportacao/ExportacaoOut]]
+   [:apagamento-possivel-em Instante]
+   [:pode-pedir-apagamento :boolean]
+   [:exportacao-disponivel :boolean]
+   [:apagamento-disponivel :boolean]
+   [:apagamento-pendente [:maybe PedidoOut]]
+   [:destino-acervo-url [:maybe :string]]
+   [:encerrada-em Instante]
+   [:apagamento [:maybe [:map-of :keyword :any]]]])
+
 (def FichaDaCasaOut
   [:map {:closed true}
    [:casa CasaOut]
    [:primeiro-admin [:maybe [:map {:closed true} [:nome [:maybe :string]] [:email [:maybe :string]]]]]
    [:pedido-aberto [:maybe PedidoOut]]
+   [:encerramento [:maybe EncerramentoOut]]
    [:atuacao [:vector AtuacaoOut]]])
 
 (def TransicaoOut
@@ -63,7 +86,9 @@
   [:map {:closed true}
    [:casa CasaOut]
    [:pedido [:maybe PedidoOut]]
-   [:efeito [:maybe [:enum "imediato" "agendado" "ja-efetivado"]]]])
+   [:efeito [:maybe [:enum "imediato" "agendado" "ja-efetivado" "encerrada" "apagamento-interrompido"]]]
+   ;; o apagamento que parou no meio diz por que (a tela oferece retomar)
+   [:erro {:optional true} :string]])
 
 (def ProvisionadaOut
   [:map {:closed true}

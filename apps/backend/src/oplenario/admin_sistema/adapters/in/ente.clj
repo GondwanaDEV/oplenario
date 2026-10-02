@@ -59,3 +59,23 @@
 
 (defn reativar->justificativa [json-params]
   (get (corpo! wire/ReativarIn json-params) "justificativa"))
+
+;; ---- ADR-0018 (fatia 2) ----
+
+(defn confirmar-recebimento->sha256 [json-params]
+  (str/lower-case (get (corpo! wire/ConfirmarRecebimentoIn
+                               (cond-> json-params
+                                 (string? (get json-params "sha256")) (update "sha256" str/lower-case)))
+                       "sha256")))
+
+(defn oficio->texto [json-params]
+  (get (corpo! wire/OficioIn json-params) "texto"))
+
+(defn destino-acervo->url [json-params]
+  (not-empty (get (corpo! wire/DestinoAcervoIn (cond-> json-params
+                                                (and (map? json-params) (string? (get json-params "url")) (str/blank? (get json-params "url")))
+                                                (assoc "url" nil)))
+                  "url")))
+
+(defn pedir-apagamento->justificativa [json-params]
+  (get (corpo! wire/PedirApagamentoIn json-params) "justificativa"))
