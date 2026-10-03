@@ -4,7 +4,7 @@
   display: grid; gap: clamp(1rem, 2.4vw, 1.6rem); align-content: start;
   padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem;
 }
-.ma-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-22); color: var(--texto); margin: 0 0 0.6rem; }
+.ma-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.6rem; }
 
 .ma-dados {
   margin: 0; padding: 1.1rem; display: grid; gap: 0.8rem 1.2rem;
@@ -13,7 +13,7 @@
 .ma-dados > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .ma-dados .ma-largo { grid-column: 1 / -1; }
 .ma-dados dt { font-size: var(--t-12); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.06em; }
-.ma-dados dd { margin: 0; font-size: var(--t-14); color: var(--texto); overflow-wrap: anywhere; }
+.ma-dados dd { margin: 0; font-size: var(--t-13); color: var(--texto); overflow-wrap: anywhere; }
 .ma-dados dd.mono { font-family: var(--mono); }
 .ma-rodape { margin: 0; padding: 0 1.1rem 1.1rem; font-size: var(--t-13); color: var(--texto-2); }
 .ma-rodape a { color: var(--marca); font-weight: 600; }
@@ -34,7 +34,7 @@
 .mesa-audiencia .campo input,
 .mesa-audiencia .campo select {
   padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14); min-width: 0;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13); min-width: 0;
 }
 .mesa-audiencia .campo input:focus-visible,
 .mesa-audiencia .campo select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }

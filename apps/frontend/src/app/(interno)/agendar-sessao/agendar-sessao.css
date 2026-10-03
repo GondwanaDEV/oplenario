@@ -54,7 +54,7 @@
   background: color-mix(in srgb, var(--marca) 4%, var(--surface));
 }
 .bloco-audiencia > legend {
-  padding: 0 0.35rem; font-family: var(--display); font-weight: 600; font-size: var(--t-15); color: var(--texto);
+  padding: 0 0.35rem; font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto);
 }
 .ba-ajuda { margin: 0; font-size: var(--t-13); color: var(--texto-2); max-width: 64ch; line-height: 1.5; }
 .ba-dica { font-size: var(--t-12); color: var(--texto-2); }
