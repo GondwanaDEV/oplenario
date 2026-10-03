@@ -18,6 +18,7 @@
 (def ^:private colunas
   [:id :ente_id :sessao_legislativa_id :tipo_sessao :numero_sequencial :estado :modalidade
    :delibera :transmite_publica :gera_ata_regimental :permite_voto_secreto :permite_modalidade_remota
+   :exige_quorum :aceita_inscricao_cidadao
    :agendada_para :aberta_em :encerrada_em :motivo_nao_realizada :lock_version])
 
 (defn agendar!
@@ -42,6 +43,8 @@
                                        :gera_ata_regimental (:gera-ata-regimental caps)
                                        :permite_voto_secreto (:permite-voto-secreto caps)
                                        :permite_modalidade_remota (:permite-modalidade-remota caps)
+                                       :exige_quorum (:exige-quorum caps)
+                                       :aceita_inscricao_cidadao (:aceita-inscricao-cidadao caps)
                                        :agendada_para agendada-para :created_by created-by :efetivado_em [:now]}]
                              :returning [:efetivado_em]})))]
     {:id id :numero num :ocorrido-em (:efetivado-em row)}))
@@ -176,7 +179,9 @@
   que difere entre elas e' SO' a clausula de data, passada em `extra`."
   [ente-id tipos extra]
   (cond-> (into [:and [:= :ente_id ente-id]
-                 [:in :estado (vec logic/estados-sessao-fechada)]]
+                 [:in :estado (vec logic/estados-sessao-fechada)]
+                 ;; ADR-0021: a audiencia publica nunca entra na assiduidade (nem com `tipos` vazio)
+                 [:not-in :tipo_sessao (vec logic/tipos-fora-da-assiduidade)]]
                 extra)
     (seq tipos) (conj [:in :tipo_sessao (vec tipos)])))
 

@@ -261,7 +261,8 @@
              "src/oplenario/sessoes/logic.clj"                           ; o PISO da janela + a DATA DE REFERENCIA (uso real)
              "src/oplenario/sessoes/components/serializador_folha.clj"    ; a FOLHA, Etapa 5 fatia 2
              "src/oplenario/sessoes/components/renderizador_pdf.clj"     ; o PDF da FOLHA, Etapa 5 fatia 3 (uso real)
-             "src/oplenario/sessoes/db/sessao.clj"}                      ; a APURACAO, Etapa 6 fatia 2 (uso real)
+             "src/oplenario/sessoes/db/sessao.clj"                       ; a APURACAO, Etapa 6 fatia 2 (uso real)
+             "src/oplenario/gatilho_compliance.clj"}                     ; o dia do vinculo a regra, ADR-0021 (uso real)
            consumidores)
         "a lista de arquivos de src/ que MENCIONAM o fuso global mudou — atualize a docstring da constante
          (e este conjunto) ANTES de mergear"))

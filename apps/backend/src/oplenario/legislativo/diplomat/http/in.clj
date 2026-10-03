@@ -64,19 +64,24 @@
 (defn- abrir-handler
   "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
   autoriza na sessao (:id) e abre; adapters/out projeta o recibo. nil (sessao inexistente) -> 404; sessao ja
-  fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #5)."
-  [repo-leg consultar-sessao sessao-fechada?]
+  fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #5). ADR-0021: a materia de contas cujo quorum ou
+  modalidade nao sao os da regra (`:conflito/regra-de-votacao`) -> 422 com a regra em palavras."
+  [repo-leg consultar-sessao sessao-fechada? registro]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           m    (adapters-in/abrir-votacao->dominio ator (:json-params req))]
       (try
-        (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao sessao-fechada? ator sid m)]
+        (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao sessao-fechada? registro ator sid m)]
           (http/json-resposta 201 (adapters-out/abertura->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
-            (resposta-conflito-sessao-fechada e)
+          (case (:tipo (ex-data e))
+            ;; ADR-0021: a sessao nao delibera (audiencia publica, solene, especial) — mesma forma do 409 de sessao fechada
+            (:conflito/sessao-fechada :conflito/sessao-nao-delibera) (resposta-conflito-sessao-fechada e)
+            :conflito/regra-de-votacao (http/json-resposta 422 {:erro (ex-message e)
+                                                                :regra (:regra (ex-data e))
+                                                                :referencia (:referencia (ex-data e))})
             (throw e)))))))
 
 (defn- voto-handler
@@ -1285,7 +1290,7 @@
         ;; vereador nessas telas). ESCRITA/acoes seguem em `papel` (secretario).
         papel-leitura (it/exige-algum-papel #{"secretario" "vereador" "juridico"})]
     #{["/sessoes/:id/votacoes" :post
-       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada?)]
+       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada? registro)]
        :route-name :legislativo/abrir-votacao]
       ["/sessoes/:id/votacoes/:votacao-id/votos" :post
        [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao sessao-fechada? vereador-no-roster?)]

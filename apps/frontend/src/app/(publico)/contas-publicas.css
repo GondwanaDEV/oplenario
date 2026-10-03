@@ -1,0 +1,19 @@
+/* As contas no portal (ADR-0021 Parte B). Tokens do sistema; o mesmo vocabulário de dados-abertos/pautas-oficiais. */
+.contas-publicas { padding-block: 2rem 3rem; }
+.contas-publicas .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
+.contas-publicas .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.contas-publicas .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; line-height: 1.55; }
+.contas-publicas .estado { color: var(--texto-2); font-size: var(--t-13); margin: 0.6rem 0 0; }
+.contas-publicas .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.8rem 0 0.7rem; }
+.cp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; max-width: 52rem; }
+.cp-item { padding: 1rem 1.2rem; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface); box-shadow: var(--sombra); display: grid; gap: 0.6rem; min-width: 0; }
+.cp-item h3 { margin: 0; font-family: var(--display); font-size: var(--t-16); color: var(--texto); }
+.cp-dl { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 1rem; margin: 0; }
+.cp-dl dt { font-size: var(--t-13); color: var(--texto-2); }
+.cp-dl dd { margin: 0; font-size: var(--t-13); color: var(--texto); font-weight: 500; overflow-wrap: anywhere; }
+.cp-frase { margin: 0; padding: 0.55rem 0.8rem; border-left: 4px solid var(--marca); background: color-mix(in srgb, var(--marca) 8%, var(--surface)); font-weight: 700; color: var(--texto); }
+.cp-docs { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.cp-docs li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; align-items: center; }
+.cp-docs a { min-height: 44px; display: inline-flex; align-items: center; color: var(--marca); font-weight: 600; }
+.cp-doc-nome { font-size: var(--t-12); color: var(--texto-2); overflow-wrap: anywhere; }
+@media (max-width: 480px) { .cp-dl { grid-template-columns: 1fr; gap: 0.1rem; } .cp-dl dd { margin-bottom: 0.4rem; } }

@@ -8,6 +8,7 @@ import {
   rotuloQuorum,
   MODALIDADES,
   QUORUNS,
+  regraDaVotacaoDeContas,
 } from "./votacao-mesa-vista";
 import type { VotacaoAbertaResumo } from "./use-votacao-mesa";
 
@@ -84,5 +85,17 @@ describe("rótulos e regras", () => {
       "maioria_qualificada_2_3",
       "maioria_qualificada_3_5",
     ]);
+  });
+});
+
+describe("regraDaVotacaoDeContas (ADR-0021 B2)", () => {
+  it("nominal, 2/3, a pergunta e quantos votos a rejeição precisa", () => {
+    const r = regraDaVotacaoDeContas({ baseMembros: 21, necessariosParaRejeitar: 14 });
+    expect(r.modalidade).toBe("nominal");
+    expect(r.quorumTipo).toBe("maioria_qualificada_2_3");
+    expect(r.pergunta).toBe("Rejeitar o parecer prévio do TCE?");
+    expect(r.legendaSim).toBe("Sim = rejeitar o parecer");
+    expect(r.precisos).toBe("São precisos 14 votos pela rejeição (2/3 dos 21 membros).");
+    expect(rotuloQuorum(r.quorumTipo)).toBe("Qualificada (2/3)");
   });
 });

@@ -44,6 +44,7 @@
 (def SESSAO-ID     {:kind :opaco :nome "SessaoId"})    ; F4.3b: agregadores de quorum (presentes_*(SessaoId,Instante))
 (def VEREADOR-ID   {:kind :opaco :nome "VereadorId"})    ; C3: esta_presente_em(SessaoId,VereadorId,Instante)
 (def PROPOSICAO-ID {:kind :opaco :nome "ProposicaoId"}) ; 3-B: aprovada_em_votacao(ProposicaoId)->Booleano
+(def PRESTACAO-CONTAS-ID {:kind :opaco :nome "PrestacaoContasId"}) ; ADR-0021 B4: contas_julgadas(PrestacaoContasId)->Booleano
 
 ;; ---- predicados de compatibilidade usados pelo type-checker ----
 (def ^:private numericos #{INTEIRO RACIONAL})

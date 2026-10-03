@@ -39,7 +39,11 @@
      :aberta-em                 (->str (:aberta-em s))
      :encerrada-em              (->str (:encerrada-em s))
      :motivo-nao-realizada      (:motivo-nao-realizada s)
-     :lock-version              (:lock-version s)}]
+     :lock-version              (:lock-version s)}
+          ;; ADR-0021: as duas capabilities novas (a linha do banco sempre as traz)
+          out (cond-> out
+                (some? (:exige-quorum s)) (assoc :exige-quorum (:exige-quorum s))
+                (some? (:aceita-inscricao-cidadao s)) (assoc :aceita-inscricao-cidadao (:aceita-inscricao-cidadao s)))]
       (when-not (m/validate wire/SessaoOut out)
         (throw (ex-info "projecao de sessao viola o contrato SessaoOut (bug de servidor)"
                         {:campos (keys (me/humanize (m/explain wire/SessaoOut out)))})))

@@ -161,6 +161,19 @@ describe("derivarCentral — fila de trabalho", () => {
     expect(v.fila.itens[0].prazo?.atrasado).toBe(true);
   });
 
+  it("a obrigação aparece pelo nome (ADR-0021); a chave desconhecida segue crua", () => {
+    const v = derivarCentral(entrada({
+      compliance: { itens: [
+        { id: "o1", templateChave: "julgamento_contas_prefeito", venceEm: "2026-10-31" },
+        { id: "o2", templateChave: "rgf", venceEm: "2026-11-30" },
+      ], total: 2 },
+    }));
+    expect(v.fila.itens.map((i) => i.titulo)).toEqual([
+      "Obrigação em aberto · Julgamento das contas do Prefeito",
+      "Obrigação em aberto · rgf",
+    ]);
+  });
+
   it(`corta os prazos legais em ${LIMITE_LEGAIS} e conta o resto pelo total AUTORITATIVO do servidor`, () => {
     const itens = Array.from({ length: 7 }, (_, i) => ({ id: `o${i}`, templateChave: "t", venceEm: `2026-10-0${i + 1}` }));
     const v = derivarCentral(entrada({ compliance: { itens, total: 12 } }));

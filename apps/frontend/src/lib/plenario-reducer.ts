@@ -322,6 +322,13 @@ export type VistaQuorum =
   | { status: "indisponivel" }
   | { status: "ok"; presentes: number; membrosDaCasa: number; foraDoRoster: number; semRegistro: boolean };
 
+/** O telão mostra o quórum? (ADR-0021) A audiência pública — e toda sessão com `exige-quorum = false` — não
+ * tem quórum: um "3 de 21 presentes" ali sugeriria que falta gente para algo que não se decide. Backend que
+ * ainda não manda a capability cai em `delibera`, o mesmo backfill da migration. */
+export function exigeQuorumDaSessao(sessao: Pick<SessaoOut, "delibera" | "exige-quorum">): boolean {
+  return typeof sessao["exige-quorum"] === "boolean" ? sessao["exige-quorum"] : sessao.delibera !== false;
+}
+
 export function vistaDoQuorum(estado: EstadoPlenario): VistaQuorum {
   if (estado.quorum === null) return { status: estado.quorumStatus === "indisponivel" ? "indisponivel" : "carregando" };
   const q = estado.quorum;

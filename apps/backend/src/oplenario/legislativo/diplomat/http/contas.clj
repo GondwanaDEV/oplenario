@@ -1,0 +1,272 @@
+(ns oplenario.legislativo.diplomat.http.contas
+  "Borda HTTP do JULGAMENTO DAS CONTAS (ADR-0021 Parte B). Ns proprio, ao lado de `in.clj` (que ja' carrega as tres
+  verticais do modulo): as rotas internas (`/contas`, `/contas-da-proposicao/:id`, `/parametros-de-contas`) e as do
+  portal (`/portal/casa/:ente/contas`). Os caminhos foram escolhidos para nao por literal e curinga no mesmo nivel do
+  roteador do Pedestal.
+
+  `hoje` (o dia civil da Casa, de que depende o estado derivado) sai do relogio injetado, lido aqui na borda. A base do
+  quorum vem do servidor (`membros-da-casa`, seam do host), nunca do cliente — o mesmo denominador do encerramento."
+  (:require [clojure.string :as str]
+            [io.pedestal.interceptor.chain :as chain]
+            [oplenario.http :as http]
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.contas :as adapters-in]
+            [oplenario.legislativo.adapters.out.contas :as adapters-out]
+            [oplenario.legislativo.controllers :as controllers]
+            [oplenario.legislativo.logic.contas :as logic-contas]
+            [ring.middleware.multipart-params :as multipart])
+  (:import (java.io InputStream)
+           (java.net URLEncoder)
+           (java.nio.charset StandardCharsets)
+           (java.time ZoneId)))
+
+(set! *warn-on-reflection* true)
+
+(def ^:private zona-civil (ZoneId/of "America/Fortaleza"))
+
+(defn- hoje [relogio] (tempo/hoje relogio zona-civil))
+
+(def ^:private nao-encontrada (http/json-resposta 404 {:erro "prestação de contas não encontrada"}))
+
+(def ^:private erros-notificacao
+  {:mesa [409 "As contas da Mesa são só acompanhamento: não há notificação nem defesa."]
+   :julgada [409 "As contas deste exercício já foram julgadas."]})
+
+(defn- ficha [deps ente-id p]
+  (adapters-out/prestacao->wire p (hoje (:relogio deps))
+                                (controllers/base-do-quorum (:membros-da-casa deps) ente-id p)))
+
+(defn- auditoria
+  "O resumo do efeito para a trilha (ADR-0017): o exercicio e o tipo — nunca o conteudo dos documentos."
+  [resp p]
+  (assoc resp :auditoria {:rotulo (str "Contas " (:exercicio p) " (" (:tipo p) ")")
+                          :recurso-tipo "prestacao_contas" :recurso-id (str (:id p))}))
+
+;; ---------- handlers internos ----------
+
+(defn- listar-handler [{:keys [repo-legislativo relogio]}]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out/prestacoes->wire
+                              (controllers/prestacoes-de-contas repo-legislativo (:ente-id (:ator req)))
+                              (hoje relogio)))))
+
+(defn- registrar-handler
+  [{:keys [repo-legislativo resolver-municipio comissoes-vigentes relogio] :as deps}]
+  (fn [req]
+    (let [ator (:ator req)
+          m (adapters-in/registro->dominio (:json-params req))]
+      (try
+        (let [p (controllers/registrar-prestacao! repo-legislativo resolver-municipio comissoes-vigentes ator
+                                                  (hoje relogio) m)]
+          (auditoria (http/json-resposta 201 (ficha deps (:ente-id ator) p)) p))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/prestacao-duplicada (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro (str "Já há prestação de contas "
+                                                (if (= "governo_prefeito" (:tipo m)) "do Prefeito" "da Mesa")
+                                                " do exercício de " (:exercicio m) ".")})
+            (throw e)))))))
+
+(defn- detalhe-handler [{:keys [repo-legislativo] :as deps}]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))]
+      (if-let [p (some->> (adapters-in/id-do-path req :id) (controllers/prestacao-de-contas repo-legislativo ente-id))]
+        (http/json-resposta 200 (ficha deps ente-id p))
+        nao-encontrada))))
+
+(defn- da-proposicao-handler [{:keys [repo-legislativo] :as deps}]
+  (fn [req]
+    (let [ente-id (:ente-id (:ator req))]
+      (if-let [p (some->> (adapters-in/id-do-path req :proposicao-id)
+                          (controllers/prestacao-da-proposicao repo-legislativo ente-id))]
+        (http/json-resposta 200 (ficha deps ente-id p))
+        (http/json-resposta 404 {:erro "esta matéria não é de julgamento de contas"})))))
+
+(defn- editar-handler [{:keys [repo-legislativo] :as deps}]
+  (fn [req]
+    (let [ator (:ator req)
+          m (adapters-in/edicao->dominio (:json-params req))]
+      (if-let [p (when-let [id (adapters-in/id-do-path req :id)]
+                   (controllers/atualizar-prestacao! repo-legislativo ator id m))]
+        (auditoria (http/json-resposta 200 (ficha deps (:ente-id ator) p)) p)
+        nao-encontrada))))
+
+(defn- notificacao-handler [{:keys [repo-legislativo relogio] :as deps}]
+  (fn [req]
+    (let [ator (:ator req)
+          m (adapters-in/notificacao->dominio (:json-params req))
+          id (adapters-in/id-do-path req :id)
+          {:keys [prestacao erro] :as r} (if id
+                                           (controllers/notificar-prestacao! repo-legislativo ator (hoje relogio) id m)
+                                           {:erro :nao-encontrada})]
+      (cond
+        prestacao (auditoria (http/json-resposta 200 (ficha deps (:ente-id ator) prestacao)) prestacao)
+        (= :nao-encontrada erro) nao-encontrada
+        (= :ja-notificada erro)
+        (http/json-resposta 409 {:erro (str "O responsável já foi notificado em "
+                                            (logic-contas/data-br (:notificado-em r))
+                                            "; o prazo de defesa já está correndo.")})
+        :else (let [[status msg] (get erros-notificacao erro [500 "erro interno"])]
+                (http/json-resposta status {:erro msg}))))))
+
+;; ---------- documentos: um arquivo por requisicao, multipart (o mesmo desenho dos anexos dos comunicados) ----------
+
+(defn- ler-ate
+  "Le o stream ate' `teto` bytes; passou -> :corpo/grande (nunca aloca alem do teto + 1 bloco)."
+  ^bytes [^InputStream in teto]
+  (let [out (java.io.ByteArrayOutputStream.)
+        buf (byte-array 8192)]
+    (loop [total 0]
+      (let [n (.read in buf)]
+        (if (neg? n)
+          (.toByteArray out)
+          (let [t (+ total (long n))]
+            (when (> t (long teto)) (throw (ex-info "arquivo grande demais" {:tipo :corpo/grande})))
+            (.write out buf 0 n)
+            (recur t)))))))
+
+(def ^:private folga-do-envelope
+  "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
+  (* 64 1024))
+
+(def documento-multipart
+  "Interceptor do upload: `multipart/form-data` com UM arquivo (o campo `arquivo`), lido para memoria com teto de 10 MB
+  (o object storage recebe os bytes e o sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/malformado
+  -> 400. Resultado em `(:request :arquivo)` {:nome :tipo-midia :conteudo}."
+  {:name ::documento-multipart
+   :enter (fn [ctx]
+            (let [req (:request ctx)
+                  tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
+                  recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))]
+              (if (and tamanho (> (long tamanho) (+ logic-contas/max-bytes-documento folga-do-envelope)))
+                (recusa 413 "O documento passa de 10 MB.")
+                (try
+                  (let [params (:multipart-params
+                                (multipart/multipart-params-request
+                                 req {:max-file-count 1
+                                      :store (fn [{:keys [filename content-type stream]}]
+                                               {:nome (logic-contas/nome-de-arquivo filename)
+                                                :tipo-midia (logic-contas/tipo-de-midia content-type)
+                                                :conteudo (ler-ate stream logic-contas/max-bytes-documento)})}))
+                        arquivos (filter #(and (map? %) (:conteudo %)) (vals params))]
+                    (cond
+                      (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
+                      (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
+                      :else (assoc-in ctx [:request :arquivo] (first arquivos))))
+                  (catch clojure.lang.ExceptionInfo e
+                    (if (= :corpo/grande (:tipo (ex-data e)))
+                      (recusa 413 "O documento passa de 10 MB.")
+                      (recusa 400 "Envie um arquivo por vez (campo arquivo).")))
+                  (catch Exception _
+                    (recusa 400 "O envio do arquivo veio malformado."))))))})
+
+(defn- anexar-handler [{:keys [repo-legislativo objeto-store]}]
+  (fn [req]
+    (let [tipo (adapters-in/tipo-do-documento (:query-params req))
+          id (adapters-in/id-do-path req :id)]
+      (if-let [d (when id (controllers/anexar-documento-de-contas! repo-legislativo objeto-store (:ator req) id tipo
+                                                                   (:arquivo req)))]
+        (assoc (http/json-resposta 201 (adapters-out/documento->wire d))
+               :auditoria {:rotulo (str (:tipo d) ": " (:nome d)) :recurso-tipo "prestacao_contas"
+                           :recurso-id (str id)})
+        nao-encontrada))))
+
+(defn- content-disposition
+  "attachment com o nome em ASCII (fallback) e em UTF-8 (RFC 5987) — o nome ja' vem sem aspas nem controle."
+  [nome]
+  (let [ascii (str/replace nome #"[^\x20-\x7E]" "_")
+        utf8 (str/replace (URLEncoder/encode ^String nome StandardCharsets/UTF_8) "+" "%20")]
+    (str "attachment; filename=\"" ascii "\"; filename*=UTF-8''" utf8)))
+
+(defn- arquivo [{:keys [documento stream]}]
+  {:status 200
+   :headers {"Content-Type" (:tipo-midia documento)
+             "Content-Length" (str (:tamanho-bytes documento))
+             "Content-Disposition" (content-disposition (:nome documento))}
+   :body stream})
+
+(defn- baixar-handler [{:keys [repo-legislativo objeto-store]}]
+  (fn [req]
+    (let [id (adapters-in/id-do-path req :id)
+          doc-id (adapters-in/id-do-path req :doc-id)]
+      (if-let [r (when (and id doc-id)
+                   (controllers/baixar-documento-de-contas repo-legislativo objeto-store (:ente-id (:ator req))
+                                                           id doc-id false))]
+        (arquivo r)
+        (http/json-resposta 404 {:erro "documento não encontrado"})))))
+
+;; ---------- parametros da Casa ----------
+
+(defn- parametros-handler [{:keys [repo-legislativo]}]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out/parametros->wire
+                              (controllers/parametros-de-contas repo-legislativo (:ente-id (:ator req)))))))
+
+(defn- salvar-parametros-handler [{:keys [repo-legislativo]}]
+  (fn [req]
+    (let [m (adapters-in/parametros->dominio (:json-params req))]
+      (http/json-resposta 200 (adapters-out/parametros->wire
+                                (controllers/salvar-parametros-de-contas! repo-legislativo (:ator req) m))))))
+
+;; ---------- portal (publico) ----------
+
+(defn- portal-handler [{:keys [repo-legislativo relogio resolver-ente-publico casa-existe?]}]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if (casa-existe? ente-id)
+        (http/json-resposta 200 (adapters-out/publicas->wire (controllers/prestacoes-de-contas repo-legislativo ente-id)
+                                                             (hoje relogio)))
+        (http/json-resposta 404 {:erro "ente nao encontrado"})))))
+
+(defn- portal-documento-handler [{:keys [repo-legislativo objeto-store resolver-ente-publico casa-existe?]}]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
+          id (adapters-in/id-do-path req :id)
+          doc-id (adapters-in/id-do-path req :doc-id)]
+      (if-let [r (when (and id doc-id (casa-existe? ente-id))
+                   (controllers/baixar-documento-de-contas repo-legislativo objeto-store ente-id id doc-id true))]
+        (arquivo r)
+        (http/json-resposta 404 {:erro "documento não encontrado"})))))
+
+(defn motivo-nao-pautavel
+  "Ponto de entrada IN-PROCESS da costura da PAUTA (o host injeta em `sessoes`): nil se a proposicao pode entrar na pauta
+  hoje; o motivo em palavras se e' o PDL de contas que ainda nao esta' pronto. Gemeo nao-HTTP, como
+  `pareceres-juridicos-publicos-wire`: NAO verifica papel — quem chama (a inclusao na pauta) ja' passou o gate dela."
+  [repo-legislativo relogio ente-id proposicao-id]
+  (controllers/motivo-nao-pautavel repo-legislativo ente-id (hoje relogio) proposicao-id))
+
+(defn rotas
+  "`deps` = {:auth :repo-legislativo :objeto-store :relogio :membros-da-casa :resolver-municipio :comissoes-vigentes
+  :resolver-ente-publico :casa-existe?}. Escrita: secretaria (os parametros, o admin_ente). Leitura da ficha: secretaria,
+  vereador e juridico (o painel de votacao, secretaria e vereador). Portal: anonimo, so' os documentos do TCE."
+  [{:keys [auth relogio comissoes-vigentes membros-da-casa resolver-ente-publico casa-existe?] :as deps}]
+  (let [deps (assoc deps
+                    :relogio (or relogio (tempo/relogio-sistema))
+                    :comissoes-vigentes (or comissoes-vigentes (constantly []))
+                    :membros-da-casa (or membros-da-casa (constantly 0))
+                    :casa-existe? (or casa-existe? (constantly false))
+                    :resolver-ente-publico (or resolver-ente-publico (constantly nil)))
+        papel (it/exige-papel "secretario")
+        papel-leitura (it/exige-algum-papel #{"secretario" "vereador" "juridico"})
+        papel-painel (it/exige-algum-papel #{"secretario" "vereador"})
+        papel-parametros (it/exige-algum-papel #{"secretario" "admin_ente"})
+        papel-admin-ente (it/exige-papel "admin_ente")]
+    #{["/contas" :get [auth papel-leitura (listar-handler deps)] :route-name :legislativo/listar-contas]
+      ["/contas" :post [auth papel it/corpo-json (registrar-handler deps)] :route-name :legislativo/registrar-contas]
+      ["/contas/:id" :get [auth papel-leitura (detalhe-handler deps)] :route-name :legislativo/prestacao-contas]
+      ["/contas/:id" :patch [auth papel it/corpo-json (editar-handler deps)] :route-name :legislativo/editar-contas]
+      ["/contas/:id/notificacao" :post [auth papel it/corpo-json (notificacao-handler deps)]
+       :route-name :legislativo/notificar-contas]
+      ["/contas/:id/documentos" :post [auth papel documento-multipart (anexar-handler deps)]
+       :route-name :legislativo/anexar-documento-contas]
+      ["/contas/:id/documentos/:doc-id" :get [auth papel-leitura (baixar-handler deps)]
+       :route-name :legislativo/baixar-documento-contas]
+      ["/contas-da-proposicao/:proposicao-id" :get [auth papel-painel (da-proposicao-handler deps)]
+       :route-name :legislativo/contas-da-proposicao]
+      ["/parametros-de-contas" :get [auth papel-parametros (parametros-handler deps)]
+       :route-name :legislativo/parametros-de-contas]
+      ["/parametros-de-contas" :put [auth papel-admin-ente it/corpo-json (salvar-parametros-handler deps)]
+       :route-name :legislativo/salvar-parametros-de-contas]
+      ["/portal/casa/:ente/contas" :get [(portal-handler deps)] :route-name :legislativo/contas-publicas]
+      ["/portal/casa/:ente/contas/:id/documentos/:doc-id" :get [(portal-documento-handler deps)]
+       :route-name :legislativo/documento-contas-publico]}))

@@ -28,6 +28,7 @@ import { PainelApreciacao } from "./painel-apreciacao";
 import { PainelLeituraAta } from "./painel-leitura-ata";
 import { PainelAtosMesa, type MateriaDaPauta } from "./painel-atos-mesa";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
+import { comToken } from "@/lib/nav";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -209,6 +210,14 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
               {vista.rotuloEstado}
             </span>
           </div>
+          {sessao.tipoSessao === "audiencia_publica" && (
+            <p className="nota-mesa link-audiencia">
+              <span>
+                Audiência pública: as falas do cidadão (inscritos, chamada, cronômetro) são conduzidas na{" "}
+                <a href={comToken(`/sessoes/${sessao.id}/audiencia`, token)}>Mesa da audiência</a>.
+              </span>
+            </p>
+          )}
           <ul className="marcos">
             {quando(sessao.agendadaPara) && (
               <li>
@@ -338,7 +347,8 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
           <PainelLeituraAta sessaoId={sessao.id} token={token} />
         )}
 
-        {sessao.estado === "aberta" && (
+        {/* ADR-0021: sessão que não delibera (audiência, solene, especial) não abre votação — o servidor recusa com 409 */}
+        {sessao.estado === "aberta" && sessao.delibera && (
           <PainelVotacao
             sessaoId={sessao.id}
             token={token}

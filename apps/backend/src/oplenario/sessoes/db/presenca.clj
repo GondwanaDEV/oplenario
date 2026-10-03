@@ -331,13 +331,15 @@
 
 (defn- sessoes-encerradas-recentes
   "As `teto` sessoes mais RECENTES do tenant com `estado`='encerrada' e encerrada_em carimbado —
-  janela autocontida (nao depende de 'legislativa vigente', que exigiria cruzar cadastros)."
+  janela autocontida (nao depende de 'legislativa vigente', que exigiria cruzar cadastros). A audiencia publica nao
+  entra (ADR-0021: nao conta na presenca do plenario)."
   [tx ente-id teto]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select [:id :encerrada_em] :from [:sessoes.sessao]
                   :where [:and [:= :ente_id ente-id] [:= :estado [:inline "encerrada"]]
-                          [:is-not :encerrada_em nil]]
+                          [:is-not :encerrada_em nil]
+                          [:not-in :tipo_sessao (vec logic/tipos-fora-da-assiduidade)]]
                   :order-by [[:encerrada_em :desc]] :limit teto}))))
 
 (def ^:private positivos (vec (sort logic/tipos-presenca-positiva)))

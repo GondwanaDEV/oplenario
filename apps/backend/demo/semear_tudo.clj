@@ -18,11 +18,14 @@
   `e2e/semear.sh`) pelo `demo/semear-tudo.sh` na raiz do projeto — nao tem alias proprio em `deps.edn`;
   o `-Sdeps` inline do script resolve `:extra-paths [\"demo\"]`, deixando `deps.edn` intocado."
   (:require [acervo]
+            [audiencias]
             [casa]
             [comunicados]
+            [contas]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [compliance :as compliance-demo]
+            [obrigacoes-legais]
             [oplenario.config :as config]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]
@@ -63,6 +66,14 @@
               ;; proposicao dele) e ANTES da reconciliacao (o protocolo COM-AAAA-NNNNNN e' um escopo numerado).
               (let [comunicados-r (comunicados/semear! sys ente identidades)]
                 (println "==> comunicados:" (comunicados/resumo comunicados-r)))
+              ;; ADR-0021 Parte B: as prestacoes de contas — depois da casa (comissao de financas, roster da votacao) e
+              ;; ANTES da reconciliacao (o PDL que o registro protocola e' um escopo numerado).
+              (println "==> contas:" (pr-str (:estados (contas/semear! sys ente identidades))))
+              ;; ADR-0021: as audiencias publicas (a tematica agendada e a de metas fiscais encerrada com ata) — depois
+              ;; de `sessoes` (a mesma sessao legislativa) e ANTES da reconciliacao (o protocolo AUD-AAAA-NNNNNN e'
+              ;; um escopo numerado)
+              (let [audiencias-r (audiencias/semear! sys ente identidades)]
+                (println "==> audiencias:" (audiencias/resumo sys ente audiencias-r)))
               ;; 5a etapa: reconciliar `shared.sequencial` com a numeracao que as 4 sementes gravaram.
               ;; NAO e' zelo preventivo — e' reparo. As 4 sementes sao idempotentes POR PULAR (releem em
               ;; vez de reescrever), entao um banco que perdeu os contadores e manteve as linhas numeradas
@@ -83,6 +94,9 @@
               (let [compliance-r (compliance-demo/semear! sys ente)]
                 (println "==> compliance:" (pr-str (select-keys compliance-r
                                                                 [:template :resumo :vencidas-pelo-sweep])))
+                ;; 7a etapa (ADR-0021 fatia 3): as obrigacoes legais — o gatilho de producao avalia a audiencia de
+                ;; metas fiscais (a de 2026-Q1 cumprida pela audiencia de `audiencias`) e o julgamento das contas.
+                (println "==> obrigacoes legais:" (pr-str (obrigacoes-legais/semear! sys ente)))
                 (println "==> semear-tudo! OK — ente" ente)
                 {:ente ente :casa casa-r :acervo acervo-r :sessoes sessoes-r
                  :participacao participacao-r :compliance compliance-r})))))

@@ -52,3 +52,15 @@
                             :forma_compilada :assinatura_parametros :registry_versao_ref :estado_versao]
                    :from [:motor.template_compliance]
                    :where [:and [:= :chave_template chave-template] [:= :versao versao]]}))))
+
+(defn vigente-por-chave
+  "A versao 'vigente' de um template pela chave logica, COM a `fonte_yaml` — quem opera a regra (o gatilho do host,
+  ADR-0021) avalia o que o catalogo diz, nao uma copia em codigo. nil = ainda nao catalogado."
+  [tx chave-template]
+  (linha->template
+    (jdbc/execute-one! tx
+      (sql/format {:select [:id :chave_template :versao :dominio :chave_dominio :severidade :fonte_yaml
+                            :forma_compilada :assinatura_parametros :registry_versao_ref :estado_versao]
+                   :from [:motor.template_compliance]
+                   :where [:and [:= :chave_template chave-template] [:= :estado_versao "vigente"]]
+                   :order-by [[:versao :desc]] :limit 1}))))

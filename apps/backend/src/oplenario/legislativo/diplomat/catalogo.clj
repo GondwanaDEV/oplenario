@@ -6,7 +6,9 @@
   (:require [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.catalogo :as catalogo]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.legislativo.adapters.in.contas :as adapters-in-contas]
             [oplenario.legislativo.adapters.in.juridico :as adapters-in-juridico]
+            [oplenario.legislativo.adapters.out.contas :as adapters-out-contas]
             [oplenario.legislativo.adapters.in.proposicao :as adapters-in-proposicao]
             [oplenario.legislativo.adapters.out.juridico :as adapters-out-juridico]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
@@ -15,6 +17,8 @@
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.controllers :as controllers]
             [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.logic.contas :as logic-contas]
+            [oplenario.legislativo.wire.out.contas :as wire-contas]
             [oplenario.legislativo.wire.out.juridico :as wire-jur]
             [oplenario.legislativo.wire.out.proposicao :as wire]
             [oplenario.legislativo.wire.out.requerimento :as wire-req])
@@ -388,4 +392,126 @@
                                                                    ator parecer-id relator-id)
                          adapters-out-juridico/relator->wire))})])
 
-(def entradas (into [] cat [entradas-materia entradas-requerimento entradas-conferencia entradas-juridico]))
+;; ---------- ADR-0021 Parte B: o julgamento das contas ----------
+
+(def ^:private RegistrarPrestacao
+  [:map {:closed true}
+   [:tipo {:description "governo_prefeito (contas do Prefeito: protocola o projeto de decreto legislativo) ou gestao_camara (contas da Mesa: so' acompanhamento)."}
+    [:enum "governo_prefeito" "gestao_camara"]]
+   [:exercicio {:description "O ano das contas (ex.: 2024)."} [:int {:min 1990 :max 9999}]]
+   [:responsavel {:description "Quem prestou as contas: o Prefeito DAQUELE exercicio (ou o Presidente da Mesa)."}
+    [:string {:min 1 :max 200}]]
+   [:recebida-em {:description "Quando a Camara recebeu o processo do TCE (AAAA-MM-DD)."} [:re #"^\d{4}-\d{2}-\d{2}$"]]
+   [:processo-tce {:optional true :description "O numero do processo no Tribunal de Contas."} [:string {:min 1 :max 80}]]
+   [:parecer-previo {:optional true :description "O parecer previo do TCE; obrigatorio nas contas do Prefeito."}
+    [:enum "favoravel" "favoravel_com_ressalvas" "desfavoravel"]]
+   [:comissao-autora-id {:optional true :description "A comissao autora do projeto de decreto legislativo (use comissoes_da_casa); obrigatoria nas contas do Prefeito."}
+    :uuid]
+   [:situacao-tce {:optional true :description "A situacao do processo no TCE (contas da Mesa)."} [:string {:min 1 :max 500}]]])
+
+(defn- prestacao->json [m]
+  (into {} (keep (fn [[k v]] (when (some? v) [(name k) (if (uuid? v) (str v) v)]))) m))
+
+(def ^:private RegistrarNotificacao
+  [:map {:closed true}
+   [:prestacao-id {:description "A prestacao de contas do Prefeito (use contas_da_casa)."} :uuid]
+   [:notificado-em {:description "O dia em que o responsavel foi notificado (AAAA-MM-DD)."} [:re #"^\d{4}-\d{2}-\d{2}$"]]
+   [:meio {:description "Como foi notificado (ex.: 'oficio entregue em maos', 'AR dos Correios')."} [:string {:min 1 :max 200}]]])
+
+(def ^:private de-quem-sao-as-contas {"governo_prefeito" "do Prefeito" "gestao_camara" "da Mesa"})
+
+(def ^:private entradas-contas
+  [(catalogo/entrada
+    {:nome "contas_da_casa"
+     :descricao (str "Lista as prestacoes de contas que a Camara recebeu do TCE: as do Prefeito (que a Camara julga) "
+                     "e as da Mesa (so' acompanhamento), com o parecer previo, o estado (aguardando notificacao, prazo "
+                     "de defesa, pronta para pauta, julgada) e o resultado. Use para 'as contas de 2024 ja' foram "
+                     "julgadas?'.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador" "juridico"}
+     :entrada [:map {:closed true}]
+     :saida wire-contas/PrestacoesOut
+     :rotas #{:legislativo/listar-contas}
+     :executar (fn [{:keys [repo-legislativo] :as deps} ator _]
+                 (adapters-out-contas/prestacoes->wire
+                   (controllers/prestacoes-de-contas repo-legislativo (:ente-id ator)) (hoje deps)))})
+   (catalogo/entrada
+    {:nome "prestacao_de_contas"
+     :descricao (str "A ficha de uma prestacao de contas: parecer previo do TCE, o projeto de decreto legislativo, a "
+                     "notificacao e o prazo de defesa do responsavel, se ja' pode ir a pauta (e por que nao), quantos "
+                     "votos rejeitam o parecer (2/3 dos membros, CF art. 31 §2) e o resultado em palavras.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador" "juridico"}
+     :entrada [:map {:closed true} [:prestacao-id {:description "Id da prestacao (de contas_da_casa)."} :uuid]]
+     :saida wire-contas/PrestacaoOut
+     :rotas #{:legislativo/prestacao-contas}
+     :executar (fn [{:keys [repo-legislativo membros-da-casa] :as deps} ator {:keys [prestacao-id]}]
+                 (let [ente-id (:ente-id ator)]
+                   (when-let [p (controllers/prestacao-de-contas repo-legislativo ente-id prestacao-id)]
+                     (adapters-out-contas/prestacao->wire
+                       p (hoje deps) (controllers/base-do-quorum (or membros-da-casa (constantly 0)) ente-id p)))))})
+   (catalogo/entrada
+    {:nome "registrar_prestacao_de_contas"
+     :descricao (str "Prepara o registro de uma prestacao de contas recebida do TCE. Nas contas do Prefeito, o registro "
+                     "PROTOCOLA o projeto de decreto legislativo de autoria da comissao indicada. Voce NAO registra: "
+                     "isto cria uma PROPOSTA, e a secretaria le e confirma na tela Propostas. Nao invente parecer nem "
+                     "processo: use o que esta' no documento do TCE.")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario"}
+     :entrada RegistrarPrestacao
+     :saida wire-contas/PrestacaoOut
+     :rotas #{:legislativo/registrar-contas}
+     :apresentar (fn [{:keys [resolver-comissoes]} ator m]
+                   (let [{:keys [tipo exercicio responsavel recebida-em processo-tce parecer-previo comissao-autora-id]}
+                         (adapters-in-contas/registro->dominio (prestacao->json m))
+                         comissao (when comissao-autora-id
+                                    (get ((or resolver-comissoes (constantly {})) (:ente-id ator) [comissao-autora-id])
+                                         comissao-autora-id))]
+                     (when (and comissao-autora-id (nil? comissao))
+                       (invalido! "comissao inexistente nesta Casa" :comissao-autora-id))
+                     {:titulo (str "Registrar as contas " (de-quem-sao-as-contas tipo) " de " exercicio)
+                      :texto (str "A secretaria registra a prestação de contas " (de-quem-sao-as-contas tipo) " do exercício de "
+                                  exercicio ", de " responsavel ", recebida em " (logic-contas/data-br recebida-em) "."
+                                  (when processo-tce (str "\nProcesso no TCE: " processo-tce))
+                                  (when parecer-previo (str "\nParecer prévio: " parecer-previo))
+                                  (when comissao
+                                    (str "\nO registro protocola o projeto de decreto legislativo de autoria da "
+                                         comissao ".")))}))
+     :executar (fn [{:keys [repo-legislativo resolver-municipio comissoes-vigentes membros-da-casa] :as deps} ator m]
+                 (let [p (controllers/registrar-prestacao! repo-legislativo resolver-municipio
+                                                           (or comissoes-vigentes (constantly [])) ator (hoje deps)
+                                                           (adapters-in-contas/registro->dominio (prestacao->json m)))]
+                   (adapters-out-contas/prestacao->wire
+                     p (hoje deps) (controllers/base-do-quorum (or membros-da-casa (constantly 0)) (:ente-id ator) p))))})
+   (catalogo/entrada
+    {:nome "registrar_notificacao_das_contas"
+     :descricao (str "Prepara o registro da notificacao do responsavel pelas contas do Prefeito: a data e o meio. A "
+                     "notificacao abre o prazo de defesa (dias da Casa, congelados aqui); a pauta so' aceita o projeto "
+                     "depois que o prazo vence ou a defesa e' juntada. Voce NAO registra: isto cria uma PROPOSTA que a "
+                     "secretaria confirma na tela Propostas.")
+     :classe :ato
+     :ritual :confirmar
+     :papeis #{"secretario"}
+     :entrada RegistrarNotificacao
+     :saida wire-contas/PrestacaoOut
+     :rotas #{:legislativo/notificar-contas}
+     :apresentar (fn [{:keys [repo-legislativo]} ator {:keys [prestacao-id notificado-em meio]}]
+                   (when-let [p (controllers/prestacao-de-contas repo-legislativo (:ente-id ator) prestacao-id)]
+                     (let [{dia :notificado-em} (adapters-in-contas/notificacao->dominio {"notificado-em" notificado-em
+                                                                                          "meio" meio})]
+                       {:titulo (str "Registrar a notificação das contas de " (:exercicio p))
+                        :texto (str "A secretaria registra que " (:responsavel p) " foi notificado em "
+                                    (logic-contas/data-br dia) " (" meio ") sobre as contas do exercício de "
+                                    (:exercicio p) ". O prazo de defesa começa a correr e fica fixado.")})))
+     :executar (fn [{:keys [repo-legislativo membros-da-casa] :as deps} ator {:keys [prestacao-id notificado-em meio]}]
+                 (let [{:keys [prestacao]} (controllers/notificar-prestacao!
+                                             repo-legislativo ator (hoje deps) prestacao-id
+                                             (adapters-in-contas/notificacao->dominio {"notificado-em" notificado-em
+                                                                                       "meio" meio}))]
+                   (when prestacao
+                     (adapters-out-contas/prestacao->wire
+                       prestacao (hoje deps)
+                       (controllers/base-do-quorum (or membros-da-casa (constantly 0)) (:ente-id ator) prestacao)))))})])
+
+(def entradas (into [] cat [entradas-materia entradas-requerimento entradas-conferencia entradas-juridico entradas-contas]))

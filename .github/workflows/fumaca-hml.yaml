@@ -287,6 +287,90 @@ jobs:
                   `enviados=${env.status}:${itens.length} com-ciencia=${comCiencia?.protocolo ?? '-'} leitura=${leitura.status}:${leitura.body?.linhas?.length ?? '-'} contagem=${cont.status} setores=${setores.body?.setores?.length ?? '-'} caixa-vereadora=${cxVer.status}:${naCaixaVer} enviados-casa-vereadora=${daCasaVer.status}`);
             } catch (e) { rec('/caixa + comunicados', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 10) AUDIENCIA PUBLICA (ADR-0021 parte A) — a demo semeia uma tematica agendada (2 inscritos) e a de metas fiscais
+            //     2026-Q1 encerrada com ata (2 cidadaos falaram). O portal lista as duas; a pagina publica oferece "Quero
+            //     falar"; a Mesa ve a fila em /sessoes/:id/audiencia.
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const lst = await api(anon, `/api/portal/casa/${E}/audiencias`);
+              const prox = Array.isArray(lst.body?.proximas) ? lst.body.proximas : [];
+              const real = Array.isArray(lst.body?.realizadas) ? lst.body.realizadas : [];
+              const metas = real.find(x => x.finalidade === 'metas_fiscais');
+              const detM = metas ? await api(anon, `/api/portal/casa/${E}/audiencias/${metas['sessao-id']}`) : { status: 0, body: null };
+              const alvo = prox[0];
+              const pg = await anon.newPage();
+              let tp = '';
+              if (alvo) {
+                await pg.goto(`${B}/portal/casa/${E}/audiencias/${alvo['sessao-id']}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await pg.waitForTimeout(3000);
+                tp = (await pg.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              }
+              await anon.close();
+              const mesa = alvo ? await api(cSec, `/api/sessoes/${alvo['sessao-id']}/audiencia`) : { status: 0, body: null };
+              let tm = '';
+              if (alvo) {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/sessoes/${alvo['sessao-id']}/audiencia`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(3000);
+                tm = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                await p.close();
+              }
+              const ok = lst.status === 200 && prox.length >= 1 && !!metas
+                && detM.status === 200 && detM.body?.['ata-publicada'] === true && (detM.body?.falaram?.length ?? 0) >= 2
+                && /Quero falar/i.test(tp) && mesa.status === 200 && (mesa.body?.inscricoes?.length ?? 0) >= 2
+                && /Inscri/i.test(tm) && !/Application error|Internal Server/i.test(tp + tm);
+              rec('audiencias publicas', ok ? 'OK' : 'ERRO',
+                  `portal=${lst.status} proximas=${prox.length} realizadas=${real.length} metas-ata=${detM.body?.['ata-publicada'] ?? '-'} falaram=${detM.body?.falaram?.length ?? '-'} quero-falar=${/Quero falar/i.test(tp)} mesa=${mesa.status}:${mesa.body?.inscricoes?.length ?? '-'}`);
+            } catch (e) { rec('audiencias publicas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 11) JULGAMENTO DAS CONTAS (ADR-0021 parte B) — a demo semeia o Prefeito 2024 pronto para a pauta, o 2023 julgado
+            //     (parecer mantido) e a Mesa 2024 em acompanhamento. A ficha diz como a Camara decide; o painel de votacao acha
+            //     a prestacao pelo PDL; o portal mostra as contas; a vereadora le a lista.
+            try {
+              const lst = await api(cSec, '/api/contas');
+              const ps = Array.isArray(lst.body?.prestacoes) ? lst.body.prestacoes : [];
+              const g24 = ps.find(x => x.tipo === 'governo_prefeito' && x.exercicio === 2024);
+              const g23 = ps.find(x => x.tipo === 'governo_prefeito' && x.exercicio === 2023);
+              const ficha = g24 ? await api(cSec, `/api/contas/${g24.id}`) : { status: 0, body: null };
+              const pdl = ficha.body?.proposicao?.id;
+              const porPdl = pdl ? await api(cSec, `/api/contas-da-proposicao/${pdl}`) : { status: 0 };
+              const ver = await api(cVer, '/api/contas');
+              let tf = '';
+              if (g24) {
+                const p = await cSec.newPage();
+                await p.goto(`${B}/contas/${g24.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                await p.waitForTimeout(3000);
+                tf = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+                await p.close();
+              }
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const pub = await api(anon, `/api/portal/casa/${E}/contas`);
+              const pg = await anon.newPage();
+              await pg.goto(`${B}/portal/casa/${E}/contas`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await pg.waitForTimeout(3000);
+              const tp = (await pg.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await anon.close();
+              const ok = lst.status === 200 && ps.length >= 3 && g24?.estado === 'pronta_para_pauta' && g23?.estado === 'julgada'
+                && ficha.status === 200 && ficha.body?.pautavel === true && (ficha.body?.quorum?.['necessarios-para-rejeitar'] ?? 0) >= 1
+                && porPdl.status === 200 && ver.status === 200
+                && /Como a C[aâ]mara decide/i.test(tf) && pub.status === 200 && (pub.body?.prestacoes?.length ?? 0) >= 2
+                && /Contas/i.test(tp) && !/Application error|Internal Server/i.test(tf + tp);
+              rec('julgamento das contas', ok ? 'OK' : 'ERRO',
+                  `lista=${lst.status}:${ps.length} 2024=${g24?.estado ?? '-'} 2023=${g23?.estado ?? '-'} ficha=${ficha.status} pautavel=${ficha.body?.pautavel} por-pdl=${porPdl.status} vereadora=${ver.status} portal=${pub.status}:${pub.body?.prestacoes?.length ?? '-'}`);
+            } catch (e) { rec('julgamento das contas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 12) OBRIGACOES LEGAIS NO MOTOR (ADR-0021 fatia 3) — ler o painel aciona o gatilho: a audiencia de metas
+            //     fiscais e o julgamento das contas aparecem como obrigacoes da Casa (a demo esta' ligada desde 01/01/2026)
+            try {
+              const pn = await api(cSec, '/api/compliance/painel');
+              const ab = Array.isArray(pn.body?.['em-aberto']) ? pn.body['em-aberto'] : [];
+              const metas = ab.filter(x => x['template-chave'] === 'audiencia_metas_fiscais');
+              const contas = ab.filter(x => x['template-chave'] === 'julgamento_contas_prefeito');
+              const ok = pn.status === 200 && metas.length >= 1 && contas.length >= 1;
+              rec('obrigacoes legais (motor)', ok ? 'OK' : 'ERRO',
+                  `painel=${pn.status} em-aberto=${ab.length} metas-fiscais=${metas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'} contas=${contas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'}`);
+            } catch (e) { rec('obrigacoes legais (motor)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');

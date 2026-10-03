@@ -56,6 +56,9 @@
    ;; comunicacao/logic.clj escopo-da-numeracao — (str "comunicado:" ano) (ADR-0020, Eixo 5)
    ["select 'comunicado:' || ano as escopo, max(numero) as piso
      from comunicacao.comunicado where ente_id = ? group by ano"]
+   ;; sessoes/db/audiencia.clj — (logic.audiencia/escopo-protocolo ano), ADR-0021
+   ["select 'inscricao_audiencia:' || ano as escopo, max(numero) as piso
+     from sessoes.inscricao_cidadao where ente_id = ? group by ano"]
    ;; sessoes/db/sessao.clj:33 — logic/escopo-numeracao = (str "sessao:" sessao-legislativa-id ":" tipo)
    ["select 'sessao:' || sessao_legislativa_id || ':' || tipo_sessao as escopo,
             max(numero_sequencial) as piso

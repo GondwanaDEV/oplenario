@@ -52,6 +52,9 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; t
   // ADR-0019 — a fila do parecer jurídico: o jurídico da Casa (papel `juridico`) redige e assina; a secretaria pede e
   // acompanha. É a única tela de trabalho do jurídico. Gated no GuardJuridico + exige-papel no backend.
   { rotulo: "Jurídico", href: "/juridico", papel: ["juridico", "secretario"] },
+  // ADR-0021 Parte B — o julgamento das contas do Prefeito (e o acompanhamento das contas da Mesa). Secretaria, vereador
+  // e jurídico leem; só a secretaria registra. Gated no GuardContas + exige-papel no backend.
+  { rotulo: "Contas", href: "/contas", papel: ["secretario", "vereador", "juridico"] },
   // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
   // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
   { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },

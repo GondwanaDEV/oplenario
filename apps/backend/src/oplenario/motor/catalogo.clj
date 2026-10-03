@@ -12,6 +12,9 @@
                                                ; 3-B: +aprovada_em_votacao(ProposicaoId)->Booleano (aditivo: assinatura
                                                ; NOVA nao invalida regra ja' carimbada, entao a versao NAO bumpa — mesma
                                                ; decisao de C3. Quem REMOVER ou MUDAR uma assinatura tem de bumpar.)
+                                               ; ADR-0021 (A4/B4): +tipo PrestacaoContasId, +builtin prazo_metas_fiscais_lrf,
+                                               ; +audiencia_publica_realizada, +contas_julgadas, +prazo_julgamento_contas,
+                                               ; +data_recebimento_contas (todos aditivos — a versao NAO bumpa, idem)
 
 ;; Enums de domínio. Símbolos globalmente únicos no protótipo p/ o literal resolver
 ;; o domínio sem ambiguidade (o catálogo real qualificaria: TipoAtoLegislativo.resolucao).
@@ -38,7 +41,8 @@
    "Instante" t/INSTANTE "Duracao" t/DURACAO "Racional" t/RACIONAL
    "Competencia" t/COMPETENCIA "Maioria" t/MAIORIA
    "IdentidadeId" t/IDENTIDADE-ID "ComissaoId" t/COMISSAO-ID "SessaoId" t/SESSAO-ID
-   "VereadorId" t/VEREADOR-ID "ProposicaoId" t/PROPOSICAO-ID})
+   "VereadorId" t/VEREADOR-ID "ProposicaoId" t/PROPOSICAO-ID
+   "PrestacaoContasId" t/PRESTACAO-CONTAS-ID})
 
 (defn resolver-tipo-nome [nome]
   (or (get tipos-nomeados nome)
@@ -56,6 +60,9 @@
         [(b "hoje" [] t/DATA)
          (b "agora" [] t/INSTANTE)
          (b "fim_de" [t/COMPETENCIA] t/DATA)
+         ;; ADR-0021 A4: o ultimo dia do mes SEGUINTE a competencia (04/2026 -> 31/05/2026) — o prazo da audiencia de
+         ;; metas fiscais do quadrimestre. Literal: 12/2026 -> 31/01/2027 (a LRF diz fevereiro p/ o 3o quadrimestre).
+         (b "prazo_metas_fiscais_lrf" [t/COMPETENCIA] t/DATA)
          (b "proximo_dia_util" [t/DATA] t/DATA)
          (b "soma_dias_uteis" [t/DATA t/INTEIRO] t/DATA)
          (b "arredonda_cima" [t/RACIONAL] t/INTEIRO)   ; aceita Inteiro via coerção numérica
@@ -102,6 +109,14 @@
          ;; legislativo/relacoes (ADR-0019 Eixo 8) — a etapa juridica obrigatoria, DESLIGADA por padrao: so' vale onde a
          ;; Casa poe a guarda no rito. Pergunta 'assinado', nunca 'favoravel' (o parecer e' opinativo).
          (r "tem_parecer_juridico_assinado" [t/PROPOSICAO-ID] t/BOOLEANO "Legislativo")
+         ;; legislativo/relacoes (ADR-0021 B4) — o julgamento das contas do Prefeito: o ATO (a votacao do PDL encerrada
+         ;; gravou o resultado) e as duas datas congeladas da prestacao (recebimento e prazo para julgar).
+         (r "contas_julgadas" [t/PRESTACAO-CONTAS-ID] t/BOOLEANO "Legislativo")
+         (r "prazo_julgamento_contas" [t/PRESTACAO-CONTAS-ID] t/DATA "Legislativo")
+         (r "data_recebimento_contas" [t/PRESTACAO-CONTAS-ID] t/DATA "Legislativo")
+         ;; sessoes/relacoes/audiencia (ADR-0021 A4) — houve audiencia publica daquela finalidade, do quadrimestre que
+         ;; termina na competencia (04, 08, 12 -> Q1, Q2, Q3), ENCERRADA e com ata publicada (a prova para o TCE).
+         (r "audiencia_publica_realizada" [t/TEXTO t/COMPETENCIA] t/BOOLEANO "Sessoes")
          ;; (b) assinaturas sem fn (módulo futuro) — remessa_enviada perde `ente` (§4-bis)
          (r "remessa_enviada" [t/TEXTO t/COMPETENCIA] t/BOOLEANO "Compliance-remessa")
          (r "publicada_no_portal" [(t/Registro "AtoDespesa")] t/BOOLEANO "Transparencia")

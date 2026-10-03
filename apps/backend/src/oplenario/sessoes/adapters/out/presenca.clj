@@ -156,10 +156,11 @@
   acrescentado a `ChamadaOut` amanha passaria a viajar nesta rota por omissao — a lista de exclusao teria de
   ser mantida a mao, e ninguem lembraria. Assim o default e' NAO expor, e o `:closed true` do contrato
   transforma qualquer descuido em erro de servidor em vez de vazamento."
-  [{:keys [sessao-id sessao-estado instante data-de-composicao composicao-resolvida-em
+  [{:keys [sessao-id sessao-estado exige-quorum instante data-de-composicao composicao-resolvida-em
            sem-registro-de-presenca quorum]}]
   (let [out {:sessao-id (str sessao-id)
              :sessao-estado sessao-estado
+             :exige-quorum (not (false? exige-quorum))
              :instante (str instante)
              :data-de-composicao (str data-de-composicao)
              :composicao-resolvida-em (str composicao-resolvida-em)

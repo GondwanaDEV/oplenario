@@ -4,7 +4,8 @@
 // painel do plenário.
 //
 // Os valores vêm do CHECK de `sessoes.sessao.tipo_sessao` (a FONTE), não de memória:
-//   CHECK (tipo_sessao IN ('ordinaria','extraordinaria','solene','secreta','especial'))
+//   CHECK (tipo_sessao IN ('ordinaria','extraordinaria','solene','secreta','especial','audiencia_publica'))
+// (`audiencia_publica` entra com a ADR-0021, migration 20261003000182.)
 // Mesma mecânica de `NOME_TIPO_ITEM` que a tela do plenário já usa para os itens de pauta — é a
 // convenção da casa para enum de domínio virando texto, não um conceito novo.
 //
@@ -16,6 +17,7 @@ const NOME_TIPO_SESSAO: Record<string, string> = {
   solene: "solene",
   secreta: "secreta",
   especial: "especial",
+  audiencia_publica: "audiência pública",
 };
 
 export function nomeTipoSessao(tipo: string | null | undefined): string {

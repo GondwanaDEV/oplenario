@@ -71,7 +71,9 @@
   assiduidade) no intervalo de INSTANTES `[lo, hi)` que filtra o `COALESCE` de
   `logic/marcos-de-data-de-referencia-sql`. O ROTULO de cada linha ja' NAO e' calculado aqui: sai de
   `logic/data-de-referencia-da-sessao` (item c), que e' a mesma regra que a `/chamada` aplica. Valor efemero
-  de request, nunca persistido por este consumidor.
+  de request, nunca persistido por este consumidor. (h) `gatilho_compliance.clj` (ADR-0021) — o DIA CIVIL em
+  que a Casa foi ligada a uma regra do motor (o `criado_em` do vinculo): o gatilho nao cobra prazo anterior a ele.
+  Valor efemero de request, nunca persistido por este consumidor.
 
   O QUE ESTA CONSTANTE RESOLVE: ate aqui o fuso era literal espalhado pelas bordas; o host
   (`rotas.clj`) tinha DOIS. Ter um lugar so' e' o pre-requisito de transformar o fuso em
