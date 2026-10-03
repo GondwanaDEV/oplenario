@@ -18,6 +18,7 @@
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.destinatarios :as destinatarios]
+            [oplenario.gatilho-compliance :as gatilho]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
@@ -302,6 +303,8 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
+           ;; ADR-0021 (fatia 3): o catalogo do motor, que o gatilho das obrigacoes legais garante
+           repo-motor
            keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio
            ;; ADR-0016: o console do operador (supratenant)
            idp-operacao repo-admin-sistema operacao
@@ -516,8 +519,18 @@
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de
         ;; compliance (painel-wire), nunca pelo seu adapters/out direto (a lint proibe host->adapters). O
         ;; override injetavel (`painel-compliance` no arg) so' serve aos testes DB-free da borda de paineis.
+        ;; ADR-0021 (fatia 3): o GATILHO das obrigacoes legais (audiencia de metas fiscais, julgamento das contas). So'
+        ;; existe com o compliance, o motor e o registro de fatos montados; nunca lanca (loga e segue). O dia civil de
+        ;; hoje vem do relogio do host.
+        deps-gatilho (when (and repo-compliance repo-motor registro-fatos)
+                       {:repo-compliance repo-compliance :repo-motor repo-motor :registro-fatos registro-fatos
+                        :repo-legislativo repo-legislativo :hoje hoje-civil})
+        disparar-gatilho (fn [ente-id opts] (when deps-gatilho (gatilho/disparar-sem-falhar! deps-gatilho ente-id opts)))
+        ;; ... e ele roda antes de o painel de compliance ser lido (aqui, o card da Mesa; a rota, mais abaixo)
         painel-compliance (or painel-compliance
-                              (fn [ente-id] (compliance-http/painel-wire repo-compliance ente-id)))
+                              (fn [ente-id]
+                                (disparar-gatilho ente-id {:origem "sob_demanda"})
+                                (compliance-http/painel-wire repo-compliance ente-id)))
         ;; FE Onda A2 fast-follow: nome real do ente injetado no portal publico (barra institucional/rodape
         ;; mostravam o UUID cru da rota) — mesma inversao de dependencia de consultar-sessao/membros-da-casa;
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
@@ -614,7 +627,8 @@
          :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}]
     ;; ADR-0018 (fatia 2): a Casa ENCERRADA responde 410 tambem nas rotas publicas dela (o portal, a descoberta do login)
     (restricao-casa/com-casa-encerrada
-     (-> #{["/saude"             :get http/saude :route-name :saude]
+     (cond->
+      (-> #{["/saude"             :get http/saude :route-name :saude]
           ;; ADR-0018: /eu leva a faixa de acesso restrito (o interno ve o motivo; a cidada, so' "acesso restrito")
           ["/eu"                :get [auth (fn [req]
                                              (let [ator (:ator req)
@@ -895,4 +909,24 @@
                         (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
                                           :deps-catalogo deps-catalogo})))
                 #{})))
+      ;; ADR-0021 (fatia 3): o gatilho das obrigacoes legais, composto AQUI sobre as rotas montadas — sessoes e
+      ;; legislativo nao conhecem o compliance. Antes da leitura do painel; depois dos atos que criam/cumprem (so' 2xx).
+      deps-gatilho
+      (gatilho/com-gatilho
+       {["/compliance/painel" :get]
+        (gatilho/interceptor-antes disparar-gatilho {:origem "sob_demanda"})
+        ;; a ata publicada da AUDIENCIA PUBLICA — a ata de outra sessao nao cumpre nada aqui
+        ["/sessoes/:id/ata" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:metas-fiscais}}
+                                    (fn [req]
+                                      (let [ente-id (get-in req [:ator :ente-id])
+                                            sid (some-> (get-in req [:path-params :id]) parse-uuid)]
+                                        (boolean (and ente-id sid
+                                                      (= "audiencia_publica"
+                                                         (:tipo-sessao (consultar-sessao ente-id sid))))))))
+        ;; o registro da prestacao cria a obrigacao de julgar; o encerramento da votacao do PDL a cumpre
+        ["/contas" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
+        ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))}))
      estado-da-casa)))
