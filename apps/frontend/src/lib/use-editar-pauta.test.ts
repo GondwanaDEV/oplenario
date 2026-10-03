@@ -50,6 +50,21 @@ describe("useEditarPauta", () => {
     expect(corpoDa(fn, 0).corpo).toEqual({ fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata" });
   });
 
+  it("incluir com 409 do domínio: o motivo do servidor vai à tela (ADR-0021: o PDL das contas antes do prazo de defesa)", async () => {
+    mockFetch(resposta(409, { erro: "o prazo de defesa vai até 20/10/2026" }), resposta(409, {}));
+    const { result } = renderHook(() => useEditarPauta("s1", "tok"));
+    let r1, r2;
+    await act(async () => {
+      r1 = await result.current.incluir({ fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p9" });
+    });
+    await act(async () => {
+      r2 = await result.current.incluir({ fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p9" });
+    });
+    expect(r1).toEqual({ ok: false, conflito: true, erro: "O prazo de defesa vai até 20/10/2026." });
+    // sem motivo, segue a frase de sempre
+    expect(r2).toEqual({ ok: false, conflito: true, erro: MSG_CONFLITO_PAUTA });
+  });
+
   it("incluir texto vazio: recusa sem chamar a API", async () => {
     const fn = mockFetch();
     const { result } = renderHook(() => useEditarPauta("s1", "tok"));

@@ -10,8 +10,16 @@
 //
 // A matéria que a Mesa ANUNCIOU (em apreciação, docs/23 Fatia 4b) vem pré-escolhida no seletor: o rito é
 // anunciar → discutir → votar a mesma matéria. A Mesa pode trocar; depois de abrir, o seletor volta vazio.
+//
+// MATÉRIA DE CONTAS (ADR-0021 B2): para a matéria escolhida (ou a em curso) o painel pergunta a `legislativo`
+// (GET /contas-da-proposicao/:id — 200 = é o PDL de uma prestação; 404 = matéria comum, comportamento de sempre). Sendo
+// de contas, quórum (2/3 dos membros) e modalidade (nominal) ficam TRAVADOS, e a Mesa vê a pergunta votada — "Rejeitar
+// o parecer prévio do TCE?" (Sim = rejeitar) — e quantos votos a rejeição precisa. Encerrada, o painel refaz o GET da
+// prestação e diz o resultado em palavras ("O parecer prevalece: 12 votos pela rejeição, eram precisos 14.").
 
 import { useState } from "react";
+import { fraseDoResultado } from "@/lib/contas-vista";
+import { buscarContasDaProposicao, useContasDaProposicao } from "@/lib/use-contas";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { useVotacaoMesa, type ModalidadeVotacao, type QuorumTipo, type ResultadoVotacao } from "@/lib/use-votacao-mesa";
 import {
@@ -20,6 +28,7 @@ import {
   rotuloModalidade,
   rotuloObjetoTipo,
   rotuloQuorum,
+  regraDaVotacaoDeContas,
   MODALIDADES,
   QUORUNS,
 } from "@/lib/votacao-mesa-vista";
@@ -49,6 +58,7 @@ export function PainelVotacao({
   const [enviando, setEnviando] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const [resultadoContas, setResultadoContas] = useState<string | null>(null);
 
   const candidatos = candidatosObjeto(itens);
   const sugerido = itens.find((i) => i.id === emApreciacaoItemId)?.proposicaoId ?? null;
@@ -59,6 +69,11 @@ export function PainelVotacao({
         ? sugerido!
         : "";
 
+  const contas = useContasDaProposicao(token, painel.tipo === "em-curso" ? painel.votacao.objetoId : objetoId || null);
+  const regraContas = contas.fase === "contas" ? regraDaVotacaoDeContas(contas.prestacao.quorum) : null;
+  const modalidadeEfetiva = regraContas ? regraContas.modalidade : modalidade;
+  const quorumEfetivo = regraContas ? regraContas.quorumTipo : quorumTipo;
+
   async function onAbrir() {
     if (!objetoId) {
       setErroAcao("Escolha o objeto da votação na pauta.");
@@ -68,11 +83,18 @@ export function PainelVotacao({
     setEnviando(true);
     setErroAcao(null);
     setAviso(null);
+    setResultadoContas(null);
+    // a pergunta "é de contas?" ainda em voo: espera a resposta aqui, para nunca abrir a matéria de contas fora da regra
+    let regra = regraContas;
+    if (contas.fase === "carregando") {
+      const p = await buscarContasDaProposicao(token, objetoId);
+      regra = p.ok && p.dado ? regraDaVotacaoDeContas(p.dado.quorum) : null;
+    }
     const r = await abrir({
       objetoTipo: "proposicao",
       objetoId,
-      modalidade,
-      quorumTipo,
+      modalidade: regra ? regra.modalidade : modalidade,
+      quorumTipo: regra ? regra.quorumTipo : quorumTipo,
       pautaItemId: alvo ? itens.find((i) => i.proposicaoId === objetoId)?.id ?? null : null,
     });
     setEnviando(false);
@@ -92,7 +114,16 @@ export function PainelVotacao({
     setEnviando(true);
     setErroAcao(null);
     setAviso(null);
+    setResultadoContas(null);
+    // a matéria de contas em curso: guardada ANTES do encerramento (depois dele não há mais votação em curso)
+    const contasEmCurso = contas.fase === "contas" && painel.tipo === "em-curso" ? painel.votacao.objetoId : null;
     const r = await encerrar(exigeResultado ? (resultado as ResultadoVotacao) : undefined);
+    if (r.ok && contasEmCurso) {
+      // o resultado é gravado na prestação na mesma transação do encerramento: o GET de agora já o traz
+      const p = await buscarContasDaProposicao(token, contasEmCurso);
+      const frase = p.ok && p.dado ? fraseDoResultado(p.dado) : null;
+      setResultadoContas(frase ?? "O resultado do julgamento das contas está na ficha da prestação.");
+    }
     setEnviando(false);
     if (r.ok) {
       setResultado("");
@@ -112,6 +143,11 @@ export function PainelVotacao({
         {aviso && (
           <p role="status" className="aviso-ok">
             {aviso}
+          </p>
+        )}
+        {resultadoContas && (
+          <p role="status" className="votacao-contas-resultado">
+            {resultadoContas}
           </p>
         )}
         {erroAcao && (
@@ -149,6 +185,7 @@ export function PainelVotacao({
             {painel.votacao.proposicao?.ementa && (
               <p className="votacao-ementa">{painel.votacao.proposicao.ementa}</p>
             )}
+            {regraContas && <BlocoContas regra={regraContas} />}
             {painel.exigeResultado && (
               <fieldset className="campo-radio">
                 <legend>Resultado declarado (aclamação)</legend>
@@ -206,6 +243,8 @@ export function PainelVotacao({
                   </select>
                 </div>
 
+                {regraContas && <BlocoContas regra={regraContas} />}
+
                 <fieldset className="campo-radio">
                   <legend>Modalidade</legend>
                   {MODALIDADES.map((m) => (
@@ -214,7 +253,8 @@ export function PainelVotacao({
                         id={`mod-${m.valor}`}
                         type="radio"
                         name="modalidade"
-                        checked={modalidade === m.valor}
+                        checked={modalidadeEfetiva === m.valor}
+                        disabled={!!regraContas}
                         onChange={() => setModalidade(m.valor)}
                       />
                       {m.rotulo}
@@ -224,7 +264,12 @@ export function PainelVotacao({
 
                 <div className="campo">
                   <label htmlFor="quorum">Quórum exigido</label>
-                  <select id="quorum" value={quorumTipo} onChange={(e) => setQuorumTipo(e.target.value as QuorumTipo)}>
+                  <select
+                    id="quorum"
+                    value={quorumEfetivo}
+                    disabled={!!regraContas}
+                    onChange={(e) => setQuorumTipo(e.target.value as QuorumTipo)}
+                  >
                     {QUORUNS.map((q) => (
                       <option key={q.valor} value={q.valor}>
                         {rotuloQuorum(q.valor)}
@@ -242,5 +287,20 @@ export function PainelVotacao({
         )}
       </div>
     </section>
+  );
+}
+
+/** A pergunta votada na matéria de contas e o que a rejeição precisa (ADR-0021 B2). */
+function BlocoContas({ regra }: { regra: ReturnType<typeof regraDaVotacaoDeContas> }) {
+  return (
+    <div className="votacao-contas" role="note" aria-label="Votação das contas do Prefeito">
+      <p className="votacao-contas-pergunta">
+        <b>{regra.pergunta}</b> <span>({regra.legendaSim})</span>
+      </p>
+      <p className="votacao-contas-precisos">{regra.precisos}</p>
+      <p className="nota-mesa">
+        <span>{regra.nota}</span>
+      </p>
+    </div>
   );
 }
