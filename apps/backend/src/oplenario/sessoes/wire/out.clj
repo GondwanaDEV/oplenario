@@ -729,11 +729,12 @@
   conduziu), que nao e' necessario para contar cabecas.
 
   `exige-quorum` (ADR-0021): a capability da sessao — false na audiencia publica (e na solene/especial), em que a
-  tela mostra a presenca sem cobrar quorum."
+  tela mostra a presenca sem cobrar quorum. O servidor SEMPRE manda; opcional no contrato so' para nao quebrar o
+  cliente que ja' existia (fixture do telao sem o campo = exige, o comportamento de antes)."
   [:map {:closed true}
    [:sessao-id :string]
    [:sessao-estado (km/enum-de logic/estados-sessao)]
-   [:exige-quorum :boolean]
+   [:exige-quorum {:optional true} :boolean]
    [:instante :string]
    [:data-de-composicao :string]
    [:composicao-resolvida-em :string]
