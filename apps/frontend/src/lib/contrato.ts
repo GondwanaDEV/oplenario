@@ -22,6 +22,9 @@ export interface SessaoOut {
   "aberta-em": string | null;
   "encerrada-em": string | null;
   "motivo-nao-realizada": string | null;
+  /** ADR-0021: capabilities novas. Opcionais até todo backend em produção as mandar (ausente = não sabido). */
+  "exige-quorum"?: boolean;
+  "aceita-inscricao-cidadao"?: boolean;
 }
 
 /** GET /sessoes/:id/pauta — oplenario.sessoes.adapters.out.pauta/pauta->wire (internos filtrados). */

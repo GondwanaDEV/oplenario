@@ -204,3 +204,18 @@ describe("Comando da Mesa — em apreciação (docs/23 Fatia 4b)", () => {
     expect(screen.queryByRole("heading", { name: "Em apreciação" })).toBeNull();
   });
 });
+
+describe("Comando da Mesa — audiência pública (ADR-0021)", () => {
+  it("leva à Mesa da audiência e não oferece votação (a audiência não delibera)", () => {
+    montar("aberta", { tipoSessao: "audiencia_publica", delibera: false });
+    const link = screen.getByRole("link", { name: "Mesa da audiência" });
+    expect(link.getAttribute("href")).toBe("/sessoes/s1/audiencia?token=tok");
+    expect(screen.queryByRole("heading", { name: "Votação" })).toBeNull();
+  });
+
+  it("sessão deliberativa segue com o painel de votação e sem o link da audiência", () => {
+    montar("aberta");
+    expect(screen.getByRole("heading", { name: "Votação" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Mesa da audiência" })).toBeNull();
+  });
+});
