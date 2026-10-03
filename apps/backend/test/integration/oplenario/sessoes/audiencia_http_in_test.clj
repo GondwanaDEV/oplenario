@@ -372,3 +372,18 @@
       (is (= 201 (:status (chamar ente sec :post (str "/sessoes/" s "/ata") {:texto "Ata."})))))
     (is (= (str ord1) (get-in (chamar ente sec :get (str "/sessoes/" ord2 "/leitura-ata")) [:corpo :anterior :id]))
         "a ordinaria le a ata da ordinaria anterior, nao a da audiencia no meio")))
+
+(deftest o-rascunho-da-ata-conhece-quem-falou
+  (let [ente (nova-casa!) sid (audiencia! ente) base (str "/sessoes/" sid "/audiencia/inscricoes/")]
+    (inscrever-cidada! ente cid sid)
+    (let [[i] (get-in (chamar ente sec :get (str "/sessoes/" sid "/audiencia")) [:corpo :inscricoes])]
+      (transicionar! ente sid "aberta")
+      (chamar ente sec :post (str base (:id i) "/chamada"))
+      (chamar ente sec :post (str base (:id i) "/encerramento") {:tempo-usado-segundos 120})
+      (let [c (rotas/contexto-para-ia *ses* (fake-cadastros) ente sid)
+            fala (first (filter #(= "manifestacao_cidada" (:tipo-fala %)) (:falas c)))]
+        (is (some? fala) "a fala do cidadao entra no contexto da IA")
+        (is (= (parse-uuid (:id i)) (:orador-id fala)))
+        (is (some? (:iniciou-em fala)))
+        (is (= "Roberta Costa Aguiar" (get (:nomes c) (:orador-id fala))) "com o nome, ao lado dos vereadores")
+        (is (not (contains? c :falas-cidadas)) "o host funde e limpa")))))
