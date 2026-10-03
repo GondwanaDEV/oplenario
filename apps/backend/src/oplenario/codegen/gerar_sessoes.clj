@@ -141,7 +141,19 @@
    ["ItemPautaOficialOut" out/ItemPautaOficialOut]
    ["VersaoPautaPublicaOut" out/VersaoPautaPublicaOut]
    ["PautaOficialVigenteOut" out/PautaOficialVigenteOut]
-   ["PautaOficialOut" out/PautaOficialOut]])
+   ["PautaOficialOut" out/PautaOficialOut]
+   ;; ADR-0021 Parte A — a AUDIENCIA PUBLICA. Folhas ANTES dos agregados.
+   ["InscricaoOut" out/InscricaoOut]
+   ["ComissaoAudienciaOut" out/ComissaoAudienciaOut]
+   ["ProposicaoAudienciaOut" out/ProposicaoAudienciaOut]
+   ["AudienciaOut" out/AudienciaOut]
+   ["ResumoAudienciaOut" out/ResumoAudienciaOut]
+   ["AudienciasPublicasOut" out/AudienciasPublicasOut]
+   ["FalaCidadaOut" out/FalaCidadaOut]
+   ["AudienciaPublicaOut" out/AudienciaPublicaOut]
+   ["InscricaoPortalReciboOut" out/InscricaoPortalReciboOut]
+   ["MinhaInscricaoOut" out/MinhaInscricaoOut]
+   ["MinhasInscricoesOut" out/MinhasInscricoesOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

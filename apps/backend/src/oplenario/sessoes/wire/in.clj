@@ -4,16 +4,67 @@
   extra (defesa de borda); o autor/tenant NAO vem do corpo (vem do `ator` resolvido na auth)."
   (:require [clojure.string :as str]
             [oplenario.kernel.malli :as km]
-            [oplenario.sessoes.logic :as logic]))
+            [oplenario.sessoes.logic :as logic]
+            [oplenario.sessoes.logic.audiencia :as logic-aud]))
+
+(def AudienciaAgendar
+  "ADR-0021: o bloco `audiencia` de POST /sessoes — obrigatorio se e so' se `tipo-sessao` = `audiencia_publica` (o
+  adapters/in decide). `comissao-id`/`proposicao-id` = uuid (string); a comissao tem de ser VIGENTE na Casa (seam do
+  host, no controller); `referencia` so' e obrigatoria em `metas_fiscais` (`AAAA-Q1|Q2|Q3`)."
+  [:map {:closed true}
+   [:comissao-id :string]
+   [:tema [:string {:min 1 :max 200}]]
+   [:local {:optional true} [:maybe [:string {:max 200}]]]
+   [:proposicao-id {:optional true} [:maybe :string]]
+   [:finalidade (km/enum-de logic-aud/finalidades)]
+   [:referencia {:optional true} [:maybe :string]]
+   [:tempo-fala-segundos {:optional true} [:maybe :int]]])
 
 (def AgendarSessao
   "Corpo de POST /sessoes. `sessao-legislativa-id` = uuid (string); `agendada-para` = ISO-8601 (string).
-  capabilities-override fica fora da V1 da borda (o tipo resolve os defaults; override entra quando pedido)."
+  capabilities-override fica fora da V1 da borda (o tipo resolve os defaults; override entra quando pedido).
+  `audiencia` (ADR-0021): os dados da audiencia publica, so' quando o tipo e' `audiencia_publica`."
   [:map {:closed true}
    [:sessao-legislativa-id :string]
    [:tipo-sessao (km/enum-de logic/tipos-sessao)]
    [:modalidade {:optional true} [:maybe (km/enum-de logic/modalidades-sessao)]]
-   [:agendada-para {:optional true} [:maybe :string]]])
+   [:agendada-para {:optional true} [:maybe :string]]
+   [:audiencia {:optional true} [:maybe AudienciaAgendar]]])
+
+;; ---------- ADR-0021 Parte A — a audiencia publica ----------
+
+(def AtualizarAudiencia
+  "Corpo de PATCH /sessoes/:id/audiencia (secretaria): o tempo de fala, se as inscricoes estao abertas e o local
+  (`local` nil = limpar). Pelo menos um campo."
+  [:map {:closed true}
+   [:tempo-fala-segundos {:optional true} :int]
+   [:inscricoes-abertas {:optional true} :boolean]
+   [:local {:optional true} [:maybe [:string {:max 200}]]]])
+
+(def InscreverPresencial
+  "Corpo de POST /sessoes/:id/audiencia/inscricoes (a Mesa inscreve no dia quem esta' presente): o nome e' digitado
+  pela secretaria (a pessoa nao entrou pelo gov.br)."
+  [:map {:closed true}
+   [:nome [:string {:min 1 :max 200}]]
+   [:fala-como (km/enum-de logic-aud/falas-como)]
+   [:entidade {:optional true} [:maybe [:string {:max 200}]]]
+   [:tema [:string {:min 1 :max 200}]]])
+
+(def InscreverPeloPortal
+  "Corpo de POST /portal/audiencias/:sessao-id/inscricoes (a cidada, pelo gov.br). SEM `nome`: o nome vem da identidade,
+  nunca do corpo. `ciente-publicidade` tem de ser `true` — o formulario avisa que a fala e' publica, entra na ata e na
+  transmissao."
+  [:map {:closed true}
+   [:fala-como (km/enum-de logic-aud/falas-como)]
+   [:entidade {:optional true} [:maybe [:string {:max 200}]]]
+   [:tema [:string {:min 1 :max 200}]]
+   [:ciente-publicidade [:= true]]])
+
+(def EncerrarFalaCidada
+  "Corpo de POST /sessoes/:id/audiencia/inscricoes/:insc-id/encerramento: o tempo que a pessoa usou (o cronometro da
+  tela da Mesa)."
+  [:map {:closed true}
+   [:tempo-usado-segundos [:int {:min 0 :max 86400}]]])
 
 (def RegistrarPresenca
   "Corpo de POST /sessoes/:id/presenca (§22.6 eixo C). `vereador-id` = uuid (string); `ocorrido-em` = instante

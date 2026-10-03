@@ -15,7 +15,8 @@
   recibo de criacao o devolvia, tornando a 2a chamada de qualquer um desses fluxos impossivel de montar
   so' pela API (a sonda daquela fase teve de ler o Postgres direto em 7 pontos)."
   (:require [oplenario.kernel.malli :as km]
-            [oplenario.sessoes.logic :as logic]))
+            [oplenario.sessoes.logic :as logic]
+            [oplenario.sessoes.logic.audiencia :as logic-aud]))
 
 (def SessaoOut
   "Projecao publica de uma sessao (resposta REST). Strings p/ uuid; ISO-8601 p/ Instant; marcos opcionais.
@@ -33,6 +34,9 @@
    [:gera-ata-regimental :boolean]
    [:permite-voto-secreto :boolean]
    [:permite-modalidade-remota :boolean]
+   ;; ADR-0021 — opcionais so' para a linha legada/fixture sem a coluna; a do banco sempre traz
+   [:exige-quorum {:optional true} :boolean]
+   [:aceita-inscricao-cidadao {:optional true} :boolean]
    [:agendada-para {:optional true} [:maybe :string]]
    [:aberta-em {:optional true} [:maybe :string]]
    [:encerrada-em {:optional true} [:maybe :string]]
@@ -722,10 +726,15 @@
   reapareca nesta projecao por descuido vira erro de servidor, nao vazamento silencioso.
 
   Nao carrega `chamadas-conduzidas` de proposito: aquele ato expoe `conduzida-por` (a identidade de quem
-  conduziu), que nao e' necessario para contar cabecas."
+  conduziu), que nao e' necessario para contar cabecas.
+
+  `exige-quorum` (ADR-0021): a capability da sessao — false na audiencia publica (e na solene/especial), em que a
+  tela mostra a presenca sem cobrar quorum. O servidor SEMPRE manda; opcional no contrato so' para nao quebrar o
+  cliente que ja' existia (fixture do telao sem o campo = exige, o comportamento de antes)."
   [:map {:closed true}
    [:sessao-id :string]
    [:sessao-estado (km/enum-de logic/estados-sessao)]
+   [:exige-quorum {:optional true} :boolean]
    [:instante :string]
    [:data-de-composicao :string]
    [:composicao-resolvida-em :string]
@@ -1126,3 +1135,124 @@
    [:sessao SessaoPautaPublicaOut]
    [:vigente {:optional true} [:maybe PautaOficialVigenteOut]]
    [:versoes [:sequential VersaoPautaPublicaOut]]])
+
+;; ---------- ADR-0021 Parte A — a AUDIENCIA PUBLICA ----------
+
+(def InscricaoOut
+  "Uma inscricao de cidadao na audiencia, como a Mesa ve (GET /sessoes/:id/audiencia e os recibos das escritas da
+  Mesa). `entidade` so' fora do individual; os marcos so' depois de chamada/encerrada."
+  [:map {:closed true}
+   [:id :string]
+   [:protocolo :string]
+   [:ordem :int]
+   [:nome :string]
+   [:fala-como (km/enum-de logic-aud/falas-como)]
+   [:entidade {:optional true} [:maybe :string]]
+   [:tema :string]
+   [:origem (km/enum-de logic-aud/origens-inscricao)]
+   [:estado (km/enum-de logic-aud/estados-inscricao)]
+   [:chamada-em {:optional true} [:maybe :string]]
+   [:encerrada-em {:optional true} [:maybe :string]]
+   [:tempo-usado-segundos {:optional true} [:maybe :int]]])
+
+(def ComissaoAudienciaOut
+  "A comissao que promove a audiencia. `nome` nil = o cadastro nao respondeu (a tela mostra rotulo honesto)."
+  [:map {:closed true}
+   [:id :string]
+   [:nome [:maybe :string]]])
+
+(def ProposicaoAudienciaOut
+  "A materia em debate na audiencia: o rotulo de exibicao ('PL 012/2026') e a ementa."
+  [:map {:closed true}
+   [:id :string]
+   [:rotulo :string]
+   [:ementa :string]])
+
+(def AudienciaOut
+  "GET/PATCH /sessoes/:id/audiencia (a Mesa): a sessao, a audiencia e as inscricoes na ordem (todas, com os estados).
+  `inscricoes-abertas` e' a flag da Mesa (o portal mostra a efetiva)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:numero :int]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:agendada-para [:maybe :string]]
+   [:modalidade (km/enum-de logic/modalidades-sessao)]
+   [:comissao ComissaoAudienciaOut]
+   [:tema :string]
+   [:local {:optional true} [:maybe :string]]
+   [:proposicao {:optional true} [:maybe ProposicaoAudienciaOut]]
+   [:finalidade (km/enum-de logic-aud/finalidades)]
+   [:referencia {:optional true} [:maybe :string]]
+   [:tempo-fala-segundos :int]
+   [:inscricoes-abertas :boolean]
+   [:inscricoes [:sequential InscricaoOut]]])
+
+(def ResumoAudienciaOut
+  "Uma audiencia na lista do portal (o `ResumoAudiencia` do contrato)."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:tema :string]
+   [:comissao-nome [:maybe :string]]
+   [:agendada-para [:maybe :string]]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:local {:optional true} [:maybe :string]]
+   [:finalidade (km/enum-de logic-aud/finalidades)]])
+
+(def AudienciasPublicasOut
+  "GET /portal/casa/:ente/audiencias: as proximas (a mais proxima primeiro) e as realizadas (as 20 mais recentes)."
+  [:map {:closed true}
+   [:proximas [:sequential ResumoAudienciaOut]]
+   [:realizadas [:sequential ResumoAudienciaOut]]])
+
+(def FalaCidadaOut
+  "Quem falou na audiencia (so' depois de encerrada): o nome e por quem falou."
+  [:map {:closed true}
+   [:nome :string]
+   [:fala-como (km/enum-de logic-aud/falas-como)]
+   [:entidade {:optional true} [:maybe :string]]])
+
+(def AudienciaPublicaOut
+  "GET /portal/casa/:ente/audiencias/:sessao-id: o resumo + o que a pagina publica mostra. `inscricoes-abertas` e' a
+  EFETIVA (a flag da Mesa E a sessao ainda nao acabou); `inscritos` conta a fila sem os desistentes; `falaram` so'
+  depois de encerrada (antes, lista vazia); nunca o nome de quem desistiu ou nao falou."
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:tema :string]
+   [:comissao-nome [:maybe :string]]
+   [:agendada-para [:maybe :string]]
+   [:estado (km/enum-de logic/estados-sessao)]
+   [:local {:optional true} [:maybe :string]]
+   [:finalidade (km/enum-de logic-aud/finalidades)]
+   [:modalidade (km/enum-de logic/modalidades-sessao)]
+   [:proposicao {:optional true} [:maybe ProposicaoAudienciaOut]]
+   [:referencia {:optional true} [:maybe :string]]
+   [:tempo-fala-segundos :int]
+   [:inscricoes-abertas :boolean]
+   [:inscritos :int]
+   [:ata-publicada :boolean]
+   [:falaram [:sequential FalaCidadaOut]]])
+
+(def InscricaoPortalReciboOut
+  "201 de POST /portal/audiencias/:sessao-id/inscricoes: o protocolo, quando e a posicao na fila."
+  [:map {:closed true}
+   [:protocolo :string]
+   [:recibo-em :string]
+   [:ordem :int]])
+
+(def MinhaInscricaoOut
+  "Uma inscricao da cidada (a area dela): `tema` e' o TEMA DA AUDIENCIA (o que a situa), com a comissao e a data."
+  [:map {:closed true}
+   [:id :string]
+   [:protocolo :string]
+   [:sessao-id :string]
+   [:tema :string]
+   [:comissao-nome [:maybe :string]]
+   [:agendada-para [:maybe :string]]
+   [:ordem :int]
+   [:estado (km/enum-de logic-aud/estados-inscricao)]
+   [:recibo-em :string]])
+
+(def MinhasInscricoesOut
+  "GET /portal/minhas-inscricoes."
+  [:map {:closed true}
+   [:inscricoes [:sequential MinhaInscricaoOut]]])

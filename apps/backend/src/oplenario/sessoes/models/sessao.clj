@@ -22,6 +22,9 @@
    [:gera-ata-regimental :boolean]
    [:permite-voto-secreto :boolean]
    [:permite-modalidade-remota :boolean]
+   ;; ADR-0021 (audiencia publica)
+   [:exige-quorum :boolean]
+   [:aceita-inscricao-cidadao :boolean]
    ;; marcos temporais
    [:agendada-para {:optional true} [:maybe km/Instante]]
    [:aberta-em {:optional true} [:maybe km/Instante]]

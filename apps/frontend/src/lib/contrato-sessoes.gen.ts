@@ -12,6 +12,8 @@ export interface SessaoOut {
   geraAtaRegimental: boolean;
   permiteVotoSecreto: boolean;
   permiteModalidadeRemota: boolean;
+  exigeQuorum?: boolean;
+  aceitaInscricaoCidadao?: boolean;
   agendadaPara?: string | null;
   abertaEm?: string | null;
   encerradaEm?: string | null;
@@ -485,6 +487,7 @@ export interface ChamadaOut {
 export interface QuorumSessaoOut {
   sessaoId: string;
   sessaoEstado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  exigeQuorum?: boolean;
   instante: string;
   dataDeComposicao: string;
   composicaoResolvidaEm: string;
@@ -730,4 +733,108 @@ export interface PautaOficialOut {
   sessao: SessaoPautaPublicaOut;
   vigente?: PautaOficialVigenteOut | null;
   versoes: VersaoPautaPublicaOut[];
+}
+
+export interface InscricaoOut {
+  id: string;
+  protocolo: string;
+  ordem: number;
+  nome: string;
+  falaComo: "conselho_movimento" | "entidade" | "individual";
+  entidade?: string | null;
+  tema: string;
+  origem: "portal_govbr" | "presencial_secretaria";
+  estado: "ausente" | "desistiu" | "falando" | "falou" | "inscrita";
+  chamadaEm?: string | null;
+  encerradaEm?: string | null;
+  tempoUsadoSegundos?: number | null;
+}
+
+export interface ComissaoAudienciaOut {
+  id: string;
+  nome: string | null;
+}
+
+export interface ProposicaoAudienciaOut {
+  id: string;
+  rotulo: string;
+  ementa: string;
+}
+
+export interface AudienciaOut {
+  sessaoId: string;
+  numero: number;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  agendadaPara: string | null;
+  modalidade: "hibrida" | "presencial" | "remota";
+  comissao: ComissaoAudienciaOut;
+  tema: string;
+  local?: string | null;
+  proposicao?: ProposicaoAudienciaOut | null;
+  finalidade: "ldo" | "loa" | "metas_fiscais" | "ppa" | "tematica";
+  referencia?: string | null;
+  tempoFalaSegundos: number;
+  inscricoesAbertas: boolean;
+  inscricoes: InscricaoOut[];
+}
+
+export interface ResumoAudienciaOut {
+  sessaoId: string;
+  tema: string;
+  comissaoNome: string | null;
+  agendadaPara: string | null;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  local?: string | null;
+  finalidade: "ldo" | "loa" | "metas_fiscais" | "ppa" | "tematica";
+}
+
+export interface AudienciasPublicasOut {
+  proximas: ResumoAudienciaOut[];
+  realizadas: ResumoAudienciaOut[];
+}
+
+export interface FalaCidadaOut {
+  nome: string;
+  falaComo: "conselho_movimento" | "entidade" | "individual";
+  entidade?: string | null;
+}
+
+export interface AudienciaPublicaOut {
+  sessaoId: string;
+  tema: string;
+  comissaoNome: string | null;
+  agendadaPara: string | null;
+  estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
+  local?: string | null;
+  finalidade: "ldo" | "loa" | "metas_fiscais" | "ppa" | "tematica";
+  modalidade: "hibrida" | "presencial" | "remota";
+  proposicao?: ProposicaoAudienciaOut | null;
+  referencia?: string | null;
+  tempoFalaSegundos: number;
+  inscricoesAbertas: boolean;
+  inscritos: number;
+  ataPublicada: boolean;
+  falaram: FalaCidadaOut[];
+}
+
+export interface InscricaoPortalReciboOut {
+  protocolo: string;
+  reciboEm: string;
+  ordem: number;
+}
+
+export interface MinhaInscricaoOut {
+  id: string;
+  protocolo: string;
+  sessaoId: string;
+  tema: string;
+  comissaoNome: string | null;
+  agendadaPara: string | null;
+  ordem: number;
+  estado: "ausente" | "desistiu" | "falando" | "falou" | "inscrita";
+  reciboEm: string;
+}
+
+export interface MinhasInscricoesOut {
+  inscricoes: MinhaInscricaoOut[];
 }

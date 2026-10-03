@@ -28,7 +28,9 @@
             [oplenario.sessoes.adapters.out.publicacao-pauta :as adapters-out-pub]
             [oplenario.sessoes.adapters.out.sessao :as adapters-out]
             [oplenario.sessoes.adapters.out.tribuna :as adapters-out-tribuna]
-            [oplenario.sessoes.controllers :as controllers])
+            [oplenario.sessoes.controllers :as controllers]
+            [oplenario.sessoes.controllers.audiencia :as controllers-aud]
+            [oplenario.sessoes.diplomat.http.audiencia :as audiencia-http])
   (:import (org.postgresql.util PSQLException)))
 
 (set! *warn-on-reflection* true)
@@ -562,13 +564,19 @@
 
 (defn- agendar-handler
   "POST /sessoes. corpo JSON parseado em (:json-params req) pelo corpo-json; adapters/in valida+coage+injeta o
-  ente/autor do ator; controller agenda; adapters/out projeta o recibo. Sucesso -> 201."
-  [repo-sessoes]
+  ente/autor do ator; controller agenda; adapters/out projeta o recibo. Sucesso -> 201. ADR-0021: a audiencia publica
+  traz o bloco `audiencia`; comissao que nao e' vigente na Casa (ou proposicao que nao e' dela) -> 422 com a frase."
+  [deps-audiencia]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in/agendar-sessao->dominio ator (:json-params req))]
-      (http/json-resposta 201 (adapters-out/recibo-agendamento->wire
-                               (controllers/agendar-sessao repo-sessoes ator m))))))
+      (try
+        (http/json-resposta 201 (adapters-out/recibo-agendamento->wire
+                                 (controllers-aud/agendar-sessao deps-audiencia ator m)))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/audiencia-invalida (:tipo (ex-data e)))
+            (http/json-resposta 422 {:erro (ex-message e) :campo (some-> (:campo (ex-data e)) name)})
+            (throw e)))))))
 
 (defn- ingestao-handler
   "POST /gravacoes. Ingestao AGNOSTICA de sessao (§22.3.4 / Opcao A: o segmento chega do CLI/watch-folder SEM
@@ -1233,7 +1241,12 @@
            ;; ADR-0020 fatia 2: os vereadores que recebem o aviso da pauta publicada (host). Opcional: sem ele, sem aviso.
            vereadores-a-avisar
            ;; ADR-0021 (B3): se a proposicao pode entrar na pauta (o PDL das contas, pelo `legislativo`). Opcional.
-           motivo-nao-pautavel]}]
+           motivo-nao-pautavel
+           ;; ADR-0021 (audiencia publica): a comissao vigente / o nome dela (cadastros), o rotulo da materia em debate
+           ;; (legislativo) e o nome de quem se inscreve pelo gov.br (identidade) — seams do host, ver
+           ;; `controllers.audiencia`. Opcionais no boot (testes de outras verticais); a rota que precisa e nao tem
+           ;; responde 500 nomeado, nunca grava sem conferir.
+           comissoes-vigentes nomes-de-comissoes rotular-proposicoes nome-da-identidade]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1272,8 +1285,16 @@
         deps-publicacao {:repo-sessoes repo-sessoes :situacao-de-parecer situacao-de-parecer
                          :cargo-na-mesa cargo-na-mesa :nome-na-casa nome-na-casa
                          :vereadores-a-avisar vereadores-a-avisar}
-        relogio-pub (or relogio (tempo/relogio-sistema))]
-   #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler repo-sessoes)]
+        relogio-pub (or relogio (tempo/relogio-sistema))
+        sem-seam (fn [nome] (fn [& _] (throw (ex-info (str "sessoes/rotas: seam " nome " ausente")
+                                                      {:tipo :servidor/erro :seam nome}))))
+        deps-audiencia {:repo-sessoes repo-sessoes :relogio relogio-pub
+                        :comissoes-vigentes (or comissoes-vigentes (sem-seam :comissoes-vigentes))
+                        :nomes-de-comissoes (or nomes-de-comissoes (sem-seam :nomes-de-comissoes))
+                        :rotular-proposicoes (or rotular-proposicoes (sem-seam :rotular-proposicoes))
+                        :nome-da-identidade (or nome-da-identidade (sem-seam :nome-da-identidade))}]
+   (into
+   #{["/sessoes"     :post [auth (it/exige-papel "secretario") it/corpo-json (agendar-handler deps-audiencia)]
      :route-name :sessoes/agendar]
     ;; MESMO path do POST acima, metodo diferente — Pedestal despacha por (path, metodo); precedente
     ;; identico em `/sessoes/:id/chamada` (GET+POST) e `/pauta/itens/:item-id` (PATCH+DELETE). SEM papel
@@ -1500,7 +1521,10 @@
      :route-name :sessoes/pautas-publicas]
     ["/portal/casa/:ente/pautas/:sessao-id" :get
      [(pauta-oficial-publica-handler repo-sessoes resolver-ente-publico casa-existe? resumir-proposicoes)]
-     :route-name :sessoes/pauta-oficial-publica]}))
+     :route-name :sessoes/pauta-oficial-publica]}
+   ;; ADR-0021 Parte A: a audiencia publica (a Mesa, o portal e a cidada) — fragmento proprio
+   (audiencia-http/rotas (assoc deps-audiencia :auth auth :resolver-ente-publico resolver-ente-publico
+                                :casa-existe? casa-existe?)))))
 
 (defn presenca-resumo-wire
   "Ponto de entrada IN-PROCESS da presenca agregada (FE Onda A1) — o gemeo nao-HTTP p/ a RAIZ DE COMPOSICAO

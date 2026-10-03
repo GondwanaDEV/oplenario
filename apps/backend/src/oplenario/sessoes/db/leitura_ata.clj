@@ -14,7 +14,8 @@
 (defn sessao-anterior
   "A sessao cuja ata esta' sessao le: a mais recente da Casa, ANTERIOR a esta (pelo inicio: aberta_em, ou a data
   agendada), que gera ata regimental e ja' acabou. Sessao secreta so' e' 'anterior' de outra secreta — a ata sigilosa
-  nunca e' lida em sessao publica. nil = nao ha'."
+  nunca e' lida em sessao publica. A audiencia publica (ADR-0021) nunca e' 'anterior': a ata dela e' da comissao com a
+  sociedade, nao do plenario. nil = nao ha'."
   [tx ente-id {:keys [id tipo-sessao aberta-em agendada-para]}]
   (let [inicio (or aberta-em agendada-para)]
     (when inicio
@@ -24,6 +25,7 @@
                       :from [:sessoes.sessao]
                       :where [:and [:= :ente_id ente-id] [:<> :id id] [:= :gera_ata_regimental true]
                               [:in :estado ["encerrada" "arquivada"]]
+                              [:<> :tipo_sessao "audiencia_publica"]
                               [:< [:coalesce :aberta_em :agendada_para] inicio]
                               (when-not (= "secreta" tipo-sessao) [:<> :tipo_sessao "secreta"])]
                       :order-by [[[:coalesce :aberta_em :agendada_para] :desc] [:id :desc]]

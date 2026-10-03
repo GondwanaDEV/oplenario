@@ -33,6 +33,7 @@
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
             [oplenario.legislativo.diplomat.http.contas :as contas-http]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
+            [oplenario.legislativo.logic :as legislativo-logic]
             [oplenario.mcp :as mcp]
             [oplenario.normas.components.repositorio :as repo-normas-comp]
             [oplenario.normas.diplomat.http.in :as normas-http]
@@ -132,6 +133,8 @@
   disto (sessao secreta, segmento restrito)."
   [repo-sessoes repo-cadastros ente-id sessao-id]
   (when-let [c (repo-sessoes-comp/contexto-para-ia repo-sessoes ente-id sessao-id)]
+    ;; ADR-0021: na audiencia publica, os cidadaos que falaram entram como falas (o id da inscricao no lugar do
+    ;; orador) e os nomes deles, ao lado dos vereadores — o rascunho da ata nomeia quem falou
     ;; mesma data de referencia da /chamada (sessoes-logic): a composicao DE ENTAO, nunca a de hoje. Sessao sem
     ;; data nenhuma nao tem composicao conhecida — vai sem nomes (a IA marca os oradores como nao nomeados).
     (let [data  (try (sessoes-logic/data-de-referencia-da-sessao (:sessao c))
@@ -140,7 +143,10 @@
                   (into {} (map (fn [l] [(:vereador-id l) (or (not-empty (:nome-parlamentar l)) (:nome l))]))
                         (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
                   {})]
-      (assoc c :nomes nomes))))
+      (-> c
+          (update :falas (fnil into []) (:falas-cidadas c))
+          (assoc :nomes (merge nomes (:nomes-cidadaos c)))
+          (dissoc :falas-cidadas :nomes-cidadaos)))))
 
 (defn ata-para-ia
   "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
@@ -407,6 +413,11 @@
         ;; dependencia de `consultar-sessao`. Consumido pelo `pauta-handler` (que degrada se isto falhar).
         resumir-proposicoes-fn (fn [ente-id ids]
                                  (repo-legislativo-comp/resumos-de-proposicoes repo-legislativo ente-id ids))
+        ;; ADR-0021: o rotulo de exibicao ('PL 012/2026') + a ementa da materia em debate na audiencia publica — a
+        ;; sigla e' vocabulario do legislativo (`numero-exibicao`), por isso o host monta e o `sessoes` so' le.
+        rotular-proposicoes-fn (fn [ente-id ids]
+                                 (update-vals (resumir-proposicoes-fn ente-id ids)
+                                              (fn [r] {:rotulo (legislativo-logic/numero-exibicao r) :ementa (:ementa r)})))
         ;; ADR-0019 fatia 3 (publicar a pauta): a situacao de parecer das materias da pauta (legislativo) e o cargo
         ;; de quem publica na Mesa de HOJE (cadastros) — os dois seams da regra e dos avisos, mesma inversao de
         ;; dependencia de `resumir-proposicoes-fn` (sessoes nunca importa legislativo nem cadastros, §22.10).
@@ -645,7 +656,16 @@
                                    :ler-rascunho-ata ler-rascunho-ata-fn
                                    ;; Onda E: o livro de atas publico (mesmo seam V1 do portal: UUID coagido)
                                    :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
-                                   :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))}))
+                                   :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))
+                                   ;; ADR-0021 (audiencia publica): a comissao vigente que promove e o nome dela
+                                   ;; (cadastros), o rotulo + ementa da materia em debate (legislativo) e o nome de
+                                   ;; quem se inscreve pelo gov.br (identidade — nunca o nome digitado no corpo)
+                                   :comissoes-vigentes (fn [ente-id]
+                                                         (repo-cadastros-comp/comissoes-vigentes repo-cadastros ente-id
+                                                                                                 (hoje-civil)))
+                                   :nomes-de-comissoes resolver-comissoes-fn
+                                   :rotular-proposicoes rotular-proposicoes-fn
+                                   :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
@@ -833,6 +853,8 @@
                 (let [deps-catalogo
                       {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                        :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       ;; ADR-0021: o rotulo da materia em debate na audiencia publica (as ferramentas de audiencia)
+                       :rotular-proposicoes rotular-proposicoes-fn
                        ;; ADR-0019 fatia 3: publicar_pauta (proposta do agente) usa os MESMOS seams da tela
                        :situacao-de-parecer situacao-de-parecer-fn :cargo-na-mesa cargo-na-mesa-fn
                        ;; ADR-0020: os comunicados (ler a caixa, ler, painel de leitura, PROPOR o envio) e os avisos

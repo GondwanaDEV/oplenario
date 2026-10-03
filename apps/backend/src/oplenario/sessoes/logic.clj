@@ -13,7 +13,7 @@
 
 (set! *warn-on-reflection* true)
 
-(def tipos-sessao #{"ordinaria" "extraordinaria" "solene" "secreta" "especial"})
+(def tipos-sessao #{"ordinaria" "extraordinaria" "solene" "secreta" "especial" "audiencia_publica"})
 (def modalidades-sessao #{"presencial" "remota" "hibrida"})
 (def estados-sessao #{"agendada" "aberta" "suspensa" "encerrada" "nao_realizada" "arquivada"})
 
@@ -34,18 +34,30 @@
   (contains? (get transicoes-sessao de #{}) para))
 
 (def capabilities
-  "As 5 capabilities da sessao (§22.6 eixo A) — ordem estavel p/ defaults/models."
-  [:delibera :transmite-publica :gera-ata-regimental :permite-voto-secreto :permite-modalidade-remota])
+  "As 7 capabilities da sessao (§22.6 eixo A) — ordem estavel p/ defaults/models. As duas ultimas sao da ADR-0021
+  (audiencia publica): `exige-quorum` (ate' ali implicito em `delibera`) e `aceita-inscricao-cidadao`."
+  [:delibera :transmite-publica :gera-ata-regimental :permite-voto-secreto :permite-modalidade-remota
+   :exige-quorum :aceita-inscricao-cidadao])
 
 (def ^:private capabilities-default-por-tipo
   "Defaults DEFENSAVEIS por tipo (regimental — [GAP] p/ o especialista, como os templates do motor). O
-  override individual e' explicito e auditado (disc.3). [delibera transmite gera_ata voto_secreto remota]"
+  override individual e' explicito e auditado (disc.3). [delibera transmite gera_ata voto_secreto remota]
+  + (ADR-0021) `exige-quorum` = `delibera` nos tipos que ja' existiam (o backfill da mig 182 faz o mesmo) e
+  `aceita-inscricao-cidadao` so' na audiencia publica — que nao delibera, nao exige quorum e gera ata."
   {;;                       delib  transm  ata   v.secr  remota
-   "ordinaria"      {:delibera true  :transmite-publica true  :gera-ata-regimental true  :permite-voto-secreto false :permite-modalidade-remota true}
-   "extraordinaria" {:delibera true  :transmite-publica true  :gera-ata-regimental true  :permite-voto-secreto false :permite-modalidade-remota true}
-   "solene"         {:delibera false :transmite-publica true  :gera-ata-regimental false :permite-voto-secreto false :permite-modalidade-remota false}
-   "secreta"        {:delibera true  :transmite-publica false :gera-ata-regimental true  :permite-voto-secreto true  :permite-modalidade-remota false}
-   "especial"       {:delibera false :transmite-publica true  :gera-ata-regimental false :permite-voto-secreto false :permite-modalidade-remota true}})
+   "ordinaria"      {:delibera true  :transmite-publica true  :gera-ata-regimental true  :permite-voto-secreto false :permite-modalidade-remota true
+                     :exige-quorum true  :aceita-inscricao-cidadao false}
+   "extraordinaria" {:delibera true  :transmite-publica true  :gera-ata-regimental true  :permite-voto-secreto false :permite-modalidade-remota true
+                     :exige-quorum true  :aceita-inscricao-cidadao false}
+   "solene"         {:delibera false :transmite-publica true  :gera-ata-regimental false :permite-voto-secreto false :permite-modalidade-remota false
+                     :exige-quorum false :aceita-inscricao-cidadao false}
+   "secreta"        {:delibera true  :transmite-publica false :gera-ata-regimental true  :permite-voto-secreto true  :permite-modalidade-remota false
+                     :exige-quorum true  :aceita-inscricao-cidadao false}
+   "especial"       {:delibera false :transmite-publica true  :gera-ata-regimental false :permite-voto-secreto false :permite-modalidade-remota true
+                     :exige-quorum false :aceita-inscricao-cidadao false}
+   "audiencia_publica"
+                    {:delibera false :transmite-publica true  :gera-ata-regimental true  :permite-voto-secreto false :permite-modalidade-remota false
+                     :exige-quorum false :aceita-inscricao-cidadao true}})
 
 (defn capabilities-default
   "As capabilities default do tipo. Fail-closed: tipo desconhecido lanca (nao monta sessao sem comportamento)."
@@ -55,7 +67,7 @@
 
 (defn resolver-capabilities
   "Capabilities efetivas = default do tipo + override (so as chaves presentes em `override` sobrescrevem).
-  `override` e' um mapa parcial das 5 capabilities (valores boolean)."
+  `override` e' um mapa parcial das 7 capabilities (valores boolean)."
   [tipo override]
   (merge (capabilities-default tipo) (select-keys override capabilities)))
 
@@ -1363,6 +1375,15 @@
                         {:tipo :limite/periodo-excedido :medido dias
                          :teto teto-de-dias-do-periodo-de-assiduidade}))))))
 
+(def tipos-fora-da-assiduidade
+  "ADR-0021 (A1): os tipos de sessao que NAO contam na assiduidade do vereador — a audiencia publica e' da comissao com
+  a sociedade, nao sessao do plenario (e nao e' a 'sessao anterior' cuja ata a proxima le)."
+  #{"audiencia_publica"})
+
+(def tipos-de-assiduidade
+  "Os tipos que a apuracao de assiduidade conhece (o filtro `tipos` so' aceita estes)."
+  (apply disj tipos-sessao tipos-fora-da-assiduidade))
+
 (defn validar-tipos-de-assiduidade!
   "Fail-closed sobre o filtro `tipos` da apuracao, chamado nos MESMOS DOIS lugares que
   `validar-periodo-assiduidade!` (controller antes da tx + `db/sessao/listar-fechadas-no-periodo` como rede
@@ -1377,13 +1398,14 @@
     Nao ha' rota que alcance isto hoje (a Fatia 3 e' que abre a borda), e por isso nao e' explotavel; o ponto
     e' que a unica coisa que separava o SQL de uma entrada arbitraria era NAO EXISTIR chamador.
 
-  `nil`/vazio = todos os tipos (o default do brief), e continua legitimo."
+  `nil`/vazio = todos os tipos que contam (o default do brief), e continua legitimo. A audiencia publica (ADR-0021)
+  NAO conta na assiduidade do vereador: pedi-la e' tipo desconhecido para a apuracao (400), e o `db/` a exclui sempre."
   [tipos]
   (doseq [t tipos]
-    (when-not (and (string? t) (contains? tipos-sessao t))
+    (when-not (and (string? t) (contains? tipos-de-assiduidade t))
       (throw (ex-info "apuracao de assiduidade: tipo de sessao desconhecido"
                       {:tipo :validacao/invalido :campo :tipos :valor (str t)
-                       :classe (some-> t class .getName) :validos tipos-sessao})))))
+                       :classe (some-> t class .getName) :validos tipos-de-assiduidade})))))
 
 (def ^:private criterio-de-inclusao-assiduidade
   "So' sessoes FECHADAS entram no periodo apurado: encerrada, nao_realizada ou arquivada
@@ -1775,8 +1797,10 @@
 
 ;; ---------- ADR-0020 fatia 2: o aviso automatico da pauta publicada ----------
 
-(def ^:private rotulo-do-tipo
-  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"})
+(def rotulo-do-tipo
+  "O nome legivel de cada tipo de sessao (o que a pessoa le: 'sessão ordinária nº 3', 'audiência pública nº 1')."
+  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"
+   "audiencia_publica" "audiência pública"})
 
 (defn avisos-de-pauta-publicada
   "PURO: os payloads de `notificacao.requisitada` (canal `in_app`, a caixa do sistema) para cada vereador quando a pauta
@@ -1784,7 +1808,8 @@
   ato nunca avisa duas vezes, e cada republicacao avisa de novo (a pauta mudou). O texto so' diz o que a pauta publicada
   ja' torna publico: a sessao, a data e a versao."
   [sessao versao identidade-ids]
-  (let [nome (str "sessão " (get rotulo-do-tipo (:tipo-sessao sessao) (:tipo-sessao sessao))
+  (let [nome (str (when-not (= "audiencia_publica" (:tipo-sessao sessao)) "sessão ")
+                  (get rotulo-do-tipo (:tipo-sessao sessao) (:tipo-sessao sessao))
                   (when-let [n (:numero-sequencial sessao)] (str " nº " n)))
         quando (when-let [^Instant t (:agendada-para sessao)]
                  (str " de " (.format (.toLocalDate (.atZone t ^ZoneId tempo/zona-civil-padrao))
@@ -1806,3 +1831,11 @@
              :objeto-id (str (:id sessao))
              :categoria "pauta_publicada"})
           (distinct identidade-ids))))
+
+;; ---------- ADR-0021 Parte A: a audiencia publica ----------
+
+(defn ano-civil
+  "O ano CIVIL (no fuso da Casa) de um instante — o `AAAA` do protocolo `AUD-AAAA-NNNNNN` da inscricao na audiencia.
+  Aqui (e nao em `logic.audiencia`) para o fuso seguir num lugar so' deste modulo (ver `tempo/zona-civil-padrao`)."
+  [^Instant instante]
+  (.getYear (LocalDate/ofInstant instante ^ZoneId tempo/zona-civil-padrao)))

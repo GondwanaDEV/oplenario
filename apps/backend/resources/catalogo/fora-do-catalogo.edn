@@ -234,4 +234,25 @@
  :legislativo/contas-publicas {:categoria :so-tela
                                :motivo "as prestacoes de contas e os resultados no portal do cidadao (anonimo)"}
  :legislativo/documento-contas-publico {:categoria :so-tela
-                                        :motivo "o download publico dos documentos do TCE no portal do cidadao (anonimo)"}}
+                                        :motivo "o download publico dos documentos do TCE no portal do cidadao (anonimo)"}
+ ;; ---------- ADR-0021 Parte A: a audiencia publica (o agente le por audiencias_publicas / audiencia_publica) ----------
+ :sessoes/atualizar-audiencia {:categoria :so-tela
+                               :motivo "ajustar o tempo de fala, abrir/fechar inscricoes e o local e' da secretaria, na tela da Mesa"}
+ :sessoes/inscrever-na-audiencia {:categoria :so-tela
+                                  :motivo "a Mesa inscreve no dia quem esta' presente na audiencia, digitando o nome, pela tela"}
+ :sessoes/chamar-cidadao {:categoria :pessoal
+                          :motivo "conducao da audiencia ao vivo: dar a palavra ao cidadao e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/encerrar-fala-cidada {:categoria :pessoal
+                                :motivo "conducao da audiencia ao vivo: encerrar a fala do cidadao e' da Mesa, pela tela (Eixo 4.3)"}
+ :sessoes/registrar-ausencia-cidada {:categoria :pessoal
+                                     :motivo "conducao da audiencia ao vivo: registrar que o inscrito nao estava e' da Mesa (Eixo 4.3)"}
+ :sessoes/audiencias-publicas {:categoria :so-tela
+                               :motivo "a lista de audiencias no portal do cidadao (anonimo); o agente le por audiencias_publicas"}
+ :sessoes/audiencia-publica {:categoria :so-tela
+                             :motivo "a pagina publica da audiencia no portal (anonimo); o agente le por audiencia_publica"}
+ :sessoes/inscrever-pelo-portal {:categoria :so-tela
+                                 :motivo "o cidadao pede para falar pelo gov.br, ciente de que a fala e' publica; agente do cidadao e' pos-V1"}
+ :sessoes/minhas-inscricoes {:categoria :so-tela
+                             :motivo "a lista da propria cidada para acompanhar as inscricoes; agente do cidadao e' pos-V1 (docs/26 §4)"}
+ :sessoes/desistir-da-inscricao {:categoria :so-tela
+                                 :motivo "desistir da fala e' da propria cidada, na area dela; agente do cidadao e' pos-V1"}}

@@ -264,7 +264,7 @@
     (is (= 200 (:status r)))
     ;; Igualdade de CONJUNTO, nao `not-contains`: um campo novo acrescentado no futuro quebra este teste de
     ;; proposito, obrigando quem o acrescentar a decidir explicitamente se ele pode circular no telao.
-    (is (= #{:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
+    (is (= #{:sessao-id :sessao-estado :exige-quorum :instante :data-de-composicao :composicao-resolvida-em
              :sem-registro-de-presenca :quorum}
            (set (keys body)))
         "o contrato e' fechado e MAGRO: so' os numeros e os carimbos que os situam no tempo")

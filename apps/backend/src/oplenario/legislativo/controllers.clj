@@ -54,11 +54,17 @@
   adapters/in (sem sessao-id). Devolve o recibo {:id} ou nil se a sessao nao existe no tenant (-> 404). Sessao
   ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5).
   ADR-0021: `registro` (RegistroFatos do motor) vai ao Repo, que avalia NA TX do INSERT a regra de votacao da materia de
-  contas (`:conflito/regra-de-votacao` -> 422); sem ele, a guarda so' le os campos da votacao (fato = fail-closed)."
+  contas (`:conflito/regra-de-votacao` -> 422); sem ele, a guarda so' le os campos da votacao (fato = fail-closed).
+
+  ADR-0021 (A1): sessao que NAO DELIBERA (a capability `delibera` da sessao — audiencia publica, solene, especial) nao
+  abre votacao: `:conflito/sessao-nao-delibera` (-> 409 \"esta sessão não delibera\"). Ate' aqui abria. `false?` e nao
+  `not`: a sessao sem a capability no mapa (fixture antiga) segue o comportamento de antes."
   ([repo-leg consultar-sessao sessao-fechada? ator sessao-id m]
    (abrir-votacao repo-leg consultar-sessao sessao-fechada? nil ator sessao-id m))
   ([repo-leg consultar-sessao sessao-fechada? registro ator sessao-id m]
-   (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
+   (when-let [s (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)]
+     (when (false? (:delibera s))
+       (throw (ex-info "esta sessão não delibera" {:tipo :conflito/sessao-nao-delibera :sessao-id sessao-id})))
      (repo/abrir-votacao! repo-leg (:ente-id ator) (assoc m :sessao-id sessao-id :registro registro)))))
 
 (defn registrar-voto
