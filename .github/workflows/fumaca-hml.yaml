@@ -359,6 +359,18 @@ jobs:
                   `lista=${lst.status}:${ps.length} 2024=${g24?.estado ?? '-'} 2023=${g23?.estado ?? '-'} ficha=${ficha.status} pautavel=${ficha.body?.pautavel} por-pdl=${porPdl.status} vereadora=${ver.status} portal=${pub.status}:${pub.body?.prestacoes?.length ?? '-'}`);
             } catch (e) { rec('julgamento das contas', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 12) OBRIGACOES LEGAIS NO MOTOR (ADR-0021 fatia 3) — ler o painel aciona o gatilho: a audiencia de metas
+            //     fiscais e o julgamento das contas aparecem como obrigacoes da Casa (a demo esta' ligada desde 01/01/2026)
+            try {
+              const pn = await api(cSec, '/api/compliance/painel');
+              const ab = Array.isArray(pn.body?.['em-aberto']) ? pn.body['em-aberto'] : [];
+              const metas = ab.filter(x => x['template-chave'] === 'audiencia_metas_fiscais');
+              const contas = ab.filter(x => x['template-chave'] === 'julgamento_contas_prefeito');
+              const ok = pn.status === 200 && metas.length >= 1 && contas.length >= 1;
+              rec('obrigacoes legais (motor)', ok ? 'OK' : 'ERRO',
+                  `painel=${pn.status} em-aberto=${ab.length} metas-fiscais=${metas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'} contas=${contas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'}`);
+            } catch (e) { rec('obrigacoes legais (motor)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');
