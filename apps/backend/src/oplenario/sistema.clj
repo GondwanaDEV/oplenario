@@ -12,6 +12,7 @@
             [oplenario.cadastros.components.repositorio :as repo-cadastros]
             [oplenario.cadastros.relacoes.cadastro :as rel-cadastros]
             [oplenario.compliance.components.repositorio :as repo-compliance]
+            [oplenario.comunicacao.components.repositorio :as repo-comunicacao]
             [oplenario.compliance.relacoes :as rel-compliance]
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.integracao-ia.components.repositorio :as repo-integracao-ia]
@@ -142,6 +143,9 @@
    :repo-normas     (component/using (repo-normas/repositorio) [:datasource :bus])
    ;; ADR-0017: a trilha de auditoria da Casa — a corrente selada de cada Casa. So' :datasource.
    :repo-auditoria  (component/using (repo-auditoria/repositorio) [:datasource])
+   ;; ADR-0020: os comunicados internos da Casa (setores, lista congelada, recebido/lido/ciente). So' :datasource — o
+   ;; modulo nao emite evento (os avisos automaticos sao de quem faz o ato: sessoes, legislativo).
+   :repo-comunicacao (component/using (repo-comunicacao/repositorio) [:datasource])
    ;; o host É a fronteira (§22.10): importa as `relacoes` dos módulos e as injeta no registry do motor.
    ;; O motor chama por nome (resolver-para), nunca importa o módulo. Sem :datasource — a `tx` do tenant
    ;; entra por-chamada (quem avalia abre a tx via Repo). O `start` roda o assert de costura (fail-closed).
@@ -211,4 +215,4 @@
                          [:idp :idp-operacao :repo-admin-sistema :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
                           :canal-store :objeto-store :registro-fatos :repo-integracao-ia :repo-normas
-                          :repo-auditoria])))
+                          :repo-auditoria :repo-comunicacao])))

@@ -36,6 +36,9 @@
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
     :paineis/marcar-notificacao-lida
+    ;; ADR-0020: dar ciencia de um comunicado recebido, como marcar a notificacao como lida — a pessoa reconhece o que a
+    ;; Casa ja' comunicou; ENVIAR comunicado fica bloqueado (e' ato da Casa)
+    :comunicacao/ciencia
     ;; o motor de compliance SEGUE (Eixo 2: prazo que vence em silencio e' o pior incidente, CLAUDE.md §5): a Casa
     ;; suspensa ainda valida, envia a remessa ao TCE e registra o recibo — perder a janela do TCE seria culpa nossa
     :compliance/validar-remessa :compliance/submeter-remessa :compliance/resposta-remessa

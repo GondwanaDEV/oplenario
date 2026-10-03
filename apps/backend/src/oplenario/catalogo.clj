@@ -6,7 +6,8 @@
   Conjunto por publico = o que um agente daquele publico PODE oferecer (o publico vem da credencial delegada,
   ADR-0010); expoe MENOS do que a permissao da pessoa (Eixo 2), e a ferramenta ainda exige o papel dela a cada
   chamada (interseccao, Eixo 3.2)."
-  (:require [oplenario.integracao-ia.components.repositorio :as repo-ia]
+  (:require [oplenario.comunicacao.diplomat.catalogo :as comunicacao]
+            [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.catalogo :as catalogo]
             [oplenario.legislativo.diplomat.catalogo :as legislativo]
@@ -15,7 +16,7 @@
 
 (def entradas
   "Todas as entradas, na ordem dos modulos."
-  (into [] cat [legislativo/entradas sessoes/entradas normas/entradas]))
+  (into [] cat [legislativo/entradas sessoes/entradas normas/entradas comunicacao/entradas]))
 
 (def por-nome (catalogo/validar-catalogo! entradas))
 
@@ -26,13 +27,18 @@
                  ;; ADR-0019 fatia 2: o caminho da materia. O agente so' PROPOE (a secretaria confirma em /propostas);
                  ;; assinar parecer juridico nao e' ferramenta, e' ato pessoal do advogado.
                  "pareceres_juridicos_da_materia" "pedir_parecer_juridico" "comissoes_da_casa" "vereadores_da_casa"
-                 "encaminhar_as_comissoes" "designar_relator"}
+                 "encaminhar_as_comissoes" "designar_relator"
+                 ;; ADR-0020: os comunicados internos. O agente le a caixa SEM marcar e so' PROPOE o envio; a ciencia
+                 ;; (`registrar_ciencia`) fica fora de todo conjunto: e' a prova de que a PESSOA reconheceu
+                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"}
    :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
                 "ler_dispositivo"
                 ;; B.6: o requerimento do proprio vereador — o agente so' PROPOE; ele assina na tela (ADR-0012)
                 "modelos_de_requerimento" "protocolar_requerimento"
                 ;; ADR-0019: o vereador le o que o juridico ja' opinou sobre a materia
-                "pareceres_juridicos_da_materia" "vereadores_da_casa"}
+                "pareceres_juridicos_da_materia" "vereadores_da_casa"
+                ;; ADR-0020: a caixa do vereador e o comunicado que ele propoe enviar (ele confirma na tela)
+                "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"}
    ;; B.8 (ADR-0013): o agente institucional da Casa (sem pessoa) — le a materia e as normas, e so' deixa RASCUNHO
    :institucional #{"situacao_da_materia" "buscar_dispositivos" "ler_dispositivo" "registrar_nota_tecnica"}})
 

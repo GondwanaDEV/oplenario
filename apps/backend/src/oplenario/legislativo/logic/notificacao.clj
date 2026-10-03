@@ -36,3 +36,32 @@
                    "Ementa: " (:ementa norma) "\n"
                    "URN: " (:urn norma) "\n\n"
                    "O texto vigente esta' disponivel no acervo de legislacao da Camara.")}))
+
+;; ---------- ADR-0020 fatia 2: o aviso automatico do pedido de parecer juridico ----------
+
+(defn avisos-de-pedido-juridico
+  "PURO: os payloads de `notificacao.requisitada` (canal `in_app`, a caixa do sistema) para cada pessoa com o papel
+  `juridico` quando um parecer juridico e' PEDIDO. Um por pessoa; chave de idempotencia (pedido, pessoa). Objeto = o
+  pedido (a tela abre a fila /juridico nele). O texto diz a materia (quando ha') e o assunto do pedido — so' para quem
+  trabalha na Casa."
+  [pedido identidade-ids]
+  (let [materia (when (:materia-tipo pedido)
+                  (str (str/upper-case (str (:materia-tipo pedido))) " " (:materia-sequencial pedido) "/"
+                       (:materia-ano pedido)))
+        de (case (:origem pedido) "relator" "pelo relator da comissão" "pela secretaria")
+        corpo (str "Um parecer jurídico foi pedido " de
+                   (if materia (str " sobre " materia) " (consulta avulsa)")
+                   (when-not (str/blank? (:assunto pedido)) (str ": " (:assunto pedido)))
+                   (when-let [p (:prazo pedido)] (str ". Prazo: " p))
+                   ".")]
+    (mapv (fn [iid]
+            {:destinatario-identidade-id (str iid)
+             :canal "in_app"
+             :consent-base "vinculo"
+             :idempotency-key (str "parecer_juridico_pedido:" (:id pedido) ":" iid)
+             :assunto (str "Pedido de parecer jurídico" (when materia (str " — " materia)))
+             :corpo corpo
+             :objeto-tipo "pedido_parecer_juridico"
+             :objeto-id (str (:id pedido))
+             :categoria "parecer_juridico_pedido"})
+          (distinct identidade-ids))))

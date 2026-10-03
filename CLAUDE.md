@@ -131,6 +131,21 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   - flags (12.3);
   - billing (12.2, parqueado).
 
+**Comunicados internos ENTREGUES (02/10/2026, [ADR-0020](docs/adr/0020-comunicados-internos-e-setores.md)):** a
+resposta ao "servidor de e-mail" do Daouda é uma caixa DENTRO do sistema, sem e-mail.
+- Setores da Casa (`cadastros.setor`, em `/administracao`).
+- Comunicado com protocolo `COM-AAAA-NNNNNN`, imutável, endereçado a pessoa, vereador, setor, todos os setores ou
+  comissão. A lista é congelada no envio.
+- Marcas insert-only `recebido`/`lido`/`ciente`. Ciência opcional, com prazo em dia.
+- Painel de leitura para quem enviou, a secretaria e o admin.
+- Anexos, link para sessão/proposição/protocolo e substituição.
+- `/caixa` para todos (o vereador na aba Avisos), juntando comunicados e avisos do sistema. Avisos automáticos de
+  pauta publicada e de parecer jurídico pedido.
+- Módulo de domínio novo `comunicacao`; o host compõe os destinatários em `destinatarios.clj`.
+- **Falta:**
+  - e-mail/push (quando houver SMTP);
+  - a convocação oficial de sessão (4.15), que espera a resposta jurídica sobre a prova.
+
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
 pago") estava **errada**, e errada de um jeito caro: mandaria 12 agentes portar telas que não têm API

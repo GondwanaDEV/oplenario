@@ -8,7 +8,13 @@
   apareceria em runtime."
   (:require [clojure.test :refer [deftest is]]
             [oplenario.legislativo.events.notificacao :as leg]
+            [oplenario.sessoes.events.notificacao :as sess]
             [oplenario.transparencia.events.notificacao :as transp]))
+
+;; ADR-0020 fatia 2: `sessoes` virou o TERCEIRO produtor (o aviso da pauta publicada aos vereadores). Mesma regra.
+(deftest a-terceira-copia-tambem-nao-driftou
+  (is (= leg/requisitada-tipo sess/requisitada-tipo))
+  (is (= leg/RequisitadaPayload sess/RequisitadaPayload)))
 
 (deftest o-nome-do-evento-e-o-mesmo
   ;; DOIS asserts separados de proposito (achado de review: `(is (= a b "msg"))` e' `=` de aridade 3, nao

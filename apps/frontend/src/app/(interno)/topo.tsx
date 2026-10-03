@@ -25,12 +25,17 @@ import { useAuth } from "@/lib/auth";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
+import { useContagemDaCaixa } from "@/lib/use-comunicados";
 import "./topo.css";
 
-const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[] }[] = [
+const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; todos?: true }[] = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
+  // ADR-0020 (Eixo 7) — a caixa: os comunicados da Casa e os avisos do sistema. É de TODA pessoa interna, inclusive de
+  // quem só administra, só audita ou só dá parecer (`todos`: escapa do recorte `soAdministracao` abaixo). Leva o número
+  // do que está por ler (`useContagemDaCaixa`).
+  { rotulo: "Caixa", href: "/caixa", todos: true },
   // Faixa A / A.5 da Track IA — busca intra-câmara (proposições + o que foi dito em plenário). Gated "secretario"
   // (GuardSecretaria + exige-papel no backend). Logo depois da Central: é a outra porta de entrada da secretaria.
   { rotulo: "Busca", href: "/busca" },
@@ -89,7 +94,8 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[] }[
   { rotulo: "Moderação", href: "/moderacao" },
 ];
 
-/** As entradas da nav que o ator vê. Entrada com `papel` só aparece para quem tem (um d)ele. As SEM papel são as telas
+/** As entradas da nav que o ator vê. Entrada com `papel` só aparece para quem tem (um d)ele; a marcada `todos` (a
+ *  caixa, ADR-0020), para qualquer pessoa. As SEM papel são as telas
  *  de trabalho da secretaria/Mesa — quem só administra, só audita ou só dá parecer jurídico na Casa
  *  (admin_ente/auditor/juridico sem secretario nem vereador: como nasce o 1º administrador provisionado, ADR-0016, o
  *  controle interno, ADR-0017, e o jurídico, ADR-0019) não as vê, porque cada uma o levaria a "Acesso restrito". */
@@ -98,13 +104,14 @@ export function destinosVisiveis(papeis: string[]) {
     (papeis.includes("admin_ente") || papeis.includes("auditor") || papeis.includes("juridico")) &&
     !papeis.includes("secretario") && !papeis.includes("vereador");
   return DESTINOS_NAV.filter((d) =>
-    d.papel ? [d.papel].flat().some((p) => papeis.includes(p)) : !soAdministracao);
+    d.todos ? true : d.papel ? [d.papel].flat().some((p) => papeis.includes(p)) : !soAdministracao);
 }
 
 export function TopoInterno({ area }: { area: string }) {
   const { tema, alternar } = useTema();
   const { token } = useAuth();
   const { dados, estado } = useMeuIdentidade(token);
+  const porLer = useContagemDaCaixa(token);
   // Nunca um nome inventado: "carregando"/"erro" são rótulos HONESTOS, não um ator fixo. `estado==="erro"`
   // cobre tanto a falha de rede quanto a resposta não-ok (ver docstring de useMeuIdentidade).
   const nome = estado === "pronto" && dados ? dados.nome : estado === "carregando" ? "Carregando…" : "Sessão";
@@ -136,6 +143,13 @@ export function TopoInterno({ area }: { area: string }) {
               prefetch={false}
             >
               {d.rotulo}
+              {d.href === "/caixa" && porLer !== null && porLer > 0 && (
+                <>
+                  {/* o número é visual; o leitor de tela ouve a frase (", 3 por ler") como parte do link */}
+                  <span className="nav-contagem" aria-hidden="true">{porLer > 99 ? "99+" : porLer}</span>
+                  <span className="sr-only">, {porLer === 1 ? "1 por ler" : `${porLer} por ler`}</span>
+                </>
+              )}
             </Link>
           ))}
         </nav>

@@ -22,6 +22,8 @@
 .nav-interna a { font-family: var(--mono); font-size: var(--t-13); font-weight: 500; letter-spacing: .02em; color: var(--texto-2); text-decoration: none; padding: 0.3rem 0; border-bottom: 2px solid transparent; white-space: nowrap; }
 .nav-interna a:hover { color: var(--texto); }
 .nav-interna a[aria-current="page"] { color: var(--marca); border-bottom-color: var(--marca); font-weight: 600; }
+/* ADR-0020: o número do que está por ler na Caixa. Branco sobre --telha-fundo (5.44) — nunca sobre --telha (4.0, §5.1). */
+.nav-contagem { display: inline-block; margin-left: 0.35rem; min-width: 1.35em; padding: 0 0.35em; border-radius: 999px; background: var(--telha-fundo); color: #fff; font-size: var(--t-11); font-weight: 600; line-height: 1.5; text-align: center; font-variant-numeric: tabular-nums; }
 
 /* No mobile a nav não cabe em linha nenhuma sem virar 3-4 linhas na barra fixa (come a altura da viewport)
    e, sem tratamento, transbordava horizontalmente escondendo itens (achado do teste exploratório em 390px:

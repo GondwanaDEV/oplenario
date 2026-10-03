@@ -1,0 +1,15 @@
+DROP TABLE IF EXISTS comunicacao.anexo;
+--;;
+DROP TABLE IF EXISTS comunicacao.marca;
+--;;
+DROP FUNCTION IF EXISTS comunicacao.ciente_exige_ciencia();
+--;;
+DROP TABLE IF EXISTS comunicacao.destinatario;
+--;;
+DROP TABLE IF EXISTS comunicacao.destino;
+--;;
+DROP TABLE IF EXISTS comunicacao.comunicado;
+--;;
+REVOKE USAGE ON SCHEMA comunicacao FROM oplenario_app;
+--;;
+DROP SCHEMA IF EXISTS comunicacao;
