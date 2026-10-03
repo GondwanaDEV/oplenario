@@ -93,7 +93,7 @@ describe("CentralDaCasa", () => {
     await waitFor(() => expect(within(fila).getAllByRole("heading", { level: 3 })).toHaveLength(5));
     expect(within(fila).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
       "Pedido e-SIC 2026/0112",
-      "Obrigação TCE em aberto · balancete-mensal",
+      "Obrigação em aberto · balancete-mensal",
       "Gerar a folha da 14ª sessão ordinária",
       "2 justificativas de ausência a decidir",
       "1 comentário do portal para moderar",

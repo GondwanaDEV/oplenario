@@ -45,6 +45,16 @@
   [s]
   (boolean (and (string? s) (re-matches #"[0-9]{4}-Q[1-3]" s))))
 
+(def ^:private quadrimestre-do-ultimo-mes {4 "Q1" 8 "Q2" 12 "Q3"})
+
+(defn referencia-do-quadrimestre
+  "A `referencia` (`AAAA-Q1|Q2|Q3`) do quadrimestre que TERMINA na competencia `{:ano :mes}` — a forma como a regra de
+  metas fiscais do motor (ADR-0021 A4) nomeia o periodo: 04 -> Q1, 08 -> Q2, 12 -> Q3. Outro mes nao fecha quadrimestre:
+  nil (o fato responde falso)."
+  [{:keys [ano mes]}]
+  (when-let [q (and (int? ano) (get quadrimestre-do-ultimo-mes mes))]
+    (format "%04d-%s" ano q)))
+
 (defn- texto-ok? [s] (and (string? s) (not (str/blank? s)) (<= (count s) teto-texto)))
 
 (defn tempo-de-fala-valido? [n]

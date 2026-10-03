@@ -212,7 +212,22 @@ describe("derivarCalendario — prazos de compliance", () => {
     expect(v.celulas.find((c) => c.iso === "2026-05-31")!.eventos).toEqual([]);
   });
 
-  it("o prazo não tem hora e leva a chave do template CRUA (não se inventa nome bonito)", () => {
+  it("as obrigações da ADR-0021 têm nome; a chave desconhecida aparece crua", () => {
+    const v = derivarCalendario({
+      ...JUNHO,
+      hoje: "2026-06-22",
+      sessoes: [],
+      obrigacoes: [
+        obrigacao({ id: "o1", templateChave: "audiencia_metas_fiscais" }),
+        obrigacao({ id: "o2", templateChave: "regra_nova_da_casa" }),
+      ],
+    });
+    const titulos = v.celulas.find((c) => c.iso === "2026-06-29")!.eventos.map((e) => e.titulo);
+    expect(titulos).toContain("Audiência de metas fiscais (LRF)");
+    expect(titulos).toContain("regra_nova_da_casa");
+  });
+
+  it("o prazo não tem hora e leva o NOME da obrigação (ADR-0021: rótulo legível, chave como fallback)", () => {
     const v = derivarCalendario({
       ...JUNHO,
       hoje: "2026-06-22",
@@ -223,9 +238,9 @@ describe("derivarCalendario — prazos de compliance", () => {
     expect(e.hora).toBeNull();
     expect(e.tipo).toBe("prazo");
     // o rótulo da GRADE leva o tipo por extenso (a célula não pode ser só cor); o título da agenda
-    // lateral segue a chave crua.
-    expect(e.rotulo).toBe("Prazo · remessa_mensal_sim");
-    expect(e.titulo).toBe("remessa_mensal_sim");
+    // lateral é o nome da obrigação, sem o prefixo.
+    expect(e.rotulo).toBe("Prazo · Remessa mensal ao SIM (TCE-CE)");
+    expect(e.titulo).toBe("Remessa mensal ao SIM (TCE-CE)");
     // O ramo PENDENTE do `meta` não era assertado em lugar nenhum: um `vencida em …` incondicional
     // passava verde e a tela dava falso alarme de prazo do TCE estourado.
     expect(e.meta).toBe("vence em 29/06/2026");
