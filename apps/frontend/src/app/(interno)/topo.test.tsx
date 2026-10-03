@@ -91,11 +91,16 @@ describe("destinosVisiveis — a nav por papel", () => {
     expect(rotulos(["secretario"])).toContain("Auditoria");
   });
 
-  it("o jurídico (juridico) vê só a fila de pareceres — nada das telas da secretaria (ADR-0019)", () => {
-    expect(rotulos(["juridico"])).toEqual(["Caixa", "Jurídico"]);
+  it("o jurídico (juridico) vê a fila de pareceres e as contas — nada das telas da secretaria (ADR-0019, ADR-0021)", () => {
+    expect(rotulos(["juridico"])).toEqual(["Caixa", "Jurídico", "Contas"]);
     expect(rotulos(["secretario"])).toContain("Jurídico");
     expect(rotulos(["admin_ente"])).not.toContain("Jurídico");
     expect(rotulos(["vereador"])).not.toContain("Jurídico");
+  });
+
+  it("as Contas (ADR-0021) são de secretaria, vereador e jurídico — não de quem só administra ou audita", () => {
+    for (const papeis of [["secretario"], ["vereador"], ["juridico"]]) expect(rotulos(papeis)).toContain("Contas");
+    for (const papeis of [["admin_ente"], ["auditor"]]) expect(rotulos(papeis)).not.toContain("Contas");
   });
 
   it("a Caixa (ADR-0020) é de TODA pessoa interna — logo depois da Central", () => {

@@ -7,6 +7,9 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.sessoes.diplomat.producers :as producers]
             [oplenario.sessoes.db.anuncio :as anuncio]
+            [oplenario.sessoes.db.audiencia :as audiencia]
+            [oplenario.sessoes.logic.audiencia :as logic-aud]
+            [oplenario.sessoes.components.repositorio-audiencia :as repo-audiencia]
             [oplenario.sessoes.db.ata :as ata]
             [oplenario.sessoes.db.ata-rascunho :as ata-rascunho]
             [oplenario.sessoes.db.leitura-ata :as leitura-ata]
@@ -247,6 +250,10 @@
     (transacao this ente-id
       (fn [tx]
         (let [r (sessao/agendar! tx (assoc m :ente-id ente-id))]
+          ;; ADR-0021: a audiencia publica nasce com a linha 1:1 dela, na MESMA tx (sessao de audiencia sem os dados da
+          ;; audiencia nao existe)
+          (when-let [a (:audiencia m)]
+            (audiencia/inserir! tx (assoc a :ente-id ente-id :sessao-id (:id m) :created-by (:created-by m))))
           (producers/emitir-sessao-agendada! bus tx ente-id
             {:sessao-id (:id m) :agendada-para (some-> (:agendada-para m) str) :ocorrido-em (str (:ocorrido-em r))})
           r))))
@@ -533,9 +540,13 @@
     (transacao this ente-id
       (fn [tx]
         (when-let [s (sessao/buscar tx ente-id sessao-id)]
-          {:sessao    s
-           :segmentos (gravacao/listar-segmentos-da-sessao tx ente-id sessao-id)
-           :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)}))))
+          (let [falaram (filter #(= "falou" (:estado %)) (audiencia/inscricoes-da-sessao tx ente-id sessao-id))]
+            {:sessao    s
+             :segmentos (gravacao/listar-segmentos-da-sessao tx ente-id sessao-id)
+             :falas     (tribuna/listar-falas-da-sessao tx ente-id sessao-id)
+             ;; ADR-0021: na audiencia, a fala de cada cidadao (a ancora do Caminho C e o nome no rascunho da ata)
+             :falas-cidadas (mapv logic-aud/fala-cidada-para-ia falaram)
+             :nomes-cidadaos (into {} (map (juxt :id :nome)) falaram)})))))
   (listar-transcricoes [this ente-id sessao-id]
     (transacao this ente-id #(transcricao/listar-da-sessao % ente-id sessao-id)))
   (publicar-ata! [this ente-id m]
@@ -802,6 +813,72 @@
               publicas (if p (filterv :publica (pauta/listar-versoes tx ente-id (:id p))) [])]
           {:vigente (last publicas)
            :versoes (vec (reverse (map #(dissoc % :snapshot :avisos) publicas)))})))))
+
+(defn- recusa-audiencia! [msg motivo]
+  (throw (ex-info msg {:tipo :conflito/audiencia :motivo motivo})))
+
+(def ^:private marcos-da-transicao
+  "Os carimbos de cada estado-alvo da inscricao (o tempo usado entra no encerramento)."
+  {"falando" (fn [_] {:chamada_em [:now]})
+   "falou"   (fn [m] {:encerrada_em [:now] :tempo_usado_segundos (:tempo-usado-segundos m)})
+   "ausente" (fn [_] {})
+   "desistiu" (fn [_] {})})
+
+(defn- recusa-da-transicao
+  "nil = cabe; senao a frase do 409. A CHAMADA tem a regra dela (`logic.audiencia/motivo-recusa-chamada`); a ausencia
+  pede a sessao ja' em curso (ou acabada: a Mesa fecha a lista depois); a desistencia, a sessao ainda nao acabada."
+  [sessao inscricao para alguem-falando?]
+  (cond
+    (not (logic-aud/transicao-valida? (:estado inscricao) para))
+    (case para
+      "falou"    "esta inscricao nao esta' com a palavra"
+      "desistiu" "esta inscricao nao pode mais ser desistida"
+      "esta inscricao nao esta' aguardando a vez")
+    (= "falando" para) (logic-aud/motivo-recusa-chamada sessao inscricao alguem-falando?)
+    (and (= "ausente" para) (not (contains? #{"aberta" "suspensa" "encerrada"} (:estado sessao))))
+    "a ausencia e' registrada na audiencia em curso (ou depois dela)"
+    (and (= "desistiu" para) (not (contains? logic-aud/estados-que-aceitam-inscricao (:estado sessao))))
+    "a audiencia ja' terminou"))
+
+(extend-type RepoSessoesPg
+  repo-audiencia/RepoAudiencia
+  (audiencia-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [a (audiencia/buscar tx ente-id sessao-id)]
+          {:audiencia a
+           :inscricoes (audiencia/inscricoes-da-sessao tx ente-id sessao-id)
+           :ata-publicada (audiencia/ata-publicada? tx ente-id sessao-id)}))))
+  (atualizar-audiencia! [this ente-id sessao-id campos updated-by]
+    (transacao this ente-id #(audiencia/atualizar! % ente-id sessao-id campos updated-by)))
+  ;; a conferencia (cabe a inscricao?) roda DEPOIS das travas e sobre a leitura DESTA tx: a Mesa nao fecha as
+  ;; inscricoes nem encerra a sessao entre a conferencia e o INSERT, e duas inscricoes nao disputam a mesma ordem
+  (inscrever-cidadao! [this ente-id {:keys [sessao-id pelo-portal?] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [s (audiencia/sessao-com-trava-compartilhada tx ente-id sessao-id)
+              a (when s (audiencia/travar tx ente-id sessao-id))]
+          (when (and s a)
+            (when-let [motivo (logic-aud/motivo-recusa-inscricao s a pelo-portal?)]
+              (recusa-audiencia! motivo :inscricoes-fechadas))
+            (audiencia/inserir-inscricao! tx (-> m (dissoc :pelo-portal?) (assoc :ente-id ente-id))))))))
+  (transicionar-inscricao! [this ente-id {:keys [sessao-id inscricao-id para dono?] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [s (audiencia/sessao-com-trava-compartilhada tx ente-id sessao-id)
+              a (when s (audiencia/travar tx ente-id sessao-id))
+              i (when a (audiencia/buscar-inscricao tx ente-id inscricao-id))]
+          (when (and i (= sessao-id (:sessao-id i)) (or (nil? dono?) (dono? i)))
+            (when-let [motivo (recusa-da-transicao s i para (and (= "falando" para)
+                                                                 (audiencia/alguem-falando? tx ente-id sessao-id)))]
+              (recusa-audiencia! motivo :transicao))
+            (or (audiencia/transicionar-inscricao! tx ente-id inscricao-id (:estado i) para
+                                                   ((marcos-da-transicao para) m))
+                (recusa-audiencia! "a inscricao mudou enquanto voce agia: recarregue" :corrida)))))))
+  (audiencias-publicas [this ente-id] (transacao this ente-id #(audiencia/audiencias-publicas % ente-id)))
+  (inscricoes-da-identidade [this ente-id identidade-id]
+    (transacao this ente-id #(audiencia/inscricoes-da-identidade % ente-id identidade-id)))
+  (buscar-inscricao-cidada [this ente-id id] (transacao this ente-id #(audiencia/buscar-inscricao % ente-id id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

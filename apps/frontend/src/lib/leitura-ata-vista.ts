@@ -11,6 +11,7 @@ const TIPOS: Record<string, string> = {
   solene: "Solene",
   especial: "Especial",
   secreta: "Secreta",
+  audiencia_publica: "Audiência pública",
 };
 
 export type ModoLeitura = LeituraAtaRegistradaOut["modo"];

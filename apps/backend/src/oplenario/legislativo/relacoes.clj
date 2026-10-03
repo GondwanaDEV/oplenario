@@ -43,6 +43,7 @@
   Colapsar os dois faria a Casa dizer 'este ato nao e' possivel' quando a verdade e' 'voce nao pode pedi-lo'."
   (:require [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
+            [oplenario.legislativo.db.prestacao-contas :as prestacao-contas]
             [oplenario.legislativo.db.votacao :as votacao]))
 
 (set! *warn-on-reflection* true)
@@ -86,8 +87,39 @@
   [tx proposicao-id]
   (parecer-juridico/tem-parecer-assinado? tx (tenancy/ente-da-sessao tx) proposicao-id))
 
+;; ---------- ADR-0021 B4: o prazo para julgar as contas do Prefeito ----------
+
+(defn- prestacao!
+  "A prestacao `prestacao-id` da Casa da tx. Inexistente LANCA (`:erro :runtime`, fail-closed): um fato nunca responde
+  'nao julgada' sobre uma prestacao que nao existe — a pergunta nao tem sujeito."
+  [tx prestacao-id]
+  (or (prestacao-contas/buscar tx (tenancy/ente-da-sessao tx) prestacao-id)
+      (throw (ex-info (str "prestacao de contas inexistente nesta Casa: " prestacao-id)
+                      {:erro :runtime :prestacao-id prestacao-id}))))
+
+(defn contas-julgadas?
+  "A Camara JULGOU as contas da prestacao? Booleano. O ato e' a votacao do PDL encerrada, que grava `julgada_em` (e o
+  `resultado`) na mesma tx (ADR-0021 B2) — o fato pergunta o ato, nao o resultado: parecer mantido ou rejeitado, as
+  contas foram julgadas."
+  [tx prestacao-id]
+  (some? (:julgada-em (prestacao! tx prestacao-id))))
+
+(defn prazo-julgamento-contas
+  "O prazo para julgar (`prazo_julgamento_ate`), CONGELADO no registro da prestacao (parametro da Casa ou o padrao de
+  60 dias, a conferir na LOM). A janela da obrigacao `julgamento_contas_prefeito`."
+  [tx prestacao-id]
+  (:prazo-julgamento-ate (prestacao! tx prestacao-id)))
+
+(defn data-recebimento-contas
+  "A data em que a Camara recebeu a prestacao (`recebida_em`) — de onde o prazo de julgamento conta."
+  [tx prestacao-id]
+  (:recebida-em (prestacao! tx prestacao-id)))
+
 ;; nome canonico (= assinatura em motor/catalogo FUNCOES-RELACAO) -> fn de relacao. O host funde este
 ;; mapa no RegistroFatos (`sistema/fundir-relacoes`, que FALHA em colisao de nome entre modulos).
 (def relacoes
   {"aprovada_em_votacao" aprovada-em-votacao?
-   "tem_parecer_juridico_assinado" tem-parecer-juridico-assinado?})
+   "tem_parecer_juridico_assinado" tem-parecer-juridico-assinado?
+   "contas_julgadas" contas-julgadas?
+   "prazo_julgamento_contas" prazo-julgamento-contas
+   "data_recebimento_contas" data-recebimento-contas})

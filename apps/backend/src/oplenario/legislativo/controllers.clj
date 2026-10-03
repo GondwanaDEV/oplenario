@@ -7,11 +7,15 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.components.objeto-store :as store]
             [oplenario.legislativo.components.repositorio :as repo]
+            [oplenario.legislativo.components.repositorio-contas :as repo-contas]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.logic :as logic]
-            [oplenario.motor.api :as motor]))
+            [oplenario.legislativo.logic.contas :as logic-contas]
+            [oplenario.motor.api :as motor])
+  (:import (java.security MessageDigest)))
 
 (set! *warn-on-reflection* true)
 
@@ -48,10 +52,20 @@
 (defn abrir-votacao
   "Abre uma votacao na sessao `sessao-id` (authz herdada da sessao). `m` ja vem decodificado/coagido pelo
   adapters/in (sem sessao-id). Devolve o recibo {:id} ou nil se a sessao nao existe no tenant (-> 404). Sessao
-  ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5)."
-  [repo-leg consultar-sessao sessao-fechada? ator sessao-id m]
-  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
-    (repo/abrir-votacao! repo-leg (:ente-id ator) (assoc m :sessao-id sessao-id))))
+  ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5).
+  ADR-0021: `registro` (RegistroFatos do motor) vai ao Repo, que avalia NA TX do INSERT a regra de votacao da materia de
+  contas (`:conflito/regra-de-votacao` -> 422); sem ele, a guarda so' le os campos da votacao (fato = fail-closed).
+
+  ADR-0021 (A1): sessao que NAO DELIBERA (a capability `delibera` da sessao — audiencia publica, solene, especial) nao
+  abre votacao: `:conflito/sessao-nao-delibera` (-> 409 \"esta sessão não delibera\"). Ate' aqui abria. `false?` e nao
+  `not`: a sessao sem a capability no mapa (fixture antiga) segue o comportamento de antes."
+  ([repo-leg consultar-sessao sessao-fechada? ator sessao-id m]
+   (abrir-votacao repo-leg consultar-sessao sessao-fechada? nil ator sessao-id m))
+  ([repo-leg consultar-sessao sessao-fechada? registro ator sessao-id m]
+   (when-let [s (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)]
+     (when (false? (:delibera s))
+       (throw (ex-info "esta sessão não delibera" {:tipo :conflito/sessao-nao-delibera :sessao-id sessao-id})))
+     (repo/abrir-votacao! repo-leg (:ente-id ator) (assoc m :sessao-id sessao-id :registro registro)))))
 
 (defn registrar-voto
   "Registra um voto na votacao `votacao-id` da sessao `sessao-id`. Authz na sessao + amarra votacao<->sessao.
@@ -1341,3 +1355,101 @@
     (when-let [vereador-id (resolver-vereador ente-id (:identidade-id ator))]
       (when (repo/relator-do-parecer? repo-legislativo ente-id vereador-id id)
         (repo/nova-versao-parecer! repo-legislativo ente-id m)))))
+
+;; ========================= ADR-0021 Parte B: o julgamento das contas =========================
+;; A prestacao do Prefeito (governo) protocola o PDL de autoria da comissao escolhida, na MESMA tx; a notificacao congela
+;; o prazo de defesa; a defesa entra como documento; o estado e' derivado (logic/contas). A Mesa (gestao_camara) e' so'
+;; acompanhamento. Quem pode cada rota e' o gate grosso da borda; a Casa e' a do ator (RLS).
+
+(defn prestacoes-de-contas [repo-legislativo ente-id] (repo-contas/prestacoes repo-legislativo ente-id))
+
+(defn prestacao-de-contas [repo-legislativo ente-id id] (repo-contas/prestacao repo-legislativo ente-id id))
+
+(defn prestacao-da-proposicao
+  "A prestacao cujo PDL e' `proposicao-id` (o painel de votacao trava quorum e pergunta), ou nil."
+  [repo-legislativo ente-id proposicao-id]
+  (repo-contas/prestacao-da-proposicao repo-legislativo ente-id proposicao-id))
+
+(defn base-do-quorum
+  "A composicao sobre a qual se contam os 2/3: a da votacao que julgou (gravada no encerramento) ou, antes dela, a de
+  hoje (`membros-da-casa`, seam do host sobre cadastros — o mesmo denominador do encerramento)."
+  [membros-da-casa ente-id p]
+  (or (get-in p [:votacao :base-membros]) (membros-da-casa ente-id) 0))
+
+(defn registrar-prestacao!
+  "POST /contas. Governo: a comissao autora tem de ser comissao VIGENTE da Casa (`comissoes-vigentes`, seam do host) — o
+  PDL nasce de autoria dela, com a ementa do exercicio, no ano de hoje; `resolver-municipio` da' a URN (eixo H). Mesa:
+  sem PDL. A comissao inexistente -> :validacao/invalido (400); exercicio ja' registrado -> :conflito/prestacao-duplicada."
+  [repo-legislativo resolver-municipio comissoes-vigentes ator hoje m]
+  (let [ente-id (:ente-id ator)
+        por (:identidade-id ator)
+        pdl (when (logic-contas/governo? m)
+              (let [comissao (some #(when (= (:comissao-autora-id m) (:id %)) %) (comissoes-vigentes ente-id))
+                    {:keys [uf municipio-nome]} (resolver-municipio ente-id)]
+                (when-not comissao
+                  (throw (ex-info "a comissao autora nao e' comissao vigente desta Casa"
+                                  {:tipo :validacao/invalido :campos [:comissao-autora-id]})))
+                {:id (random-uuid) :tipo "projeto_decreto_legislativo" :ano (.getYear ^java.time.LocalDate hoje)
+                 :uf uf :municipio-nome municipio-nome :ementa (logic-contas/ementa-do-pdl (:exercicio m))
+                 :autor-tipo "comissao" :autor-texto (:nome comissao) :created-by por}))]
+    (repo-contas/registrar-prestacao! repo-legislativo ente-id
+                                      (cond-> (-> m (dissoc :comissao-autora-id) (assoc :por por))
+                                        pdl (assoc :pdl pdl)))))
+
+(defn atualizar-prestacao! [repo-legislativo ator id m]
+  (repo-contas/atualizar-prestacao! repo-legislativo (:ente-id ator) id m (:identidade-id ator)))
+
+(defn notificar-prestacao!
+  "Registra a notificacao do responsavel. Data futura -> 400. {:prestacao} | {:erro kw}."
+  [repo-legislativo ator hoje id {:keys [notificado-em] :as m}]
+  (when (.isAfter ^java.time.LocalDate notificado-em ^java.time.LocalDate hoje)
+    (throw (ex-info "a notificacao nao pode ter data futura" {:tipo :validacao/invalido :campos [:notificado-em]})))
+  (repo-contas/notificar-prestacao! repo-legislativo (:ente-id ator) id (assoc m :por (:identidade-id ator))))
+
+(defn- sha256-hex [^bytes b]
+  (apply str (map #(format "%02x" (bit-and (int %) 0xff)) (.digest (MessageDigest/getInstance "SHA-256") b))))
+
+(defn anexar-documento-de-contas!
+  "Um documento na prestacao (o tamanho ja' foi limitado na borda). O arquivo sobe ao object storage ANTES da linha (a
+  linha so' existe apontando para um blob que existe); se a linha for recusada, o blob sai. `tipo` defesa marca a defesa
+  juntada (a primeira). nil = prestacao inexistente nesta Casa (o blob orfao tambem sai)."
+  [repo-legislativo objeto-store ator prestacao-id tipo {:keys [nome tipo-midia ^bytes conteudo]}]
+  (let [ente-id (:ente-id ator)]
+    (when (repo-contas/prestacao repo-legislativo ente-id prestacao-id)
+      (let [doc-id (random-uuid)
+            chave (logic-contas/chave-do-documento ente-id prestacao-id doc-id)
+            remover! #(try (store/remover! objeto-store chave) (catch Exception _ nil))]
+        (store/guardar! objeto-store chave conteudo tipo-midia)
+        (try
+          (or (repo-contas/anexar-documento-de-contas! repo-legislativo ente-id prestacao-id
+                                                       {:id doc-id :tipo tipo :nome nome :tipo-midia tipo-midia
+                                                        :tamanho-bytes (alength conteudo) :sha256 (sha256-hex conteudo)
+                                                        :chave-objeto chave :por (:identidade-id ator)})
+              (do (remover!) nil))
+          (catch Exception e
+            (remover!)
+            (throw e)))))))
+
+(defn baixar-documento-de-contas
+  "{:documento :stream} (o CHAMADOR fecha o stream), ou nil (inexistente). `publico?` = so' os documentos do TCE."
+  [repo-legislativo objeto-store ente-id prestacao-id doc-id publico?]
+  (when-let [d (repo-contas/documento-de-contas repo-legislativo ente-id prestacao-id doc-id)]
+    (when (or (not publico?) (contains? logic-contas/documentos-publicos (:tipo d)))
+      (when-let [in (store/abrir objeto-store (:chave-objeto d))]
+        {:documento d :stream in}))))
+
+(defn parametros-de-contas
+  "{:prazo-defesa-dias :prazo-julgamento-dias :padrao} — os da Casa, ou os padroes (15/60) se ela nunca gravou."
+  [repo-legislativo ente-id]
+  (logic-contas/parametros-efetivos (repo-contas/parametros-de-contas repo-legislativo ente-id)))
+
+(defn salvar-parametros-de-contas! [repo-legislativo ator m]
+  (logic-contas/parametros-efetivos
+   (repo-contas/salvar-parametros-de-contas! repo-legislativo (:ente-id ator) (assoc m :por (:identidade-id ator)))))
+
+(defn motivo-nao-pautavel
+  "A costura da PAUTA (sessoes pergunta pelo host): nil se a proposicao pode entrar na pauta; o motivo em palavras se e'
+  o PDL de contas e o estado derivado nao e' `pronta_para_pauta` (B3: bloqueio, nao aviso)."
+  [repo-legislativo ente-id hoje proposicao-id]
+  (some-> (repo-contas/prestacao-da-proposicao repo-legislativo ente-id proposicao-id)
+          (logic-contas/motivo-nao-pautavel hoje)))

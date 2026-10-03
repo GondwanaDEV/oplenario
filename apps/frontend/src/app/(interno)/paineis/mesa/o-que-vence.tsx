@@ -15,6 +15,7 @@
 import { AnelPrazo } from "@/lib/charts/anel-prazo";
 import { rotularObjetoPrazo } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
+import { rotularObrigacao } from "@/lib/rotulos-compliance";
 
 /** Dias ate' o vencimento, COM SINAL: negativo = ja' venceu ha' N dias.
  *
@@ -80,7 +81,7 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
             const dias = diasAte(item.venceEm);
             const rotulo =
               item.origem === "compliance"
-                ? `Obrigação TCE · ${item.templateChave}`
+                ? `Obrigação · ${rotularObrigacao(item.templateChave)}`
                 : `${rotularObjetoPrazo(item.objetoTipo)} · ${item.protocolo}`;
             return (
               // Chave ESTAVEL, nao o indice: `vista.itens` e' recomposta de duas fontes e reordenada

@@ -1,0 +1,57 @@
+/* Audiências públicas no portal (ADR-0021) — porte de audiencia-publica.html. Cartões, campos, recibo e trilho vêm
+   de participacao.css (os formulários do cidadão); aqui só o que é desta superfície. Prefixo `ap-`. */
+.audiencias-publicas { padding-bottom: 2.5rem; }
+.audiencias-publicas .estado { color: var(--texto-2); font-size: var(--t-13); }
+.audiencias-publicas .estado a { color: var(--marca); font-weight: 600; }
+
+/* o topo da audiência: o "quando" em mono (acento), o título display, a linha de contexto */
+.ap-hero { padding: 2rem 0 0.4rem; }
+.ap-quando { display: inline-flex; align-items: center; gap: 0.4rem; font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--acento-texto); }
+.ap-hero h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.9rem, 5vw, var(--t-40)); letter-spacing: -0.02em;
+  color: var(--texto); margin: 0.4rem 0 0; line-height: 1.05; overflow-wrap: anywhere; }
+.ap-hero p { font-size: var(--t-16); color: var(--texto-2); margin: 0.7rem 0 0; max-width: 62ch; }
+.audiencias-publicas .pf-grade { margin-top: 1.4rem; }
+.ap-coluna { display: grid; gap: 1rem; min-width: 0; }
+
+.ap-dl { display: grid; grid-template-columns: auto 1fr; gap: 0.55rem 1rem; margin: 0.6rem 0 0; }
+.ap-dl dt { font-size: var(--t-13); color: var(--texto-2); }
+.ap-dl dd { font-size: var(--t-13); color: var(--texto); margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.ap-dl dd.mono { font-family: var(--mono); }
+.ap-dl a { color: var(--marca); font-weight: 600; }
+@media (max-width: 480px) { .ap-dl { grid-template-columns: 1fr; gap: 0.15rem; } .ap-dl dd { margin-bottom: 0.5rem; } }
+
+/* a caixa "estou ciente": obrigatória — o texto diz o que é público, a caixa não depende de cor */
+.ap-ciente { display: flex; gap: 0.7rem; align-items: flex-start; margin: 0.2rem 0 1rem; padding: 0.9rem 1rem;
+  border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface-2); cursor: pointer; }
+.ap-ciente input { margin-top: 3px; flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--marca); }
+.ap-ciente input:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.ap-ciente > span { display: grid; gap: 0.2rem; }
+.ap-ciente b { font-size: var(--t-13); color: var(--texto); font-weight: 600; }
+.ap-ciente > span > span { font-size: var(--t-12); color: var(--texto-2); line-height: 1.4; }
+
+/* quem falou (depois de realizada) */
+.ap-falaram { margin: 0.6rem 0 1rem; padding-left: 1.3rem; display: grid; gap: 0.5rem; }
+.ap-falaram li::marker { font-family: var(--mono); font-weight: 600; color: var(--marca); }
+.ap-falaram b { display: block; font-size: var(--t-13); color: var(--texto); }
+.ap-falaram span { font-size: var(--t-12); color: var(--texto-2); }
+
+/* a lista (página das audiências) e o trilho "Próximas" */
+.ap-secao { margin: 1.6rem 0 0; }
+.ap-secao h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.8rem; }
+.ap-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.8rem; }
+.ap-item { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 1rem; align-items: start;
+  background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1rem 1.2rem; }
+.ap-prox { list-style: none; margin: 0 0 0.6rem; padding: 0; display: grid; gap: 0.7rem; }
+.ap-prox li { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.7rem; }
+.ap-data { text-align: center; min-width: 2.6rem; }
+.ap-data b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--marca); display: block; line-height: 1; }
+.ap-data span { font-family: var(--mono); font-size: var(--t-11); text-transform: uppercase; color: var(--texto-2); }
+.ap-info { display: grid; gap: 0.2rem; min-width: 0; }
+.ap-info a { text-decoration: none; }
+.ap-info a b { font-size: var(--t-13); color: var(--texto); }
+.ap-info a:hover b { text-decoration: underline; }
+.ap-info > span { font-size: var(--t-12); color: var(--texto-2); overflow-wrap: anywhere; }
+.ap-selos { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; }
+.ap-selo { font-family: var(--mono); font-size: var(--t-11); letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--texto-2); border: 1px solid var(--linha); border-radius: 999px; padding: 0.15rem 0.55rem; }
+.ap-selo.ap-estado-aberta { color: var(--marca); border-color: currentColor; }

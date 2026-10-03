@@ -57,6 +57,18 @@ async function falha(r: Response, acao: string): Promise<ResultadoPauta> {
   return { ok: false, conflito: false, erro: corpo?.erro ?? `falha ao ${acao} (status ${r.status})` };
 }
 
+/** Incluir não tem CAS (é um item novo): o 409 aqui é uma recusa DO DOMÍNIO com motivo — a sessão já fechou, ou a
+ *  matéria ainda não é pautável (ADR-0021: o PDL das contas antes do prazo de defesa, "o prazo de defesa vai até
+ *  20/10/2026"). Dizer "a pauta mudou" esconderia o motivo; o motivo do servidor vai à tela, e a pauta recarrega. */
+async function falhaAoIncluir(r: Response): Promise<ResultadoPauta> {
+  if (r.status !== 409) return falha(r, "incluir o item");
+  const corpo = await r.json().catch(() => null);
+  const motivo = typeof corpo?.erro === "string" ? corpo.erro.trim() : "";
+  if (!motivo) return { ok: false, conflito: true, erro: MSG_CONFLITO_PAUTA };
+  const frase = motivo.charAt(0).toUpperCase() + motivo.slice(1);
+  return { ok: false, conflito: true, erro: /[.!?]$/.test(frase) ? frase : `${frase}.` };
+}
+
 export function useEditarPauta(sessaoId: string | null, token: string | null) {
   const [enviando, setEnviando] = useState(false);
   const enviandoRef = useRef(false);
@@ -108,7 +120,7 @@ export function useEditarPauta(sessaoId: string | null, token: string | null) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(corpo),
         });
-        return r.ok ? { ok: true } : falha(r, "incluir o item");
+        return r.ok ? { ok: true } : falhaAoIncluir(r);
       }),
     [executar, token],
   );

@@ -18,6 +18,7 @@
             [oplenario.compliance.diplomat.http.in :as compliance-http]
             [oplenario.config :as config]
             [oplenario.destinatarios :as destinatarios]
+            [oplenario.gatilho-compliance :as gatilho]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-identidade-comp]
@@ -31,7 +32,9 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
+            [oplenario.legislativo.diplomat.http.contas :as contas-http]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
+            [oplenario.legislativo.logic :as legislativo-logic]
             [oplenario.mcp :as mcp]
             [oplenario.normas.components.repositorio :as repo-normas-comp]
             [oplenario.normas.diplomat.http.in :as normas-http]
@@ -131,6 +134,8 @@
   disto (sessao secreta, segmento restrito)."
   [repo-sessoes repo-cadastros ente-id sessao-id]
   (when-let [c (repo-sessoes-comp/contexto-para-ia repo-sessoes ente-id sessao-id)]
+    ;; ADR-0021: na audiencia publica, os cidadaos que falaram entram como falas (o id da inscricao no lugar do
+    ;; orador) e os nomes deles, ao lado dos vereadores — o rascunho da ata nomeia quem falou
     ;; mesma data de referencia da /chamada (sessoes-logic): a composicao DE ENTAO, nunca a de hoje. Sessao sem
     ;; data nenhuma nao tem composicao conhecida — vai sem nomes (a IA marca os oradores como nao nomeados).
     (let [data  (try (sessoes-logic/data-de-referencia-da-sessao (:sessao c))
@@ -139,7 +144,10 @@
                   (into {} (map (fn [l] [(:vereador-id l) (or (not-empty (:nome-parlamentar l)) (:nome l))]))
                         (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data))
                   {})]
-      (assoc c :nomes nomes))))
+      (-> c
+          (update :falas (fnil into []) (:falas-cidadas c))
+          (assoc :nomes (merge nomes (:nomes-cidadaos c)))
+          (dissoc :falas-cidadas :nomes-cidadaos)))))
 
 (defn ata-para-ia
   "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
@@ -295,6 +303,8 @@
   [{:keys [idp repo-identidade repo-sessoes repo-legislativo repo-compliance repo-participacao
            repo-transparencia repo-paineis repo-cadastros canal-store objeto-store painel-compliance
            presenca-resumo esic-cumprimento relatores-pendentes info-ente registro-fatos
+           ;; ADR-0021 (fatia 3): o catalogo do motor, que o gatilho das obrigacoes legais garante
+           repo-motor
            keycloak sessao identidade-existe? repo-integracao-ia integracao-ia repo-normas relogio
            ;; ADR-0016: o console do operador (supratenant)
            idp-operacao repo-admin-sistema operacao
@@ -406,6 +416,11 @@
         ;; dependencia de `consultar-sessao`. Consumido pelo `pauta-handler` (que degrada se isto falhar).
         resumir-proposicoes-fn (fn [ente-id ids]
                                  (repo-legislativo-comp/resumos-de-proposicoes repo-legislativo ente-id ids))
+        ;; ADR-0021: o rotulo de exibicao ('PL 012/2026') + a ementa da materia em debate na audiencia publica — a
+        ;; sigla e' vocabulario do legislativo (`numero-exibicao`), por isso o host monta e o `sessoes` so' le.
+        rotular-proposicoes-fn (fn [ente-id ids]
+                                 (update-vals (resumir-proposicoes-fn ente-id ids)
+                                              (fn [r] {:rotulo (legislativo-logic/numero-exibicao r) :ementa (:ementa r)})))
         ;; ADR-0019 fatia 3 (publicar a pauta): a situacao de parecer das materias da pauta (legislativo) e o cargo
         ;; de quem publica na Mesa de HOJE (cadastros) — os dois seams da regra e dos avisos, mesma inversao de
         ;; dependencia de `resumir-proposicoes-fn` (sessoes nunca importa legislativo nem cadastros, §22.10).
@@ -504,8 +519,18 @@
         ;; que o diplomat de paineis chama — paineis nunca importa compliance (§22.10). Passa pelo diplomat de
         ;; compliance (painel-wire), nunca pelo seu adapters/out direto (a lint proibe host->adapters). O
         ;; override injetavel (`painel-compliance` no arg) so' serve aos testes DB-free da borda de paineis.
+        ;; ADR-0021 (fatia 3): o GATILHO das obrigacoes legais (audiencia de metas fiscais, julgamento das contas). So'
+        ;; existe com o compliance, o motor e o registro de fatos montados; nunca lanca (loga e segue). O dia civil de
+        ;; hoje vem do relogio do host.
+        deps-gatilho (when (and repo-compliance repo-motor registro-fatos)
+                       {:repo-compliance repo-compliance :repo-motor repo-motor :registro-fatos registro-fatos
+                        :repo-legislativo repo-legislativo :hoje hoje-civil})
+        disparar-gatilho (fn [ente-id opts] (when deps-gatilho (gatilho/disparar-sem-falhar! deps-gatilho ente-id opts)))
+        ;; ... e ele roda antes de o painel de compliance ser lido (aqui, o card da Mesa; a rota, mais abaixo)
         painel-compliance (or painel-compliance
-                              (fn [ente-id] (compliance-http/painel-wire repo-compliance ente-id)))
+                              (fn [ente-id]
+                                (disparar-gatilho ente-id {:origem "sob_demanda"})
+                                (compliance-http/painel-wire repo-compliance ente-id)))
         ;; FE Onda A2 fast-follow: nome real do ente injetado no portal publico (barra institucional/rodape
         ;; mostravam o UUID cru da rota) — mesma inversao de dependencia de consultar-sessao/membros-da-casa;
         ;; transparencia nunca importa cadastros (§22.10). Ente sem perfil cadastrado -> nil -> 404 na borda.
@@ -602,7 +627,8 @@
          :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}]
     ;; ADR-0018 (fatia 2): a Casa ENCERRADA responde 410 tambem nas rotas publicas dela (o portal, a descoberta do login)
     (restricao-casa/com-casa-encerrada
-     (-> #{["/saude"             :get http/saude :route-name :saude]
+     (cond->
+      (-> #{["/saude"             :get http/saude :route-name :saude]
           ;; ADR-0018: /eu leva a faixa de acesso restrito (o interno ve o motivo; a cidada, so' "acesso restrito")
           ["/eu"                :get [auth (fn [req]
                                              (let [ator (:ator req)
@@ -625,6 +651,12 @@
                                    :cargo-na-mesa cargo-na-mesa-fn
                                    ;; ADR-0020 fatia 2: o aviso automatico da pauta publicada aos vereadores
                                    :vereadores-a-avisar vereadores-a-avisar-fn
+                                   ;; ADR-0021 (B3): o PDL das contas so' entra na pauta depois do prazo de defesa (ou
+                                   ;; da defesa juntada) — a pauta pergunta ao `legislativo` pelo host (§22.10)
+                                   :motivo-nao-pautavel (fn [ente-id proposicao-id]
+                                                          (when repo-legislativo
+                                                            (contas-http/motivo-nao-pautavel repo-legislativo relogio-producao
+                                                                                             ente-id proposicao-id)))
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
@@ -638,7 +670,16 @@
                                    :ler-rascunho-ata ler-rascunho-ata-fn
                                    ;; Onda E: o livro de atas publico (mesmo seam V1 do portal: UUID coagido)
                                    :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
-                                   :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))}))
+                                   :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))
+                                   ;; ADR-0021 (audiencia publica): a comissao vigente que promove e o nome dela
+                                   ;; (cadastros), o rotulo + ementa da materia em debate (legislativo) e o nome de
+                                   ;; quem se inscreve pelo gov.br (identidade — nunca o nome digitado no corpo)
+                                   :comissoes-vigentes (fn [ente-id]
+                                                         (repo-cadastros-comp/comissoes-vigentes repo-cadastros ente-id
+                                                                                                 (hoje-civil)))
+                                   :nomes-de-comissoes resolver-comissoes-fn
+                                   :rotular-proposicoes rotular-proposicoes-fn
+                                   :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}))
         (into (legislativo-http/rotas {:auth auth :repo-legislativo repo-legislativo
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
@@ -692,6 +733,17 @@
                                        :normas-publicadas? (fn [ente-id] (normas-da-casa-publicadas? repo-normas ente-id))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
+        ;; ADR-0021 Parte B: o julgamento das contas (legislativo). A comissao autora do PDL e a composicao do quorum vem de
+        ;; cadastros pelos MESMOS seams da tela do parecer e do encerramento da votacao (§22.10).
+        (into (contas-http/rotas {:auth auth :repo-legislativo repo-legislativo :objeto-store objeto-store
+                                  :relogio relogio-producao :membros-da-casa membros-da-casa
+                                  :resolver-municipio resolver-municipio
+                                  :comissoes-vigentes (fn [ente-id]
+                                                        (repo-cadastros-comp/comissoes-vigentes
+                                                          repo-cadastros ente-id
+                                                          (tempo/hoje relogio-producao tempo/zona-civil-padrao)))
+                                  :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                  :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
         (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
                                                              :repo-sessoes repo-sessoes})}))
@@ -815,6 +867,8 @@
                 (let [deps-catalogo
                       {:repo-legislativo repo-legislativo :repo-sessoes repo-sessoes
                        :nome-na-casa nome-na-casa-fn :resumir-proposicoes resumir-proposicoes-fn
+                       ;; ADR-0021: o rotulo da materia em debate na audiencia publica (as ferramentas de audiencia)
+                       :rotular-proposicoes rotular-proposicoes-fn
                        ;; ADR-0019 fatia 3: publicar_pauta (proposta do agente) usa os MESMOS seams da tela
                        :situacao-de-parecer situacao-de-parecer-fn :cargo-na-mesa cargo-na-mesa-fn
                        ;; ADR-0020: os comunicados (ler a caixa, ler, painel de leitura, PROPOR o envio) e os avisos
@@ -846,6 +900,8 @@
                                                (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
                        :nomes-de-vereadores (fn [ente-id ids]
                                               (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
+                       ;; ADR-0021: o quorum das contas (a composicao de hoje) na ficha que o agente le
+                       :membros-da-casa membros-da-casa
                        :relogio relogio-producao
                        :propor (propostas/propositor repo-integracao-ia relogio-producao)
                        :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]
@@ -853,4 +909,24 @@
                         (propostas/rotas {:auth auth :repo-integracao-ia repo-integracao-ia :relogio relogio-producao
                                           :deps-catalogo deps-catalogo})))
                 #{})))
+      ;; ADR-0021 (fatia 3): o gatilho das obrigacoes legais, composto AQUI sobre as rotas montadas — sessoes e
+      ;; legislativo nao conhecem o compliance. Antes da leitura do painel; depois dos atos que criam/cumprem (so' 2xx).
+      deps-gatilho
+      (gatilho/com-gatilho
+       {["/compliance/painel" :get]
+        (gatilho/interceptor-antes disparar-gatilho {:origem "sob_demanda"})
+        ;; a ata publicada da AUDIENCIA PUBLICA — a ata de outra sessao nao cumpre nada aqui
+        ["/sessoes/:id/ata" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:metas-fiscais}}
+                                    (fn [req]
+                                      (let [ente-id (get-in req [:ator :ente-id])
+                                            sid (some-> (get-in req [:path-params :id]) parse-uuid)]
+                                        (boolean (and ente-id sid
+                                                      (= "audiencia_publica"
+                                                         (:tipo-sessao (consultar-sessao ente-id sid))))))))
+        ;; o registro da prestacao cria a obrigacao de julgar; o encerramento da votacao do PDL a cumpre
+        ["/contas" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
+        ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))}))
      estado-da-casa)))

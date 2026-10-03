@@ -27,6 +27,7 @@ import { ConcederAuditorForm } from "./conceder-auditor-form";
 import { ConcederJuridicoForm } from "./conceder-juridico-form";
 import { ParecerNoPortal } from "./parecer-no-portal";
 import { RegrasDaPauta } from "./regras-da-pauta";
+import { PrazosDasContas } from "./prazos-das-contas";
 import { ExportarDados } from "./exportar-dados";
 import { Setores } from "./setores";
 import { PainelAgente } from "../conferencias/fila-conferencias";
@@ -206,6 +207,7 @@ function Conteudo() {
         <Setores token={token} />
         <ParecerNoPortal token={token} />
         <RegrasDaPauta token={token} />
+        <PrazosDasContas token={token} />
         <ExportarDados token={token} />
 
         <section className="adm-outras" aria-labelledby="adm-outras-titulo">

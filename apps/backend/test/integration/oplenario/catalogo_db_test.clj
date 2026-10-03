@@ -193,9 +193,10 @@
     ;; a credencial de `agente-de` so' concede leitura: as tres de ATO da secretaria (pedir parecer juridico, encaminhar
     ;; as comissoes, designar relator) nem aparecem — ver `juridico_catalogo_test`
     ;; ADR-0020: as tres leituras de comunicado (o envio e' ato, fora desta credencial so' de leitura)
-    (is (= ["ata_da_sessao" "buscar_dispositivos" "comissoes_da_casa" "ler_caixa" "ler_comunicado" "ler_dispositivo"
-            "ler_leitura_do_comunicado" "pareceres_juridicos_da_materia"
-            "pauta_da_sessao" "situacao_da_materia" "tramitacao_da_materia" "vereadores_da_casa"]
+    ;; ADR-0021: as duas leituras das contas (registrar e notificar sao ato)
+    (is (= ["ata_da_sessao" "buscar_dispositivos" "comissoes_da_casa" "contas_da_casa" "ler_caixa" "ler_comunicado"
+            "ler_dispositivo" "ler_leitura_do_comunicado" "pareceres_juridicos_da_materia"
+            "pauta_da_sessao" "prestacao_de_contas" "situacao_da_materia" "tramitacao_da_materia" "vereadores_da_casa"]
            (map :nome (catalogo/ferramentas secretaria))))
     (is (empty? (catalogo/ferramentas (agente-de ente "admin_ente" :secretaria)))
         "o conjunto do publico nao da' a ninguem o que o papel dele nao alcanca")

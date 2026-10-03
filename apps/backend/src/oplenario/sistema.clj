@@ -37,6 +37,7 @@
             [oplenario.motor.components.registro-fatos :as registro-fatos]
             [oplenario.motor.components.repositorio :as repo-motor]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
+            [oplenario.sessoes.relacoes.audiencia :as rel-sessoes-audiencia]
             [oplenario.sessoes.relacoes.presenca :as rel-sessoes]
             [oplenario.tempo-real.components :as tr-comp]
             [oplenario.tempo-real.consumer :as tr-consumer]
@@ -154,7 +155,9 @@
                                       rel-compliance/relacoes rel-participacao/relacoes
                                       ;; 3-B: o legislativo passa a publicar fato proprio — `aprovada_em_votacao`,
                                       ;; o ATO que um guard de rito exige antes de deixar a materia avancar.
-                                      rel-legislativo/relacoes)))))
+                                      rel-legislativo/relacoes
+                                      ;; ADR-0021 A4: a audiencia de metas fiscais realizada (a prova da regra da LRF)
+                                      rel-sessoes-audiencia/relacoes)))))
 
 (defn- idp-para
   "Seleciona a impl do IdP por ambiente. dev/test usam idp-dev (confia em claims sem verificar
@@ -215,4 +218,6 @@
                          [:idp :idp-operacao :repo-admin-sistema :repo-identidade :repo-sessoes :repo-legislativo :repo-compliance
                           :repo-participacao :repo-transparencia :repo-paineis :repo-cadastros
                           :canal-store :objeto-store :registro-fatos :repo-integracao-ia :repo-normas
-                          :repo-auditoria :repo-comunicacao])))
+                          :repo-auditoria :repo-comunicacao
+                          ;; ADR-0021 (fatia 3): o gatilho das obrigacoes legais garante o catalogo do motor
+                          :repo-motor])))

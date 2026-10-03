@@ -18,6 +18,7 @@
 //     sem `Date` nenhum (mesma lição de formatarDataSimples em formatar-data.ts).
 // A grade em si é aritmética em UTC (Date.UTC + getUTC*), que é fuso-independente por construção.
 
+import { rotularObrigacao } from "./rotulos-compliance";
 import { nomeTipoSessao } from "./rotulos-sessao";
 import type { SessaoOut } from "./contrato-sessoes.gen";
 
@@ -233,15 +234,16 @@ function eventoDeObrigacao(o: ObrigacaoEmAberto): EventoCalendario | null {
     tipo: "prazo",
     dia,
     hora: null,
-    // A chave do template é dado de tenant (Invariante 4: regra de compliance é DADO). O front não tem
-    // dicionário dela e não vai fabricar um nome bonito — mostra a chave, como o painel da Mesa já faz.
+    // A chave do template é dado (Invariante 4: regra de compliance é DADO). O nome de tela vem de
+    // `rotularObrigacao` (ADR-0021 fatia 3) só para as regras que a plataforma liga em toda Casa; chave
+    // desconhecida aparece crua, nunca com um nome inventado.
     // O prefixo "Prazo · " existe por DOIS motivos, os dois de tela: (1) na grade do mês o tipo do evento
-    // não pode ser só a cor, e "remessa_mensal_sim" sozinho não se identifica como prazo (uma sessão se
+    // não pode ser só a cor, e o nome da obrigação sozinho não se identifica como prazo (uma sessão se
     // identifica: "15ª Ordinária"); (2) sem ele o rótulo da célula seria a MESMA string do título da
     // agenda lateral, e o mesmo texto em dois lugares distintos da tela é ambíguo para quem lê e para
-    // quem testa. O `titulo` (agenda lateral) segue sendo a chave crua.
-    rotulo: `Prazo · ${o.templateChave}`,
-    titulo: o.templateChave,
+    // quem testa. O `titulo` (agenda lateral) é o nome da obrigação sem o prefixo.
+    rotulo: `Prazo · ${rotularObrigacao(o.templateChave)}`,
+    titulo: rotularObrigacao(o.templateChave),
     meta: o.estado === "vencida" ? `vencida em ${diaBr(dia)}` : `vence em ${diaBr(dia)}`,
     // Na grade, `pendente` e `vencida` pintam o MESMO losango telha. Só o alerta separa "prazo em dia"
     // de "prazo estourado" para quem enxerga.

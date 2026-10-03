@@ -153,7 +153,7 @@ para chamar. A medição (14 telas × medir + refutar; ledger `docs/16`, seção
 
 | Veredito | Telas |
 |---|---|
-| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` · `julgamento-contas` · `trilha-auditoria` ✅ · `observabilidade-ia` ✅ |
+| **BLOQUEADO — o domínio não existe no backend** (8) | `transparencia-fiscal` · `console-operador` ✅ · `console-operador-tenant` ✅ · `livro-atas` ✅ · `audiencia-publica` ✅ · `julgamento-contas` ✅ · `trilha-auditoria` ✅ · `observabilidade-ia` ✅ |
 | **PARCIAL** (4) | `dados-abertos` ✅ · `calendario` ✅ · `vereador-estatisticas` ✅ · `notificacoes` ✅ |
 | **PORTÁVEL** (1) | `status` ✅ — e só porque o design é texto fixo, sem binding |
 | **JÁ FEITA** (1) | `perfil-vereador-publico` (a lista anterior a dava como pendente) |
@@ -182,9 +182,26 @@ deliberação, e o caminho da comissão por tela (encaminhar às comissões, des
   citado. Ver *Materialização* na ADR.
 - **As perguntas ao Rigoni foram decididas pela pesquisa (02/10/2026):** o código já atende; ver o fim da ADR.
 
-**Propostas esperando decisão (29/09/2026):** `audiencia-publica` e `julgamento-contas` →
-[`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md). Cada uma traz opções por eixo e uma
-recomendação; o código começa depois do "Confirmo".
+**Audiência pública e julgamento das contas ENTREGUES (03/10/2026, [ADR-0021](docs/adr/0021-audiencia-publica-e-julgamento-das-contas.md)):**
+as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgamento-de-contas.md) confirmadas e implementadas.
+- **Audiência pública:** tipo de sessão `audiencia_publica` (não delibera, não exige quórum, aceita inscrição do
+  cidadão), promovida por comissão, com tema e finalidade (temática, metas fiscais, LDO, LOA, PPA).
+  - O cidadão se inscreve pelo gov.br no portal (`/portal/casa/[ente]/audiencias/[sessao]`, protocolo `AUD-…`); a Mesa
+    inscreve presencialmente, chama, cronometra e encerra em `/sessoes/[id]/audiencia`.
+  - Sessão que não delibera não abre votação (vale para solene e especial). A audiência não conta na assiduidade nem é
+    a "sessão anterior" da leitura de ata.
+- **Julgamento das contas:** `prestacao_contas` em `legislativo` (`/contas`). Registrar a do Prefeito protocola o PDL.
+  - Notificação e defesa: a pauta só aceita o PDL depois do prazo de defesa ou da defesa juntada.
+  - A votação sobre o parecer prévio é travada pela regra-dado `contas_prefeito`: 2/3 dos membros, nominal. O
+    resultado sai em palavras ("O parecer prevalece: 12 votos pela rejeição, eram precisos 14.").
+  - Contas da Mesa: só acompanhamento. Prazos por Casa em `/administracao`. Portal `/portal/casa/[ente]/contas`.
+- **Motor:** a primeira regra com gatilho em produção.
+  - `audiencia_metas_fiscais`: LRF art. 9 §4 — fim de maio, setembro e fevereiro.
+  - `julgamento_contas_prefeito`: o prazo da LOM por Casa.
+  - Avaliadas pelo gatilho do host (`gatilho_compliance.clj`) ao ler o painel e depois dos atos. Nada anterior ao
+    vínculo da Casa à regra.
+- **Falta, `[GAP]`:** datas de LDO/LOA/PPA por LOM; prazos de defesa e julgamento por LOM (há padrão editável); efeito
+  do vencimento; comunicação do resultado ao TCE; contas da Mesa com deliberação (confirmar com o jurídico).
 
 `trilha-auditoria` ✅ **entregue em 29/09/2026** ([ADR-0017](docs/adr/0017-trilha-de-auditoria-da-casa.md), aceita):
 - **o que é:** o módulo `auditoria`, uma corrente selada por Casa (particionada por mês, append-only; só o IP pode virar

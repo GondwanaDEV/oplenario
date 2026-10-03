@@ -15,6 +15,8 @@ import type {
   VotacaoAbertaResumo,
 } from "./use-votacao-mesa";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
+import { LEGENDA_SIM, PERGUNTA_VOTACAO, fraseDosPrecisos } from "./contas-vista";
+import type { QuorumContas } from "./contrato-contas";
 
 export interface OpcaoRotulada<T extends string> {
   valor: T;
@@ -116,4 +118,33 @@ export function derivarPainelVotacao(dados: {
     };
   }
   return { tipo: "abrir" };
+}
+
+// ---- matéria de contas (ADR-0021 B2) ----
+//
+// O PDL das contas do Prefeito vota "Rejeitar o parecer prévio do TCE?" (Sim = rejeitar), NOMINAL, com 2/3 dos MEMBROS
+// (CF art. 31 §2). A regra é dado no backend (guarda avaliada ao abrir: 422 se o quórum ou a modalidade não forem os
+// dela); aqui a Mesa só vê a regra travada e dita em palavras — sem chance de abrir com outra e tomar o 422.
+
+export const QUORUM_DE_CONTAS: QuorumTipo = "maioria_qualificada_2_3";
+export const MODALIDADE_DE_CONTAS: ModalidadeVotacao = "nominal";
+
+export interface RegraVotacaoContas {
+  quorumTipo: QuorumTipo;
+  modalidade: ModalidadeVotacao;
+  pergunta: string;
+  legendaSim: string;
+  precisos: string;
+  nota: string;
+}
+
+export function regraDaVotacaoDeContas(quorum: QuorumContas | null | undefined): RegraVotacaoContas {
+  return {
+    quorumTipo: QUORUM_DE_CONTAS,
+    modalidade: MODALIDADE_DE_CONTAS,
+    pergunta: PERGUNTA_VOTACAO,
+    legendaSim: LEGENDA_SIM,
+    precisos: fraseDosPrecisos(quorum),
+    nota: "Matéria de contas: quórum de 2/3 dos membros e votação nominal, fixados pela CF art. 31 §2. Sem os 2/3, o parecer do TCE prevalece.",
+  };
 }

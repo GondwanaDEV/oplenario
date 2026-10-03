@@ -6,6 +6,7 @@
             [malli.core :as m]
             [malli.error :as me]
             [oplenario.sessoes.logic :as logic]
+            [oplenario.sessoes.logic.audiencia :as logic-aud]
             [oplenario.sessoes.wire.in :as wire])
   (:import (java.time Instant)
            (java.time.format DateTimeParseException)
@@ -18,7 +19,11 @@
 (def ^:private campos-agendar
   "As chaves esperadas do corpo (strings — :json-params vem com chaves STRING, sem keyword-interning, review
   seg W3 MAJOR-2). So estas sao promovidas a keyword; chaves alheias do cliente NAO viram keyword (nem entram)."
-  ["sessao-legislativa-id" "tipo-sessao" "modalidade" "agendada-para"])
+  ["sessao-legislativa-id" "tipo-sessao" "modalidade" "agendada-para" "audiencia"])
+
+(def ^:private campos-audiencia
+  "ADR-0021: as chaves do bloco `audiencia` (o mapa aninhado tambem chega com chaves STRING)."
+  ["comissao-id" "tema" "local" "proposicao-id" "finalidade" "referencia" "tempo-fala-segundos"])
 
 (defn- so-esperados
   "mapa STRING-keyed -> mapa keyword-keyed contendo SO os `campos` presentes (keyword literal, ja internada)."
@@ -55,18 +60,34 @@
   [ator wire-in]
   (when-not (map? wire-in)
     (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
-  (let [m (so-esperados wire-in campos-agendar)]
+  (let [m (cond-> (so-esperados wire-in campos-agendar)
+            (map? (get wire-in "audiencia")) (assoc :audiencia (so-esperados (get wire-in "audiencia") campos-audiencia)))
+        audiencia? (= "audiencia_publica" (:tipo-sessao m))]
     ;; valida UMA vez; em falha guarda so os nomes-de-campo humanizados (NUNCA o payload cru — review W3:
     ;; m/explain embute :value, que vazaria PII do corpo p/ o log quando o F7 fiar logging de erro).
     (when-let [erros (m/explain wire/AgendarSessao m)]
       (invalido! "corpo de agendar sessao invalido" {:campos (keys (me/humanize erros))}))
-    {:id                    (random-uuid)
-     :ente-id               (:ente-id ator)
-     :sessao-legislativa-id (->uuid (:sessao-legislativa-id m) :sessao-legislativa-id)
-     :tipo-sessao           (:tipo-sessao m)
-     :modalidade            (:modalidade m)
-     :agendada-para         (->instante (:agendada-para m) :agendada-para)
-     :created-by            (:identidade-id ator)}))
+    ;; ADR-0021: o bloco `audiencia` e' obrigatorio SE E SO' SE o tipo e' audiencia publica
+    (when (not= audiencia? (some? (:audiencia m)))
+      (invalido! "o bloco `audiencia` e' obrigatorio na audiencia publica, e so' nela" {:campo :audiencia}))
+    (cond-> {:id                    (random-uuid)
+             :ente-id               (:ente-id ator)
+             :sessao-legislativa-id (->uuid (:sessao-legislativa-id m) :sessao-legislativa-id)
+             :tipo-sessao           (:tipo-sessao m)
+             :modalidade            (:modalidade m)
+             :agendada-para         (->instante (:agendada-para m) :agendada-para)
+             :created-by            (:identidade-id ator)}
+      audiencia?
+      (assoc :audiencia
+             (let [a (:audiencia m)]
+               (logic-aud/validar-audiencia!
+                {:comissao-id         (->uuid (:comissao-id a) :comissao-id)
+                 :tema                (some-> (:tema a) str/trim)
+                 :local               (some-> (:local a) str/trim not-empty)
+                 :proposicao-id       (some-> (:proposicao-id a) (->uuid :proposicao-id))
+                 :finalidade          (:finalidade a)
+                 :referencia          (some-> (:referencia a) str/trim not-empty)
+                 :tempo-fala-segundos (:tempo-fala-segundos a)}))))))
 
 (def ^:private campos-transicao ["para" "motivo" "lock-version"])
 

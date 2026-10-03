@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  FORM_AUDIENCIA_VAZIO,
+  validarAudiencia,
   agendadaParaIso,
   sessoesLegislativasDisponiveis,
   validarAgendar,
@@ -70,7 +72,53 @@ describe("agendadaParaIso", () => {
 
 describe("opções cobrem os enums do backend", () => {
   it("tipos e modalidades", () => {
-    expect(TIPOS_SESSAO.map((t) => t.valor)).toEqual(["ordinaria", "extraordinaria", "solene", "secreta", "especial"]);
+    expect(TIPOS_SESSAO.map((t) => t.valor)).toEqual([
+      "ordinaria", "extraordinaria", "solene", "secreta", "especial", "audiencia_publica",
+    ]);
     expect(MODALIDADES_SESSAO.map((m) => m.valor)).toEqual(["presencial", "remota", "hibrida"]);
+  });
+});
+
+describe("validarAudiencia (ADR-0021 A1)", () => {
+  const base = { ...FORM_AUDIENCIA_VAZIO, comissaoId: "c1", tema: "Mobilidade urbana" };
+
+  it("temática mínima: comissão, tema, finalidade e o tempo em segundos", () => {
+    expect(validarAudiencia(base)).toEqual({
+      ok: true,
+      corpo: { "comissao-id": "c1", tema: "Mobilidade urbana", finalidade: "tematica", "tempo-fala-segundos": 300 },
+    });
+  });
+
+  it("opcionais preenchidos entram; vazios ficam fora", () => {
+    const r = validarAudiencia({ ...base, local: " Plenário ", proposicaoId: "p1", tempoFalaMinutos: "" });
+    expect(r).toEqual({
+      ok: true,
+      corpo: { "comissao-id": "c1", tema: "Mobilidade urbana", finalidade: "tematica", local: "Plenário", "proposicao-id": "p1" },
+    });
+  });
+
+  it("exige comissão e tema", () => {
+    expect(validarAudiencia({ ...base, comissaoId: "" })).toMatchObject({ ok: false, erro: expect.stringMatching(/comissão/) });
+    expect(validarAudiencia({ ...base, tema: "  " })).toMatchObject({ ok: false, erro: expect.stringMatching(/tema/) });
+    expect(validarAudiencia({ ...base, tema: "x".repeat(201) }).ok).toBe(false);
+  });
+
+  it("metas fiscais exige o quadrimestre de referência, no formato AAAA-Qn", () => {
+    expect(validarAudiencia({ ...base, finalidade: "metas_fiscais" }).ok).toBe(false);
+    expect(validarAudiencia({ ...base, finalidade: "metas_fiscais", referenciaAno: "26", referenciaQuadrimestre: "Q1" }).ok).toBe(false);
+    expect(validarAudiencia({ ...base, finalidade: "metas_fiscais", referenciaAno: "2026", referenciaQuadrimestre: "Q2" })).toMatchObject({
+      ok: true,
+      corpo: { finalidade: "metas_fiscais", referencia: "2026-Q2" },
+    });
+  });
+
+  it("fora de metas fiscais, a referência não vai (mesmo se sobrou preenchida)", () => {
+    const r = validarAudiencia({ ...base, finalidade: "ldo", referenciaAno: "2026", referenciaQuadrimestre: "Q1" });
+    expect(r.ok && "referencia" in r.corpo).toBe(false);
+  });
+
+  it("o tempo de fala vai de 1 a 30 minutos", () => {
+    expect(validarAudiencia({ ...base, tempoFalaMinutos: "45" }).ok).toBe(false);
+    expect(validarAudiencia({ ...base, tempoFalaMinutos: "3" })).toMatchObject({ ok: true, corpo: { "tempo-fala-segundos": 180 } });
   });
 });

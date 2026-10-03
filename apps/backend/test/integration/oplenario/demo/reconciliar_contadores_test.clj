@@ -12,6 +12,7 @@
 
   `with-sistema` reusada de `oplenario.demo.casa-test`, como os outros testes de `demo/`."
   (:require [acervo]
+            [audiencias :as audiencias-demo]
             [casa]
             [clojure.set :as set]
             [clojure.test :refer [deftest is testing]]
@@ -44,6 +45,8 @@
           _ (participacao-demo/semear! s ente)
           ;; ADR-0020: o protocolo do comunicado (`comunicado:<ano>`) e' mais uma familia numerada
           _ (comunicados-demo/semear! s ente identidades)
+          ;; ADR-0021: o protocolo da inscricao na audiencia (`inscricao_audiencia:<ano>`) tambem
+          _ (audiencias-demo/semear! s ente identidades)
           reais (escopos-gravados-pelo-proximo ds ente)
           meus  (into #{} (map :escopo) (recon/pisos ds ente))]
       (testing "a semente exercitou numeracao de verdade (senao o teste nao provaria nada)"

@@ -1,6 +1,10 @@
 # 28 — Proposta: audiência pública (4.18) e julgamento das contas do Prefeito (4.19)
 
-> **Status: 🟡 rascunho para decisão do Daouda** (29/09/2026), eixo a eixo. São as duas últimas telas da Onda E que
+> **Status: ✅ decidido** — confirmado em 03/10/2026 e implementado: ver
+> [ADR-0021](adr/0021-audiencia-publica-e-julgamento-das-contas.md). O texto abaixo é o rascunho de 29/09/2026,
+> mantido como registro das opções.
+>
+> **Rascunho original:** (29/09/2026), eixo a eixo. São as duas últimas telas da Onda E que
 > não têm domínio no backend (`audiencia-publica.html`, `julgamento-contas.html`). Aqui está o desenho de produto e
 > dados a confirmar antes do código; cada eixo traz opções e uma recomendação.
 >

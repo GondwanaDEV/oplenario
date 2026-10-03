@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PainelVotacao } from "./painel-votacao";
 import type { ItemPautaVotacao, VotacaoAbertaResumo } from "@/lib/use-votacao-mesa";
@@ -40,6 +40,21 @@ function montar(over: {
     />,
   );
 }
+
+// ADR-0021: o painel pergunta a `legislativo` se a matéria é de contas. Por padrão, 404 = matéria comum.
+const contasPorProposicao = new Map<string, () => unknown>();
+const chamadasFetch: string[] = [];
+beforeEach(() => {
+  contasPorProposicao.clear();
+  chamadasFetch.length = 0;
+  global.fetch = vi.fn(async (url: string) => {
+    chamadasFetch.push(String(url));
+    const m = /^\/api\/contas-da-proposicao\/(.+)$/.exec(String(url));
+    const corpo = m ? contasPorProposicao.get(decodeURIComponent(m[1])) : undefined;
+    if (!corpo) return { ok: false, status: 404, json: async () => ({ erro: "nao e materia de contas" }) } as Response;
+    return { ok: true, status: 200, json: async () => corpo() } as Response;
+  }) as unknown as typeof fetch;
+});
 
 afterEach(() => {
   cleanup();
@@ -163,5 +178,65 @@ describe("PainelVotacao — indisponível", () => {
     montar({ sessaoEstado: "suspensa" });
     expect(screen.getByText(/só é conduzida com a sessão aberta/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Abrir votação|Encerrar votação/ })).toBeNull();
+  });
+});
+
+describe("PainelVotacao — matéria de contas (ADR-0021)", () => {
+  const prestacaoFio = (extra: Record<string, unknown> = {}) => ({
+    id: "pc1", tipo: "governo_prefeito", exercicio: 2024, responsavel: "José Sarto", "parecer-previo": "favoravel", estado: "pronta_para_pauta",
+    "recebida-em": "2026-10-02", proposicao: { id: "p1", rotulo: "PDL 3/2026", estado: "em_pauta" },
+    quorum: { "base-membros": 21, "necessarios-para-rejeitar": 14 }, pautavel: true, documentos: [], ...extra,
+  });
+
+  it("matéria de contas: trava nominal + 2/3, mostra a pergunta e quantos votos a rejeição precisa", async () => {
+    contasPorProposicao.set("p1", () => prestacaoFio());
+    montar({ votacaoAberta: null, emApreciacaoItemId: "it1" });
+    expect(await screen.findByText("Rejeitar o parecer prévio do TCE?")).toBeTruthy();
+    expect(screen.getByText("(Sim = rejeitar o parecer)")).toBeTruthy();
+    expect(screen.getByText("São precisos 14 votos pela rejeição (2/3 dos 21 membros).")).toBeTruthy();
+    expect((screen.getByLabelText("Nominal") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Simbólica") as HTMLInputElement).disabled).toBe(true);
+    const quorum = screen.getByLabelText(/Quórum exigido/) as HTMLSelectElement;
+    expect(quorum.value).toBe("maioria_qualificada_2_3");
+    expect(quorum.disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: /Abrir votação/ }));
+    await waitFor(() =>
+      expect(abrir).toHaveBeenCalledWith(expect.objectContaining({ objetoId: "p1", modalidade: "nominal", quorumTipo: "maioria_qualificada_2_3" })),
+    );
+  });
+
+  it("matéria comum (404): comportamento de sempre — a Mesa escolhe modalidade e quórum", async () => {
+    montar({ votacaoAberta: null, emApreciacaoItemId: "it1" });
+    await waitFor(() => expect(chamadasFetch).toContain("/api/contas-da-proposicao/p1"));
+    await waitFor(() => expect((screen.getByRole("button", { name: /Abrir votação/ }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("Rejeitar o parecer prévio do TCE?")).toBeNull();
+    expect((screen.getByLabelText(/Quórum exigido/) as HTMLSelectElement).disabled).toBe(false);
+    fireEvent.click(screen.getByLabelText("Simbólica"));
+    fireEvent.click(screen.getByRole("button", { name: /Abrir votação/ }));
+    await waitFor(() => expect(abrir).toHaveBeenCalledWith(expect.objectContaining({ modalidade: "simbolica", quorumTipo: "maioria_simples" })));
+  });
+
+  it("encerrada a votação de contas: refaz o GET da prestação e diz o resultado em palavras", async () => {
+    let n = 0;
+    contasPorProposicao.set("p1", () =>
+      n++ === 0
+        ? prestacaoFio()
+        : prestacaoFio({ estado: "julgada", resultado: "parecer_mantido", "frase-resultado": "O parecer prevalece: 12 votos pela rejeição, eram precisos 14." }),
+    );
+    montar({
+      votacaoAberta: { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: { tipo: "projeto_decreto_legislativo", ano: 2026, sequencial: 3, ementa: "Contas 2024" } },
+    });
+    expect(await screen.findByText("Rejeitar o parecer prévio do TCE?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Encerrar votação/ }));
+    expect(await screen.findByText("O parecer prevalece: 12 votos pela rejeição, eram precisos 14.")).toBeTruthy();
+    expect(chamadasFetch.filter((u) => u === "/api/contas-da-proposicao/p1")).toHaveLength(2);
+  });
+
+  it("encerrada uma votação comum: nenhuma frase de contas", async () => {
+    montar({ votacaoAberta: { votacaoId: "vt2", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", proposicao: null } });
+    await waitFor(() => expect(chamadasFetch).toContain("/api/contas-da-proposicao/p1"));
+    fireEvent.click(screen.getByRole("button", { name: /Encerrar votação/ }));
+    expect(await screen.findByText("Votação encerrada.")).toBeTruthy();
+    expect(screen.queryByText(/parecer prevalece|parecer foi rejeitado/)).toBeNull();
   });
 });
