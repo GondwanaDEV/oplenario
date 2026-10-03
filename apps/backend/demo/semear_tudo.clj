@@ -20,6 +20,7 @@
   (:require [acervo]
             [casa]
             [comunicados]
+            [contas]
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [compliance :as compliance-demo]
@@ -63,6 +64,9 @@
               ;; proposicao dele) e ANTES da reconciliacao (o protocolo COM-AAAA-NNNNNN e' um escopo numerado).
               (let [comunicados-r (comunicados/semear! sys ente identidades)]
                 (println "==> comunicados:" (comunicados/resumo comunicados-r)))
+              ;; ADR-0021 Parte B: as prestacoes de contas — depois da casa (comissao de financas, roster da votacao) e
+              ;; ANTES da reconciliacao (o PDL que o registro protocola e' um escopo numerado).
+              (println "==> contas:" (pr-str (:estados (contas/semear! sys ente identidades))))
               ;; 5a etapa: reconciliar `shared.sequencial` com a numeracao que as 4 sementes gravaram.
               ;; NAO e' zelo preventivo — e' reparo. As 4 sementes sao idempotentes POR PULAR (releem em
               ;; vez de reescrever), entao um banco que perdeu os contadores e manteve as linhas numeradas
