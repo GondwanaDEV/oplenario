@@ -47,7 +47,9 @@
    [:versao-fixada-id {:optional true} [:maybe :uuid]]
    [:ativa :boolean]
    [:motivo-desativacao {:optional true} [:maybe :string]] ; obrigatorio no DDL quando ativa=false (CHECK)
-   [:parametros-tenant [:map-of :string :any]]])
+   [:parametros-tenant [:map-of :string :any]]
+   ;; ADR-0021: desde quando a Casa esta' ligada a regra (o gatilho nao cobra prazo anterior ao vinculo)
+   [:criado-em {:optional true} [:fn {:error/message "deve ser java.time.Instant"} #(instance? java.time.Instant %)]]])
 
 ;; --- B3: registry_catalogo_versao — log de versao do catalogo (proveniencia/re-validacao no deploy) ---
 (def VersaoCatalogo
