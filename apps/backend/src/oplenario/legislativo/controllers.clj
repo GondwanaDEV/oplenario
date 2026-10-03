@@ -48,9 +48,15 @@
 (defn abrir-votacao
   "Abre uma votacao na sessao `sessao-id` (authz herdada da sessao). `m` ja vem decodificado/coagido pelo
   adapters/in (sem sessao-id). Devolve o recibo {:id} ou nil se a sessao nao existe no tenant (-> 404). Sessao
-  ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5)."
+  ja fechada -> `sessao-autorizada` lanca `:conflito/sessao-fechada` (-> 409, ledger Fase 8 achado #5).
+
+  ADR-0021 (A1): sessao que NAO DELIBERA (a capability `delibera` da sessao — audiencia publica, solene, especial) nao
+  abre votacao: `:conflito/sessao-nao-delibera` (-> 409 \"esta sessão não delibera\"). Ate' aqui abria. `false?` e nao
+  `not`: a sessao sem a capability no mapa (fixture antiga) segue o comportamento de antes."
   [repo-leg consultar-sessao sessao-fechada? ator sessao-id m]
-  (when (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)
+  (when-let [s (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)]
+    (when (false? (:delibera s))
+      (throw (ex-info "esta sessão não delibera" {:tipo :conflito/sessao-nao-delibera :sessao-id sessao-id})))
     (repo/abrir-votacao! repo-leg (:ente-id ator) (assoc m :sessao-id sessao-id))))
 
 (defn registrar-voto

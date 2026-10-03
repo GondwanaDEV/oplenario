@@ -75,8 +75,9 @@
           (http/json-resposta 201 (adapters-out/abertura->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
-            (resposta-conflito-sessao-fechada e)
+          (case (:tipo (ex-data e))
+            ;; ADR-0021: a sessao nao delibera (audiencia publica, solene, especial) — mesma forma do 409 de sessao fechada
+            (:conflito/sessao-fechada :conflito/sessao-nao-delibera) (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
 (defn- voto-handler

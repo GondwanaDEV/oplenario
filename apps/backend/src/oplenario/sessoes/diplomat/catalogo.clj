@@ -5,11 +5,13 @@
   (:require [clojure.string :as str]
             [oplenario.kernel.catalogo :as catalogo]
             [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.adapters.out.audiencia :as adapters-out-aud]
             [oplenario.sessoes.adapters.out.livro-atas :as adapters-out-livro]
             [oplenario.sessoes.adapters.out.pauta :as adapters-out-pauta]
             [oplenario.sessoes.adapters.out.publicacao-pauta :as adapters-out-pub]
             [oplenario.sessoes.components.repositorio :as repo]
             [oplenario.sessoes.controllers :as controllers]
+            [oplenario.sessoes.controllers.audiencia :as controllers-aud]
             [oplenario.sessoes.wire.out :as wire]))
 
 (set! *warn-on-reflection* true)
@@ -35,7 +37,20 @@
 (defn- agora [{:keys [relogio]}] (tempo/agora (or relogio (tempo/relogio-sistema))))
 
 (def ^:private rotulo-tipo-sessao
-  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"})
+  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"
+   "audiencia_publica" "audiência pública"})
+
+(defn- deps-audiencia
+  "As deps do controller da audiencia a partir das do catalogo (os mesmos seams da tela, pelo host)."
+  [deps]
+  {:repo-sessoes (:repo-sessoes deps)
+   :nomes-de-comissoes (or (:resolver-comissoes deps) (fn [_ _] {}))
+   :rotular-proposicoes (or (:rotular-proposicoes deps) (fn [_ _] {}))})
+
+(defn- falas-de-terceiro
+  "Eixo 4.5: a entidade por quem um cidadao falou e' texto que ELE escreveu — conteudo de terceiro para o agente."
+  [saida]
+  (vec (keep (fn [f] (when (:entidade f) {:origem "inscricao_audiencia" :referencia (:nome f)})) (:falaram saida))))
 
 (def ^:private rotulo-aviso
   {"sem-parecer-comissao" "sem parecer da comissão"
@@ -98,6 +113,36 @@
                                       (:sessao-id (first (controllers/livro-de-atas-publico repo-sessoes ente))))]
                      (some-> (controllers/ata-do-livro-publica repo-sessoes ente sid nil)
                              (adapters-out-livro/ata-do-livro->wire true)))))})
+   ;; ADR-0021 Parte A — a audiencia publica. O agente le pelo caminho do PORTAL (so' transmissao publica; nada de
+   ;; protocolo, identidade ou nome de quem desistiu/nao falou): e' o que a Casa ja' torna publico.
+   (catalogo/entrada
+    {:nome "audiencias_publicas"
+     :descricao (str "Lista as audiencias publicas da Casa: as proximas (agendadas ou em curso, a mais proxima primeiro) "
+                     "e as realizadas (as 20 mais recentes), com tema, comissao que promove, data, estado, local e "
+                     "finalidade (tematica, metas fiscais do quadrimestre, LDO, LOA ou PPA).")
+     :classe :leitura
+     :papeis #{"secretario" "vereador"}
+     :entrada [:map {:closed true}]
+     :saida wire/AudienciasPublicasOut
+     :rotas #{}
+     :executar (fn [deps ator _]
+                 (adapters-out-aud/audiencias-publicas->wire
+                  (controllers-aud/audiencias-publicas (deps-audiencia deps) (:ente-id ator))))})
+   (catalogo/entrada
+    {:nome "audiencia_publica"
+     :descricao (str "Le uma audiencia publica: tema, comissao, finalidade (e o quadrimestre, se de metas fiscais), "
+                     "data, estado, a materia em debate, o tempo de fala de cada cidadao, se as inscricoes estao "
+                     "abertas, quantos se inscreveram, se a ata foi publicada e — depois de encerrada — quem falou.")
+     :classe :leitura
+     :papeis #{"secretario" "vereador"}
+     :entrada [:map {:closed true}
+               [:sessao-id {:description "Id da sessao da audiencia (de audiencias_publicas)."} :uuid]]
+     :saida wire/AudienciaPublicaOut
+     :rotas #{:sessoes/audiencia}
+     :terceiro falas-de-terceiro
+     :executar (fn [deps ator {:keys [sessao-id]}]
+                 (some-> (controllers-aud/audiencia-publica (deps-audiencia deps) (:ente-id ator) sessao-id)
+                         adapters-out-aud/audiencia-publica->wire))})
    ;; ADR-0019 fatia 3 (Eixo 7): publicar a pauta e' ATO (congela a pauta oficial) — o agente PROPOE, a pessoa confere os
    ;; avisos e confirma (ADR-0012). Nao e' ato pessoal (voto, presenca, conducao ao vivo): e' ato de expediente.
    (catalogo/entrada

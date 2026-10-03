@@ -934,6 +934,9 @@
                      (logic/derivar-linhas-da-chamada roster presencas justificativas))]
     {:sessao-id (:id sessao)
      :sessao-estado (:estado sessao)
+     ;; ADR-0021: a audiencia (e a solene/especial) nao exige quorum — a tela diz isso em vez de cobrar presenca.
+     ;; Linha legada sem a coluna (fixture) conta como exige (o comportamento de antes).
+     :exige-quorum (not (false? (:exige-quorum sessao)))
      :instante instante
      :data-de-composicao data
      :composicao-resolvida-em agora
@@ -1023,8 +1026,8 @@
   [repo-sessoes roster-da-casa ator sessao-id relogio]
   (some-> (chamada-da-sessao* repo-sessoes roster-da-casa ator sessao-id relogio
                               :sessao/ver-quorum logic/pode-ver-quorum-da-sessao?)
-          (select-keys [:sessao-id :sessao-estado :instante :data-de-composicao :composicao-resolvida-em
-                        :sem-registro-de-presenca :quorum])))
+          (select-keys [:sessao-id :sessao-estado :exige-quorum :instante :data-de-composicao
+                        :composicao-resolvida-em :sem-registro-de-presenca :quorum])))
 
 ;; ---------- Tribuna nominal — a COMPOSICAO da sessao (GET /sessoes/:id/composicao) ----------
 
