@@ -97,6 +97,7 @@ describe("página da audiência", () => {
     render(<Audiencia ente={ENTE} sessaoId="s1" sessao={anonima} />);
     const govbr = await screen.findByRole("link", { name: /entrar com gov\.br/i });
     expect(decodeURIComponent(govbr.getAttribute("href")!)).toContain(`redirect=/portal/casa/${ENTE}/audiencias/s1`);
+    expect(screen.getByRole("heading", { name: "Quero falar na audiência" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Inscrever-me/ })).toBeNull();
   });
 

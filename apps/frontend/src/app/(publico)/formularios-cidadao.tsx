@@ -56,7 +56,20 @@ export function Hero({ rotulo, titulo, texto, lei }: { rotulo: string; titulo: s
 }
 
 // O que ocupa o lugar do formulário quando a sessão não serve para escrever aqui.
-export function Portao({ ente, sessao, voltarPara, porque }: { ente: string; sessao: Sessao; voltarPara: string; porque: string }) {
+export function Portao({
+  ente,
+  sessao,
+  voltarPara,
+  porque,
+  titulo = "Identifique-se para enviar",
+}: {
+  ente: string;
+  sessao: Sessao;
+  voltarPara: string;
+  porque: string;
+  /** O título do cartão sem sessão (a audiência diz "Quero falar na audiência", como o desenho). */
+  titulo?: string;
+}) {
   if (sessao.estado === "carregando") return <div className="pf-card" aria-busy="true" />;
   if (sessao.estado === "outra-casa") {
     return (
@@ -70,7 +83,7 @@ export function Portao({ ente, sessao, voltarPara, porque }: { ente: string; ses
   }
   return (
     <div className="pf-card">
-      <h2>Identifique-se para enviar</h2>
+      <h2>{titulo}</h2>
       <p className="pf-ajuda">{porque}</p>
       {sessao.estado === "erro" && (
         <p className="form-erro" role="alert">
