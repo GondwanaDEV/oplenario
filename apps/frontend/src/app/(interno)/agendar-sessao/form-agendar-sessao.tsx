@@ -4,7 +4,7 @@
 // existentes (use-sessoes) só para resolver o `sessao-legislativa-id` — não há endpoint de listagem de
 // sessões legislativas, mas as sessões do período corrente compartilham a sua. Deriva opções/validação de
 // `agendar-sessao-vista.ts` e escreve por `use-agendar-sessao.ts`. No sucesso, mostra a sessão criada com um
-// link para conduzi-la.
+// link para conduzi-la (e, na audiência pública, também para a tela da Mesa da audiência — ADR-0021).
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -17,9 +17,14 @@ import {
   agendadaParaIso,
   sessoesLegislativasDisponiveis,
   validarAgendar,
+  validarAudiencia,
+  FORM_AUDIENCIA_VAZIO,
+  TIPO_AUDIENCIA,
   TIPOS_SESSAO,
   MODALIDADES_SESSAO,
+  type FormAudiencia,
 } from "@/lib/agendar-sessao-vista";
+import { BlocoAudiencia } from "./bloco-audiencia";
 
 export function FormAgendarSessao({ token }: { token: string | null }) {
   const { sessoes, estado: estadoSessoes } = useSessoes(token);
@@ -33,6 +38,8 @@ export function FormAgendarSessao({ token }: { token: string | null }) {
   const [agendadaPara, setAgendadaPara] = useState("");
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [criada, setCriada] = useState<SessaoOut | null>(null);
+  const [audiencia, setAudiencia] = useState<FormAudiencia>(FORM_AUDIENCIA_VAZIO);
+  const ehAudiencia = tipoSessao === TIPO_AUDIENCIA;
 
   // auto-seleciona a única sessão legislativa (o caso comum: um período corrente)
   const legislativaEfetiva = sessaoLegislativaId || (legislativas.length === 1 ? legislativas[0].id : "");
@@ -47,15 +54,27 @@ export function FormAgendarSessao({ token }: { token: string | null }) {
       setErroAcao(v.erro);
       return;
     }
+    // ADR-0021 A1: o bloco da audiência é obrigatório se e só se o tipo é audiência pública
+    let corpoAudiencia: Record<string, string | number> | null = null;
+    if (ehAudiencia) {
+      const va = validarAudiencia(audiencia);
+      if (!va.ok) {
+        setErroAcao(va.erro);
+        return;
+      }
+      corpoAudiencia = va.corpo;
+    }
     const r = await agendar({
       sessaoLegislativaId: legislativaEfetiva,
       tipoSessao,
       modalidade: modalidade || null,
       agendadaPara: agendadaParaIso(agendadaPara),
+      audiencia: corpoAudiencia,
     });
     if (r.ok) {
       setCriada(r.sessao);
       setAgendadaPara("");
+      setAudiencia(FORM_AUDIENCIA_VAZIO);
     } else {
       setErroAcao(r.erro);
     }
@@ -78,7 +97,15 @@ export function FormAgendarSessao({ token }: { token: string | null }) {
             <b>Sessão {nomeTipoSessao(criada.tipoSessao)} nº {criada.numeroSequencial}</b> agendada.
           </p>
           <div className="criada-acoes">
-            <Link className="btn btn-primaria" href={comToken(`/sessoes/${criada.id}/conduzir`, token)}>
+            {criada.tipoSessao === TIPO_AUDIENCIA && (
+              <Link className="btn btn-primaria" href={comToken(`/sessoes/${criada.id}/audiencia`, token)}>
+                Abrir a Mesa da audiência
+              </Link>
+            )}
+            <Link
+              className={`btn ${criada.tipoSessao === TIPO_AUDIENCIA ? "btn-contorno" : "btn-primaria"}`}
+              href={comToken(`/sessoes/${criada.id}/conduzir`, token)}
+            >
               Conduzir a sessão
             </Link>
             <button type="button" className="btn btn-fantasma" onClick={() => setCriada(null)}>
@@ -127,6 +154,8 @@ export function FormAgendarSessao({ token }: { token: string | null }) {
               ))}
             </select>
           </div>
+
+          {ehAudiencia && <BlocoAudiencia token={token} valor={audiencia} onChange={setAudiencia} />}
 
           <div className="campo">
             <label htmlFor="modalidade">Modalidade (opcional)</label>

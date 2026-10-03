@@ -3,13 +3,14 @@ import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
 
 describe("nomeTipoSessao — o tipo da sessao no cabecalho do telao", () => {
   // Valores da FONTE — CHECK de `sessoes.sessao.tipo_sessao`:
-  //   CHECK (tipo_sessao IN ('ordinaria','extraordinaria','solene','secreta','especial'))
+  //   CHECK (tipo_sessao IN ('ordinaria','extraordinaria','solene','secreta','especial','audiencia_publica'))
   it.each([
     ["ordinaria", "ordinária"],
     ["extraordinaria", "extraordinária"],
     ["solene", "solene"],
     ["secreta", "secreta"],
     ["especial", "especial"],
+    ["audiencia_publica", "audiência pública"],
   ])("%s -> %s", (chave, rotulo) => {
     expect(nomeTipoSessao(chave)).toBe(rotulo);
   });

@@ -54,6 +54,20 @@ describe("useAgendarSessao", () => {
     expect(corpo).toMatchObject({ modalidade: "hibrida" });
   });
 
+  it("audiência pública: o bloco `audiencia` vai no corpo como veio (ADR-0021 A1)", async () => {
+    let corpo: Record<string, unknown> = {};
+    global.fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      corpo = init?.body ? JSON.parse(init.body as string) : {};
+      return ok({ id: "s3", "sessao-legislativa-id": "sl", "tipo-sessao": "audiencia_publica", estado: "agendada", "lock-version": 0 });
+    }) as unknown as typeof fetch;
+    const { result } = renderHook(() => useAgendarSessao("tok"));
+    const audiencia = { "comissao-id": "c1", tema: "Mobilidade", finalidade: "tematica" };
+    await act(async () => {
+      await result.current.agendar({ sessaoLegislativaId: "sl", tipoSessao: "audiencia_publica", audiencia });
+    });
+    expect(corpo).toMatchObject({ "tipo-sessao": "audiencia_publica", audiencia });
+  });
+
   it("erro do servidor -> estado erro e resultado ok:false com a mensagem", async () => {
     global.fetch = vi.fn(async () => fail(400, { erro: "sessao-legislativa-id invalido" })) as unknown as typeof fetch;
     const { result } = renderHook(() => useAgendarSessao("tok"));

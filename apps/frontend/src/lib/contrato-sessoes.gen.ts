@@ -3,7 +3,7 @@
 export interface SessaoOut {
   id: string;
   sessaoLegislativaId: string;
-  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  tipoSessao: "audiencia_publica" | "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
   numeroSequencial: number;
   estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
   modalidade: "hibrida" | "presencial" | "remota";
@@ -201,7 +201,7 @@ export interface VinculoGravacaoOut {
 
 export interface SugestaoSessaoOut {
   sessaoId: string;
-  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  tipoSessao: "audiencia_publica" | "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
   numeroSequencial: number;
   estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
   inicio: string;
@@ -560,7 +560,7 @@ export interface FolhasDaSessaoOut {
 export interface AssiduidadeSessaoOut {
   id: string;
   numero: number;
-  tipo: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  tipo: "audiencia_publica" | "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
   estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
   dataDeReferencia: string;
   sigilosa: boolean;
@@ -689,7 +689,7 @@ export interface PautaOficialResumoOut {
 
 export interface SessaoPautaPublicaOut {
   sessaoId: string;
-  tipoSessao: "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
+  tipoSessao: "audiencia_publica" | "especial" | "extraordinaria" | "ordinaria" | "secreta" | "solene";
   numeroSequencial: number;
   estado: "aberta" | "agendada" | "arquivada" | "encerrada" | "nao_realizada" | "suspensa";
   agendadaPara?: string | null;

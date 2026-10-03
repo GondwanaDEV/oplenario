@@ -1,7 +1,7 @@
 "use client";
 
 // Hook de mutação — POST /api/sessoes (agendar sessão). Fecha o GAP docs/20: a criação de sessão só existia
-// via API. Corpo kebab {sessao-legislativa-id, tipo-sessao, modalidade?, agendada-para?}; devolve o
+// via API. Corpo kebab {sessao-legislativa-id, tipo-sessao, modalidade?, agendada-para?, audiencia?}; devolve o
 // SessaoOut criado (com id) para a tela linkar direto ao comando da sessão. Papel `secretario` no backend.
 // Mirror do idioma de `use-meu-voto.ts` (POST simples + estado + erro).
 
@@ -18,6 +18,8 @@ export interface AgendarArgs {
   tipoSessao: string;
   modalidade?: string | null;
   agendadaPara?: string | null; // ISO-8601 ou null
+  /** ADR-0021 A1: o bloco da audiência pública (já em kebab, de `validarAudiencia`) — só com `audiencia_publica`. */
+  audiencia?: Record<string, string | number> | null;
 }
 
 export type ResultadoAgendar = { ok: true; sessao: SessaoOut } | { ok: false; erro: string };
@@ -49,6 +51,7 @@ export function useAgendarSessao(token: string | null) {
     };
     if (args.modalidade) corpo.modalidade = args.modalidade;
     if (args.agendadaPara) corpo["agendada-para"] = args.agendadaPara;
+    if (args.audiencia) corpo.audiencia = args.audiencia;
 
     try {
       const r = await apiFetch("/api/sessoes", {

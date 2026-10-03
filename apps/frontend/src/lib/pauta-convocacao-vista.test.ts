@@ -83,12 +83,13 @@ describe("sessoesAgendadas / selecionarSessaoAlvo", () => {
 });
 
 describe("formatarTipoSessao / formatarTituloSessao", () => {
-  it("mapeia os 5 tipos conhecidos (logic/tipos-sessao no backend)", () => {
+  it("mapeia os 6 tipos conhecidos (logic/tipos-sessao no backend)", () => {
     expect(formatarTipoSessao("ordinaria")).toBe("Ordinária");
     expect(formatarTipoSessao("extraordinaria")).toBe("Extraordinária");
     expect(formatarTipoSessao("solene")).toBe("Solene");
     expect(formatarTipoSessao("secreta")).toBe("Secreta");
     expect(formatarTipoSessao("especial")).toBe("Especial");
+    expect(formatarTipoSessao("audiencia_publica")).toBe("Audiência pública");
   });
 
   it("tipo desconhecido -> capitaliza o texto cru (fail-closed, não esconde)", () => {

@@ -46,7 +46,8 @@ export function avisoCorteSessoes(sessoes: SliSessaoOut[], sessoesTotal: number)
   );
 }
 
-// ---------- rótulos de tipo de sessão (os 5 valores fechados de logic/tipos-sessao no backend;
+// ---------- rótulos de tipo de sessão (os 6 valores fechados de logic/tipos-sessao no backend, com a audiência
+// pública da ADR-0021;
 // fail-closed — tipo fora do mapa cai no texto cru capitalizado, nunca é escondido) ----------
 
 const TIPO_SESSAO_ROTULO: Record<string, string> = {
@@ -55,6 +56,7 @@ const TIPO_SESSAO_ROTULO: Record<string, string> = {
   solene: "Solene",
   secreta: "Secreta",
   especial: "Especial",
+  audiencia_publica: "Audiência pública",
 };
 
 export function formatarTipoSessao(tipoSessao: string): string {
