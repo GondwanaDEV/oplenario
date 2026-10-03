@@ -225,6 +225,7 @@ describe("as duas portas", () => {
     mockar({ "GET /api/comunicados/c1": { corpo: comunicado({ substitui: { id: "c0", protocolo: "COM-2026-000100" } }) } });
     render(<PaginaComunicadoVereador />);
     expect((await screen.findByRole("link", { name: "← Avisos" })).getAttribute("href")).toBe("/notificacoes?token=tok");
-    expect(screen.getByRole("link", { name: "COM-2026-000100" }).getAttribute("href")).toBe("/notificacoes/c0?token=tok");
+    // "← Avisos" já existe no "Carregando…": só o link do substituído prova que o comunicado chegou — esperar por ele
+    expect((await screen.findByRole("link", { name: "COM-2026-000100" })).getAttribute("href")).toBe("/notificacoes/c0?token=tok");
   });
 });
