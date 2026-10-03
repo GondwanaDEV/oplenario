@@ -88,20 +88,28 @@
 (def estados-votacao-terminais #{"encerrada" "anulada"})
 (def tipos-voto #{"sim" "nao" "abstencao"})
 
+(defn votos-necessarios
+  "Quantos votos SIM o quorum sobre a COMPOSICAO da Casa exige (`base-membros` = N). Aritmetica EXATA em INTEIROS (a
+  armadilha do quorum: 2/3*10 em float = 6.6666 e o floor erraria; `quot` acerta): ceil(p*N/q) = (quot (+ p*N (dec q)) q).
+  nil para a maioria simples, que nao tem numero fixo (olha os votos validos). E' a MESMA aritmetica que decide o
+  resultado (`resultado-votacao`) e a que a ficha das contas mostra ('eram precisos 14', ADR-0021)."
+  [quorum-tipo base-membros]
+  (case quorum-tipo
+    "maioria_simples"         nil
+    "maioria_absoluta"        (inc (quot base-membros 2))       ; > metade da Casa
+    "maioria_qualificada_2_3" (quot (+ (* 2 base-membros) 2) 3) ; ceil(2N/3)
+    "maioria_qualificada_3_5" (quot (+ (* 3 base-membros) 4) 5) ; ceil(3N/5)
+    (throw (ex-info "quorum-tipo desconhecido" {:quorum-tipo quorum-tipo}))))
+
 (defn resultado-votacao
-  "VERIFICACAO do quorum (§22.4 eixo G) — devolve 'aprovada' | 'rejeitada'. Aritmetica EXATA em INTEIROS
-  (a armadilha do quorum: 2/3*10 em float = 6.6666 e o floor erraria; `quot` acerta). `base-membros` = a
-  composicao da Casa (p/ as maiorias absoluta/qualificada); a maioria simples olha os votos validos.
-  ceil(p*N/q) = (quot (+ p*N (dec q)) q). NOTA: a BASE exata por tipo (Casa vs votos validos vs presentes)
-  e' detalhe REGIMENTAL — default defensavel aqui; refinavel com o especialista (como os templates [GAP])."
+  "VERIFICACAO do quorum (§22.4 eixo G) — devolve 'aprovada' | 'rejeitada'. `base-membros` = a composicao da Casa (p/ as
+  maiorias absoluta/qualificada, `votos-necessarios`); a maioria simples olha os votos validos. NOTA: a BASE exata por
+  tipo (Casa vs votos validos vs presentes) e' detalhe REGIMENTAL — default defensavel aqui; refinavel com o
+  especialista (como os templates [GAP])."
   [quorum-tipo {:keys [sim nao]} base-membros]
-  (let [aprovado?
-        (case quorum-tipo
-          "maioria_simples"         (> sim nao)                                ; mais sim que nao (validos)
-          "maioria_absoluta"        (>= sim (inc (quot base-membros 2)))       ; > metade da Casa
-          "maioria_qualificada_2_3" (>= sim (quot (+ (* 2 base-membros) 2) 3)) ; ceil(2N/3)
-          "maioria_qualificada_3_5" (>= sim (quot (+ (* 3 base-membros) 4) 5)) ; ceil(3N/5)
-          (throw (ex-info "quorum-tipo desconhecido" {:quorum-tipo quorum-tipo})))]
+  (let [aprovado? (if-let [minimo (votos-necessarios quorum-tipo base-membros)]
+                    (>= sim minimo)
+                    (> sim nao))]                               ; maioria simples: mais sim que nao (validos)
     (if aprovado? "aprovada" "rejeitada")))
 
 ;; --- eixo G / F4 Slice 3: politica da camada FINA p/ DIRIGIR a votacao ao vivo (§22.5 eixo E) ---

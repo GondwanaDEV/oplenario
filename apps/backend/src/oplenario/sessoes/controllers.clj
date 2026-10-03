@@ -446,13 +446,21 @@
   404), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed). O Repo faz get-or-create do container 1:1 +
   insere o item na MESMA tx (a pauta e' transparente — a borda adiciona item A SESSAO, nao a um container que o
   cliente cria a parte). `ordem` e' numerada server-side (max+1). created-by = o ator. Devolve {:id :ordem} ou
-  nil (sessao inexistente)."
-  [repo-sessoes ator m]
-  (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
-    (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
-    (exigir-sessao-aberta! sessao)
-    (repo/adicionar-item-na-sessao! repo-sessoes (:ente-id ator)
-      (assoc m :id (random-uuid) :created-by (:identidade-id ator)))))
+  nil (sessao inexistente).
+
+  ADR-0021 (B3): `motivo-nao-pautavel` e' a costura do host com `legislativo` — (fn [ente-id proposicao-id] -> nil |
+  motivo). O PDL das contas so' entra na pauta depois que o prazo de defesa vence ou a defesa e' juntada: com motivo,
+  `:conflito/materia-nao-pautavel` (409, o motivo em palavras). Sem o seam, nenhuma materia e' barrada aqui."
+  ([repo-sessoes ator m] (adicionar-item-pauta repo-sessoes nil ator m))
+  ([repo-sessoes motivo-nao-pautavel ator m]
+   (when-let [sessao (repo/buscar-sessao repo-sessoes (:ente-id ator) (:sessao-id m))]
+     (authz/check! ator :sessao/editar-pauta sessao logic/pode-ver-sessao?)
+     (exigir-sessao-aberta! sessao)
+     (when-let [motivo (and motivo-nao-pautavel (:proposicao-id m)
+                            (motivo-nao-pautavel (:ente-id ator) (:proposicao-id m)))]
+       (throw (ex-info motivo {:tipo :conflito/materia-nao-pautavel :proposicao-id (:proposicao-id m)})))
+     (repo/adicionar-item-na-sessao! repo-sessoes (:ente-id ator)
+       (assoc m :id (random-uuid) :created-by (:identidade-id ator))))))
 
 (defn- item-desta-sessao
   "Resolve o item `item-id` GARANTINDO que pertence A pauta da sessao do path (anti confused-deputy: sem isto, um

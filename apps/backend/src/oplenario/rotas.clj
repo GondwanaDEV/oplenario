@@ -31,6 +31,7 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
+            [oplenario.legislativo.diplomat.http.contas :as contas-http]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
             [oplenario.mcp :as mcp]
             [oplenario.normas.components.repositorio :as repo-normas-comp]
@@ -625,6 +626,12 @@
                                    :cargo-na-mesa cargo-na-mesa-fn
                                    ;; ADR-0020 fatia 2: o aviso automatico da pauta publicada aos vereadores
                                    :vereadores-a-avisar vereadores-a-avisar-fn
+                                   ;; ADR-0021 (B3): o PDL das contas so' entra na pauta depois do prazo de defesa (ou
+                                   ;; da defesa juntada) — a pauta pergunta ao `legislativo` pelo host (§22.10)
+                                   :motivo-nao-pautavel (fn [ente-id proposicao-id]
+                                                          (when repo-legislativo
+                                                            (contas-http/motivo-nao-pautavel repo-legislativo relogio-producao
+                                                                                             ente-id proposicao-id)))
                                    ;; Etapa 5 fatia 1: `dados-da-casa-fn` chega pronto para a Fatia 5 (as
                                    ;; rotas HTTP da folha) fiar o cabecalho — sem rota nova nesta fatia,
                                    ;; `sessoes-http/rotas` ainda nao destrutura a chave (chave extra e'
@@ -692,6 +699,17 @@
                                        :normas-publicadas? (fn [ente-id] (normas-da-casa-publicadas? repo-normas ente-id))
                                        :registro registro-fatos
                                        :relogio relogio-producao}))
+        ;; ADR-0021 Parte B: o julgamento das contas (legislativo). A comissao autora do PDL e a composicao do quorum vem de
+        ;; cadastros pelos MESMOS seams da tela do parecer e do encerramento da votacao (§22.10).
+        (into (contas-http/rotas {:auth auth :repo-legislativo repo-legislativo :objeto-store objeto-store
+                                  :relogio relogio-producao :membros-da-casa membros-da-casa
+                                  :resolver-municipio resolver-municipio
+                                  :comissoes-vigentes (fn [ente-id]
+                                                        (repo-cadastros-comp/comissoes-vigentes
+                                                          repo-cadastros ente-id
+                                                          (tempo/hoje relogio-producao tempo/zona-civil-padrao)))
+                                  :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
+                                  :casa-existe? (fn [ente-id] (some? (info-ente ente-id)))}))
         ;; Faixa A / A.5: a busca intra-camara (host: cruza integracao-ia, legislativo e sessoes).
         (into (busca/rotas {:auth auth :seams (busca/seams {:ia ia :repo-legislativo repo-legislativo
                                                              :repo-sessoes repo-sessoes})}))
@@ -846,6 +864,8 @@
                                                (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
                        :nomes-de-vereadores (fn [ente-id ids]
                                               (repo-cadastros-comp/nomes-de-vereadores repo-cadastros ente-id ids))
+                       ;; ADR-0021: o quorum das contas (a composicao de hoje) na ficha que o agente le
+                       :membros-da-casa membros-da-casa
                        :relogio relogio-producao
                        :propor (propostas/propositor repo-integracao-ia relogio-producao)
                        :marcar-terceiro (propostas/marcador-de-terceiro repo-integracao-ia)}]

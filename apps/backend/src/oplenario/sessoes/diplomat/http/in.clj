@@ -462,18 +462,20 @@
   proposicao-id? | texto-descricao?} INCL. a FK-por-tipo (-> 400 na borda); o controller carrega+autoriza a
   sessao e adiciona o item (get-or-create do container 1:1 + insere, atomico); adapters/out projeta o recibo
   {:id :ordem}. nil (sessao inexistente) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (ledger
-  Fase 8 achado #4: sessao ENCERRADA aceitava item de pauta novo); sucesso -> 201 (cria)."
-  [repo-sessoes]
+  Fase 8 achado #4: sessao ENCERRADA aceitava item de pauta novo); sucesso -> 201 (cria). ADR-0021: o PDL das contas
+  ainda sem prazo de defesa vencido nem defesa juntada (`:conflito/materia-nao-pautavel`) -> 409 com o motivo."
+  [repo-sessoes motivo-nao-pautavel]
   (fn [req]
     (let [ator (:ator req)
           m    (adapters-in-pauta/adicionar-item->dominio (get-in req [:path-params :id]) (:json-params req))]
       (try
-        (if-let [recibo (controllers/adicionar-item-pauta repo-sessoes ator m)]
+        (if-let [recibo (controllers/adicionar-item-pauta repo-sessoes motivo-nao-pautavel ator m)]
           (http/json-resposta 201 (adapters-out-pauta/recibo-item-adicionado->wire recibo))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
-            (resposta-conflito-sessao-fechada e)
+          (case (:tipo (ex-data e))
+            :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
+            :conflito/materia-nao-pautavel (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- reordenar-item-handler
@@ -1229,7 +1231,9 @@
            ;; sem `cargo-na-mesa` a regra de cargo (presidente/1o secretario/Mesa) nao autoriza ninguem (fail-closed).
            situacao-de-parecer cargo-na-mesa
            ;; ADR-0020 fatia 2: os vereadores que recebem o aviso da pauta publicada (host). Opcional: sem ele, sem aviso.
-           vereadores-a-avisar]}]
+           vereadores-a-avisar
+           ;; ADR-0021 (B3): se a proposicao pode entrar na pauta (o PDL das contas, pelo `legislativo`). Opcional.
+           motivo-nao-pautavel]}]
   ;; ASSERCAO DE BOOT do seam — o carry que as revisoes das Fatias 1 e 2 registraram DUAS vezes e que a
   ;; Fatia 3, que e' quem finalmente destrutura a chave, nao tinha. O mapa que `rotas.clj` passa aqui NAO e'
   ;; `:closed`: uma chave com o nome errado (`:roster-da-casa-em-data`, um typo num refactor) destruturaria
@@ -1401,7 +1405,7 @@
      :route-name :sessoes/registrar-incidente]
     ["/sessoes/:id/pauta" :get [auth (pauta-handler repo-sessoes resumir-proposicoes)] :route-name :sessoes/pauta]
     ["/sessoes/:id/pauta/itens" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (adicionar-item-handler repo-sessoes)]
+     [auth (it/exige-papel "secretario") it/corpo-json (adicionar-item-handler repo-sessoes motivo-nao-pautavel)]
      :route-name :sessoes/adicionar-item-pauta]
     ["/sessoes/:id/pauta/itens/:item-id" :patch
      [auth (it/exige-papel "secretario") it/corpo-json (reordenar-item-handler repo-sessoes)]
