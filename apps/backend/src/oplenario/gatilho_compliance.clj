@@ -5,8 +5,8 @@
   AS DUAS REGRAS (regra e' DADO, Inv. 4 — o texto abaixo e' o que vai ao catalogo do motor e e' o que se avalia):
     - `audiencia_metas_fiscais` (federal, aviso, LRF art. 9 §4): a audiencia de metas fiscais do quadrimestre, provada
       pelo fato `audiencia_publica_realizada` (sessoes). A competencia e' o ULTIMO mes do quadrimestre (04, 08, 12);
-      a janela e' `fim_do_mes_seguinte(competencia)`, como a ADR fixou. `[GAP]` de conteudo: para o 3o quadrimestre a
-      LRF diz 'fevereiro' e a janela da' 31 de janeiro — o aviso chega um mes ANTES do prazo legal, nunca depois.
+      a janela e' `prazo_metas_fiscais_lrf(competencia)` — o calendario da propria LRF: fim de maio, de setembro e de
+      fevereiro do ano seguinte.
     - `julgamento_contas_prefeito` (regimento_tenant, aviso, CF art. 31 §2 + LOM): as contas do Prefeito julgadas
       (`contas_julgadas`, legislativo) ate' o prazo congelado no registro da prestacao (`prazo_julgamento_contas`).
 
@@ -23,7 +23,8 @@
   Depois de avaliar, varre os vencimentos (a unica transicao que evento nao dispara, §22.7.7 S1).
 
   O QUE AVALIA, por Casa: (a) as competencias de metas fiscais dos quadrimestres JA' TERMINADOS cujo prazo e' de no
-  maximo 365 dias atras (o quadrimestre que acabou e os recentes); (b) cada prestacao `governo_prefeito`. A obrigacao
+  maximo 365 dias atras (o quadrimestre que acabou e os recentes) E nao anterior ao vinculo da Casa a regra — a Casa
+  que chega hoje nao nasce com 'vencidas' de antes de usar o sistema; (b) cada prestacao `governo_prefeito`. A obrigacao
   ja' cumprida (ou dispensada/cancelada) nao e' reavaliada; na leitura do painel, a obrigacao aberta avaliada ha' menos
   de `intervalo-sob-demanda-min` tambem nao — a prova append-only nao ganha uma linha a cada recarga da tela.
 
@@ -35,7 +36,8 @@
             [oplenario.legislativo.components.repositorio-contas :as repo-contas]
             [oplenario.motor.api :as motor]
             [oplenario.motor.components.repositorio :as repo-motor]
-            [oplenario.motor.nucleo :as nuc])
+            [oplenario.motor.nucleo :as nuc]
+            [oplenario.kernel.tempo :as tempo])
   (:import (java.nio.charset StandardCharsets)
            (java.time Duration Instant LocalDate YearMonth)
            (java.util UUID)
@@ -56,7 +58,7 @@
        "aplica_quando: verdadeiro\n"
        "exige: audiencia_publica_realizada(\"metas_fiscais\", competencia)\n"
        "prazo:\n"
-       "  janela: fim_do_mes_seguinte(competencia)\n"
+       "  janela: prazo_metas_fiscais_lrf(competencia)\n"
        "  a_partir_de: fim_de(competencia)\n"
        "severidade: aviso\n"
        "referencia_normativa: \"LRF art. 9 §4\"\n"))
@@ -92,21 +94,28 @@
 ;; ---------------- puro: quais competencias, que objeto ----------------
 
 (defn- fim-de ^LocalDate [{:keys [ano mes]}] (.atEndOfMonth (YearMonth/of (int ano) (int mes))))
-(defn- fim-do-mes-seguinte ^LocalDate [{:keys [ano mes]}]
-  (.atEndOfMonth (.plusMonths (YearMonth/of (int ano) (int mes)) 1)))
+(defn prazo-lrf
+  "O prazo da LRF art. 9 §4 para o quadrimestre que fecha em `mes` (4, 8, 12) — o MESMO calendario do builtin
+  `prazo_metas_fiscais_lrf` do motor (aqui so' para escolher QUAIS competencias avaliar; a janela que vale e' a do motor)."
+  ^LocalDate [{:keys [ano mes]}]
+  (case (int mes)
+    4 (.atEndOfMonth (YearMonth/of (int ano) 5))
+    8 (.atEndOfMonth (YearMonth/of (int ano) 9))
+    12 (.atEndOfMonth (YearMonth/of (inc (int ano)) 2))))
 
 (defn competencias-de-metas-fiscais
   "As competencias ({:ano :mes}, ultimo mes do quadrimestre: 04, 08, 12) que o gatilho avalia em `hoje`: o quadrimestre
-  ja' TERMINOU (o ultimo dia dele ficou para tras) e o prazo (`fim_do_mes_seguinte`) e' de no maximo 365 dias atras.
-  Em ordem cronologica."
-  [^LocalDate hoje]
-  (let [limite (.minusDays hoje 365)]
+  ja' TERMINOU (o ultimo dia dele ficou para tras) e o prazo (`prazo-lrf`) e' de no maximo 365 dias atras e nao e'
+  anterior a `desde` (o dia em que a Casa foi ligada a regra; nil = sem esse corte). Em ordem cronologica."
+  ([hoje] (competencias-de-metas-fiscais hoje nil))
+  ([^LocalDate hoje ^LocalDate desde]
+  (let [limite (if (and desde (.isAfter desde (.minusDays hoje 365))) desde (.minusDays hoje 365))]
     (vec (for [ano (range (- (.getYear hoje) 2) (inc (.getYear hoje)))
                mes [4 8 12]
                :let [c {:ano ano :mes mes}]
                :when (and (.isBefore (fim-de c) hoje)
-                          (not (.isBefore (fim-do-mes-seguinte c) limite)))]
-           c))))
+                          (not (.isBefore (prazo-lrf c) limite)))]
+           c)))))
 
 (defn objeto-da-competencia
   "O id do objeto sob prazo da regra de metas fiscais: DERIVADO de (Casa, regra, competencia) — nunca aleatorio, porque a
@@ -151,15 +160,23 @@
         (or (repo-motor/template-vigente repo-m chave)
             (throw (ex-info (str "regra " chave " sem versao vigente no catalogo") {:chave chave}))))))
 
-(defn- vinculo-ativo?
-  "A Casa esta' ligada a regra? Sem vinculo, cria o ativo (a regra vale para toda Casa); com vinculo, respeita o que la'
-  esta' — o opt-out com motivo nao e' desfeito por aqui."
-  [repo-m ente-id chave]
+(def ^:private zona tempo/zona-civil-padrao)
+
+(defn- dia-civil ^LocalDate [t]
+  (cond (instance? java.time.OffsetDateTime t) (.toLocalDate (.atZoneSameInstant ^java.time.OffsetDateTime t zona))
+        (instance? java.sql.Timestamp t) (LocalDate/ofInstant (.toInstant ^java.sql.Timestamp t) zona)
+        (instance? Instant t) (LocalDate/ofInstant ^Instant t zona)
+        :else nil))
+
+(defn- vinculo
+  "O vinculo da Casa a regra: {:ativa bool :desde LocalDate}. Sem vinculo, cria o ativo (a regra vale para toda Casa) e
+  `:desde` e' hoje; com vinculo, respeita o que la' esta' — o opt-out com motivo nao e' desfeito por aqui."
+  [repo-m ente-id chave ^LocalDate hoje]
   (if-let [b (repo-motor/binding-do-ente repo-m ente-id chave)]
-    (boolean (:ativa b))
+    {:ativa (boolean (:ativa b)) :desde (or (dia-civil (:criado-em b)) hoje)}
     (do (repo-motor/criar-binding! repo-m ente-id {:id (random-uuid) :ente-id ente-id :template-chave chave
                                                     :ativa true :parametros-tenant {}})
-        true)))
+        {:ativa true :desde hoje})))
 
 ;; ---------------- o gatilho ----------------
 
@@ -177,10 +194,11 @@
 
 (defn- regra-da-casa
   "{:regra <envelope> :reg-ver} da regra vigente, ou nil se a Casa esta' desligada dela."
-  [repo-m ente-id chave]
-  (let [t (garantir-template! repo-m chave)]
-    (when (vinculo-ativo? repo-m ente-id chave)
-      {:regra (nuc/carregar-envelope (:fonte-yaml t)) :reg-ver (:registry-versao-ref t)})))
+  [repo-m ente-id chave hoje]
+  (let [t (garantir-template! repo-m chave)
+        v (vinculo repo-m ente-id chave hoje)]
+    (when (:ativa v)
+      {:regra (nuc/carregar-envelope (:fonte-yaml t)) :reg-ver (:registry-versao-ref t) :desde (:desde v)})))
 
 (defn- cada!
   "Avalia cada objeto isolado: a falha de UM (dado quebrado) e' logada e nao impede os outros."
@@ -206,12 +224,12 @@
         ;; o carimbo da obrigacao e' o now() do banco: compara-se com o relogio real, nunca com o do dominio
         instante (Instant/now)
         metas (when (contains? partes :metas-fiscais)
-                (when-let [r (regra-da-casa repo-motor ente-id chave-metas-fiscais)]
-                  (cada! chave-metas-fiscais (competencias-de-metas-fiscais dia)
+                (when-let [r (regra-da-casa repo-motor ente-id chave-metas-fiscais dia)]
+                  (cada! chave-metas-fiscais (competencias-de-metas-fiscais dia (:desde r))
                          (fn [c] (avaliar-objeto! deps ente-id r objeto-competencia (objeto-da-competencia ente-id c)
                                                   {"competencia" c} dia origem instante)))))
         contas (when (and repo-legislativo (contains? partes :contas))
-                 (when-let [r (regra-da-casa repo-motor ente-id chave-contas)]
+                 (when-let [r (regra-da-casa repo-motor ente-id chave-contas dia)]
                    (cada! chave-contas
                           (->> (repo-contas/prestacoes repo-legislativo ente-id)
                                (filter #(and (= "governo_prefeito" (:tipo %)) (:prazo-julgamento-ate %)))

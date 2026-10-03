@@ -122,6 +122,14 @@
 (defn- contar [ente tabela]
   (na-casa ente #(-> (jdbc/execute-one! % [(str "select count(*) as n from " tabela " where ente_id = ?") ente]) :n long)))
 
+(defn- vincular-desde!
+  "A Casa ligada a regra de metas fiscais desde `dia` (o gatilho nao cobra prazo anterior ao vinculo)."
+  [ente dia]
+  (na-casa ente #(jdbc/execute-one! % [(str "insert into motor.compliance_regra_tenant "
+                                            "(id, ente_id, template_chave, ativa, parametros_tenant, criado_em) "
+                                            "values (?, ?, 'audiencia_metas_fiscais', true, '{}'::jsonb, ?::timestamptz)")
+                                       (random-uuid) ente (str dia "T12:00:00Z")])))
+
 (defn- obrigacao [ente template objeto-tipo objeto-id]
   (->> (repo-compliance/obrigacoes-do-objeto (:repo-compliance *deps*) ente objeto-tipo objeto-id)
        (filter #(= template (:template-chave %)))
@@ -186,13 +194,24 @@
 
 ;; ---------- o gatilho: metas fiscais ----------
 
+(deftest casa-nova-nao-nasce-com-vencidas
+  (testing "a Casa ligada a regra HOJE nao ve como vencidas as audiencias de antes de usar o sistema"
+    (let [ente (random-uuid)
+          {:keys [status corpo]} (chamar *svc* ente :get "/compliance/painel")]
+      (is (= 200 status))
+      (is (empty? (filter #(= "audiencia_metas_fiscais" (:template-chave %)) (:em-aberto corpo))))
+      (is (true? (:ativa (repo-motor/binding-do-ente (:repo-motor *deps*) ente "audiencia_metas_fiscais")))
+          "o vinculo nasce na primeira leitura; a proxima audiencia (3o quadrimestre, fevereiro) ja' sera' cobrada"))))
+
 (deftest ler-o-painel-aciona-o-gatilho-e-a-ata-cumpre
   (let [ente (random-uuid)]
-    (testing "a primeira leitura do painel materializa os tres quadrimestres terminados — vencidos (Casa nova)"
+    (vincular-desde! ente "2025-01-01")
+    (testing "a primeira leitura do painel materializa os tres quadrimestres terminados — vencidos"
       (let [{:keys [status corpo]} (chamar *svc* ente :get "/compliance/painel")
             metas-abertas (filter #(= "audiencia_metas_fiscais" (:template-chave %)) (:em-aberto corpo))]
         (is (= 200 status))
-        (is (= #{"2026-01-31" "2026-05-31" "2026-09-30"} (set (map :vence-em metas-abertas))))
+        (is (= #{"2026-02-28" "2026-05-31" "2026-09-30"} (set (map :vence-em metas-abertas)))
+            "o 3o quadrimestre de 2025 vence no fim de FEVEREIRO (LRF art. 9 §4)")
         (is (every? #(= "vencida" (:estado %)) metas-abertas))
         (is (= 3 (get-in corpo [:resumo :vencida])))))
     (testing "o catalogo nasceu: os dois templates vigentes e o vinculo ativo da Casa"
@@ -223,6 +242,7 @@
 
 (deftest gatilho-e-idempotente-e-respeita-a-casa-desligada
   (let [ente (random-uuid)
+        _ (vincular-desde! ente "2025-01-01")
         r1 (gatilho/disparar! *deps* ente {:origem "evento"})
         obr (contar ente "compliance.prazo_dominio_ativo")
         r2 (gatilho/disparar! *deps* ente {:origem "evento"})]

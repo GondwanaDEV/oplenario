@@ -1,6 +1,6 @@
 (ns oplenario.gatilho-compliance-test
   "ADR-0021 (fatia 3) — o que e' PURO no gatilho das obrigacoes legais e nas duas regras-dado: o builtin
-  `fim_do_mes_seguinte`, o quadrimestre da competencia, as duas regras passando no verificador do save time (com os
+  `prazo_metas_fiscais_lrf`, o quadrimestre da competencia, as duas regras passando no verificador do save time (com os
   fatos novos tipados no catalogo e costurados nas relacoes dos modulos), quais competencias o gatilho avalia em cada
   dia, o objeto derivado e a composicao nas rotas."
   (:require [clojure.test :refer [deftest is testing]]
@@ -17,14 +17,15 @@
 
 (defn- d [s] (LocalDate/parse s))
 
-(deftest builtin-fim-do-mes-seguinte
-  (let [f #(rt/eval-expr "fim_do_mes_seguinte(c)" {"c" (rt/competencia %1 %2)} (rt/estado) (d "2026-10-03"))]
+(deftest builtin-prazo-metas-fiscais-lrf
+  (let [f #(rt/eval-expr "prazo_metas_fiscais_lrf(c)" {"c" (rt/competencia %1 %2)} (rt/estado) (d "2026-10-03"))]
     (is (= (d "2026-05-31") (f 2026 4)) "1o quadrimestre: ate' o fim de maio")
     (is (= (d "2026-09-30") (f 2026 8)) "2o quadrimestre: ate' o fim de setembro")
-    (is (= (d "2027-01-31") (f 2026 12)) "dezembro vira o ano (literal: o mes seguinte e' janeiro)")
-    (is (= (d "2028-02-29") (f 2028 1)) "fevereiro bissexto"))
-  (is (= t/DATA (:retorno (cat/buscar-assinatura "fim_do_mes_seguinte"))))
-  (is (= "builtin" (:categoria (cat/buscar-assinatura "fim_do_mes_seguinte")))))
+    (is (= (d "2027-02-28") (f 2026 12)) "3o quadrimestre: ate' o fim de FEVEREIRO do ano seguinte (LRF art. 9 §4)")
+    (is (= (d "2028-02-29") (f 2027 12)) "fevereiro bissexto")
+    (is (thrown? clojure.lang.ExceptionInfo (f 2026 5)) "mes que nao fecha quadrimestre: lanca, nunca inventa prazo"))
+  (is (= t/DATA (:retorno (cat/buscar-assinatura "prazo_metas_fiscais_lrf"))))
+  (is (= "builtin" (:categoria (cat/buscar-assinatura "prazo_metas_fiscais_lrf")))))
 
 (deftest quadrimestre-da-competencia
   (is (= "2026-Q1" (logic-aud/referencia-do-quadrimestre {:ano 2026 :mes 4})))
@@ -63,7 +64,16 @@
     (is (some #{{:ano 2026 :mes 4}} (g/competencias-de-metas-fiscais (d "2026-05-01")))))
   (testing "o prazo de ha' exatamente 365 dias ainda entra; um dia a mais, nao"
     (is (some #{{:ano 2025 :mes 8}} (g/competencias-de-metas-fiscais (d "2026-09-30"))))
-    (is (not-any? #{{:ano 2025 :mes 8}} (g/competencias-de-metas-fiscais (d "2026-10-01"))))))
+    (is (not-any? #{{:ano 2025 :mes 8}} (g/competencias-de-metas-fiscais (d "2026-10-01")))))
+  (testing "o 3o quadrimestre vence no fim de fevereiro: em 20/02 ainda nao e' cobrado como vencido, mas ja' e' avaliado"
+    (is (= (d "2027-02-28") (g/prazo-lrf {:ano 2026 :mes 12})))
+    (is (some #{{:ano 2026 :mes 12}} (g/competencias-de-metas-fiscais (d "2027-02-20")))))
+  (testing "nada anterior ao vinculo da Casa: a Casa ligada hoje nao nasce com vencidas de antes de usar o sistema"
+    (is (= [] (g/competencias-de-metas-fiscais (d "2026-10-03") (d "2026-10-03"))))
+    (is (= [{:ano 2026 :mes 8}] (g/competencias-de-metas-fiscais (d "2026-10-03") (d "2026-07-01"))))
+    (is (= (g/competencias-de-metas-fiscais (d "2026-10-03"))
+           (g/competencias-de-metas-fiscais (d "2026-10-03") (d "2020-01-01")))
+        "vinculo antigo: vale o corte de 365 dias")))
 
 (deftest objeto-da-competencia-e-derivado
   (let [a (random-uuid) b (random-uuid)]

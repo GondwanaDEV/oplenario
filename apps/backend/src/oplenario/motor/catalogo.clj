@@ -12,7 +12,7 @@
                                                ; 3-B: +aprovada_em_votacao(ProposicaoId)->Booleano (aditivo: assinatura
                                                ; NOVA nao invalida regra ja' carimbada, entao a versao NAO bumpa — mesma
                                                ; decisao de C3. Quem REMOVER ou MUDAR uma assinatura tem de bumpar.)
-                                               ; ADR-0021 (A4/B4): +tipo PrestacaoContasId, +builtin fim_do_mes_seguinte,
+                                               ; ADR-0021 (A4/B4): +tipo PrestacaoContasId, +builtin prazo_metas_fiscais_lrf,
                                                ; +audiencia_publica_realizada, +contas_julgadas, +prazo_julgamento_contas,
                                                ; +data_recebimento_contas (todos aditivos — a versao NAO bumpa, idem)
 
@@ -62,7 +62,7 @@
          (b "fim_de" [t/COMPETENCIA] t/DATA)
          ;; ADR-0021 A4: o ultimo dia do mes SEGUINTE a competencia (04/2026 -> 31/05/2026) — o prazo da audiencia de
          ;; metas fiscais do quadrimestre. Literal: 12/2026 -> 31/01/2027 (a LRF diz fevereiro p/ o 3o quadrimestre).
-         (b "fim_do_mes_seguinte" [t/COMPETENCIA] t/DATA)
+         (b "prazo_metas_fiscais_lrf" [t/COMPETENCIA] t/DATA)
          (b "proximo_dia_util" [t/DATA] t/DATA)
          (b "soma_dias_uteis" [t/DATA t/INTEIRO] t/DATA)
          (b "arredonda_cima" [t/RACIONAL] t/INTEIRO)   ; aceita Inteiro via coerção numérica

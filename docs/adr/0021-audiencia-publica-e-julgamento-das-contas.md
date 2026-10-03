@@ -167,9 +167,10 @@ código no boot).
 
 - Fato `audiencia_publica_realizada(Texto, Competencia) → Booleano` (`sessoes`): a competência é o **último mês do
   quadrimestre** (04, 08, 12 → Q1, Q2, Q3).
-- Builtin `fim_do_mes_seguinte(Competencia) → Data`.
+- Builtin `prazo_metas_fiscais_lrf(Competencia) → Data` (o calendário da LRF: fim de maio, de setembro e de fevereiro
+  do ano seguinte).
 - Template `audiencia_metas_fiscais` (domínio federal, severidade aviso, `LRF art. 9 §4`): `exige:
-  audiencia_publica_realizada("metas_fiscais", competencia)`, janela `fim_do_mes_seguinte(competencia)`.
+  audiencia_publica_realizada("metas_fiscais", competencia)`, janela `prazo_metas_fiscais_lrf(competencia)`.
 - Template `julgamento_contas_prefeito` (domínio regimento_tenant, severidade aviso, `CF art. 31 §2 + LOM`):
   `exige: contas_julgadas(prestacao)`, janela = `prazo_julgamento_ate` da prestação (fato de data).
 - **Gatilho:** hoje nada em produção chama a avaliação. Um gatilho do host avalia, por Casa e de forma idempotente,
@@ -216,8 +217,9 @@ código no boot).
   /sessoes/:id/ata` de sessão `audiencia_publica`, `POST /contas` e o encerramento de votação (`evento`). Obrigação
   cumprida/dispensada/cancelada não é reavaliada; na leitura, a aberta avaliada há menos de 10 min também não (a prova
   append-only não ganha uma linha a cada recarga). Falha loga e segue.
-- **`[GAP]` de conteúdo:** `fim_do_mes_seguinte` dá 31/01 para o 3º quadrimestre; a LRF diz fevereiro. O aviso chega
-  um mês antes do prazo legal (nunca depois). Corrigir pede uma janela que a DSL ainda não expressa (condicional por
-  mês) ou um prazo de domínio em `motor.prazo_dominio_vigente`.
-- **Janela de avaliação:** quadrimestres terminados com prazo de até 365 dias atrás — uma Casa provisionada hoje vê
-  vencidas as audiências dos quadrimestres recentes anteriores ao uso do sistema.
+- **Prazo da LRF:** o contrato pedia `fim_do_mes_seguinte`, que daria 31/01 para o 3º quadrimestre; a LRF diz
+  fevereiro. Corrigido na integração: o builtin é `prazo_metas_fiscais_lrf` (04 → 31/05, 08 → 30/09, 12 → fim de
+  fevereiro do ano seguinte; outro mês lança).
+- **Janela de avaliação:** quadrimestres terminados com prazo de até 365 dias atrás **e não anterior ao vínculo da Casa
+  à regra** (`criado_em` do vínculo). Uma Casa que chega hoje não nasce com "vencidas" de antes de usar o sistema; a
+  primeira cobrança é a do próximo prazo. A demo data o vínculo em 01/01/2026 para mostrar o 2º quadrimestre vencido.

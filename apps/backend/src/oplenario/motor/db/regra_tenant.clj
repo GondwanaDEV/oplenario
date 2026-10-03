@@ -32,7 +32,7 @@
   [tx ente-id template-chave]
   (when-let [row (jdbc/execute-one! tx
                    (sql/format {:select [:id :ente_id :template_chave :versao_fixada_id :ativa
-                                         :motivo_desativacao :parametros_tenant]
+                                         :motivo_desativacao :parametros_tenant :criado_em]
                                 :from [:motor.compliance_regra_tenant]
                                 :where [:and [:= :ente_id ente-id] [:= :template_chave template-chave]]}))]
     (-> (comum/linha->kebab row)

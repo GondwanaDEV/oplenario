@@ -50,11 +50,18 @@
         prox (if (= mes 12) (ldate (inc ano) 1 1) (ldate ano (inc mes) 1))]
     (.minusDays ^LocalDate prox 1)))
 
-(defn- fim-do-mes-seguinte
-  "O ultimo dia do mes SEGUINTE a competencia (ADR-0021 A4): 04/2026 -> 31/05/2026; 12/2026 -> 31/01/2027."
+(defn- prazo-metas-fiscais-lrf
+  "O prazo da audiencia de metas fiscais do quadrimestre (LRF art. 9 §4: 'ate' o final dos meses de maio, setembro e
+  fevereiro'). A competencia e' o ULTIMO mes do quadrimestre: 04 -> 31/05; 08 -> 30/09; 12 -> fim de fevereiro do ano
+  seguinte (29 no bissexto). Outro mes nao e' quadrimestre: lanca (fail-closed, nunca um prazo inventado)."
   [comp]
   (let [{:keys [ano mes]} comp]
-    (fim-de (if (= mes 12) {:ano (inc ano) :mes 1} {:ano ano :mes (inc mes)}))))
+    (case (int mes)
+      4 (fim-de {:ano ano :mes 5})
+      8 (fim-de {:ano ano :mes 9})
+      12 (fim-de {:ano (inc ano) :mes 2})
+      (throw (ex-info (str "prazo_metas_fiscais_lrf: o mes " mes " nao fecha quadrimestre (4, 8 ou 12)")
+                      {:erro :runtime})))))
 
 (defn comp-chave [comp] (format "%04d-%02d" (int (:ano comp)) (int (:mes comp))))
 
@@ -219,7 +226,7 @@
       ;;      motor.compliance_regra_tenant). O motor é dono dessas tabelas — não é cross-módulo. ----
       ("hoje" "agora") (:agora ctx)
       "fim_de" (fim-de (nth args 0))
-      "fim_do_mes_seguinte" (fim-do-mes-seguinte (nth args 0))
+      "prazo_metas_fiscais_lrf" (prazo-metas-fiscais-lrf (nth args 0))
       "proximo_dia_util" (prox-dia-util (nth args 0) fer)
       "soma_dias_uteis" (soma-dias-uteis (nth args 0) (nth args 1) fer)
       "arredonda_cima" (arredonda-cima (nth args 0))
