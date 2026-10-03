@@ -108,7 +108,7 @@ describe("PaginaCalendario", () => {
     const celula24 = await screen.findByRole("gridcell", { name: /24 de junho/i });
     expect(celula24.textContent).toContain("15ª Ordinária");
     const celula29 = screen.getByRole("gridcell", { name: /29 de junho/i });
-    expect(celula29.textContent).toContain("remessa_mensal_sim");
+    expect(celula29.textContent).toContain("Remessa mensal ao SIM (TCE-CE)");
     // O dia 23 não tem evento nenhum — a célula não pode ganhar conteúdo fabricado.
     expect(screen.getByRole("gridcell", { name: /23 de junho/i }).textContent).toBe("23");
   });
@@ -117,7 +117,7 @@ describe("PaginaCalendario", () => {
     mockarRotas(tudoOk);
     render(<PaginaCalendario />);
     await waitFor(() => expect(screen.getByLabelText(/^Sessão: 15ª Sessão Ordinária/)).toBeDefined());
-    expect(screen.getByLabelText(/^Prazo: remessa_mensal_sim/)).toBeDefined();
+    expect(screen.getByLabelText(/^Prazo: Remessa mensal ao SIM \(TCE-CE\)/)).toBeDefined();
   });
 
   it("a agenda lateral lista os próximos com título completo", async () => {
@@ -217,7 +217,7 @@ describe("PaginaCalendario", () => {
     render(<PaginaCalendario />);
     await waitFor(() => expect(screen.getByText(/sessões não puderam ser carregadas/i)).toBeDefined());
     expect(screen.queryByText(/Nada agendado/i)).toBeNull();
-    expect(screen.getByText("remessa_mensal_sim")).toBeDefined();
+    expect(screen.getByText("Remessa mensal ao SIM (TCE-CE)")).toBeDefined();
   });
 
   it("Casa sem nada agendado: vazio honesto, e só quando as DUAS fontes responderam", async () => {

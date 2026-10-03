@@ -70,6 +70,15 @@ describe("OQueVence — o prazo em palavras", () => {
     expect(getByText(/vence em 15 dia\(s\)/)).toBeTruthy();
   });
 
+  it("a obrigação aparece pelo NOME (ADR-0021), não pela chave do template", () => {
+    const metas = { ...item("2026-09-30", "m"), templateChave: "audiencia_metas_fiscais" };
+    const contas = { ...item("2026-10-31", "j"), objetoTipo: "prestacao_contas", templateChave: "julgamento_contas_prefeito" };
+    const { getByText, queryByText } = render(<OQueVence vista={vista([metas, contas])} />);
+    expect(getByText("Obrigação · Audiência de metas fiscais (LRF)")).toBeTruthy();
+    expect(getByText("Obrigação · Julgamento das contas do Prefeito")).toBeTruthy();
+    expect(queryByText(/audiencia_metas_fiscais|julgamento_contas_prefeito/)).toBeNull();
+  });
+
   it("as três frases são distintas entre si na mesma lista", () => {
     const { getAllByText } = render(
       <OQueVence

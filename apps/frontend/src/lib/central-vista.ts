@@ -19,6 +19,7 @@ import { rotuloSessao } from "./inicio-vista";
 import { diaLocal, horaLocal, FUSO_DA_CASA } from "./calendario-vista";
 import { formatarData } from "./formatar-data";
 import { rotularObjetoPrazo } from "./mesa-vista";
+import { rotularObrigacao } from "./rotulos-compliance";
 import { ESTADOS_AGUARDANDO_PAUTA } from "./proposicoes-vista";
 
 // ---------------------------------------------------------------- entrada
@@ -370,7 +371,7 @@ function montarFila(e: EntradaCentral, focoId: string | null): FilaCentral {
         vence: o.venceEm,
         item: {
           id: `tce-${o.id}`, gravidade: "legal", icone: "tce",
-          titulo: `Obrigação TCE em aberto · ${o.templateChave}`, contexto: null,
+          titulo: `Obrigação em aberto · ${rotularObrigacao(o.templateChave)}`, contexto: null,
           prazo: textoPrazo(diasAte(o.venceEm, e.agoraIso)),
           acao: { rotulo: "Ver compliance", href: "/paineis/mesa" },
         },
