@@ -18,6 +18,7 @@
   `e2e/semear.sh`) pelo `demo/semear-tudo.sh` na raiz do projeto — nao tem alias proprio em `deps.edn`;
   o `-Sdeps` inline do script resolve `:extra-paths [\"demo\"]`, deixando `deps.edn` intocado."
   (:require [acervo]
+            [audiencias]
             [casa]
             [comunicados]
             [clojure.tools.logging :as log]
@@ -63,6 +64,11 @@
               ;; proposicao dele) e ANTES da reconciliacao (o protocolo COM-AAAA-NNNNNN e' um escopo numerado).
               (let [comunicados-r (comunicados/semear! sys ente identidades)]
                 (println "==> comunicados:" (comunicados/resumo comunicados-r)))
+              ;; ADR-0021: as audiencias publicas (a tematica agendada e a de metas fiscais encerrada com ata) — depois
+              ;; de `sessoes` (a mesma sessao legislativa) e ANTES da reconciliacao (o protocolo AUD-AAAA-NNNNNN e'
+              ;; um escopo numerado)
+              (let [audiencias-r (audiencias/semear! sys ente identidades)]
+                (println "==> audiencias:" (audiencias/resumo sys ente audiencias-r)))
               ;; 5a etapa: reconciliar `shared.sequencial` com a numeracao que as 4 sementes gravaram.
               ;; NAO e' zelo preventivo — e' reparo. As 4 sementes sao idempotentes POR PULAR (releem em
               ;; vez de reescrever), entao um banco que perdeu os contadores e manteve as linhas numeradas
