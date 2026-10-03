@@ -41,6 +41,11 @@ const CARTOES = [
     motivo: "Salários, diárias, contratos e a execução do orçamento da Câmara chegam numa fatia futura de transparência fiscal.",
   },
   {
+    titulo: "Contas do Prefeito e da Câmara",
+    motivo: "O parecer do Tribunal de Contas sobre cada exercício, o julgamento da Câmara e os documentos do Tribunal para baixar.",
+    rota: "contas",
+  },
+  {
     titulo: "Ouvidoria",
     motivo: "Reclamação, denúncia, elogio ou sugestão, com resposta em até 30 dias (prorrogável, Lei 13.460).",
     rota: "ouvidoria",

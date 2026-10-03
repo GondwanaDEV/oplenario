@@ -184,6 +184,18 @@ export function vazioDaLista(ehSecretaria: boolean): string {
     : "Nenhuma prestação de contas registrada nesta Casa.";
 }
 
+// ---- o portal ----
+
+/** A situação de uma prestação para o cidadão, em palavras — sem o jargão interno do rito ("pronta para pauta"). */
+export function situacaoPublica(p: Pick<PrestacaoResumo, "tipo" | "estado" | "resultado"> & { situacaoTce?: string | null }): string {
+  if (p.tipo === "gestao_camara") return p.situacaoTce?.trim() ? `No Tribunal de Contas: ${p.situacaoTce.trim()}` : "Em análise no Tribunal de Contas";
+  if (p.resultado === "parecer_rejeitado") return "Julgadas: a Câmara rejeitou o parecer do Tribunal";
+  if (p.resultado === "parecer_mantido") return "Julgadas: o parecer do Tribunal prevaleceu";
+  if (p.estado === "aguardando_notificacao" || p.estado === "prazo_de_defesa") return "Em análise na Câmara — prazo de defesa do responsável";
+  if (p.estado === "pronta_para_pauta") return "Em análise na Câmara — aguardando a votação em plenário";
+  return rotuloEstado(p.estado);
+}
+
 // ---- o formulário de registro ----
 
 export type FormNovaPrestacao = {
