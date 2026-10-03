@@ -221,7 +221,8 @@ export function Audiencia({ ente, sessaoId, sessao }: { ente: string; sessaoId: 
         ente={ente}
         sessao={sessao}
         voltarPara={hrefAudiencia(ente, sessaoId)}
-        porque="A inscrição para falar é feita em seu nome, como o gov.br o confirma — é ele que a Mesa chama na hora da fala."
+        titulo="Quero falar na audiência"
+        porque="Entre com o gov.br para se inscrever. A inscrição para falar é feita em seu nome, como o gov.br o confirma — é ele que a Mesa chama na hora da fala."
       />
     );
   } else {
