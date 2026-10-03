@@ -200,3 +200,24 @@ código no boot).
 - Pela primeira vez uma regra do motor tem gatilho em produção; o padrão serve às próximas.
 - `[GAP]` que ficam: datas de LDO/LOA/PPA, prazos de defesa e de julgamento por LOM (há padrão editável), efeito do
   vencimento do prazo de julgamento, comunicação do resultado ao TCE, contas da Mesa com deliberação.
+
+## Materialização (fatia 3 — motor)
+
+- **Fatos:** `audiencia_publica_realizada(Texto, Competencia)` em `sessoes/relacoes/audiencia.clj` (encerrada|arquivada
+  **e** com linha em `sessoes.ata`; competência fora de 04/08/12 = falso); `contas_julgadas`, `prazo_julgamento_contas`
+  e `data_recebimento_contas` (o `a_partir_de` da janela) em `legislativo/relacoes.clj`, sobre o tipo opaco novo
+  `PrestacaoContasId`. Prestação inexistente lança (fail-closed). Tudo aditivo no catálogo: a versão não sobe.
+- **Catálogo e vínculo:** garantidos pelo próprio gatilho (`oplenario.gatilho-compliance`), sem migration: o template
+  passa no verificador e é gravado `vigente` na primeira vez; a Casa ganha o vínculo ativo na primeira vez que o
+  gatilho roda para ela; o opt-out existente (com motivo) é respeitado. O gatilho avalia o `fonte_yaml` vigente do
+  catálogo, não uma cópia em código.
+- **Gatilho:** composto em `rotas.clj` sobre as rotas montadas (interceptor antes do handler da leitura; depois do
+  handler dos atos, só em 2xx): `GET /compliance/painel` e o card de `/paineis/mesa` (`sob_demanda`), `POST
+  /sessoes/:id/ata` de sessão `audiencia_publica`, `POST /contas` e o encerramento de votação (`evento`). Obrigação
+  cumprida/dispensada/cancelada não é reavaliada; na leitura, a aberta avaliada há menos de 10 min também não (a prova
+  append-only não ganha uma linha a cada recarga). Falha loga e segue.
+- **`[GAP]` de conteúdo:** `fim_do_mes_seguinte` dá 31/01 para o 3º quadrimestre; a LRF diz fevereiro. O aviso chega
+  um mês antes do prazo legal (nunca depois). Corrigir pede uma janela que a DSL ainda não expressa (condicional por
+  mês) ou um prazo de domínio em `motor.prazo_dominio_vigente`.
+- **Janela de avaliação:** quadrimestres terminados com prazo de até 365 dias atrás — uma Casa provisionada hoje vê
+  vencidas as audiências dos quadrimestres recentes anteriores ao uso do sistema.
