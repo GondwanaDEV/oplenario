@@ -30,7 +30,9 @@
                  "encaminhar_as_comissoes" "designar_relator"
                  ;; ADR-0020: os comunicados internos. O agente le a caixa SEM marcar e so' PROPOE o envio; a ciencia
                  ;; (`registrar_ciencia`) fica fora de todo conjunto: e' a prova de que a PESSOA reconheceu
-                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"}
+                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"
+                 ;; ADR-0021 Parte B: o julgamento das contas — registrar e notificar sao PROPOSTAS (a secretaria confirma)
+                 "contas_da_casa" "prestacao_de_contas" "registrar_prestacao_de_contas" "registrar_notificacao_das_contas"}
    :vereador   #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
                 "ler_dispositivo"
                 ;; B.6: o requerimento do proprio vereador — o agente so' PROPOE; ele assina na tela (ADR-0012)
@@ -38,7 +40,9 @@
                 ;; ADR-0019: o vereador le o que o juridico ja' opinou sobre a materia
                 "pareceres_juridicos_da_materia" "vereadores_da_casa"
                 ;; ADR-0020: a caixa do vereador e o comunicado que ele propoe enviar (ele confirma na tela)
-                "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"}
+                "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"
+                ;; ADR-0021 Parte B: o vereador le as contas e a ficha (quantos votos rejeitam o parecer)
+                "contas_da_casa" "prestacao_de_contas"}
    ;; B.8 (ADR-0013): o agente institucional da Casa (sem pessoa) — le a materia e as normas, e so' deixa RASCUNHO
    :institucional #{"situacao_da_materia" "buscar_dispositivos" "ler_dispositivo" "registrar_nota_tecnica"}})
 

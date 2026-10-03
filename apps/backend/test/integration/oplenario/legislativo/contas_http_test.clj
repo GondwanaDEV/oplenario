@@ -173,6 +173,13 @@
         (is (nil? (:proposicao corpo)))
         (is (= 409 (:status (chamar ente sec :post (str "/contas/" (:id corpo) "/notificacao")
                                     {:notificado-em "2026-10-01" :meio "Ofício"}))))))
+    (testing "PATCH corrige o processo e a situacao no TCE (so' as chaves presentes)"
+      (let [r (chamar ente sec :patch (str "/contas/" (:id corpo)) {:situacao-tce "Julgada regular com ressalvas"})]
+        (is (= 200 (:status r)))
+        (is (= "Julgada regular com ressalvas" (get-in r [:corpo :situacao-tce])))
+        (is (= "07345/2025-1" (get-in r [:corpo :processo-tce]))))
+      (is (= 400 (:status (chamar ente sec :patch (str "/contas/" (:id corpo)) {}))))
+      (is (= 403 (:status (chamar ente ver :patch (str "/contas/" (:id corpo)) {:processo-tce "x"})))))
     (testing "a lista mostra as duas; o vereador e o juridico leem"
       (is (= 2 (count (get-in (chamar ente ver :get "/contas") [:corpo :prestacoes]))))
       (is (= 200 (:status (chamar ente jur :get "/contas")))))))
