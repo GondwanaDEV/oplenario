@@ -15,7 +15,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import type { PautaOut, SessaoOut } from "@/lib/contrato";
-import { vistaDoQuorum, type EstadoPlenario, type PlacarVotacao } from "@/lib/plenario-reducer";
+import { exigeQuorumDaSessao, vistaDoQuorum, type EstadoPlenario, type PlacarVotacao } from "@/lib/plenario-reducer";
 import {
   DURACAO_RESULTADO_MS,
   dataDaTv,
@@ -294,7 +294,7 @@ function Miolo({
         </section>
       );
     case "em-apreciacao":
-      return apreciacao ? <EmApreciacao apreciacao={apreciacao} estado={estado} agora={agora} /> : <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} />;
+      return apreciacao ? <EmApreciacao apreciacao={apreciacao} estado={estado} agora={agora} comQuorum={exigeQuorumDaSessao(sessao)} /> : <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} comQuorum={exigeQuorumDaSessao(sessao)} />;
     case "votacao":
       return <Votacao estado={estado} />;
     case "resultado":
@@ -312,7 +312,7 @@ function Miolo({
       );
     case "em-curso":
     default:
-      return <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} />;
+      return <EmCurso estado={estado} itens={itens} agora={agora} oficial={pautaOficialTv(pauta)} comQuorum={exigeQuorumDaSessao(sessao)} />;
   }
 }
 
@@ -392,12 +392,13 @@ function CartaoQuorum({ estado }: { estado: EstadoPlenario }) {
   );
 }
 
-function EmCurso({ estado, itens, agora, oficial }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number; oficial: string | null }) {
+// `comQuorum` (ADR-0021): a audiência pública — e toda sessão com `exige-quorum = false` — não mostra o quórum.
+function EmCurso({ estado, itens, agora, oficial, comQuorum }: { estado: EstadoPlenario; itens: ItemPautaTv[]; agora: number; oficial: string | null; comQuorum: boolean }) {
   return (
     <section className="tv-miolo f-em-curso" aria-label="Sessão em curso">
       <div className="tv-coluna">
         <CartaoTribuna estado={estado} agora={agora} />
-        <CartaoQuorum estado={estado} />
+        {comQuorum && <CartaoQuorum estado={estado} />}
       </div>
       <Pauta itens={itens} rotulo="Pauta do dia" oficial={oficial} />
     </section>
@@ -406,7 +407,7 @@ function EmCurso({ estado, itens, agora, oficial }: { estado: EstadoPlenario; it
 
 /** docs/23 Fatia 4b — a matéria que a Mesa anunciou, em destaque, com a autoria; embaixo, quem fala sobre ela
  * e o quórum. Segue até a votação dela abrir (aí a fase é "votacao"). */
-function EmApreciacao({ apreciacao, estado, agora }: { apreciacao: VistaApreciacaoTv; estado: EstadoPlenario; agora: number }) {
+function EmApreciacao({ apreciacao, estado, agora, comQuorum }: { apreciacao: VistaApreciacaoTv; estado: EstadoPlenario; agora: number; comQuorum: boolean }) {
   return (
     <section className="tv-miolo f-em-apreciacao" aria-label="Matéria em apreciação" aria-live="polite">
       <div className="materia apreciacao">
@@ -421,7 +422,7 @@ function EmApreciacao({ apreciacao, estado, agora }: { apreciacao: VistaApreciac
       </div>
       <div className="apr-corpo">
         <CartaoTribuna estado={estado} agora={agora} />
-        <CartaoQuorum estado={estado} />
+        {comQuorum && <CartaoQuorum estado={estado} />}
       </div>
     </section>
   );

@@ -16,7 +16,7 @@ import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
 import { Tribuna } from "./tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
-import { vistaDoQuorum } from "@/lib/plenario-reducer";
+import { exigeQuorumDaSessao, vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
@@ -102,7 +102,7 @@ function Painel({ sessao, estado, conexao, pauta, token }: { sessao: SessaoOut; 
         <div className="cabine">
           <Palco sessao={sessao} estado={estado} pauta={pauta} />
           <aside className="rail" aria-label="Estado do plenário ao vivo">
-            <Quorum vista={vistaDoQuorum(estado)} />
+            {exigeQuorumDaSessao(sessao) && <Quorum vista={vistaDoQuorum(estado)} />}
             <Tribuna estado={estado} agora={agora} />
           </aside>
         </div>

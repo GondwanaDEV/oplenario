@@ -33,7 +33,7 @@ type Sessao = { estado: EstadoSessaoCidada; token: string | null };
 // `acessoRestritoDesde` (ADR-0018): a Casa está com o sistema restrito — o pedido foi recebido e o prazo corre.
 type Recibo = { protocolo: string; reciboEm: string; acessoRestritoDesde?: string | null };
 
-const IconeEscudo = () => (
+export const IconeEscudo = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
     <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" />
   </svg>
@@ -56,7 +56,7 @@ export function Hero({ rotulo, titulo, texto, lei }: { rotulo: string; titulo: s
 }
 
 // O que ocupa o lugar do formulário quando a sessão não serve para escrever aqui.
-function Portao({ ente, sessao, voltarPara, porque }: { ente: string; sessao: Sessao; voltarPara: string; porque: string }) {
+export function Portao({ ente, sessao, voltarPara, porque }: { ente: string; sessao: Sessao; voltarPara: string; porque: string }) {
   if (sessao.estado === "carregando") return <div className="pf-card" aria-busy="true" />;
   if (sessao.estado === "outra-casa") {
     return (
@@ -130,7 +130,7 @@ function ReciboProtocolo({
   );
 }
 
-function Campo({
+export function Campo({
   id,
   rotulo,
   obrigatorio,
@@ -179,7 +179,7 @@ function useFormulario(token: string | null) {
   return { submeter, recibo, enviando: estado === "enviando", mensagem: falta ?? erro };
 }
 
-function Alerta({ mensagem }: { mensagem: string | null }) {
+export function Alerta({ mensagem }: { mensagem: string | null }) {
   return mensagem ? (
     <p className="form-erro" role="alert">
       {mensagem}

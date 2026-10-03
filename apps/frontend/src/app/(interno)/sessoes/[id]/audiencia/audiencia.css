@@ -1,0 +1,48 @@
+/* A Mesa da audiência pública (/sessoes/:id/audiencia, ADR-0021). Bloco, cronômetro, fila e mensagens vêm de
+   conduzir.css (a mesma família visual do Comando da Mesa e da tribuna) — aqui só o que é desta superfície. */
+.mesa-audiencia {
+  display: grid; gap: clamp(1rem, 2.4vw, 1.6rem); align-content: start;
+  padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem;
+}
+.ma-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); margin: 0 0 0.6rem; }
+
+.ma-dados {
+  margin: 0; padding: 1.1rem; display: grid; gap: 0.8rem 1.2rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.ma-dados > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.ma-dados .ma-largo { grid-column: 1 / -1; }
+.ma-dados dt { font-size: var(--t-12); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.ma-dados dd { margin: 0; font-size: var(--t-13); color: var(--texto); overflow-wrap: anywhere; }
+.ma-dados dd.mono { font-family: var(--mono); }
+.ma-rodape { margin: 0; padding: 0 1.1rem 1.1rem; font-size: var(--t-13); color: var(--texto-2); }
+.ma-rodape a { color: var(--marca); font-weight: 600; }
+
+.ma-avisos:empty { display: none; }
+.ma-avisos .aviso-ok { margin: 0; }
+.ma-nota { margin: 0 0 0.8rem; }
+
+/* quem já saiu da fila (falou, ausente, desistiu) recua — o estado vem escrito no chip, a cor não é o único sinal */
+.fila-item.ma-fora { background: var(--surface); }
+.fila-item.ma-fora .fila-quem b { color: var(--texto-2); }
+
+.ma-form { display: grid; gap: 0.9rem; }
+.ma-form .nota-mesa { max-width: 70ch; }
+.ma-linha { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.9rem; }
+.mesa-audiencia .campo { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.mesa-audiencia .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.mesa-audiencia .campo input,
+.mesa-audiencia .campo select {
+  padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13); min-width: 0;
+}
+.mesa-audiencia .campo input:focus-visible,
+.mesa-audiencia .campo select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.ma-inline { display: flex; gap: 0.5rem; align-items: center; }
+.ma-inline input { flex: 1 1 auto; }
+.ma-inscricoes {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.8rem 1rem; flex-wrap: wrap;
+  padding-top: 0.8rem; border-top: 1px dashed var(--linha);
+}
+.ma-inscricoes p { margin: 0; font-size: var(--t-13); color: var(--texto-2); max-width: 60ch; }
+.ma-inscricoes b { color: var(--texto); }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
@@ -961,5 +961,14 @@ describe("pauta.item-anunciado (docs/23 Fatia 4b)", () => {
   it("um anúncio novo substitui o anterior", () => {
     const e = aplicarEvento(aplicarEvento(aberta(), anuncio(1, "i22")), anuncio(2, "i31"));
     expect(e.anuncio?.itemId).toBe("i31");
+  });
+});
+
+describe("exigeQuorumDaSessao (ADR-0021)", () => {
+  it("a capability manda; sem ela, vale o backfill (= delibera)", () => {
+    expect(exigeQuorumDaSessao({ delibera: true, "exige-quorum": false })).toBe(false);
+    expect(exigeQuorumDaSessao({ delibera: false, "exige-quorum": true })).toBe(true);
+    expect(exigeQuorumDaSessao({ delibera: true })).toBe(true);
+    expect(exigeQuorumDaSessao({ delibera: false })).toBe(false);
   });
 });
