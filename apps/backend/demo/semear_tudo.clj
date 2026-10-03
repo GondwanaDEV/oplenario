@@ -25,6 +25,7 @@
             [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [compliance :as compliance-demo]
+            [obrigacoes-legais]
             [oplenario.config :as config]
             [oplenario.migracao :as migracao]
             [oplenario.sistema :as sistema]
@@ -93,6 +94,9 @@
               (let [compliance-r (compliance-demo/semear! sys ente)]
                 (println "==> compliance:" (pr-str (select-keys compliance-r
                                                                 [:template :resumo :vencidas-pelo-sweep])))
+                ;; 7a etapa (ADR-0021 fatia 3): as obrigacoes legais — o gatilho de producao avalia a audiencia de
+                ;; metas fiscais (a de 2026-Q1 cumprida pela audiencia de `audiencias`) e o julgamento das contas.
+                (println "==> obrigacoes legais:" (pr-str (obrigacoes-legais/semear! sys ente)))
                 (println "==> semear-tudo! OK — ente" ente)
                 {:ente ente :casa casa-r :acervo acervo-r :sessoes sessoes-r
                  :participacao participacao-r :compliance compliance-r})))))
