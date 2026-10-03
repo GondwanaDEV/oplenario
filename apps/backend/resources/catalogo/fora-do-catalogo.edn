@@ -217,4 +217,21 @@
  :comunicacao/anexar {:categoria :so-tela
                       :motivo "subir um arquivo (multipart) e' da tela, junto do envio; o agente nao anexa arquivo"}
  :comunicacao/baixar-anexo {:categoria :so-tela
-                            :motivo "o download binario do anexo, na tela de quem pode ver o comunicado"}}
+                            :motivo "o download binario do anexo, na tela de quem pode ver o comunicado"}
+ ;; ---------- ADR-0021 Parte B: o julgamento das contas (registrar e notificar sao entradas do catalogo) ----------
+ :legislativo/editar-contas {:categoria :so-tela
+                             :motivo "corrigir o numero do processo ou a situacao no TCE e' da ficha da prestacao, conferindo o documento"}
+ :legislativo/anexar-documento-contas {:categoria :so-tela
+                                       :motivo "subir o PDF do parecer, da notificacao ou da defesa (multipart) e' da tela; o agente nao anexa arquivo"}
+ :legislativo/baixar-documento-contas {:categoria :so-tela
+                                       :motivo "o download binario do documento da prestacao, na ficha"}
+ :legislativo/contas-da-proposicao {:categoria :so-tela
+                                    :motivo "o painel de votacao trava quorum e pergunta pela materia; o agente le a ficha por prestacao_de_contas"}
+ :legislativo/parametros-de-contas {:categoria :so-tela
+                                    :motivo "os prazos de defesa e de julgamento da Casa, lidos na administracao e na ficha"}
+ :legislativo/salvar-parametros-de-contas {:categoria :so-tela
+                                           :motivo "os prazos das contas sao regra da Casa, do admin_ente, na tela de administracao; o agente nunca muda regra"}
+ :legislativo/contas-publicas {:categoria :so-tela
+                               :motivo "as prestacoes de contas e os resultados no portal do cidadao (anonimo)"}
+ :legislativo/documento-contas-publico {:categoria :so-tela
+                                        :motivo "o download publico dos documentos do TCE no portal do cidadao (anonimo)"}}

@@ -90,7 +90,9 @@
         (is (= #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
                  "ler_dispositivo" "comissoes_da_casa" "vereadores_da_casa" "pareceres_juridicos_da_materia"
                  ;; ADR-0020: as leituras de comunicado (o envio e' ato, fora desta credencial so' de leitura)
-                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado"}
+                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado"
+                 ;; ADR-0021: as leituras das contas (registrar e notificar sao ato)
+                 "contas_da_casa" "prestacao_de_contas"}
                (set (map #(get % "name") ferramentas))))
         (is (= "object" (get-in situacao ["inputSchema" "type"])) "a regra entre campos fica no servidor")
         (is (contains? (get-in situacao ["inputSchema" "properties"]) "sequencial"))

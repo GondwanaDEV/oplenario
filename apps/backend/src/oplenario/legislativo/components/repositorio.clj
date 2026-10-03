@@ -11,6 +11,7 @@
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
+            [oplenario.legislativo.components.repositorio-contas :as repo-contas]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
@@ -26,6 +27,7 @@
             [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parametro-parecer :as parametro-parecer]
+            [oplenario.legislativo.db.prestacao-contas :as prestacao-contas]
             [oplenario.legislativo.db.parecer-juridico :as parecer-juridico]
             [oplenario.legislativo.db.parecer-nota :as parecer-nota]
             [oplenario.legislativo.db.situacao-materia :as situacao-materia]
@@ -45,6 +47,7 @@
             [oplenario.legislativo.diplomat.producers :as producers]
             [oplenario.legislativo.gerador-publicacao :as ger-pub]
             [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.logic.contas :as logic-contas]
             [oplenario.legislativo.logic.notificacao :as logic-notif])
   (:import (java.security MessageDigest)
            (java.util UUID)
@@ -465,6 +468,15 @@
        :autor-id (some-> (:autor-id p) str)})
     (cond-> r assinatura (assoc :assinatura assinatura))))
 
+(defn- hidratar-prestacao
+  "ADR-0021: a prestacao com os documentos, o PDL (rotulo e estado) e o placar da votacao que a julgou — numa tx."
+  [tx ente-id p]
+  (when p
+    (assoc p
+           :documentos (prestacao-contas/documentos tx ente-id (:id p))
+           :proposicao (some->> (:proposicao-id p) (prestacao-contas/proposicao-resumo tx ente-id))
+           :votacao (some->> (:votacao-id p) (prestacao-contas/votacao-totais tx ente-id)))))
+
 (defrecord RepoLegislativoPg [datasource bus]
   RepoLegislativo
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))
@@ -830,6 +842,9 @@
   (abrir-votacao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
+        ;; ADR-0021 (B2): a materia de CONTAS so' abre votacao que passe na regra da classe (`contas_prefeito`, guarda
+        ;; DSL avaliada pelo motor, com o `:registro` que o controller traz) — na MESMA tx do INSERT.
+        (prestacao-contas/conferir-regra-de-votacao! tx ente-id (:registro m) m)
         (let [r (votacao/abrir! tx (assoc m :ente-id ente-id))]
           (when (:sessao-id m)
             (producers/emitir-votacao-aberta! bus tx ente-id
@@ -931,6 +946,8 @@
       (fn [tx]
         (let [r (votacao/encerrar! tx (assoc m :ente-id ente-id))
               v (votacao/buscar tx ente-id (:id m))]  ; snapshot persistido: sessao-id + totais + resultado
+          ;; ADR-0021: se esta e' a votacao do PDL de uma prestacao de contas, o julgamento fica gravado NA MESMA tx
+          (prestacao-contas/registrar-julgamento! tx ente-id v)
           (when (:sessao-id v)
             (producers/emitir-votacao-encerrada! bus tx ente-id
               (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id v) :resultado (:resultado v)
@@ -1217,7 +1234,72 @@
   (situacao-de-parecer-das-materias [this ente-id ids]
     (if (empty? ids)
       {}
-      (transacao this ente-id #(situacao-materia/situacao-de-parecer % ente-id ids)))))
+      (transacao this ente-id #(situacao-materia/situacao-de-parecer % ente-id ids))))
+
+  ;; ADR-0021 Parte B — o julgamento das contas (protocolo proprio, mesmo motivo do RepoJuridico)
+  repo-contas/RepoContas
+  (registrar-prestacao! [this ente-id m]
+    (try
+      (transacao this ente-id
+        (fn [tx]
+          (when (prestacao-contas/existe? tx ente-id (:tipo m) (:exercicio m))
+            (throw (ex-info "prestacao ja' registrada" {:tipo :conflito/prestacao-duplicada})))
+          (let [governo? (logic-contas/governo? m)
+                ;; o PDL nasce ANTES da prestacao, na mesma tx: se a prestacao for recusada, o numero volta (gapless)
+                pdl (when governo? (protocolar-na-tx! bus tx ente-id (:pdl m)))
+                {:keys [prazo-julgamento-dias]} (logic-contas/parametros-efetivos (prestacao-contas/parametros tx ente-id))
+                id (prestacao-contas/inserir!
+                     tx (cond-> (-> m (dissoc :pdl) (assoc :id (random-uuid) :ente-id ente-id))
+                          governo? (assoc :proposicao-id (:id pdl)
+                                          :prazo-julgamento-ate (logic-contas/prazo-julgamento-ate
+                                                                  (:recebida-em m) prazo-julgamento-dias))))]
+            (hidratar-prestacao tx ente-id (prestacao-contas/buscar tx ente-id id)))))
+      (catch PSQLException e
+        ;; corrida: duas secretarias registrando o mesmo exercicio -> o UNIQUE (ente, tipo, exercicio) decide
+        (if (and (= "23505" (.getSQLState e)) (re-find #"prestacao_contas_ente_id_tipo_exercicio" (str (.getMessage e))))
+          (throw (ex-info "prestacao ja' registrada" {:tipo :conflito/prestacao-duplicada}))
+          (throw e)))))
+  (prestacao [this ente-id id]
+    (transacao this ente-id #(hidratar-prestacao % ente-id (prestacao-contas/buscar % ente-id id))))
+  (prestacao-da-proposicao [this ente-id proposicao-id]
+    (transacao this ente-id #(hidratar-prestacao % ente-id (prestacao-contas/da-proposicao % ente-id proposicao-id))))
+  (prestacoes [this ente-id]
+    (transacao this ente-id
+      (fn [tx] (mapv #(hidratar-prestacao tx ente-id %) (prestacao-contas/listar tx ente-id)))))
+  (atualizar-prestacao! [this ente-id id m por]
+    (transacao this ente-id
+      (fn [tx]
+        (when (prestacao-contas/buscar-com-lock tx ente-id id)
+          (hidratar-prestacao tx ente-id (prestacao-contas/atualizar! tx ente-id id m por))))))
+  (notificar-prestacao! [this ente-id id {:keys [notificado-em] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (let [p (prestacao-contas/buscar-com-lock tx ente-id id)]
+          (cond
+            (nil? p) {:erro :nao-encontrada}
+            (not (logic-contas/governo? p)) {:erro :mesa}
+            (some? (:resultado p)) {:erro :julgada}
+            (some? (:notificado-em p)) {:erro :ja-notificada :notificado-em (:notificado-em p)}
+            :else
+            (let [{:keys [prazo-defesa-dias]} (logic-contas/parametros-efetivos (prestacao-contas/parametros tx ente-id))]
+              ;; o prazo de defesa e' CONGELADO aqui: mudar o parametro depois nao mexe em prazo ja' correndo
+              (prestacao-contas/notificar! tx ente-id id
+                (assoc m :prazo-defesa-ate (logic-contas/prazo-defesa-ate notificado-em prazo-defesa-dias)))
+              {:prestacao (hidratar-prestacao tx ente-id (prestacao-contas/buscar tx ente-id id))}))))))
+  (anexar-documento-de-contas! [this ente-id prestacao-id doc]
+    (transacao this ente-id
+      (fn [tx]
+        (when (prestacao-contas/buscar-com-lock tx ente-id prestacao-id)
+          (let [d (prestacao-contas/inserir-documento! tx (assoc doc :ente-id ente-id :prestacao-id prestacao-id))]
+            (when (= "defesa" (:tipo doc))
+              (prestacao-contas/marcar-defesa-juntada! tx ente-id prestacao-id (:por doc)))
+            d)))))
+  (documento-de-contas [this ente-id prestacao-id doc-id]
+    (transacao this ente-id #(prestacao-contas/documento % ente-id prestacao-id doc-id)))
+  (parametros-de-contas [this ente-id]
+    (transacao this ente-id #(prestacao-contas/parametros % ente-id)))
+  (salvar-parametros-de-contas! [this ente-id m]
+    (transacao this ente-id #(prestacao-contas/salvar-parametros! % ente-id m))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."
