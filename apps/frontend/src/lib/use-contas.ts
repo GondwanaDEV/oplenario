@@ -185,28 +185,23 @@ export type MateriaDeContas =
   | { fase: "comum" }
   | { fase: "contas"; prestacao: PrestacaoOut };
 
-/** Para o painel de votação: pergunta a `legislativo` se a matéria escolhida é o PDL de uma prestação de contas.
- *  `rev` refaz a pergunta (depois do encerramento, para trazer o resultado gravado). */
-export function useContasDaProposicao(token: string | null, proposicaoId: string | null, rev = 0): MateriaDeContas {
-  const [r, setR] = useState<{ chave: string | null; valor: MateriaDeContas }>({ chave: null, valor: { fase: "nenhuma" } });
-  const chave = proposicaoId ? `${proposicaoId}#${rev}` : null;
+/** Para o painel de votação: pergunta a `legislativo` se a matéria escolhida é o PDL de uma prestação de contas. */
+export function useContasDaProposicao(token: string | null, proposicaoId: string | null): MateriaDeContas {
+  const [r, setR] = useState<{ de: string | null; valor: MateriaDeContas }>({ de: null, valor: { fase: "nenhuma" } });
   useEffect(() => {
-    if (!proposicaoId || !chave) return;
+    if (!proposicaoId) return;
     let vivo = true;
     (async () => {
       const res = await buscarContasDaProposicao(token, proposicaoId);
       if (!vivo) return;
-      setR({ chave, valor: res.ok && res.dado ? { fase: "contas", prestacao: res.dado } : { fase: "comum" } });
+      setR({ de: proposicaoId, valor: res.ok && res.dado ? { fase: "contas", prestacao: res.dado } : { fase: "comum" } });
     })();
     return () => {
       vivo = false;
     };
-  }, [token, proposicaoId, chave]);
+  }, [token, proposicaoId]);
   if (!proposicaoId) return { fase: "nenhuma" };
-  if (r.chave === chave) return r.valor;
-  // refazendo a pergunta sobre a MESMA matéria: mantém o que já se sabia (nada pisca nem destrava no meio)
-  if (r.chave?.startsWith(`${proposicaoId}#`)) return r.valor;
-  return { fase: "carregando" };
+  return r.de === proposicaoId ? r.valor : { fase: "carregando" };
 }
 
 // ---- escritas ----
