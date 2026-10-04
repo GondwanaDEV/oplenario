@@ -10,10 +10,15 @@
             [oplenario.admin-sistema.components.repositorio :as repo-admin]
             [oplenario.admin-sistema.controllers :as admin-sistema]
             [oplenario.config :as config]
+            [oplenario.comunicacao.components.repositorio :as repo-comunicacao]
             [oplenario.ia-republicar :as ia-republicar]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.objeto-store :as objeto-store]
+            [oplenario.kernel.tempo :as tempo]
             [oplenario.migracao :as migracao]
+            [oplenario.participacao.components.repositorio :as repo-participacao]
+            [oplenario.reconciliar-anexos :as reconciliar-anexos]
             [oplenario.sistema :as sistema]))
 
 (defn- migrar!
@@ -52,6 +57,25 @@
                (println "[oplenario] orcamento de IA definido:" (str (:mensal d)) "/ teto" (str (:teto-duro d))
                         (:moeda d) "— a IA recebe pelo feed"))
              (finally (component/stop ds))))
+
+      ;; ADR-0022/ADR-0020: compara os anexos do banco com os blobs do object storage (relata; --apagar-orfaos so' tira do
+      ;; STORAGE o blob sem linha com mais de 24 h). Sai com 0 = integro, 1 = divergencia, 2 = uso/erro.
+      (= "reconciliar-anexos" (first args))
+      (let [ds (component/start (datasource/datasource cfg))
+            os (component/start (objeto-store/objeto-store cfg))
+            codigo (try (let [{:keys [saida codigo]}
+                              (reconciliar-anexos/executar
+                               {:repo-admin (assoc (repo-admin/repositorio) :datasource ds)
+                                :objeto-store os
+                                :fontes (reconciliar-anexos/fontes
+                                         {:repo-participacao (assoc (repo-participacao/repositorio) :datasource ds)
+                                          :repo-comunicacao (assoc (repo-comunicacao/repositorio) :datasource ds)})
+                                :agora (tempo/agora (tempo/relogio-sistema))}
+                               (rest args))]
+                          (println saida)
+                          codigo)
+                        (finally (component/stop os) (component/stop ds)))]
+        (System/exit codigo))
 
       ;; ADR-0016: o ciclo de vida do OPERADOR da plataforma. O primeiro nao tem console para se convidar.
       (#{"operador-convidar" "operador-desligar"} (first args))
