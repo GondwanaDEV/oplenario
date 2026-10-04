@@ -140,7 +140,7 @@ Existe o comando `reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]` (host: `
 - Por padrão só relata: linhas, blobs, blob sem linha e linha sem blob (200 itens por lista, com o total ao lado). Sai com 1 se há
   divergência. Anexo retirado sem blob é o estado correto.
 - `--apagar-orfaos` tira do storage só o blob sem linha com mais de 24 h; nunca toca em linha. Casa encerrada não é tocada.
-- Uso e códigos de saída: [`docs/27`](../27-runbook-ia-producao.md), seção 7.
+- Uso e códigos de saída: [`docs/27`](../27-runbook-ia-producao.md), seção 8.
 
 ## Fora, de propósito
 

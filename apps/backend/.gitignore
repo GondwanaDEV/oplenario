@@ -2,3 +2,5 @@
 target/
 .env
 .artifacts/
+# dump do Valkey/Redis: aparece quando um servidor roda com esta pasta como diretorio de trabalho
+dump.rdb

@@ -3,11 +3,15 @@
   canal e janela de replay (Last-Event-ID). Duas impls atras do MESMO protocolo: MEMORIA (atom — 1 no / teste)
   e VALKEY (Carmine streams — multi-no, retencao por tempo). O PROTOCOLO e' estavel p/ o swap — o projetor (G2)
   e o endpoint SSE (G3, diplomat) dependem dele, NUNCA da impl. A selecao e' por config (sistema.clj)."
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [com.stuartsierra.component :as component]
             [oplenario.tempo-real.canais :as canais]
+            [oplenario.tempo-real.codec :as codec]
             [taoensso.carmine :as car])
-  (:import (java.io Closeable)))
+  (:import (java.io Closeable)
+           (java.net URI)
+           (java.nio.charset StandardCharsets)))
 
 (set! *warn-on-reflection* true)
 
@@ -56,8 +60,9 @@
   exato + id auto `*` + a seq como campo proprio `s`) + EXPIRE de ambas as chaves, num unico EVAL. Atomico =>
   (a) sem swallow silencioso (o pipeline multi-reply do Carmine enterra excecoes num vetor; EVAL e' reply unica
   e LANCA no erro) e (b) sem GAP de seq (INCR e XADD nunca se separam por crash/blip). A seq e' calculada AQUI,
-  entao NAO vai embutida na mensagem congelada (ARGV[1]) — vira o campo `s`, reanexado como :seq na leitura.
-  KEYS[1]=stream KEYS[2]=contador ARGV[1]=mensagem(frozen) ARGV[2]=minid ARGV[3]=ttl-s. Retorna a seq."
+  entao NAO vai embutida na mensagem gravada (ARGV[1]) — vira o campo `s`, reanexado como :seq na leitura.
+  KEYS[1]=stream KEYS[2]=contador ARGV[1]=mensagem(texto de `codec/codificar`) ARGV[2]=minid ARGV[3]=ttl-s.
+  Retorna a seq."
   (str "local s = redis.call('INCR', KEYS[2]) "
        "redis.call('XADD', KEYS[1], 'MINID', ARGV[2], '*', 'm', ARGV[1], 's', s) "
        "redis.call('EXPIRE', KEYS[1], ARGV[3]) "
@@ -65,14 +70,58 @@
        "return s"))
 
 (defn- mensagem-valida?
-  "Defesa-em-profundidade (review sec-HIGH-1): valida a FORMA da mensagem descongelada antes de devolve-la. Toda
-  mensagem legitima do projetor e' {:ente-id :tipo string :dados map}; uma entrada com forma estranha (corrupcao
-  ou escrita externa nao-confiavel) NAO e' propagada como se fosse integra (`ler-desde`, abaixo, vira-a sinal
-  de lacuna em vez de descarta-la — frente 'truncamento-familia' sitio (d)). NOTA: nao e' escudo de RCE — um
-  gadget Nippy executa no THAW (dentro do XRANGE), antes daqui; o escudo real e' infra (auth/TLS/isolamento de
-  rede do Valkey) — ver o carry HIGH-1 no docstring de `canal-store-valkey`."
+  "Valida a FORMA da mensagem ja' decodificada antes de devolve-la. Toda mensagem legitima do projetor e'
+  {:ente-id :tipo string :dados map}; uma entrada com forma estranha (corrupcao ou escrita externa nao-confiavel)
+  NAO e' propagada como se fosse integra (`ler-desde`, abaixo, vira-a sinal de lacuna em vez de descarta-la —
+  frente 'truncamento-familia' sitio (d)). O que impede objeto arbitrario e' `codec/decodificar`, ANTES daqui: a
+  leitura parte de bytes crus e so' constroi dado puro (ver `ler-mensagem`)."
   [m]
   (and (map? m) (string? (:tipo m)) (map? (:dados m))))
+
+(defn- texto
+  "Bytes crus de um campo do stream -> String UTF-8 (nil se nao for bytes)."
+  [ba]
+  (when (bytes? ba) (String. ^bytes ba StandardCharsets/UTF_8)))
+
+(defn- ler-mensagem
+  "Bytes crus do campo `m` -> mensagem, ou nil quando `codec/decodificar` RECUSA (valor congelado por Nippy, EDN
+  invalido, etiqueta desconhecida, tipo fora da allowlist...). Fail-closed por entrada: a recusa e' registrada (so'
+  a razao e o tamanho — nunca o conteudo) e a entrada vira lacuna em `ler-desde`; uma entrada ruim nao derruba a
+  leitura das outras nem o canal de ninguem."
+  [canal ba]
+  (try
+    (codec/decodificar ba)
+    (catch clojure.lang.ExceptionInfo e
+      (if (:tempo-real/mensagem-recusada? (ex-data e))
+        (do (log/warn "ler-desde: valor do Valkey recusado na desserializacao (nao vira objeto)"
+                      {:canal canal :razao (:razao (ex-data e)) :bytes (when (bytes? ba) (alength ^bytes ba))})
+            nil)
+        (throw e)))))
+
+(defn- senha-na-uri?
+  "true se a URI do Valkey carrega senha (`redis://:senha@host` ou `redis://usuario:senha@host`)."
+  [uri]
+  (boolean
+   (when-not (str/blank? uri)
+     (when-let [info (try (.getUserInfo (URI. uri)) (catch Exception _ nil))]
+       (let [[_ senha] (str/split info #":" 2)]
+         (not (str/blank? senha)))))))
+
+(defn tem-senha?
+  "true se a config do Valkey traz senha — em `[:valkey :password]` (VALKEY_PASSWORD) ou embutida na URI."
+  [config]
+  (or (not (str/blank? (get-in config [:valkey :password])))
+      (senha-na-uri? (get-in config [:valkey :uri]))))
+
+(defn spec-de-conexao
+  "A spec de conexao do Carmine a partir de `[:valkey]` da config: a URI (`redis://` ou `rediss://` = TLS, pelo
+  truststore padrao da JVM) + usuario/senha quando configurados. Senha embutida na URI prevalece sobre
+  `:password` (e' a regra de merge do Carmine). Valor em branco = ausente."
+  [config]
+  (let [{:keys [uri username password]} (:valkey config)]
+    (cond-> {:uri uri}
+      (not (str/blank? username)) (assoc :username username)
+      (not (str/blank? password)) (assoc :password password))))
 
 ;; A CONEXAO Carmine vive num ATOM mutado in-place no start (NAO um campo assoc'd pelo Lifecycle): o registro de
 ;; consumidores (consumer.clj) fecha sobre ESTA instancia eagerly em sistema.clj, antes do start; compartilhar o
@@ -82,7 +131,7 @@
   (start [this]
     (when-not @conn-atom
       (let [conn {:pool (car/connection-pool {})
-                  :spec {:uri (get-in config [:valkey :uri])}}]
+                  :spec (spec-de-conexao config)}]
         ;; PING fail-fast (review sec-MINOR-3): o pool e' lazy; sem isto o boot "sobe" com o Valkey fora e so
         ;; quebra no 1o publish (que o relay poderia engolir). Falhar aqui bloqueia o boot — o certo p/ prod.
         (car/wcar conn (car/ping))
@@ -102,18 +151,22 @@
           minid (str (- (System/currentTimeMillis) (long retencao-ms)))
           s     (car/wcar conn (car/eval lua-publicar 2
                                          (chave-stream canal) (chave-seq canal)
-                                         mensagem minid ttl-canal-s))]
+                                         (codec/codificar mensagem) minid ttl-canal-s))]
       {:canal canal :seq (long s)}))
   (ler-desde [_ canal apos-seq]
     (let [conn    (or @conn-atom (throw (ex-info "CanalStoreValkey nao iniciado (conn-atom nil)" {:canal canal})))
-          entries (car/wcar conn (car/xrange (chave-stream canal) "-" "+"))]
+          ;; `parse-raw`: o Carmine devolve BYTES crus e NAO descongela nada — sem isto ele roda o thaw do Nippy em
+          ;; todo valor com o marcador dele, dentro do XRANGE, antes de qualquer validacao nossa.
+          entries (car/wcar conn (car/parse-raw (car/xrange (chave-stream canal) "-" "+")))]
       (->> entries
            (reduce
             (fn [{:keys [saida ultima-seq-confiavel]} entry]
               ;; entry = [id ["m" <msg> "s" "<seq>"]] — le por NOME de campo (nao por posicao; review clj-MINOR)
-              (let [campos   (apply hash-map (second entry))
-                    msg      (get campos "m")
-                    s-cru    (get campos "s")
+              (let [campos   (->> (partition 2 (second entry))
+                                  (reduce (fn [m [k v]] (assoc m (texto k) v)) {}))
+                    msg      (ler-mensagem canal (get campos "m"))
+                    s-cru    (let [s (get campos "s")]             ; a seq legitima tem no maximo 19 digitos
+                               (when (and (bytes? s) (<= (alength ^bytes s) 19)) (texto s)))
                     ;; `parse-long` so' roda quando `s-cru` JA e' string (review adversarial 2a rodada,
                     ;; CRITICO/IMPORTANTE): `(parse-long nil)` lanca IllegalArgumentException — o campo `s`
                     ;; ausente e' a forma MAIS natural de uma escrita externa/corrompida (a mesma classe que
@@ -146,15 +199,15 @@
   "CanalStore viva em Valkey (Carmine streams). Lifecycle: start abre o pool (+ PING fail-fast), stop fecha.
   `opts` injeta `:retencao-ms` (janela de replay; default 5 min) — teste usa janela curta + sleep real.
 
-  >>> CARRY PRE-PROD HIGH-1 (review de seguranca G3b — GATE ANTES DE STAGING/PROD) <<<
-  O pool abre com `redis://` (SEM TLS) e SEM auth, e o Carmine descongela (Nippy) os valores lidos. Hoje o
-  PRODUTOR e' 100%% interno (relay->outbox->projetor); NENHUM ator externo escreve no store. Mas se o Valkey
-  ficar alcancavel sem auth, uma escrita crua com header Nippy forjado vira RCE no thaw. Antes de prod:
-   1. VALKEY_URI = `rediss://:<senha-forte>@host:6379` (TLS + auth) — o override ja propaga (config.clj).
-   2. Valkey so na rede interna do cluster (bind/network-policy negando ingress externo).
-   3. (Endurecimento em processo) restringir o allowlist de Serializable do Nippy p/ recusar classes arbitrarias
-      no thaw — nossas mensagens sao so dado Clojure puro (map/string/uuid/keyword), nao precisam de Serializable.
-  `mensagem-valida?` ja descarta entradas de forma estranha (defesa-em-profundidade, NAO escudo de RCE)."
+  SEGURANCA (fecha o carry HIGH-1 da review do G3b):
+   - Desserializacao: a mensagem vai e volta como texto EDN de dado puro (`tempo-real.codec`); a leitura pede
+     BYTES crus ao Carmine (`parse-raw`), que por isso NAO descongela Nippy. Escrever no Valkey nao faz o backend
+     instanciar classe nem rodar leitor etiquetado — o valor estranho e' registrado e vira lacuna.
+   - Autenticacao: senha por `VALKEY_PASSWORD` (ou na URI) e usuario opcional por `VALKEY_USERNAME`
+     (`spec-de-conexao`). Fora de dev/test e sem senha, `sistema/novo-sistema` avisa em nivel error a cada boot;
+     com `VALKEY_EXIGIR_SENHA=true` recusa subir.
+   - TLS: `VALKEY_URI=rediss://...`.
+   - Rede: o Valkey fica so' na rede interna (no deploy; ver docs/27, secao do Valkey)."
   ([config] (canal-store-valkey config {}))
   ([config {:keys [retencao-ms]}]
    (map->CanalStoreValkey {:config      config

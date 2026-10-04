@@ -97,7 +97,67 @@ Na ordem em que já aconteceu:
 
 O `backend` loga o motivo como `plataforma de IA indisponivel` (`integracao_ia/diplomat/http/out.clj`).
 
-## 7. Anexos: reconciliar o banco com o object storage (comando do `backend`)
+## 7. Valkey do tempo real: senha, TLS e rede
+
+Não é do satélite (ele não usa o Valkey), mas a topologia do Dokploy está descrita aqui. O Valkey guarda o canal ao
+vivo do plenário (`tempo_real`, janela de 5 minutos) e só o `backend` fala com ele.
+
+| O quê | Onde se resolve |
+|---|---|
+| O que sai do Valkey nunca vira objeto (texto EDN de dado puro, sem Nippy na leitura) | código — nada a fazer |
+| O `backend` manda a senha (`VALKEY_PASSWORD`, ou na `VALKEY_URI`) e o usuário de ACL opcional (`VALKEY_USERNAME`) | código + variável no Dokploy |
+| Fora de `APP_ENV` dev/test, com `TEMPO_REAL_BACKPLANE=valkey` e sem senha, o `backend` **sobe** e registra `Valkey sem senha em producao` em nível `error`, a cada boot | código |
+| Com `VALKEY_EXIGIR_SENHA=true`, o mesmo caso **não sobe** (`Valkey sem senha e VALKEY_EXIGIR_SENHA ligada`) | código + variável no Dokploy |
+| TLS: `VALKEY_URI=rediss://…` | variável no Dokploy + certificado no servidor |
+| O Valkey exigir a senha (`requirepass`) | **só no Dokploy** |
+| A porta 6379 não ser publicada | **só no Dokploy** |
+
+### Pôr a senha e ligar a exigência (uma vez, depois de promover)
+
+Promover a versão não pede nada: sem senha ela sobe e avisa. A ordem abaixo é o que fecha o aviso.
+
+1. Procure `Valkey sem senha em producao` nos Logs do `backend`. Se não aparece no último boot, a senha já existe:
+   pule para o passo 5.
+2. Gere uma senha longa e aleatória e ponha no Valkey (a senha do serviço no Dokploy, ou
+   `valkey-server --requirepass <senha>` no comando). Faça o Deploy do Valkey.
+3. No `backend`, defina `VALKEY_PASSWORD` com a mesma senha e faça o Deploy. Entre os passos 2 e 3 o painel ao vivo
+   para de atualizar (o relay tenta de novo sozinho); faça fora de sessão.
+4. Confira nos Logs do `backend` que ele subiu, que o aviso **sumiu** e que um painel ao vivo atualiza.
+5. Só então defina `VALKEY_EXIGIR_SENHA=true` no `backend` e faça o Deploy. Daí em diante, perder a senha do
+   ambiente impede o boot em vez de deixar o Valkey aberto sem ninguém notar.
+
+Nunca ligue `VALKEY_EXIGIR_SENHA` antes do passo 4: sem a senha no ambiente o `backend` não sobe.
+
+Na primeira subida da versão nova, o que ainda estiver no canal no formato antigo é recusado e vira aviso de lacuna:
+quem está com o painel aberto recarrega o estado pelo snapshot. Passa em 5 minutos.
+
+### Conferir que a porta não está exposta
+
+- No serviço do Valkey no Dokploy, a porta externa fica **vazia** (nenhum mapeamento para o host).
+- De fora da VPS, `nc -zv <host-da-vps> 6379` tem de falhar. Se conectar, feche a porta antes de qualquer outra coisa.
+- O Valkey só precisa estar na rede interna do projeto, onde o `backend` o alcança pelo appName.
+
+### Trocar a senha
+
+1. `ACL SETUSER default ><senha-nova>` no Valkey (a antiga continua valendo; as duas convivem).
+2. Troque a senha no `backend` e faça o Deploy.
+3. `ACL SETUSER default <<senha-antiga>` remove a antiga. Grave a nova também na configuração do serviço, senão um
+   restart do Valkey volta para a antiga.
+
+### TLS
+
+Só é preciso se o Valkey sair da rede interna. `rediss://` usa o truststore padrão da JVM: o certificado do servidor
+tem de encadear numa autoridade que ela conhece. O cliente valida a cadeia, mas **não** confere o nome do host.
+
+### Quando o `backend` não sobe por causa do Valkey
+
+| Log | Causa |
+|---|---|
+| `Valkey sem senha e VALKEY_EXIGIR_SENHA ligada` | falta `VALKEY_PASSWORD` (ou a senha na `VALKEY_URI`); para subir já, tire `VALKEY_EXIGIR_SENHA` |
+| `NOAUTH` / `WRONGPASS` no start | o Valkey exige senha e o `backend` não tem, ou tem outra |
+| `Connection refused` | appName errado na `VALKEY_URI`, ou o Valkey fora do ar |
+
+## 8. Anexos: reconciliar o banco com o object storage (comando do `backend`)
 
 Compara os anexos do balcão (`participacao.anexo`, `atendimento/<ente>/<protocolo>/<id>`) e dos comunicados (`comunicacao.anexo`,
 `comunicados/<ente>/<comunicado>/<id>`) com os blobs do storage, uma Casa por vez (leitura na transação do tenant). Mesmo terminal
