@@ -42,8 +42,10 @@ describe("ExportarDados", () => {
       { "/api/administracao/exportacoes": { status: 202, corpo: { ...PRONTA, estado: "gerando", sha256: null, bytes: null } } },
     );
     render(<ExportarDados token="tk" />);
-    expect(await screen.findByText(/formato aberto/)).toBeTruthy();
-    expect(screen.getByText("Nenhuma exportação gerada ainda.")).toBeTruthy();
+    // "formato aberto" é texto fixo da tela, já está lá durante o "Carregando…": esperar por ele não espera a
+    // lista. O que depende da resposta é a frase da lista vazia — é ela que se espera.
+    expect(screen.getByText(/formato aberto/)).toBeTruthy();
+    expect(await screen.findByText("Nenhuma exportação gerada ainda.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Gerar exportação completa" }));
     expect(await screen.findByText(/está sendo gerado/)).toBeTruthy();
     expect(chamadas.filter((c) => c.metodo === "POST")).toHaveLength(1);

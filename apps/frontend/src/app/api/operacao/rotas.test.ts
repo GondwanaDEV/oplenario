@@ -18,7 +18,13 @@ function resposta(corpo: unknown, status = 200) {
   return new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 }
 
-beforeEach(() => vi.stubEnv("APP_ORIGIN", ORIGIN));
+beforeEach(() => {
+  vi.stubEnv("APP_ORIGIN", ORIGIN);
+  // a troca do code prefere a URL interna do Keycloak quando o ambiente a define (callback/route.ts). O container
+  // de desenvolvimento define `KEYCLOAK_INTERNAL_URL`; sem apagar as duas aqui o teste dependia de onde rodava.
+  vi.stubEnv("OPERACAO_KEYCLOAK_INTERNAL_URL", undefined);
+  vi.stubEnv("KEYCLOAK_INTERNAL_URL", undefined);
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe("BFF do console — login (ADR-0016)", () => {
@@ -60,6 +66,21 @@ describe("BFF do console — callback", () => {
     const r = await receberCallbackOperacao(req("/api/operacao/callback?code=c&state=outro", pkce), { backend: "http://b", fetchImpl: f });
     expect(r.status).toBe(400);
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it("a troca do code vai pela URL interna do Keycloak quando o ambiente a define; a do operador vence a geral", async () => {
+    const trocar = async () => {
+      const f = vi.fn()
+        .mockResolvedValueOnce(resposta(DESC))
+        .mockResolvedValueOnce(resposta({ access_token: "at" }))
+        .mockResolvedValueOnce(resposta({ sessao: "segredo-op" }));
+      await receberCallbackOperacao(req("/api/operacao/callback?code=c&state=s1", pkce), { backend: "http://b", fetchImpl: f });
+      return f.mock.calls[1][0];
+    };
+    vi.stubEnv("KEYCLOAK_INTERNAL_URL", "http://keycloak:8080");
+    expect(await trocar()).toBe("http://keycloak:8080/realms/operacao/protocol/openid-connect/token");
+    vi.stubEnv("OPERACAO_KEYCLOAK_INTERNAL_URL", "http://kc-operacao:8080");
+    expect(await trocar()).toBe("http://kc-operacao:8080/realms/operacao/protocol/openid-connect/token");
   });
 
   it("troca o code no realm do operador, minta a sessão do console e seta o cookie próprio", async () => {
