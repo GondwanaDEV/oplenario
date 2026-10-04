@@ -189,6 +189,12 @@
 
 (def ^:private ^java.util.concurrent.Semaphore vagas-de-envio (java.util.concurrent.Semaphore. (int max-envios-simultaneos)))
 
+(def ^:private ^java.util.Set envios-em-voo
+  "Quem esta' com um envio em andamento (identidade-id). UM envio por pessoa por vez (a tela ja' envia um a um): sem isto,
+  uma pessoa so' abre `max-envios-simultaneos` conexoes lentas e segura todas as vagas do processo — ninguem mais anexa,
+  em Casa nenhuma. O segundo envio da mesma pessoa -> 429, sem ler o corpo."
+  (java.util.concurrent.ConcurrentHashMap/newKeySet))
+
 (def max-partes-do-envio
   "Quantas partes (campos + arquivos) um multipart de anexo pode ter. A tela manda UMA; mais que isto e' lixo."
   8)
@@ -269,6 +275,8 @@
     (proxy [FilterInputStream] [in]
       (read
         ([] (let [b (.read in)] (when (>= b 0) (conta! 1)) b))
+        ;; o proxy despacha TODA aridade de `read` para esta fn: sem a de 1 argumento, `read(byte[])` vira ArityException
+        ([^bytes b] (conta! (.read in b 0 (alength b))))
         ([^bytes b off len] (conta! (.read in b (int off) (int len))))))))
 
 (defn- ler-arquivos-do-multipart
@@ -301,10 +309,13 @@
         arquivos))))
 
 (defn- liberar-vaga!
-  "Devolve a vaga de envio do `ctx` UMA vez (o flag impede devolver em dobro: a recusa dentro do :enter e o :leave)."
+  "Devolve a vaga de envio do `ctx` UMA vez (o flag impede devolver em dobro: a recusa dentro do :enter e o :leave), e tira
+  a pessoa de `envios-em-voo`."
   [ctx]
   (when-let [^java.util.concurrent.atomic.AtomicBoolean flag (::vaga ctx)]
-    (when (.compareAndSet flag true false) (.release vagas-de-envio)))
+    (when (.compareAndSet flag true false)
+      (.release vagas-de-envio)
+      (when-let [quem (::quem ctx)] (.remove envios-em-voo quem))))
   ctx)
 
 (defn- corpo-grande?
@@ -340,16 +351,21 @@
               (let [req (:request ctx)
                     tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
                     recusa (fn [ctx status msg] (liberar-vaga! ctx) (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))
-                    multipart? (some-> (get-in req [:headers "content-type"]) str/lower-case (str/starts-with? "multipart/form-data"))]
+                    multipart? (some-> (get-in req [:headers "content-type"]) str/lower-case (str/starts-with? "multipart/form-data"))
+                    quem (get-in req [:ator :identidade-id])
+                    ocupado (fn [ctx status msg]
+                              (chain/terminate (assoc ctx :response (assoc-in (http/json-resposta status {:erro msg})
+                                                                              [:headers "Retry-After"] "5"))))]
                 (cond
                   (and tamanho (> (long tamanho) limite-do-corpo)) (recusa ctx 413 grande)
                   (not multipart?) (recusa ctx 400 malformado)
+                  (and quem (not (.add envios-em-voo quem)))
+                  (ocupado ctx 429 "Você já tem um envio de arquivo em andamento. Espere ele terminar.")
                   (not (.tryAcquire vagas-de-envio))
-                  (chain/terminate
-                   (assoc ctx :response (assoc-in (http/json-resposta 503 {:erro "Há muitos envios de arquivo ao mesmo tempo. Tente de novo em alguns segundos."})
-                                                  [:headers "Retry-After"] "5")))
+                  (do (when quem (.remove envios-em-voo quem))
+                      (ocupado ctx 503 "Há muitos envios de arquivo ao mesmo tempo. Tente de novo em alguns segundos."))
                   :else
-                  (let [ctx (assoc ctx ::vaga (java.util.concurrent.atomic.AtomicBoolean. true))]
+                  (let [ctx (assoc ctx ::vaga (java.util.concurrent.atomic.AtomicBoolean. true) ::quem quem)]
                     (try
                       (let [arquivos (ler-arquivos-do-multipart req max-bytes limite-do-corpo)]
                         (cond
@@ -363,7 +379,11 @@
                           (= :partes/demais (:tipo (ex-data e))) (recusa ctx 400 malformado)
                           (= :cabecalho/grande (:tipo (ex-data e))) (recusa ctx 400 "O envio do arquivo veio malformado.")
                           (instance? clojure.lang.ExceptionInfo e) (recusa ctx 400 malformado)
-                          :else (recusa ctx 400 "O envio do arquivo veio malformado."))))))))
+                          :else (recusa ctx 400 "O envio do arquivo veio malformado.")))
+                      ;; um Error (OutOfMemoryError ao ler 10 MB, LinkageError do parser) nao e' Exception. O :error da cadeia
+                      ;; recebe o ctx de ANTES deste :enter, sem `::vaga`: sem devolver aqui, a vaga vazava, e depois de
+                      ;; `max-envios-simultaneos` vazamentos todo upload respondia 503 ate' reiniciar.
+                      (catch Throwable t (liberar-vaga! ctx) (throw t)))))))
      :leave liberar-vaga!
      :error (fn [ctx ex] (liberar-vaga! ctx) (assoc ctx ::chain/error ex))}))
 

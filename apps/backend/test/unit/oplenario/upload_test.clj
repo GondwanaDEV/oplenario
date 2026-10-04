@@ -41,3 +41,59 @@
 (deftest teto-de-envios-simultaneos
   (is (= 4 it/max-envios-simultaneos))
   (is (pos? it/max-partes-do-envio)))
+
+;; ---------------------------------------------------------------- o :enter do interceptor, sem HTTP
+
+(def ^:private fronteira "XfronteiraX")
+
+(defn- corpo-multipart ^bytes [nome conteudo]
+  (.getBytes (str "--" fronteira "\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"" nome "\"\r\n"
+                  "Content-Type: text/plain\r\n\r\n" conteudo "\r\n--" fronteira "--\r\n")
+             "UTF-8"))
+
+(defn- ctx-de-upload [quem ^java.io.InputStream corpo]
+  {:request {:headers {"content-type" (str "multipart/form-data; boundary=" fronteira)}
+             :ator {:identidade-id quem}
+             :body corpo}})
+
+(defn- vagas-livres [] (.availablePermits ^java.util.concurrent.Semaphore @#'it/vagas-de-envio))
+
+(deftest um-envio-por-pessoa-por-vez
+  ;; sem isto, uma pessoa so' abre `max-envios-simultaneos` conexoes lentas e ninguem mais anexa, em Casa nenhuma
+  (let [{:keys [enter leave]} (it/anexo-multipart {:max-bytes 1024})
+        ana (random-uuid) bia (random-uuid)
+        em-voo (enter (ctx-de-upload ana (java.io.ByteArrayInputStream. (corpo-multipart "a.txt" "oi"))))]
+    (is (= "a.txt" (get-in em-voo [:request :anexo :nome])) "o 1o envio da Ana passou e segue em voo (sem :leave)")
+    (testing "o 2o envio da MESMA pessoa: 429 com Retry-After, sem ler o corpo e sem gastar vaga"
+      (let [bytes (corpo-multipart "b.txt" "oi")
+            corpo (java.io.ByteArrayInputStream. bytes)
+            livres (vagas-livres)
+            r (:response (enter (ctx-de-upload ana corpo)))]
+        (is (= 429 (:status r)))
+        (is (= "5" (get-in r [:headers "Retry-After"])))
+        (is (= (alength bytes) (.available corpo)) "nenhum byte lido")
+        (is (= livres (vagas-livres)))))
+    (testing "outra pessoa envia normalmente enquanto isso"
+      (let [c (enter (ctx-de-upload bia (java.io.ByteArrayInputStream. (corpo-multipart "c.txt" "oi"))))]
+        (is (= "c.txt" (get-in c [:request :anexo :nome])))
+        (leave c)))
+    (testing "terminado o 1o envio, a mesma pessoa envia de novo"
+      (leave em-voo)
+      (let [c (enter (ctx-de-upload ana (java.io.ByteArrayInputStream. (corpo-multipart "d.txt" "oi"))))]
+        (is (= "d.txt" (get-in c [:request :anexo :nome])))
+        (leave c)))
+    (is (= it/max-envios-simultaneos (vagas-livres)) "todas as vagas voltaram")))
+
+(deftest erro-grave-na-leitura-devolve-a-vaga-e-a-pessoa
+  ;; um Error (nao Exception) no meio da leitura: a vaga e a pessoa tem de voltar, senao depois de
+  ;; `max-envios-simultaneos` erros todo upload responde 503 ate' reiniciar
+  (let [{:keys [enter]} (it/anexo-multipart {:max-bytes 1024})
+        quem (random-uuid)
+        estoura (fn [] (proxy [java.io.InputStream] []
+                         (read ([] (throw (OutOfMemoryError. "simulado")))
+                               ([_b] (throw (OutOfMemoryError. "simulado")))
+                               ([_b _off _len] (throw (OutOfMemoryError. "simulado"))))))]
+    (dotimes [_ (inc it/max-envios-simultaneos)]
+      (is (thrown? OutOfMemoryError (enter (ctx-de-upload quem (estoura))))
+          "o erro sobe (nao vira 429 nem 503: nem a pessoa nem a vaga ficaram presas)"))
+    (is (= it/max-envios-simultaneos (vagas-livres)))))
