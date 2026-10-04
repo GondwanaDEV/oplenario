@@ -241,6 +241,31 @@
          :fonte "autoatendimento" :ocorrido-em instante :agora instante
          :created-by (:identidade-id ator)}))))
 
+(defn minha-presenca
+  "A PROPRIA presenca do vereador na sessao (`GET /sessoes/:id/presenca/minha`) — a leitura irma de
+  `confirmar-minha-presenca`. Existe porque o cockpit do celular so' sabia da presenca pelo SSE, e o replay do
+  canal guarda ~5 min: um vereador ja' presente que abria o cockpit depois disso voltava a ver 'Confirme sua
+  presenca' (docs/16, 'A Trilha 3 vira gate').
+
+  `vereador-id` resolvido do ATOR (`resolver-vereador`, mesmo contrato anti-forja da confirmacao), nunca do
+  request: a rota nao responde 'o vereador X esta presente?', responde 'EU estou?'. Ator sem cadastro
+  vinculado -> nil (-> 404); sessao inexistente no tenant -> nil (-> 404); outra Casa -> 403 pela politica.
+
+  'Presente' e' a MESMA regra da chamada e do quorum: o tipo do ULTIMO evento ate' o instante de avaliacao
+  (`logic/presente-por-tipo?` sobre `db/presenca-corrente-do-vereador`, que reusa a subquery canonica) — a
+  sessao viva avalia em `agora`, a fechada em `encerrada-em`. Sem evento -> ausente, sem `:ocorrido-em`.
+  `:ocorrido-em`/`:modalidade` viajam sempre que houver evento (inclusive saida): e' o instante que o
+  cliente compara com o que o SSE ja' mostrou, para um snapshot velho nao ressuscitar estado superado."
+  [repo-sessoes resolver-vereador ator sessao-id agora]
+  (when-let [vereador-id (resolver-vereador (:ente-id ator) (:identidade-id ator))]
+    (when-let [{:keys [sessao ultimo-evento]} (repo/minha-presenca repo-sessoes (:ente-id ator) sessao-id
+                                                                    vereador-id agora)]
+      (authz/check! ator :sessao/ver sessao logic/pode-ver-sessao?)
+      (cond-> {:vereador-id vereador-id
+               :presente (boolean (and ultimo-evento (logic/presente-por-tipo? (:tipo ultimo-evento))))}
+        ultimo-evento (assoc :ocorrido-em (:ocorrido-em ultimo-evento)
+                             :modalidade (:modalidade ultimo-evento))))))
+
 (defn inscrever-orador
   "§22.6 eixo F (tribuna, intencao): inscreve um orador na fila da sessao. Carrega a sessao do tenant do `ator`
   (nil -> 404 via nil de retorno), roda pode-ver-sessao? (mesma Casa -> 403 fail-closed), e inscreve (a fila e'

@@ -79,6 +79,9 @@
                                :motivo "conducao da sessao ao vivo: anunciar o item em discussao e' da Mesa (Eixo 4.3)"}
  :sessoes/registrar-decisao-mesa {:categoria :pessoal
                                   :motivo "conducao da sessao ao vivo: a decisao da Mesa e' da Mesa, pela tela (Eixo 4.3)"}
+ ;; ---------- o cockpit do vereador: a propria presenca por snapshot (docs/16, "A Trilha 3 vira gate") ----------
+ :sessoes/minha-presenca {:categoria :so-tela
+                          :motivo "o cockpit do vereador le a propria presenca para hidratar a tela (o replay do SSE guarda ~5 min); nao e' acao de dominio, e o agente nao confirma presenca"}
  ;; ---------- formularios do cidadao (ADR-0015): o que a cidada protocolou ----------
  :participacao/meus-protocolos {:categoria :so-tela
                                 :motivo "lista da propria cidada para acompanhar o que protocolou; agente do cidadao e' pos-V1 (docs/26 §4)"}

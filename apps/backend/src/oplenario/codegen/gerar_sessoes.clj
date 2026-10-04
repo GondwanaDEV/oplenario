@@ -29,6 +29,8 @@
    ;; PresencaReciboOut ANTES de PresencaLoteReciboOut (campo :recibos aninhado).
    ["PresencaReciboOut" out/PresencaReciboOut]
    ["PresencaLoteReciboOut" out/PresencaLoteReciboOut]
+   ;; o cockpit do vereador hidrata a propria presenca (GET /sessoes/:id/presenca/minha).
+   ["MinhaPresencaOut" out/MinhaPresencaOut]
    ;; §22.6 eixo C — justificativa de ausencia (Etapa 2). LinhaJustificativaOut ANTES de JustificativasOut.
    ["JustificativaAbertaOut" out/JustificativaAbertaOut]
    ["LinhaJustificativaOut" out/LinhaJustificativaOut]

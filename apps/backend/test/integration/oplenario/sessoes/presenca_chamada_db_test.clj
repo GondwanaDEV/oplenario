@@ -201,3 +201,76 @@
   ;; nil (nao um mapa com listas vazias) — a borda traduz nil em 404. Um {:sessao nil :presencas []} viraria
   ;; uma chamada 200 OK de uma sessao que nao existe.
   (is (nil? (repo/chamada-da-sessao *repo* (random-uuid) (random-uuid) t11))))
+
+;; ---------- o Repo: a PROPRIA presenca do vereador (GET /sessoes/:id/presenca/minha) ----------
+
+(deftest minha-presenca-presente-depois-de-confirmar
+  ;; O cockpit do celular hidrata por aqui o que o replay do SSE (~5 min) ja' nao traz. A confirmacao grava
+  ;; `entrada`/`autoatendimento` — o mesmo evento que `controllers/confirmar-minha-presenca` produz.
+  (let [ente (random-uuid) a (random-uuid)
+        sid (repo/transacao *repo* ente
+              (fn [tx]
+                (let [sid (nova-sessao! tx ente)]
+                  (ev! tx ente sid a {:tipo "entrada" :fonte "autoatendimento" :ocorrido-em t10})
+                  sid)))
+        r (repo/minha-presenca *repo* ente sid a t11)]
+    (is (= sid (:id (:sessao r))) "a sessao vem junto — e' o guard de 404 e o insumo da politica")
+    (is (= t11 (:instante r)) "sessao viva -> instante = o 'agora' recebido (a mesma regra da chamada)")
+    (is (= "entrada" (:tipo (:ultimo-evento r))))
+    (is (= t10 (:ocorrido-em (:ultimo-evento r))))
+    (is (= "plenario" (:modalidade (:ultimo-evento r))))
+    (is (true? (logic/presente-por-tipo? (:tipo (:ultimo-evento r)))))))
+
+(deftest minha-presenca-ausente-depois-da-saida
+  (let [ente (random-uuid) a (random-uuid)
+        sid (repo/transacao *repo* ente
+              (fn [tx]
+                (let [sid (nova-sessao! tx ente)]
+                  (ev! tx ente sid a {:tipo "entrada" :ocorrido-em t10})
+                  (ev! tx ente sid a {:tipo "saida" :ocorrido-em t1020})
+                  sid)))]
+    (is (= "saida" (:tipo (:ultimo-evento (repo/minha-presenca *repo* ente sid a t11))))
+        "o ULTIMO evento decide: saiu -> ausente")
+    (is (= t1020 (:ocorrido-em (:ultimo-evento (repo/minha-presenca *repo* ente sid a t11)))))
+    (is (= "entrada" (:tipo (:ultimo-evento (repo/minha-presenca *repo* ente sid a t10))))
+        "o instante de corte e' respeitado: as 10:00 a saida das 10:20 ainda nao ocorreu")))
+
+(deftest minha-presenca-desempata-como-a-chamada
+  ;; mesmo instante: a secretaria (manual) vence o painel — a mesma ordem canonica da chamada e do quorum.
+  (let [ente (random-uuid) a (random-uuid)
+        sid (repo/transacao *repo* ente
+              (fn [tx]
+                (let [sid (nova-sessao! tx ente)]
+                  (ev! tx ente sid a {:tipo "saida"   :fonte "painel_eletronico" :ocorrido-em t10})
+                  (ev! tx ente sid a {:tipo "entrada" :fonte "manual_secretaria" :ocorrido-em t10})
+                  sid)))
+        minha (:ultimo-evento (repo/minha-presenca *repo* ente sid a t11))
+        da-chamada (first (filter #(= a (:vereador-id %)) (repo/presenca-corrente *repo* ente sid t11)))]
+    (is (= "entrada" (:tipo minha)))
+    (is (= (select-keys da-chamada [:tipo :modalidade :fonte :ocorrido-em])
+           (select-keys minha [:tipo :modalidade :fonte :ocorrido-em]))
+        "a linha do vereador e' a MESMA que a chamada mostra para ele")))
+
+(deftest minha-presenca-de-outro-vereador-nao-vaza
+  (let [ente (random-uuid) a (random-uuid) b (random-uuid)
+        sid (repo/transacao *repo* ente
+              (fn [tx]
+                (let [sid (nova-sessao! tx ente)]
+                  (ev! tx ente sid a {:tipo "entrada" :ocorrido-em t10})
+                  sid)))
+        r (repo/minha-presenca *repo* ente sid b t11)]
+    (is (some? (:sessao r)) "a sessao existe")
+    (is (nil? (:ultimo-evento r)) "a presenca de A nao responde por B: B nao tem evento -> ausente")))
+
+(deftest minha-presenca-de-outra-casa-nao-vaza
+  (let [ente (random-uuid) outra (random-uuid) a (random-uuid)
+        sid (repo/transacao *repo* ente
+              (fn [tx]
+                (let [sid (nova-sessao! tx ente)]
+                  (ev! tx ente sid a {:tipo "entrada" :ocorrido-em t10})
+                  sid)))]
+    (is (nil? (repo/minha-presenca *repo* outra sid a t11))
+        "pela tx de OUTRA Casa a sessao nao existe (RLS + ente_id) -> nil -> 404, nunca a presenca alheia")))
+
+(deftest minha-presenca-sessao-inexistente-devolve-nil
+  (is (nil? (repo/minha-presenca *repo* (random-uuid) (random-uuid) (random-uuid) t11))))
