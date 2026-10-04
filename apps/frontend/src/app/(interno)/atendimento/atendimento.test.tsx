@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const estado = vi.hoisted(() => ({
   papeis: ["secretario"] as string[],
@@ -937,14 +937,11 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Dado pessoal de terceiros." } });
     fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Confirmar o indeferimento" })));
-    // a resposta (a falha) e o efeito de foco do commit dela correm DENTRO do `act`: fora dele o alerta aparece
-    // no commit e o efeito roda um instante depois — clicar em "Revisar" nesse intervalo fazia o efeito atrasado
-    // consumir o destino do foco do passo seguinte, e o foco não chegava ao título (falhava sob carga).
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
     // o servidor falhou: volta ao editor, com o erro
     expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível|tente de novo|erro/i);
+    // "Revisar" logo depois do erro, sem esperar nada: o efeito de foco do commit do erro pode ainda não ter
+    // rodado, e não pode gastar o destino do foco deste passo (com `npm run test:atraso` essa ordem é a regra)
     fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
     expect(screen.queryByRole("alert")).toBeNull();   // o erro de antes nao acompanha a confirmacao
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Confirmar o indeferimento" })));

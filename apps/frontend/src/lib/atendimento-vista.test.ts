@@ -4,6 +4,7 @@ import {
   especieValida,
   faltaNoEncarregado,
   faltaNoTexto,
+  tituloQueRecebeOFoco,
   hrefDoPrazo,
   linhaDoPrazo,
   mensagemDeErroAtendimento,
@@ -159,5 +160,15 @@ describe("navegação", () => {
     expect(hrefDoPrazo("solicitacao_titular", "s1")).toBe("/atendimento/lgpd/s1");
     expect(hrefDoPrazo("recurso_esic", "r1")).toBe("/atendimento?aba=esic");
     expect(hrefDoPrazo("obrigacao", "o1")).toBeNull();
+  });
+
+  it("foco do indeferimento: o pedido só vale no commit do passo a que ele se refere", () => {
+    expect(tituloQueRecebeOFoco("confirmar", true)).toBe("confirmar");
+    expect(tituloQueRecebeOFoco("editor", false)).toBe("editor");
+    // efeito atrasado do passo anterior: o pedido é do passo que ainda vai aparecer, e fica guardado
+    expect(tituloQueRecebeOFoco("confirmar", false)).toBeNull();
+    expect(tituloQueRecebeOFoco("editor", true)).toBeNull();
+    expect(tituloQueRecebeOFoco(null, true)).toBeNull();
+    expect(tituloQueRecebeOFoco(null, false)).toBeNull();
   });
 });
