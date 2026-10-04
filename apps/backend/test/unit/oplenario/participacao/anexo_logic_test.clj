@@ -113,3 +113,26 @@
 
 (deftest so-os-anexos-da-casa-contam-para-o-limite
   (is (= 2 (count (anexo/da-casa [{:origem "casa"} {:origem "requerente"} {:origem "casa"} {:origem "requerente"}])))))
+
+;; ---------- o requerente anexa ao proprio pedido (origem `requerente`) ----------
+
+(deftest janela-do-requerente-conta-do-protocolo
+  (let [recibo (t "2026-07-03T12:00:00Z")]
+    (is (true? (anexo/na-janela-do-requerente? recibo (t "2026-07-03T12:00:00Z"))))
+    (is (true? (anexo/na-janela-do-requerente? recibo (t "2026-07-03T12:10:00Z"))) "o proprio minuto 10 vale")
+    (is (false? (anexo/na-janela-do-requerente? recibo (t "2026-07-03T12:10:01Z"))))
+    (is (false? (anexo/na-janela-do-requerente? nil (t "2026-07-03T12:00:00Z"))) "sem recibo, nunca")))
+
+(deftest pode-anexar-do-requerente-so-dentro-da-janela-e-abaixo-do-limite
+  (let [recibo (t "2026-07-03T12:00:00Z") dentro (t "2026-07-03T12:05:00Z") fora (t "2026-07-03T12:11:00Z")]
+    (is (= 5 anexo/max-anexos-do-requerente))
+    (is (true? (anexo/pode-anexar-requerente? recibo 0 dentro)))
+    (is (true? (anexo/pode-anexar-requerente? recibo 4 dentro)))
+    (is (false? (anexo/pode-anexar-requerente? recibo 5 dentro)) "5 do requerente: o limite")
+    (is (false? (anexo/pode-anexar-requerente? recibo 0 fora)))))
+
+(deftest o-limite-e-por-origem
+  (let [anexos [{:origem "casa"} {:origem "requerente"} {:origem "casa"} {:origem "requerente"} {:origem "requerente"}]]
+    (is (= 2 (count (anexo/da-origem anexos "casa"))))
+    (is (= 3 (count (anexo/da-origem anexos "requerente"))))
+    (is (= (anexo/da-casa anexos) (anexo/da-origem anexos "casa")))))

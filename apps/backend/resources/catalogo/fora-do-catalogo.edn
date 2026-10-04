@@ -129,6 +129,12 @@
                                  :motivo "baixar o anexo da resposta na tela do balcao (solicitacao do titular); o agente nao le o protocolo do cidadao antes do [GAP] juridico (LGPD art. 33)"}
  :participacao/baixar-meu-anexo-lgpd {:categoria :so-tela
                                  :motivo "o requerente baixa o anexo do proprio protocolo (solicitacao do titular), na tela dele; e' arquivo de um cidadao autenticado, nao acao de agente da Casa"}
+ :participacao/anexar-meu-esic {:categoria :so-tela
+                                 :motivo "o requerente anexa arquivo ao proprio protocolo (pedido de e-SIC) na tela dele, como protocolar; e' upload de um cidadao autenticado, nao acao de agente da Casa"}
+ :participacao/anexar-meu-ouvidoria {:categoria :so-tela
+                                 :motivo "o requerente anexa arquivo ao proprio protocolo (manifestacao de ouvidoria identificada) na tela dele, como protocolar; e' upload de um cidadao autenticado, nao acao de agente da Casa"}
+ :participacao/anexar-meu-lgpd {:categoria :so-tela
+                                 :motivo "o requerente anexa arquivo ao proprio protocolo (solicitacao do titular) na tela dele, como protocolar; e' upload de um cidadao autenticado, nao acao de agente da Casa"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------
  :admin-sistema/descoberta {:categoria :supratenant
                             :motivo "descoberta publica do realm do operador para o login do console"}

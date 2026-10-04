@@ -197,6 +197,12 @@
       (sql! "INSERT INTO identidade.vinculo (id, ente_id, identidade_id, tipo) VALUES (?, ?, ?, 'cidadao')" (random-uuid) ente cidada)
       (sql! "INSERT INTO transparencia.acompanhamento (ente_id, proposicao_id, seguidor_identidade_id, created_by, efetivado_em)
              VALUES (?, ?, ?, ?, now())" ente (random-uuid) cidada cidada)
+      ;; o anexo que a CIDADA juntou ao proprio pedido (origem `requerente`): `enviado_por` e' o id de quem so' e' cidada
+      (let [protocolo (random-uuid) anexo (random-uuid) chave (str "atendimento/" ente "/" protocolo "/" anexo)]
+        (sql! "INSERT INTO participacao.anexo (ente_id, id, objeto_tipo, objeto_id, origem, nome, tipo_midia, bytes, sha256,
+               chave_objeto, enviado_por) VALUES (?, ?, 'pedido_esic', ?, 'requerente', ?, 'application/pdf', 10, ?, ?, ?)"
+              ente anexo protocolo (str "contrato-" marca ".pdf") (apply str (repeat 64 "b")) chave cidada)
+        (store/guardar! st chave (.getBytes (str "conteudo da cidada " marca)) "application/pdf"))
       (sql! "INSERT INTO participacao.manifestacao_ouvidoria (ente_id, ano, sequencial, protocolo, tipo, assunto, descricao,
              anonima, recibo_em, efetivado_em) VALUES (?, 2026, 1, 'OUV-2026-000001', 'denuncia', 'Denúncia anônima',
              'Relato.', true, now(), now())" ente)
@@ -310,7 +316,7 @@
       (is (str/includes? (texto (es "dados/cadastros/ente.csv")) (str a)))
       (is (str/includes? (texto (es "dados/normas/norma.csv")) "Regimento da Casa-A"))
       (is (str/includes? (texto (es "dados/participacao/anexo.csv")) "folha-Casa-A.pdf") "o anexo da resposta (participacao.anexo)")
-      (is (= 1 (get-in manifesto ["tabelas" "participacao.anexo"])))
+      (is (= 2 (get-in manifesto ["tabelas" "participacao.anexo"])))
       (is (= 5 (get-in manifesto ["tabelas" "auditoria.registro"])))
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_remessa"])) "a filha sem ente_id, pela FK")
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_nota"])) "e a neta")
@@ -384,6 +390,18 @@
         (is (= 2 (count prot)))
         (is (every? #(nil? (% "identidade_id")) prot))
         (is (every? #(nil? (% "ip")) prot))))
+    (testing "o anexo que a cidada juntou ao proprio pedido: a linha e o arquivo entram, e `enviado_por` sai pseudonimizado"
+      (let [[cab & ls] (ler-csv (texto (es "dados/participacao/anexo.csv")))
+            linhas (map #(zipmap cab %) ls)
+            do-requerente (first (filter #(= "requerente" (% "origem")) linhas))
+            da-casa (first (filter #(= "casa" (% "origem")) linhas))]
+        (is (= 2 (count linhas)) "o da Casa e o do requerente")
+        (is (= (str "contrato-Casa-A.pdf") (do-requerente "nome")))
+        (is (= pseudo-cidada (do-requerente "enviado_por")) "o MESMO pseudonimo da tela da trilha, nunca o id da cidada")
+        (is (= (str pessoa) (da-casa "enviado_por")) "o servidor segue identificado (funcao publica)"))
+      (is (some #(and (str/starts-with? % (str "arquivos/atendimento/" a "/")) (str/includes? (texto (es %)) "conteudo da cidada"))
+                (keys es))
+          "o arquivo da cidada vai na exportacao entregue a Casa (e' documento que ela mesma recebeu), achado pela convencao"))
     (testing "a manifestacao anonima esta' la', sem identidade em coluna alguma"
       (let [[cab & ls] (ler-csv (texto (es "dados/participacao/manifestacao_ouvidoria.csv")))
             m (zipmap cab (first ls))]
@@ -523,7 +541,7 @@
       (is (= 1 (a-antes "auditoria.selo_diario")))
       (is (= 1 (a-antes "legislativo.protocolo_geral")))
       (is (= 2 (a-antes "sessoes.gravacao_segmento")) "inclusive o staging")
-      (is (= 1 (a-antes "participacao.anexo")) "o anexo da resposta (append-only)"))
+      (is (= 2 (a-antes "participacao.anexo")) "o anexo da resposta (Casa) e o do requerente (append-only)"))
     (testing "ZERO linhas de A em toda tabela com ente_id (varredura do catalogo) — so' ficam os eventos da Operacao"
       (let [depois (contagens a)]
         (is (= {"shared.outbox" 1} (into {} (filter (comp pos? val)) depois)) (pr-str (filter (comp pos? val) depois)))
@@ -554,7 +572,7 @@
       (is (= 1 (get-in r [:tabelas "identidade.identidade_externa"])))
       (is (contains? (:tabelas r) "paineis.pendencia") "a lista inteira do inventario, zeros inclusive")
       (is (= (reduce + (vals (:tabelas r))) (:linhas-total r)))
-      (is (= 4 (:objetos r)) "remessa + gravacao + folha + o anexo do atendimento")
+      (is (= 5 (:objetos r)) "remessa + gravacao + folha + os dois anexos do atendimento (Casa e requerente)")
       (is (= 1 (:exportacoes-apagadas r)))
       (is (= [] (:objetos-fora-da-convencao r)))
       (is (true? (:realm-apagado? r)))

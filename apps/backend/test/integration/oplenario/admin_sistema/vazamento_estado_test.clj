@@ -134,6 +134,8 @@
     :participacao/indeferir-pedido :participacao/indeferir-solicitacao
     ;; o documento que acompanha a resposta (anexar e' parte de responder; baixar e' GET e ja' passa)
     :participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd
+    ;; o requerente anexa ao proprio protocolo: parte de protocolar (o direito de pedir nao depende do contrato da Casa)
+    :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia

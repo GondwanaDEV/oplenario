@@ -29,8 +29,8 @@
    [:prorrogado-em :string]])
 
 (def Anexo
-  "Um arquivo anexado a resposta, para a PROPRIA cidada baixar (`/portal/meus-protocolos/<especie>/<id>/anexos/<anexo>`):
-  id, nome, tipo, tamanho, de quem veio e quando. Nunca a chave no object storage, o sha256 nem quem enviou. O nome e'
+  "Um arquivo do protocolo, para a PROPRIA cidada baixar (`/portal/meus-protocolos/<especie>/<id>/anexos/<anexo>`) — o da
+  Casa (na resposta) ou o dela (no pedido), pela `origem`: id, nome, tipo, tamanho, de quem veio e quando. Nunca a chave no object storage, o sha256 nem quem enviou. O nome e'
   conteudo de quem enviou: o consumidor escapa antes de renderizar (React ja' escapa)."
   [:map {:closed true}
    [:id :string]
@@ -48,8 +48,10 @@
          [:estado (km/enum-de logic/estados-pedido)]
          ;; prorrogada com justificativa (LAI art. 11 §2º)? nil enquanto nao houve (presente por chave)
          [:prorrogacao [:maybe Prorrogacao]]
-         ;; os arquivos que a Casa juntou a resposta ([] se nao ha)
+         ;; os arquivos do protocolo ([] se nao ha): os da Casa na resposta e os do requerente no pedido (`origem`)
          [:anexos [:vector Anexo]]
+         ;; o requerente ainda pode juntar arquivo ao PROPRIO pedido? (10 minutos do protocolo, ate' 5 seus)
+         [:pode-anexar :boolean]
          ;; o recurso ja' interposto (V1: um por pedido) — a tela o mostra no lugar do botao de recorrer
          [:recurso [:maybe [:map {:closed true}
                             [:protocolo :string] [:estado [:enum "protocolado" "decidido"]]
@@ -61,7 +63,8 @@
          [:id :string] [:protocolo :string]
          [:tipo (km/enum-de logic/tipos-solicitacao-titular)]
          [:estado (km/enum-de logic/estados-solicitacao-titular)]
-         [:anexos [:vector Anexo]]]
+         [:anexos [:vector Anexo]]
+         [:pode-anexar :boolean]]
         prazo))
 
 (def ManifestacaoItem
@@ -73,7 +76,8 @@
          ;; prorrogada com justificativa (Lei 13.460 art. 10)? nil enquanto nao houve. A manifestacao ANONIMA nao esta
          ;; nesta lista (nao ha dono persistido): ninguem a recebe aqui.
          [:prorrogacao [:maybe Prorrogacao]]
-         [:anexos [:vector Anexo]]]
+         [:anexos [:vector Anexo]]
+         [:pode-anexar :boolean]]
         prazo))
 
 (def MeusProtocolosOut

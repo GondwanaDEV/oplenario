@@ -94,4 +94,30 @@
   (boolean (and (na-janela? ultimo-ato-em agora)
                 (< (long n-anexos-da-casa) (long max-anexos-da-casa)))))
 
-(defn da-casa [anexos] (filter #(= "casa" (:origem %)) anexos))
+(defn da-origem
+  "Os anexos de uma `origem` (`casa` | `requerente`): o limite de 5 e' POR ORIGEM — o que a Casa anexa a resposta nao
+  toma a vaga do que o requerente anexa ao pedido, e vice-versa."
+  [anexos origem]
+  (filter #(= origem (:origem %)) anexos))
+
+(defn da-casa [anexos] (da-origem anexos "casa"))
+
+;; ---------- o REQUERENTE anexa ao proprio pedido (origem `requerente`) ----------
+;; So' o cidadao DONO do protocolo, nos 10 minutos seguintes ao protocolo (`recibo-em`), ate' 5 de origem `requerente`.
+;; Mesmos tipos, tamanho e erros dos anexos da Casa. A manifestacao ANONIMA nao tem dono persistido: nao tem anexo.
+
+(def max-anexos-do-requerente 5)
+
+(defn na-janela-do-requerente?
+  "O requerente ainda pode anexar? So' ate' 10 minutos depois do protocolo (o proprio minuto 10 vale): o pedido e' imutavel
+  e o arquivo sobe por outra requisicao, como na resposta da Casa."
+  [^Instant recibo-em ^Instant agora]
+  (boolean (and recibo-em
+                (not (.isAfter agora (.plus recibo-em ^java.time.temporal.TemporalAmount janela-de-anexos))))))
+
+(defn pode-anexar-requerente?
+  "Verdadeiro so' dentro da janela do protocolo e abaixo do limite de anexos do requerente. E' o que `meus-protocolos`
+  diz a tela (`pode-anexar`)."
+  [recibo-em n-anexos-do-requerente agora]
+  (boolean (and (na-janela-do-requerente? recibo-em agora)
+                (< (long n-anexos-do-requerente) (long max-anexos-do-requerente)))))

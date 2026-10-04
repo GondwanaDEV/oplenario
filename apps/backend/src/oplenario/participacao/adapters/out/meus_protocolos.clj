@@ -35,11 +35,15 @@
                                   :resposta (when-let [x (:resposta r)]
                                               {:corpo (:corpo x) :respondida-em (->str (:respondida-em x))})}))
         out {:pedidos-esic      (mapv #(assoc (base %) :assunto (:assunto %) :recurso (recurso (:recurso %))
-                                              :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %)))
+                                              :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %))
+                                              :pode-anexar (boolean (:pode-anexar %)))
                                       pedidos-esic)
-             :solicitacoes-lgpd (mapv #(assoc (base %) :tipo (:tipo %) :anexos (anexos (:anexos %))) solicitacoes-lgpd)
+             :solicitacoes-lgpd (mapv #(assoc (base %) :tipo (:tipo %) :anexos (anexos (:anexos %))
+                                              :pode-anexar (boolean (:pode-anexar %)))
+                                      solicitacoes-lgpd)
              :manifestacoes     (mapv #(assoc (base %) :tipo (:tipo %) :assunto (:assunto %)
-                                              :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %)))
+                                              :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %))
+                                              :pode-anexar (boolean (:pode-anexar %)))
                                       manifestacoes)}]
     (when-not (m/validate wire/MeusProtocolosOut out)
       (throw (ex-info "projecao viola o contrato MeusProtocolosOut (bug de servidor)"

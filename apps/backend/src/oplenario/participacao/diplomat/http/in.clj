@@ -403,8 +403,9 @@
   (it/anexo-multipart {:max-bytes anexo/max-bytes-anexo}))
 
 (defn- erro-de-anexo
-  "Os conflitos de anexo -> a resposta nomeada em portugues (nunca 500). nil = nao e' conflito daqui."
-  [e]
+  "Os conflitos de anexo -> a resposta nomeada em portugues (nunca 500). nil = nao e' conflito daqui. `quem` = `:casa` (a
+  secretaria anexa a RESPOSTA) ou `:requerente` (o cidadao anexa ao PEDIDO): o mesmo conflito, a frase de cada lado."
+  [quem e]
   (case (:tipo (ex-data e))
     :conflito/tipo-de-anexo
     (http/json-resposta 415 {:erro (str "Tipo de arquivo não aceito. Aceitamos " anexo/descricao-dos-tipos
@@ -412,9 +413,13 @@
     :conflito/anexo-sem-resposta
     (http/json-resposta 409 {:erro "Este protocolo ainda não tem resposta da Casa: anexe depois de responder."})
     :conflito/anexo-fora-da-janela
-    (http/json-resposta 409 {:erro "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram."})
+    (http/json-resposta 409 {:erro (if (= :requerente quem)
+                                     "Os anexos vão junto com o pedido: os 10 minutos depois do protocolo já passaram."
+                                     "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram.")})
     :conflito/anexos-demais
-    (http/json-resposta 409 {:erro (str "Este protocolo já tem " anexo/max-anexos-da-casa " anexos da Casa.")})
+    (http/json-resposta 409 {:erro (if (= :requerente quem)
+                                     (str "Este protocolo já tem " anexo/max-anexos-do-requerente " anexos seus.")
+                                     (str "Este protocolo já tem " anexo/max-anexos-da-casa " anexos da Casa."))})
     nil))
 
 (defn- anexar-handler
@@ -430,7 +435,22 @@
                  :auditoria {:rotulo (str "anexo em " (:protocolo a)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
                              :recurso-id (str id)})
           (http/json-resposta 404 {:erro "protocolo nao encontrado"}))
-        (catch clojure.lang.ExceptionInfo e (or (erro-de-anexo e) (throw e)))))))
+        (catch clojure.lang.ExceptionInfo e (or (erro-de-anexo :casa e) (throw e)))))))
+
+(defn- anexar-do-requerente-handler
+  "POST /portal/meus-protocolos/<especie>/:id/anexos (CIDADAO, so-auth; multipart, UM arquivo). So' o DONO do protocolo,
+  nos 10 minutos do protocolo, ate' 5 seus. 201 com o anexo (origem `requerente`; sem chave, sha256 nem quem enviou); 404
+  para qualquer nao-dono, outra Casa, protocolo inexistente e manifestacao ANONIMA (uniforme); 415/409/413 como os da Casa."
+  [repo-participacao objeto-store relogio especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [a (controllers/anexar-do-requerente! repo-participacao objeto-store relogio (:ator req) especie id (:anexo req))]
+          (assoc (http/json-resposta 201 (adapters-out-atendimento/anexo->wire a))
+                 :auditoria {:rotulo (str "anexo em " (:protocolo a)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
+                             :recurso-id (str id)})
+          (http/json-resposta 404 {:erro "protocolo nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e (or (erro-de-anexo :requerente e) (throw e)))))))
 
 (defn- baixar-resposta
   "O anexo como ARQUIVO, sempre: `attachment` (o navegador nao renderiza o que a pessoa enviou) + nosniff, igual ao
@@ -553,6 +573,17 @@
      ["/portal/meus-protocolos/lgpd/:id/anexos/:anexo" :get
       [auth (baixar-meu-anexo-handler repo-participacao objeto-store :lgpd)]
       :route-name :participacao/baixar-meu-anexo-lgpd]
+     ;; CIDADA: anexar ao PROPRIO pedido (so' o dono, 10 min do protocolo, ate' 5). `auth` SEM papel (como protocolar); o
+     ;; upload e' multipart. NAO existe rota publica de upload: a manifestacao anonima nao tem dono, nao tem anexo.
+     ["/portal/meus-protocolos/esic/:id/anexos" :post
+      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :esic)]
+      :route-name :participacao/anexar-meu-esic]
+     ["/portal/meus-protocolos/ouvidoria/:id/anexos" :post
+      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :ouvidoria)]
+      :route-name :participacao/anexar-meu-ouvidoria]
+     ["/portal/meus-protocolos/lgpd/:id/anexos" :post
+      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :lgpd)]
+      :route-name :participacao/anexar-meu-lgpd]
      ["/portal/esic/pedidos/:id" :get
       [auth (meu-pedido-handler repo-participacao relogio)]
       :route-name :participacao/meu-pedido-esic]

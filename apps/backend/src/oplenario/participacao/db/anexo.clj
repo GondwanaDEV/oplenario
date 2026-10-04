@@ -58,14 +58,14 @@
                     :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:in :objeto_id ids]]
                     :order-by [[:enviado_em :asc] [:id :asc]]})))))
 
-(defn contar-da-casa
-  "Quantos anexos de origem `casa` este protocolo ja' tem (o limite de 5 e' da Casa)."
-  [tx ente-id objeto-tipo objeto-id]
-  {:pre [(some? ente-id) (some? objeto-tipo) (some? objeto-id)]}
+(defn contar-da-origem
+  "Quantos anexos de uma `origem` (`casa` | `requerente`) este protocolo ja' tem: o limite de 5 e' POR ORIGEM."
+  [tx ente-id objeto-tipo objeto-id origem]
+  {:pre [(some? ente-id) (some? objeto-tipo) (some? objeto-id) (#{"casa" "requerente"} origem)]}
   (long (:n (jdbc/execute-one! tx
               (sql/format {:select [[[:count :*] :n]] :from [:participacao.anexo]
                            :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]
-                                   [:= :origem [:inline "casa"]]]})
+                                   [:= :origem origem]]})
               {:builder-fn rs/as-unqualified-maps}))))
 
 (defn buscar

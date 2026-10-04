@@ -192,8 +192,8 @@
   (atendimento-lgpd [this ente-id id]
     "A solicitacao do titular inteira para o balcao, numa tx: {:solicitacao :prazo :respostas} ou nil.")
   (anexar-ao-atendimento! [this ente-id m limite]
-    "UMA tx: serializa os anexos do MESMO protocolo (trava consultiva) e, se a Casa ainda nao tem `limite` anexos de
-    origem `casa` nele, grava o anexo (append-only). Ja' no limite -> :conflito/anexos-demais (o controller tira o blob
+    "UMA tx: serializa os anexos do MESMO protocolo (trava consultiva) e, se a `origem` (casa | requerente) ainda nao tem
+    `limite` anexos nele, grava o anexo (append-only). Ja' no limite -> :conflito/anexos-demais (o controller tira o blob
     que subiu antes). `m` = {:id :objeto-tipo :objeto-id :origem :nome :tipo-midia :bytes :sha256 :chave-objeto
     :enviado-por}. O protocolo ja' foi conferido (existe nesta Casa) pelo chamador. Devolve o anexo (kebab).")
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
@@ -596,9 +596,10 @@
     (transacao this ente-id
       (fn [tx]
         (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
-        (when (and (= "casa" origem) (>= (db-anexo/contar-da-casa tx ente-id objeto-tipo objeto-id) (long limite)))
-          (throw (ex-info "o protocolo ja' tem o maximo de anexos da Casa"
-                          {:tipo :conflito/anexos-demais :limite limite})))
+        ;; o limite e' POR ORIGEM: os anexos da Casa nao tomam a vaga dos do requerente, e vice-versa
+        (when (>= (db-anexo/contar-da-origem tx ente-id objeto-tipo objeto-id origem) (long limite))
+          (throw (ex-info "o protocolo ja' tem o maximo de anexos desta origem"
+                          {:tipo :conflito/anexos-demais :origem origem :limite limite})))
         (db-anexo/inserir! tx (assoc m :ente-id ente-id)))))
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))

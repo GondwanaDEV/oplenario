@@ -20,6 +20,8 @@
   (is (r/escrita-permitida? :post :participacao/indeferir-solicitacao) "o encarregado indefere a solicitacao LGPD")
   (is (every? #(r/escrita-permitida? :post %) [:participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd])
       "o documento que acompanha a resposta segue: anexar e' parte de responder")
+  (is (every? #(r/escrita-permitida? :post %) [:participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd])
+      "o cidadao anexa ao proprio protocolo: parte de protocolar (como `protocolar-esic`)")
   (is (r/escrita-permitida? :post :exportacao-da-casa/gerar) "a Casa suspensa exporta (portabilidade, 9.6)")
   (is (r/escrita-permitida? :post :exportacao-da-casa/confirmar-recebimento))
   (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")

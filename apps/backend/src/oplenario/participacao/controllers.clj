@@ -127,7 +127,11 @@
                                            :resposta (some-> resposta (select-keys [:corpo :respondida-em]))
                                            :prorrogacao (some-> prorrogacao
                                                                 (select-keys [:de-data :para-data :justificativa :prorrogado-em]))
-                                           :anexos (anexos-do-detalhe anexos))
+                                           :anexos (anexos-do-detalhe anexos)
+                                           ;; o requerente ainda pode juntar arquivo ao PROPRIO pedido? (10 min do protocolo, ate' 5)
+                                           :pode-anexar (anexo/pode-anexar-requerente?
+                                                         (:recibo-em item) (count (anexo/da-origem anexos "requerente"))
+                                                         (tempo/agora relogio)))
                               recurso (assoc :recurso {:protocolo (:protocolo recurso) :estado (:estado recurso)
                                                        :recibo-em (:recibo-em recurso)
                                                        :resposta (some-> (:resposta recurso)
@@ -605,20 +609,21 @@
 (defn- hex [^bytes b] (apply str (map #(format "%02x" (bit-and (int %) 0xff)) b)))
 
 (defn- protocolo-para-anexar
-  "O protocolo `id` da `especie` NESTA Casa, com o que a regra de anexar precisa: {:protocolo :dados :anexos}, ou nil
-  (inexistente ou de outra Casa)."
+  "O protocolo `id` da `especie` NESTA Casa, com o que a regra de anexar precisa: {:protocolo :linha :dados :anexos}
+  (`:linha` = o proprio pedido/manifestacao/solicitacao, com o dono e o `recibo-em`), ou nil (inexistente ou de outra
+  Casa)."
   [repo-participacao ente-id especie id]
   (case especie
     :esic      (when-let [d (repo/atendimento-esic repo-participacao ente-id id)]
-                 {:protocolo (get-in d [:pedido :protocolo])
+                 {:protocolo (get-in d [:pedido :protocolo]) :linha (:pedido d)
                   :dados {:estado (get-in d [:pedido :estado]) :respostas (:respostas d) :recurso (:recurso d)}
                   :anexos (:anexos d)})
     :ouvidoria (when-let [d (repo/atendimento-ouvidoria repo-participacao ente-id id)]
-                 {:protocolo (get-in d [:manifestacao :protocolo])
+                 {:protocolo (get-in d [:manifestacao :protocolo]) :linha (:manifestacao d)
                   :dados {:estado (get-in d [:manifestacao :estado]) :respostas (:respostas d)}
                   :anexos (:anexos d)})
     :lgpd      (when-let [d (repo/atendimento-lgpd repo-participacao ente-id id)]
-                 {:protocolo (get-in d [:solicitacao :protocolo])
+                 {:protocolo (get-in d [:solicitacao :protocolo]) :linha (:solicitacao d)
                   :dados {:estado (get-in d [:solicitacao :estado]) :respostas (:respostas d)}
                   :anexos (:anexos d)})))
 
@@ -686,3 +691,54 @@
   [repo-participacao objeto-store ator especie id anexo-id]
   (when (dono-do-protocolo? repo-participacao ator especie id)
     (baixar-anexo-do-atendimento repo-participacao objeto-store ator especie id anexo-id)))
+
+;; ---------------------------------------------------------------------------------------------
+;; O REQUERENTE anexa ao PROPRIO pedido (origem `requerente`)
+;; ---------------------------------------------------------------------------------------------
+;; So' o cidadao DONO, nos 10 minutos seguintes ao protocolo, ate' 5 de origem `requerente` (o limite e' por origem),
+;; mesmos tipos/tamanho/erros dos anexos da Casa. A manifestacao ANONIMA nao tem dono persistido: nao tem anexo.
+
+(defn- dono-da-linha?
+  "O ator e' o REQUERENTE desta linha de protocolo (pedido | manifestacao | solicitacao)? A manifestacao anonima nunca."
+  [especie ator linha]
+  (let [eu (:identidade-id ator)]
+    (boolean
+     (and eu
+          (case especie
+            :esic      (= eu (:solicitante-identidade-id linha))
+            :lgpd      (= eu (:titular-identidade-id linha))
+            :ouvidoria (and (not (:anonima linha)) (= eu (:manifestante-identidade-id linha))))))))
+
+(defn anexar-do-requerente!
+  "O CIDADAO anexa UM arquivo ao PROPRIO protocolo `id` da `especie` (rota so-auth, sem papel). Ordem das recusas: nil =
+  protocolo inexistente, de outra Casa, de outra pessoa ou manifestacao ANONIMA (404 uniforme — o tipo recusado de quem
+  nao e' dono nunca vira 415); tipo fora da lista -> :conflito/tipo-de-anexo (415); passaram os 10 minutos do protocolo ->
+  :conflito/anexo-fora-da-janela (409); o requerente ja' tem 5 -> :conflito/anexos-demais (409, na conferencia e de novo
+  DENTRO da tx do Repo). `enviado-por` INJETADO do ator. O blob sobe antes da linha e sai se a linha for recusada.
+  Devolve o anexo (kebab) com o `:protocolo`."
+  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo]}]
+  (let [ente-id (:ente-id ator)
+        objeto-tipo (anexo/objeto-tipo-da-especie especie)]
+    (when-let [{:keys [protocolo linha anexos]} (protocolo-para-anexar repo-participacao ente-id especie id)]
+      (when (dono-da-linha? especie ator linha)
+        (let [agora (tempo/agora relogio)
+              tipo (or (anexo/classificar nome tipo-midia)
+                       (conflito-de-anexo! :conflito/tipo-de-anexo "tipo de arquivo nao aceito" {:nome nome :declarado tipo-midia}))]
+          (when-not (anexo/na-janela-do-requerente? (:recibo-em linha) agora)
+            (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos do pedido vao junto com ele: a janela de 10 minutos passou"))
+          (when (>= (count (anexo/da-origem anexos "requerente")) anexo/max-anexos-do-requerente)
+            (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos do requerente"
+                                {:limite anexo/max-anexos-do-requerente}))
+          (let [anexo-id (ids/novo-id)
+                chave (anexo/chave-do-anexo ente-id id anexo-id)
+                sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
+            (store/guardar! objeto-store chave conteudo tipo)
+            (try
+              (assoc (repo/anexar-ao-atendimento! repo-participacao ente-id
+                       {:id anexo-id :objeto-tipo objeto-tipo :objeto-id id :origem "requerente" :nome nome :tipo-midia tipo
+                        :bytes (alength conteudo) :sha256 sha :chave-objeto chave :enviado-por (:identidade-id ator)}
+                       anexo/max-anexos-do-requerente)
+                     :protocolo protocolo)
+              (catch Exception e
+                (try (store/remover! objeto-store chave) (catch Exception _ nil))
+                (throw e)))))))))

@@ -29,6 +29,8 @@
   #{;; os protocolos do cidadao — o direito de pedir nao depende do contrato da Casa
     :participacao/protocolar-esic :participacao/interpor-recurso :participacao/protocolar-manifestacao
     :participacao/solicitar-titular :participacao/comentar :participacao/denunciar-comentario
+    ;; anexar ao proprio protocolo e' parte de protocolar: o direito de pedir (com o documento) nao depende do contrato
+    :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
     :transparencia/seguir :transparencia/deixar-de-seguir
     ;; os servidores respondendo aos protocolos do cidadao (prazo legal correndo)
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
