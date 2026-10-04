@@ -60,3 +60,15 @@ papel algum "até a concessão existir".
 - **Fica para depois:** a revisão da nota medida de volta na IA (taxa de aproveitamento, como a da ata), apontar
   divergência entre regra configurada e texto (7.6), e outros agentes institucionais — cada um entra na lista do
   item 1 com a concessão do admin.
+
+## Id da execução na IA (reportar erro)
+
+(04/10/2026) O "Reportar erro" (8.4) precisa do id da execução NO SATÉLITE; `nota_tecnica.execucao_id` é o da credencial.
+
+1. **`registrar_nota_tecnica` ganha `execucao-ia`**, opcional (UUID; ausente ou nulo é aceito, para o satélite antigo
+   continuar funcionando no deploy; outro valor é recusado como os demais campos). O roteiro o preenche com o id da
+   execução do núcleo (`pedido_de_registro`). Guardado em `legislativo.nota_tecnica.execucao_ia` (mig 0186, só no
+   INSERT; nota anterior fica NULL e a tela não oferece o botão) e devolvido pela leitura da nota só quando existe.
+2. **É chave de correlação, não identidade nem autoridade.** Agente e execução da CREDENCIAL continuam vindo só do
+   `:via` (item 4 acima); nenhuma decisão de autorização lê `execucao-ia`. O satélite já confere que a execução é da
+   mesma Casa ao receber o reporte.
