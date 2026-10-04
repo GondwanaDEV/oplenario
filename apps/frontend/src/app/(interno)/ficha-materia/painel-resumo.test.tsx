@@ -95,6 +95,17 @@ describe("PainelResumo", () => {
     expect(await screen.findByText("Versão 1 publicada no portal.")).toBeTruthy();
   });
 
+  it("revisão do rascunho: com o id da execução na IA oferece 'Reportar erro' (8.4); sem id, não oferece", async () => {
+    for (const [execucaoIa, oferece] of [["e-ia-res-1", true], [undefined, false]] as const) {
+      mockar({ rascunho: { status: 200, body: { ...rascunho, ...(execucaoIa ? { "execucao-ia": execucaoIa } : {}) } } });
+      render(<PainelResumo proposicaoId="p" token="tok" />);
+      fireEvent.click(await screen.findByRole("button", { name: "Revisar o rascunho" }));
+      await screen.findByRole("button", { name: "Usar este rascunho" });
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(oferece);
+      cleanup();
+    }
+  });
+
   it("mostra o publicado, avisa quando o texto mudou e escreve à mão sem rascunho de origem", async () => {
     const fetchMock = mockar({
       resumo: {
