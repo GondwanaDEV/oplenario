@@ -31,6 +31,8 @@
   (nome-por-id [this id]
     "Leitura ESTREITA (so' :nome, sem :cpf) — pra caminhos que nao devem ver CPF (ex.: provisionar
     usuario no IdP). Review Task 8 IMPORTANT-2b: nao reusar `identidade-por-id` aqui de proposito.")
+  (pessoas-com-cpf-mascarado [this ids]
+    "Balcao de atendimento: ids -> {id {:nome :cpf-mascarado}}. Leitura ESTREITA: o CPF ja' sai mascarado do banco.")
   (identidade-existe? [this id]
     "Leitura ESTREITA (booleano, nem :nome nem :cpf) — guard default de `rotas.clj` pro
     PATCH /cadastros/vereadores/:id/identidade. Review Task 12 IMPORTANT: nao reusar `identidade-por-id`
@@ -99,6 +101,7 @@
   (identidade-por-cpf [_ cpf] (id/por-cpf (:ds datasource) cpf))
   (identidade-por-id [_ id] (id/por-id (:ds datasource) id))
   (nome-por-id [_ id] (id/nome-por-id (:ds datasource) id))
+  (pessoas-com-cpf-mascarado [_ ids] (id/com-cpf-mascarado-por-ids (:ds datasource) ids))
   (identidade-existe? [_ id] (id/existe? (:ds datasource) id))
   (vincular-externa! [_ ve] (id/vincular-externa! (:ds datasource) ve))
   (identidade-por-sub [_ provedor sub] (id/identidade-por-sub (:ds datasource) provedor sub))

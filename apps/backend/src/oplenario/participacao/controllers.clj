@@ -403,3 +403,127 @@
   :cumpridos-no-prazo} (o adapters/out deriva o percentual e valida o contrato)."
   [repo-participacao ente-id]
   (repo/esic-cumprimento repo-participacao ente-id))
+
+;; ========================= BALCAO interno de atendimento (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD) =========================
+;; A secretaria le (papel exigido na rota) o que o cidadao protocolou, com o prazo que vale e as acoes cabiveis. O prazo
+;; e' a MESMA derivacao do acompanhamento do cidadao (`logic/leitura-do-prazo` sobre `logic/vencimento-efetivo` e o
+;; `hoje` do relogio injetado, no fuso civil) — nenhuma contagem nova.
+;;
+;; IDENTIDADE (regra legal): `pessoas` e' o seam do host (fn [ids] -> {id {:nome :cpf-mascarado}}; o CPF ja' sai
+;; mascarado do banco). e-SIC: o servidor ve o nome do requerente (LAI art. 10) e o CPF mascarado. LGPD: o titular,
+;; idem (a resposta e' sobre os dados dele). OUVIDORIA: so' `identificada`/`anonima` — o controller nunca le o
+;; manifestante, e o seam nunca e' chamado com ele (Lei 13.460 art. 10 §7º). Quem respondeu (servidor) vai pelo nome.
+
+(defn- hoje-civil [relogio] (tempo/hoje relogio zona-civil))
+
+(defn- pessoas-por-id
+  "ids -> {id {:nome :cpf-mascarado}} pelo seam do host; sem seam (teste/fragmento isolado), ninguem e' nomeado."
+  [pessoas ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (and pessoas (seq ids)) (pessoas ids) {})))
+
+(defn- com-nomes
+  "Troca o `:por-id` de cada entrada do historico pelo `:por` (o nome de quem agiu, ou nil)."
+  [historico por-id]
+  (mapv (fn [e] (-> e (assoc :por (get-in por-id [(:por-id e) :nome])) (dissoc :por-id))) historico))
+
+(defn fila-do-balcao
+  "A fila da `especie` (:esic|:ouvidoria|:lgpd) na `situacao` (abertos|respondidos|todos) da Casa do `ator`, ja' na
+  ordem (ver db/atendimento): cada item com `:aberto`, o prazo que vale (`:prazo-vigente`, `:prorrogado`,
+  `:dias-restantes`) e, no e-SIC, o `:recurso-pendente` (o recurso tem relogio proprio, e e' ele que vale enquanto
+  espera). Linhas de dominio: a borda projeta por allowlist."
+  [repo-participacao relogio ator especie situacao]
+  (let [hoje (hoje-civil relogio)]
+    (mapv (fn [{:keys [item prazo recurso]}]
+            (let [aberto? (logic/aberto-no-balcao? especie {:estado (:estado item) :recurso recurso})
+                  vigente (if (= :esic especie) (logic/prazo-vigente-esic {:prazo prazo :recurso recurso}) prazo)]
+              (cond-> (merge item {:aberto aberto?} (logic/leitura-do-prazo vigente aberto? hoje))
+                (= :esic especie) (assoc :recurso-pendente (when (logic/recurso-pendente? recurso)
+                                                             (select-keys recurso [:id :protocolo :recibo-em]))))))
+          (repo/fila-do-balcao repo-participacao (:ente-id ator) especie situacao))))
+
+(defn- respostas->historico [tipo respostas]
+  (mapv (fn [r] {:tipo tipo :em (:respondida-em r) :texto (:corpo r) :por-id (:respondido-por r)}) respostas))
+
+(defn- prorrogacoes->historico [prorrogacoes]
+  (mapv (fn [p] {:tipo "prorrogacao" :em (:prorrogado-em p) :texto (:justificativa p) :por-id (:prorrogado-por p)
+                 :de-data (:de-data p) :para-data (:para-data p)})
+        prorrogacoes))
+
+(defn- cronologico [& listas] (vec (sort-by :em (apply concat listas))))
+
+(defn atendimento-esic
+  "O pedido e-SIC `id` para o balcao: o texto, o requerente (nome + CPF mascarado), o prazo que vale, o recurso (se
+  houver), o historico (respostas, recurso e decisao, prorrogacao) e as acoes cabiveis. nil = inexistente na Casa."
+  [repo-participacao relogio pessoas ator id]
+  (when-let [{:keys [pedido prazo respostas recurso prorrogacoes]}
+             (repo/atendimento-esic repo-participacao (:ente-id ator) id)]
+    (let [hoje        (hoje-civil relogio)
+          aberto?     (logic/aberto-no-balcao? :esic {:estado (:estado pedido) :recurso recurso})
+          historico   (cronologico (respostas->historico "resposta" respostas)
+                                   (when recurso
+                                     [{:tipo "recurso" :em (:recibo-em recurso) :texto (:motivo recurso)
+                                       :protocolo (:protocolo recurso)}])
+                                   (respostas->historico "decisao-recurso" (:respostas recurso))
+                                   (prorrogacoes->historico prorrogacoes))
+          solicitante (:solicitante-identidade-id pedido)
+          por-id      (pessoas-por-id pessoas (cons solicitante (map :por-id historico)))]
+      (merge (select-keys pedido [:id :protocolo :assunto :descricao :estado :recibo-em])
+             {:aberto     aberto?
+              :requerente (get por-id solicitante)
+              :recurso    (when recurso
+                            (merge (select-keys recurso [:id :protocolo :motivo :estado :recibo-em :decidido-em])
+                                   (logic/leitura-do-prazo (:prazo recurso) (logic/recurso-pendente? recurso) hoje)))
+              :historico  (com-nomes historico por-id)
+              :acoes      (logic/acoes-do-balcao :esic {:estado (:estado pedido) :recurso recurso :prazo prazo})}
+             (logic/leitura-do-prazo (logic/prazo-vigente-esic {:prazo prazo :recurso recurso}) aberto? hoje)))))
+
+(defn atendimento-ouvidoria
+  "A manifestacao `id` para o balcao: tipo, assunto, texto, SE e' identificada (nunca quem — Lei 13.460 art. 10 §7º),
+  o prazo que vale, o historico (resposta ou arquivamento, prorrogacao) e as acoes cabiveis. nil = inexistente."
+  [repo-participacao relogio pessoas ator id]
+  (when-let [{:keys [manifestacao prazo respostas prorrogacoes]}
+             (repo/atendimento-ouvidoria repo-participacao (:ente-id ator) id)]
+    (let [aberto?   (logic/aberto-no-balcao? :ouvidoria manifestacao)
+          ;; a mesma tabela guarda a resposta de merito e a justificativa do arquivamento (a linha so' tem um desfecho)
+          tipo      (if (= "arquivada" (:estado manifestacao)) "arquivamento" "resposta")
+          historico (cronologico (respostas->historico tipo respostas) (prorrogacoes->historico prorrogacoes))
+          ;; so' quem AGIU pela Casa: o manifestante nunca entra no seam
+          por-id    (pessoas-por-id pessoas (map :por-id historico))]
+      (merge (select-keys manifestacao [:id :protocolo :tipo :assunto :descricao :estado :recibo-em])
+             {:aberto        aberto?
+              :identificacao (logic/identificacao-da-manifestacao manifestacao)
+              :historico     (com-nomes historico por-id)
+              :acoes         (logic/acoes-do-balcao :ouvidoria {:estado (:estado manifestacao) :prazo prazo})}
+             (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
+
+(defn atendimento-lgpd
+  "A solicitacao do titular `id` para o balcao: o direito pedido, o detalhe, o titular (nome + CPF mascarado), o prazo
+  que vale, o historico e as acoes cabiveis. nil = inexistente."
+  [repo-participacao relogio pessoas ator id]
+  (when-let [{:keys [solicitacao prazo respostas]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
+    (let [aberto?   (logic/aberto-no-balcao? :lgpd solicitacao)
+          historico (cronologico (respostas->historico "resposta" respostas))
+          titular   (:titular-identidade-id solicitacao)
+          por-id    (pessoas-por-id pessoas (cons titular (map :por-id historico)))]
+      (merge (select-keys solicitacao [:id :protocolo :tipo :detalhe :estado :recibo-em])
+             {:aberto    aberto?
+              :titular   (get por-id titular)
+              :historico (com-nomes historico por-id)
+              :acoes     (logic/acoes-do-balcao :lgpd {:estado (:estado solicitacao)})}
+             (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
+
+(defn prorrogar-pedido!
+  "SERVIDOR prorroga (1x so') o prazo do pedido e-SIC `id` por mais 10 dias, com justificativa (LAI art. 11 §2º) — o
+  MESMO mecanismo da ouvidoria: `de-data` = o vence_em ORIGINAL, `para-data` = +10 (puro); a CAS no Repo impede a 2a.
+  Devolve {:prorrogado-ate}, ou nil (pedido/prazo inexistente -> 404); ja' prorrogado ou o prazo nao esta' mais
+  pendente (respondido, vencido) -> :conflito/participacao (409)."
+  [repo-participacao relogio ator id {:keys [justificativa]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [prazo (repo/prazo-do-objeto repo-participacao ente-id "pedido_esic" id)]
+      (let [de-data (:vence-em prazo)]
+        (or (repo/prorrogar-pedido! repo-participacao ente-id
+              {:prorrogacao-id (ids/novo-id) :objeto-id id :de-data de-data
+               :para-data (logic/vence-prorrogado-esic de-data) :justificativa justificativa
+               :prorrogado-por (:identidade-id ator) :prorrogado-em (tempo/agora relogio)})
+            (em-conflito! "pedido ja prorrogado ou prazo nao esta mais pendente" {:pedido-id id}))))))
