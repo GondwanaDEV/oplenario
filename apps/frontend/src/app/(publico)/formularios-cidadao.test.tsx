@@ -366,13 +366,17 @@ describe("formulários do cidadão — o envio dos anexos depois do recibo (roda
     const m = roteiroPendente({ lista: listaDoEsic });
     await enviarEsicComArquivos(["a.pdf"]);
     await waitFor(() => expect(m.pendentes).toHaveLength(1));
-    expect(screen.getByText(/Enviando anexos, não feche esta página/)).toBeTruthy();
+    // o pedido do anexo já saiu, mas a tela ainda pode não ter pintado o aviso nem armado o `beforeunload` (que
+    // é um efeito): espera-se o aviso na tela e o aviso de saída armado, não só a chamada.
+    expect(await screen.findByText(/Enviando anexos, não feche esta página/)).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Acompanhar em Meus protocolos/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /Voltar ao portal/ })).toBeNull();
     expect(screen.getByText(/Acompanhar em Meus protocolos/).getAttribute("aria-disabled")).toBe("true");
-    const ev = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      const ev = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(true);
+    });
     m.pendentes[0].termina();
     await waitFor(() => expect(screen.getByRole("link", { name: /Acompanhar em Meus protocolos/ }).getAttribute("href")).toBe("/meus-protocolos"));
     expect(screen.getByRole("link", { name: /Voltar ao portal/ })).toBeTruthy();

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const estado = vi.hoisted(() => ({
   papeis: ["secretario"] as string[],
@@ -719,7 +719,9 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     expect(posts(c, "/anexos").map((x) => (x.body as { arquivo: string }).arquivo)).toEqual(["a.pdf", "b.csv"]);
     // depois de enviar, a selecao some (o controle fica pronto para a proxima) e o detalhe foi relido
     expect(within(secao).queryByRole("list", { name: "Arquivos escolhidos" })).toBeNull();
-    expect(c.filter((x) => x.metodo === "GET").length).toBeGreaterThanOrEqual(2);
+    // a releitura do detalhe é disparada depois de a mensagem aparecer: contar os GET na mesma hora dependia de
+    // o pedido já ter saído. Espera-se o pedido.
+    await waitFor(() => expect(c.filter((x) => x.metodo === "GET").length).toBeGreaterThanOrEqual(2));
   });
 
   it("o controle avulso: a falha diz qual arquivo e por quê, e deixa tentar de novo", async () => {
@@ -791,21 +793,27 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     render(<PaginaProtocolo />);
     await responderComArquivo();
     await waitFor(() => expect(m.pendentes).toHaveLength(1));
-    expect(screen.getByText(/Enviando anexos, não feche esta página/)).toBeTruthy();
+    // o pedido do anexo já saiu, mas a tela ainda pode não ter pintado o aviso nem armado o `beforeunload` (que
+    // é um efeito): espera-se o aviso na tela e o aviso de saída armado, não só a chamada.
+    expect(await screen.findByText(/Enviando anexos, não feche esta página/)).toBeTruthy();
     const recibo = screen.getAllByRole("status").find((e) => /Resposta ao ESIC/.test(e.textContent ?? ""))!;
     expect(within(recibo).queryByRole("link", { name: "Voltar à fila" })).toBeNull();
     const inativo = within(recibo).getByText("Voltar à fila");
     expect(inativo.getAttribute("aria-disabled")).toBe("true");
     expect(inativo.hasAttribute("href")).toBe(false);
-    const ev = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(ev);
-    expect(ev.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      const ev = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(ev);
+      expect(ev.defaultPrevented).toBe(true);
+    });
     m.terminar(0);
     await waitFor(() => expect(screen.queryByText(/Enviando anexos, não feche esta página/)).toBeNull());
     expect(within(recibo).getByRole("link", { name: "Voltar à fila" }).getAttribute("href")).toBe("/atendimento?aba=esic&token=tk");
-    const livre = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(livre);
-    expect(livre.defaultPrevented).toBe(false);
+    await waitFor(() => {
+      const livre = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(livre);
+      expect(livre.defaultPrevented).toBe(false);
+    });
   });
 
   it("F5: os botões de ato ficam desligados enquanto os anexos sobem (nada de segundo ato no meio)", async () => {
@@ -929,7 +937,12 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Dado pessoal de terceiros." } });
     fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Confirmar o indeferimento" })));
-    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    // a resposta (a falha) e o efeito de foco do commit dela correm DENTRO do `act`: fora dele o alerta aparece
+    // no commit e o efeito roda um instante depois — clicar em "Revisar" nesse intervalo fazia o efeito atrasado
+    // consumir o destino do foco do passo seguinte, e o foco não chegava ao título (falhava sob carga).
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    });
     // o servidor falhou: volta ao editor, com o erro
     expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível|tente de novo|erro/i);
     fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
