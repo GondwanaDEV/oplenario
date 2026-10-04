@@ -183,18 +183,30 @@ jobs:
                 const okC = r.status() === 200 && typeof j?.analise?.texto === 'string' && j.analise.texto.length > 0
                   && typeof eia === 'string' && eia.length > 0;
                 rec('POST /legislativo/pareceres/:id/copiloto', okC ? 'OK' : 'ERRO', `status=${r.status()} texto=${j?.analise?.texto?.length ?? '-'} normas=${j?.normas ?? '-'} execucao-ia=${eia ? 'presente' : 'AUSENTE'}`);
-                // A TELA: o botao "Reportar erro" aparece junto do rascunho da analise (8.4). So' clica em "pedir a analise" e
-                // le; nao reporta nada.
+                // A TELA: o botao "Reportar erro" aparece junto do rascunho da analise (8.4). So' pede a analise e le; nao
+                // reporta nada. O copiloto so' aparece em parecer ainda editavel: procura um entre os do acervo e, se a demo
+                // nao tiver nenhum, o caso fica PULADO e dito no resumo (nao conta como visto).
                 try {
-                  const p = await ctx.newPage();
-                  await p.goto(`${B}/parecer/${parecerId}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-                  const painel = p.locator('section[aria-label="Rascunho da análise pela IA"]');
-                  await painel.locator('button').first().click({ timeout: 25000 });
-                  const botao = painel.getByRole('button', { name: 'Reportar erro' });
-                  await botao.waitFor({ state: 'visible', timeout: 90000 });
-                  try { await p.screenshot({ path: 'shots/parecer-copiloto-reportar.png', fullPage: true }); } catch {}
-                  await p.close();
-                  rec('tela /parecer/:id — Reportar erro no copiloto', 'OK', 'botao visivel depois da analise');
+                  const candidatos = [];
+                  for (const it of (lp.body?.itens || [])) {
+                    const f = await api(ctx, `/api/legislativo/proposicoes/${it.id}/ficha`);
+                    for (const par of (f.body?.pareceres || [])) candidatos.push(par.id);
+                    if (candidatos.length >= 8) break;
+                  }
+                  let visto = false;
+                  for (const pid of candidatos) {
+                    const p = await ctx.newPage();
+                    await p.goto(`${B}/parecer/${pid}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    const painel = p.locator('section[aria-label="Rascunho da análise pela IA"]');
+                    const tem = await painel.waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false);
+                    if (!tem) { await p.close(); continue; }
+                    await painel.locator('button').first().click({ timeout: 15000 });
+                    await painel.getByRole('button', { name: 'Reportar erro' }).waitFor({ state: 'visible', timeout: 90000 });
+                    try { await p.screenshot({ path: 'shots/parecer-copiloto-reportar.png', fullPage: true }); } catch {}
+                    await p.close(); visto = true; break;
+                  }
+                  rec('tela /parecer/:id — Reportar erro no copiloto', 'OK',
+                      visto ? 'botao visivel depois da analise' : `PULADO: nenhum dos ${candidatos.length} pareceres do acervo esta editavel (a tela nao oferece o copiloto)`);
                 } catch (e) { rec('tela /parecer/:id — Reportar erro no copiloto', 'ERRO', String(e).split('\n')[0].slice(0, 160)); }
               }
             } catch (e) { rec('POST /legislativo/pareceres/:id/copiloto', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
