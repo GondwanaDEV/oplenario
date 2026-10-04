@@ -168,10 +168,12 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
     ao ato, até 5 arquivos de 10 MB, tipos fechados e conferidos pelo conteúdo; baixam só a secretaria e o dono do
     protocolo; a secretaria retira um anexo errado, com motivo;
   - o upload (também o dos comunicados) confere o pedido antes de ler o corpo e tem teto de 4 envios simultâneos e de
-    um por pessoa (`oplenario.interceptors/anexo-multipart`).
+    um por pessoa (`oplenario.interceptors/anexo-multipart`);
+  - **complemento da resposta:** depois da janela, a secretaria acrescenta um texto imutável a um protocolo já
+    respondido (`participacao.complemento`); não mexe em estado nem prazo e reabre por 10 minutos a janela de anexos da Casa.
 - **Falta:**
   - o botão de reportar nas outras telas de IA (o id da execução não chega a elas);
-  - antivírus nos anexos e resposta complementar depois da janela de 10 minutos;
+  - antivírus nos anexos;
   - a prova de que o requerente viu a prorrogação, que espera o e-mail;
   - o manifestante anônimo não tem canal para receber a justificativa da prorrogação.
 
