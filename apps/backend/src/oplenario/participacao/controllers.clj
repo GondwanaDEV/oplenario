@@ -106,10 +106,16 @@
   (repo/pedidos-do-solicitante repo-participacao (:ente-id ator) (:identidade-id ator)))
 
 (defn- anexos-do-detalhe
-  "Os anexos como a OUTRA parte os ve: id, nome, tipo, tamanho, quem anexou (casa|requerente) e quando. Nunca a chave no
-  object storage, o sha256 nem quem enviou (identidade de servidor) — a chave e' interna e `enviado-por` e' auditoria."
+  "Os anexos como a OUTRA parte (o requerente) os ve: id, nome, tipo, tamanho, quem anexou (casa|requerente), quando e, se foi
+  RETIRADO, quando. Nunca a chave no object storage, o sha256, quem enviou (identidade de servidor) nem o MOTIVO da
+  retirada (so' o balcao o le: `anexos-do-balcao`)."
   [anexos]
-  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em]) anexos))
+  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em]) anexos))
+
+(defn- anexos-do-balcao
+  "Os anexos como a SECRETARIA os ve: os do requerente mais, se retirado, o motivo da retirada (que o requerente nao le)."
+  [anexos]
+  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em :motivo-da-retirada]) anexos))
 
 (defn meus-protocolos
   "GET /portal/meus-protocolos — o que o `ator` protocolou NESTA Casa (a da sessao), cada item com vence-em
@@ -534,7 +540,7 @@
                             (merge (select-keys recurso [:id :protocolo :motivo :estado :recibo-em :decidido-em])
                                    (logic/leitura-do-prazo (:prazo recurso) (logic/recurso-pendente? recurso) hoje)))
               :historico  (com-nomes historico por-id)
-              :anexos     (anexos-do-detalhe anexos)
+              :anexos     (anexos-do-balcao anexos)
               :acoes      (assoc (logic/acoes-do-balcao :esic {:estado (:estado pedido) :recurso recurso :prazo prazo})
                                  :pode-anexar (pode-anexar? :esic {:estado (:estado pedido) :respostas respostas :recurso recurso}
                                                             anexos relogio))}
@@ -556,7 +562,7 @@
              {:aberto        aberto?
               :identificacao (logic/identificacao-da-manifestacao manifestacao)
               :historico     (com-nomes historico por-id)
-              :anexos        (anexos-do-detalhe anexos)
+              :anexos        (anexos-do-balcao anexos)
               :acoes         (assoc (logic/acoes-do-balcao :ouvidoria {:estado (:estado manifestacao) :prazo prazo})
                                     :pode-anexar (pode-anexar? :ouvidoria {:estado (:estado manifestacao) :respostas respostas}
                                                                anexos relogio))}
@@ -577,7 +583,7 @@
              {:aberto    aberto?
               :titular   (get por-id titular)
               :historico (com-nomes historico por-id)
-              :anexos    (anexos-do-detalhe anexos)
+              :anexos    (anexos-do-balcao anexos)
               :acoes     (assoc (logic/acoes-do-balcao :lgpd {:estado (:estado solicitacao)})
                                 :pode-anexar (pode-anexar? :lgpd {:estado (:estado solicitacao) :respostas respostas}
                                                            anexos relogio))}
@@ -598,11 +604,18 @@
                :prorrogado-por (:identidade-id ator) :prorrogado-em (tempo/agora relogio)})
             (em-conflito! "pedido ja prorrogado ou prazo nao esta mais pendente" {:pedido-id id}))))))
 
-;; ========================= ANEXOS da resposta (e-SIC, ouvidoria, LGPD) =========================
-;; A resposta a um pedido costuma SER um documento. A secretaria anexa arquivos a resposta de um protocolo (os 10 minutos
-;; seguintes ao ultimo ato de resposta, ate' 5, so' os 9 tipos da allowlist); o requerente os baixa em /meus-protocolos.
-;; O arquivo sobe ao object storage ANTES da linha (a linha so' existe apontando para um blob que existe); se a linha for
-;; recusada, o blob sai. Padrao de comunicacao/controllers `anexar!`.
+;; ========================= ANEXOS do atendimento (e-SIC, ouvidoria, LGPD) =========================
+;; A resposta a um pedido costuma SER um documento, e o pedido pode nascer com documento. A secretaria anexa arquivos a
+;; resposta de um protocolo (os 10 minutos seguintes ao ultimo ato de resposta, ate' 5); o requerente anexa ao proprio
+;; pedido (os 10 minutos do protocolo, ate' 5, e a cota de disco de 24 h); so' os 9 tipos da allowlist, com a ASSINATURA do
+;; conteudo conferida contra a extensao. O arquivo sobe ao object storage ANTES da linha (a linha so' existe apontando para
+;; um blob que existe); o blob so' sai se a linha foi COMPROVADAMENTE recusada (ou era reenvio de um anexo que ja' existe);
+;; no resultado desconhecido (o commit pode ter passado), fica: um blob sem linha e' lixo inofensivo, uma linha sem blob
+;; e' um download quebrado. Padrao de comunicacao/controllers `anexar!`.
+;;
+;; ANTES de aceitar corpo, a borda confere o que da' para conferir sem ele (`pre-conferir-anexo-*`): alvo, dono, janela,
+;; limite. E' economia (nao ler 10 MB de quem nao pode anexar), nao a garantia: o `anexar-*` confere tudo de novo, e o Repo
+;; confere o limite e a cota DENTRO da tx que serializa os envios do protocolo.
 
 (defn- conflito-de-anexo! [tipo msg & [info]] (throw (ex-info msg (merge {:tipo tipo} info))))
 
@@ -627,50 +640,125 @@
                   :dados {:estado (get-in d [:solicitacao :estado]) :respostas (:respostas d)}
                   :anexos (:anexos d)})))
 
+(defn- tipo-do-anexo!
+  "O tipo CANONICO do arquivo, ou a recusa 415: (1) a extensao tem de estar na lista e o tipo declarado ser coerente com ela
+  (ou `octet-stream`); (2) o CONTEUDO tem de ter a assinatura da extensao (um `.exe` renomeado para `.pdf` nao passa)."
+  [nome tipo-midia ^bytes conteudo]
+  (let [tipo (or (anexo/classificar nome tipo-midia)
+                 (conflito-de-anexo! :conflito/tipo-de-anexo "tipo de arquivo nao aceito" {:nome nome :declarado tipo-midia}))]
+    (when-not (anexo/assinatura-confere? (anexo/extensao nome) conteudo)
+      (conflito-de-anexo! :conflito/conteudo-do-anexo "o conteudo do arquivo nao confere com o formato do nome" {:nome nome}))
+    tipo))
+
+(defn- anexo-igual
+  "O anexo VIGENTE da `origem` com o mesmo sha256 entre os `anexos` ja' lidos (o reenvio), ou nil."
+  [anexos origem sha]
+  (first (filter #(= sha (:sha256 %)) (anexo/da-origem anexos origem))))
+
+(defn- remover-blob! [objeto-store chave] (try (store/remover! objeto-store chave) (catch Exception _ nil)))
+
+(defn- recusa-comprovada?
+  "A excecao do Repo prova que a linha NAO foi gravada? So' as recusas que ele mesmo lanca ANTES de escrever (limite, cota) e
+  a violacao de integridade do banco (SQLState 23xxx: o statement falhou e a tx voltou). Qualquer outra (conexao que cai,
+  timeout) deixa o resultado DESCONHECIDO: o commit pode ter passado."
+  [e]
+  (or (contains? #{:conflito/anexos-demais :conflito/cota-de-anexos} (:tipo (ex-data e)))
+      (and (instance? java.sql.SQLException e)
+           (let [^String estado (.getSQLState ^java.sql.SQLException e)]
+             (boolean (and estado (.startsWith estado "23")))))))
+
+(defn- gravar-anexo!
+  "O blob sobe, a linha e' gravada pelo Repo (que serializa, confere o limite/a cota e reconhece o reenvio). Devolve o anexo
+  (kebab) com o `:protocolo`. O blob sai se a linha foi recusada com certeza ou se era um reenvio (o anexo que ja' existia
+  aponta para o blob dele); no resultado desconhecido, fica."
+  [repo-participacao objeto-store ator especie id protocolo {:keys [nome conteudo]} tipo origem limite cota agora]
+  (let [ente-id (:ente-id ator)
+        anexo-id (ids/novo-id)
+        chave (anexo/chave-do-anexo ente-id id anexo-id)
+        sha (hex (.digest (MessageDigest/getInstance "SHA-256") ^bytes conteudo))]
+    (store/guardar! objeto-store chave conteudo tipo)
+    (try
+      (let [a (repo/anexar-ao-atendimento! repo-participacao ente-id
+                (cond-> {:id anexo-id :objeto-tipo (anexo/objeto-tipo-da-especie especie) :objeto-id id :origem origem
+                         :nome nome :tipo-midia tipo :bytes (alength ^bytes conteudo) :sha256 sha :chave-objeto chave
+                         :enviado-por (:identidade-id ator) :enviado-em agora}
+                  cota (assoc :cota cota))
+                limite)]
+        (if (:reenvio a)
+          (do (remover-blob! objeto-store chave)
+              (assoc (dissoc a :reenvio) :protocolo protocolo))
+          (assoc a :protocolo protocolo)))
+      (catch Exception e
+        (when (recusa-comprovada? e) (remover-blob! objeto-store chave))
+        (throw e)))))
+
+;; ---- a Casa anexa a RESPOSTA ----
+
+(defn- conferir-da-casa!
+  "Pode a Casa anexar agora? Lanca a recusa 409 se nao: ainda sem resposta, passou a janela de 10 minutos do ultimo ato, ou
+  ja' tem 5 anexos da Casa (vigentes)."
+  [especie dados anexos agora]
+  (let [ultimo (anexo/ultimo-ato-de-resposta especie dados)]
+    (when-not ultimo
+      (conflito-de-anexo! :conflito/anexo-sem-resposta "o protocolo ainda nao tem resposta da Casa"))
+    (when-not (anexo/na-janela? ultimo agora)
+      (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos vao junto com a resposta: a janela de 10 minutos passou"))
+    (when (>= (count (anexo/da-casa anexos)) anexo/max-anexos-da-casa)
+      (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos da Casa"
+                          {:limite anexo/max-anexos-da-casa}))))
+
+(defn pre-conferir-anexo-da-casa
+  "Antes de aceitar o corpo do upload da SECRETARIA: o protocolo existe nesta Casa? Cabe anexar (resposta feita, janela, limite)?
+  nil = nao existe (404). Cabe: {:instante ...} — o instante em que a conferencia rodou, que vale para a janela mesmo que o
+  upload demore. Nao cabe: lanca o conflito (409). Nao le o corpo (nem tem como)."
+  [repo-participacao relogio ator especie id]
+  (when-let [{:keys [dados anexos]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (let [agora (tempo/agora relogio)]
+      (conferir-da-casa! especie dados anexos agora)
+      {:instante agora})))
+
 (defn anexar-ao-atendimento!
   "SERVIDOR (papel exigido na rota) anexa UM arquivo a resposta do protocolo `id` da `especie`. Ordem das recusas: nil =
   protocolo inexistente/de outra Casa (404); tipo fora da lista ou extensao incoerente com o tipo ->
-  :conflito/tipo-de-anexo (415); sem resposta da Casa ainda -> :conflito/anexo-sem-resposta (409); passou a janela de 10
-  minutos do ultimo ato -> :conflito/anexo-fora-da-janela (409); a Casa ja' tem 5 -> :conflito/anexos-demais (409, na
-  conferencia e de novo DENTRO da tx, que serializa os envios do mesmo protocolo). O tamanho (10 MB) ja' foi limitado na
-  borda. `enviado-por` INJETADO do ator. Devolve o anexo (kebab) com o `:protocolo`, para a trilha."
-  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo]}]
-  (let [ente-id (:ente-id ator)
-        objeto-tipo (anexo/objeto-tipo-da-especie especie)]
-    (when-let [{:keys [protocolo dados anexos]} (protocolo-para-anexar repo-participacao ente-id especie id)]
-      (let [agora (tempo/agora relogio)
-            tipo (or (anexo/classificar nome tipo-midia)
-                     (conflito-de-anexo! :conflito/tipo-de-anexo "tipo de arquivo nao aceito" {:nome nome :declarado tipo-midia}))
-            ultimo (anexo/ultimo-ato-de-resposta especie dados)]
-        (when-not ultimo
-          (conflito-de-anexo! :conflito/anexo-sem-resposta "o protocolo ainda nao tem resposta da Casa"))
-        (when-not (anexo/na-janela? ultimo agora)
-          (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos vao junto com a resposta: a janela de 10 minutos passou"))
-        (when (>= (count (anexo/da-casa anexos)) anexo/max-anexos-da-casa)
-          (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos da Casa"
-                              {:limite anexo/max-anexos-da-casa}))
-        (let [anexo-id (ids/novo-id)
-              chave (anexo/chave-do-anexo ente-id id anexo-id)
-              sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
-          (store/guardar! objeto-store chave conteudo tipo)
-          (try
-            (assoc (repo/anexar-ao-atendimento! repo-participacao ente-id
-                     {:id anexo-id :objeto-tipo objeto-tipo :objeto-id id :origem "casa" :nome nome :tipo-midia tipo
-                      :bytes (alength conteudo) :sha256 sha :chave-objeto chave :enviado-por (:identidade-id ator)}
-                     anexo/max-anexos-da-casa)
-                   :protocolo protocolo)
-            (catch Exception e
-              ;; a linha foi recusada (o limite atingido por um envio concorrente): nao deixa blob orfao
-              (try (store/remover! objeto-store chave) (catch Exception _ nil))
-              (throw e))))))))
+  :conflito/tipo-de-anexo (415); a ASSINATURA do conteudo nao bate com a extensao -> :conflito/conteudo-do-anexo (415); o
+  mesmo arquivo ja' anexado (mesmo sha256, vigente) -> devolve ESSE (reenvio idempotente); sem resposta da Casa ainda ->
+  :conflito/anexo-sem-resposta (409); passou a janela de 10 minutos do ultimo ato -> :conflito/anexo-fora-da-janela (409); a
+  Casa ja' tem 5 -> :conflito/anexos-demais (409, na conferencia e de novo DENTRO da tx, que serializa os envios do mesmo
+  protocolo). O tamanho (10 MB) ja' foi limitado na borda. `enviado-por` INJETADO do ator. `:instante` (opcional, do
+  `pre-conferir-anexo-da-casa`) e' o instante que vale para a janela. Devolve o anexo (kebab) com o `:protocolo`."
+  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo instante] :as arquivo}]
+  (when-let [{:keys [protocolo dados anexos]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (let [agora (or instante (tempo/agora relogio))
+          tipo (tipo-do-anexo! nome tipo-midia conteudo)
+          sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
+      (if-let [igual (anexo-igual anexos "casa" sha)]
+        (assoc igual :protocolo protocolo)
+        (do (conferir-da-casa! especie dados anexos agora)
+            (gravar-anexo! repo-participacao objeto-store ator especie id protocolo arquivo tipo "casa"
+                           anexo/max-anexos-da-casa nil agora))))))
 
 (defn baixar-anexo-do-atendimento
   "SERVIDOR (papel exigido na rota) baixa o anexo `anexo-id` do protocolo `id` da `especie` NESTA Casa (a RLS isola):
-  {:anexo :stream} (o CHAMADOR fecha o stream), ou nil (protocolo/anexo inexistente ou de outra Casa -> 404)."
+  {:anexo :stream} (o CHAMADOR fecha o stream), ou nil (protocolo/anexo inexistente, de outra Casa ou RETIRADO -> 404)."
   [repo-participacao objeto-store ator especie id anexo-id]
   (when-let [a (repo/anexo-do-atendimento repo-participacao (:ente-id ator) (anexo/objeto-tipo-da-especie especie) id anexo-id)]
-    (when-let [in (store/abrir objeto-store (:chave-objeto a))]
-      {:anexo a :stream in})))
+    (when (nil? (:retirado-em a))
+      (when-let [in (store/abrir objeto-store (:chave-objeto a))]
+        {:anexo a :stream in}))))
+
+(defn retirar-anexo!
+  "SERVIDOR (papel exigido na rota) RETIRA o anexo `anexo-id` do protocolo `id` da `especie` — de qualquer origem — por
+  incidente de conteudo. Registra a retirada (append-only, com o motivo e quem retirou) e tira o blob do object storage; o
+  download vira 404 para todos e a vaga do limite volta. Idempotente: retirar de novo devolve a mesma retirada (a primeira) e
+  refaz a remocao do blob (que e' idempotente — se a primeira falhou no meio, esta conclui). nil = o anexo nao existe nesse
+  protocolo desta Casa (404). Devolve o anexo (kebab) com `:retirado-em` e `:motivo-da-retirada`."
+  [repo-participacao objeto-store relogio ator especie id anexo-id motivo]
+  (when-let [a (repo/retirar-anexo! repo-participacao (:ente-id ator)
+                 {:objeto-tipo (anexo/objeto-tipo-da-especie especie) :objeto-id id :anexo-id anexo-id
+                  :retirado-em (tempo/agora relogio) :retirado-por (:identidade-id ator) :motivo motivo})]
+    ;; sem `catch`: se o object storage falhar, o erro sobe (500) e a retirada JA' esta registrada — tentar de novo conclui
+    (store/remover! objeto-store (:chave-objeto a))
+    a))
 
 (defn- dono-do-protocolo?
   "O ator e' o REQUERENTE deste protocolo? e-SIC: o solicitante; LGPD: o titular; ouvidoria: o manifestante — e a
@@ -687,7 +775,7 @@
 
 (defn baixar-meu-anexo
   "O REQUERENTE baixa um anexo do PROPRIO protocolo: {:anexo :stream} ou nil. Quem nao e' o dono — e o protocolo que nao
-  existe — recebe o MESMO nil (404 uniforme: nao confirma que o protocolo existe nem de quem e')."
+  existe, e o anexo retirado — recebe o MESMO nil (404 uniforme: nao confirma que o protocolo existe nem de quem e')."
   [repo-participacao objeto-store ator especie id anexo-id]
   (when (dono-do-protocolo? repo-participacao ator especie id)
     (baixar-anexo-do-atendimento repo-participacao objeto-store ator especie id anexo-id)))
@@ -695,8 +783,9 @@
 ;; ---------------------------------------------------------------------------------------------
 ;; O REQUERENTE anexa ao PROPRIO pedido (origem `requerente`)
 ;; ---------------------------------------------------------------------------------------------
-;; So' o cidadao DONO, nos 10 minutos seguintes ao protocolo, ate' 5 de origem `requerente` (o limite e' por origem),
-;; mesmos tipos/tamanho/erros dos anexos da Casa. A manifestacao ANONIMA nao tem dono persistido: nao tem anexo.
+;; So' o cidadao DONO, nos 10 minutos seguintes ao protocolo, ate' 5 de origem `requerente` (o limite e' por origem) e ate'
+;; a cota de disco (100 MB em 24 h por identidade), mesmos tipos/tamanho/erros dos anexos da Casa. A manifestacao ANONIMA
+;; nao tem dono persistido: nao tem anexo.
 
 (defn- dono-da-linha?
   "O ator e' o REQUERENTE desta linha de protocolo (pedido | manifestacao | solicitacao)? A manifestacao anonima nunca."
@@ -709,36 +798,45 @@
             :lgpd      (= eu (:titular-identidade-id linha))
             :ouvidoria (and (not (:anonima linha)) (= eu (:manifestante-identidade-id linha))))))))
 
+(defn- conferir-do-requerente!
+  "Pode o requerente anexar agora? Lanca o 409 se nao: passaram os 10 minutos do protocolo, ou ja' tem 5 anexos seus."
+  [linha anexos agora]
+  (when-not (anexo/na-janela-do-requerente? (:recibo-em linha) agora)
+    (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos do pedido vao junto com ele: a janela de 10 minutos passou"))
+  (when (>= (count (anexo/da-origem anexos "requerente")) anexo/max-anexos-do-requerente)
+    (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos do requerente"
+                        {:limite anexo/max-anexos-do-requerente})))
+
+(defn pre-conferir-anexo-do-requerente
+  "Antes de aceitar o corpo do upload do CIDADAO: o protocolo existe, e' DESTE ator (dono) e cabe anexar (janela, limite)?
+  nil = nao existe, e' de outra pessoa/Casa ou e' manifestacao anonima (404 uniforme). Cabe: {:instante ...}. Nao cabe:
+  lanca o conflito (409). Nao le o corpo."
+  [repo-participacao relogio ator especie id]
+  (when-let [{:keys [linha anexos]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (when (dono-da-linha? especie ator linha)
+      (let [agora (tempo/agora relogio)]
+        (conferir-do-requerente! linha anexos agora)
+        {:instante agora}))))
+
 (defn anexar-do-requerente!
   "O CIDADAO anexa UM arquivo ao PROPRIO protocolo `id` da `especie` (rota so-auth, sem papel). Ordem das recusas: nil =
   protocolo inexistente, de outra Casa, de outra pessoa ou manifestacao ANONIMA (404 uniforme — o tipo recusado de quem
-  nao e' dono nunca vira 415); tipo fora da lista -> :conflito/tipo-de-anexo (415); passaram os 10 minutos do protocolo ->
-  :conflito/anexo-fora-da-janela (409); o requerente ja' tem 5 -> :conflito/anexos-demais (409, na conferencia e de novo
-  DENTRO da tx do Repo). `enviado-por` INJETADO do ator. O blob sobe antes da linha e sai se a linha for recusada.
-  Devolve o anexo (kebab) com o `:protocolo`."
-  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo]}]
-  (let [ente-id (:ente-id ator)
-        objeto-tipo (anexo/objeto-tipo-da-especie especie)]
-    (when-let [{:keys [protocolo linha anexos]} (protocolo-para-anexar repo-participacao ente-id especie id)]
-      (when (dono-da-linha? especie ator linha)
-        (let [agora (tempo/agora relogio)
-              tipo (or (anexo/classificar nome tipo-midia)
-                       (conflito-de-anexo! :conflito/tipo-de-anexo "tipo de arquivo nao aceito" {:nome nome :declarado tipo-midia}))]
-          (when-not (anexo/na-janela-do-requerente? (:recibo-em linha) agora)
-            (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos do pedido vao junto com ele: a janela de 10 minutos passou"))
-          (when (>= (count (anexo/da-origem anexos "requerente")) anexo/max-anexos-do-requerente)
-            (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos do requerente"
-                                {:limite anexo/max-anexos-do-requerente}))
-          (let [anexo-id (ids/novo-id)
-                chave (anexo/chave-do-anexo ente-id id anexo-id)
-                sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
-            (store/guardar! objeto-store chave conteudo tipo)
-            (try
-              (assoc (repo/anexar-ao-atendimento! repo-participacao ente-id
-                       {:id anexo-id :objeto-tipo objeto-tipo :objeto-id id :origem "requerente" :nome nome :tipo-midia tipo
-                        :bytes (alength conteudo) :sha256 sha :chave-objeto chave :enviado-por (:identidade-id ator)}
-                       anexo/max-anexos-do-requerente)
-                     :protocolo protocolo)
-              (catch Exception e
-                (try (store/remover! objeto-store chave) (catch Exception _ nil))
-                (throw e)))))))))
+  nao e' dono nunca vira 415); tipo fora da lista -> :conflito/tipo-de-anexo (415); conteudo que nao bate com a extensao ->
+  :conflito/conteudo-do-anexo (415); o mesmo arquivo ja' anexado -> devolve ESSE (idempotente); passaram os 10 minutos do
+  protocolo -> :conflito/anexo-fora-da-janela (409); o requerente ja' tem 5 -> :conflito/anexos-demais (409); a COTA de
+  disco de 24 h acabou -> :conflito/cota-de-anexos (409) — as duas ultimas na conferencia e de novo DENTRO da tx do Repo.
+  `enviado-por` INJETADO do ator. O blob sobe antes da linha e so' sai se a linha foi comprovadamente recusada. `:instante`
+  (opcional) = o instante da conferencia previa, que vale para a janela. Devolve o anexo (kebab) com o `:protocolo`."
+  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo instante] :as arquivo}]
+  (when-let [{:keys [protocolo linha anexos]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (when (dono-da-linha? especie ator linha)
+      (let [agora (or instante (tempo/agora relogio))
+            tipo (tipo-do-anexo! nome tipo-midia conteudo)
+            sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
+        (if-let [igual (anexo-igual anexos "requerente" sha)]
+          (assoc igual :protocolo protocolo)
+          (do (conferir-do-requerente! linha anexos agora)
+              (gravar-anexo! repo-participacao objeto-store ator especie id protocolo arquivo tipo "requerente"
+                             anexo/max-anexos-do-requerente
+                             {:max-bytes anexo/cota-do-requerente-bytes :desde (.minus ^java.time.Instant agora anexo/janela-da-cota)}
+                             agora)))))))

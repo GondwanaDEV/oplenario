@@ -8,15 +8,32 @@
 
 (set! *warn-on-reflection* true)
 
+(def ^:private teto-do-nome 200)
+(def ^:private teto-da-extensao 20)
+
+(defn- cortar-preservando-a-extensao
+  "Corta `nome` em `teto-do-nome` caracteres; se tem uma extensao razoavel (ate' `teto-da-extensao`), ela sobrevive ao corte:
+  o tipo do arquivo nao pode mudar por causa do tamanho do nome."
+  [^String nome]
+  (if (<= (count nome) teto-do-nome)
+    nome
+    (let [i (str/last-index-of nome ".")
+          ext (when i (subs nome i))]
+      (if (and ext (> i 0) (<= (count ext) (inc teto-da-extensao)))
+        (str (subs nome 0 (- teto-do-nome (count ext))) ext)
+        (subs nome 0 teto-do-nome)))))
+
 (defn nome-de-arquivo
-  "O nome que o navegador mandou, como nome de exibicao seguro: so' o ultimo segmento do caminho, sem caractere de
-  controle nem aspas, aparado e com teto. Vazio -> \"anexo\"."
+  "O nome que o navegador mandou, como nome de exibicao seguro: so' o ultimo segmento do caminho, sem aspas, sem caractere de
+  controle (C0 e C1) nem de FORMATO/invisivel Unicode (U+202E, o inversor de direcao, faz um nome terminado em
+  `fdp.exe` parecer terminado em `exe.pdf`; ZWSP, BOM...), aparado e com teto de 200 que preserva a extensao. Vazio -> \"anexo\"."
   [s]
   (let [base (last (str/split (str s) #"[/\\]"))
         limpo (-> (or base "")
-                  (str/replace #"[\p{Cntrl}\"]" "")
-                  str/trim)
-        limpo (if (> (count limpo) 200) (subs limpo 0 200) limpo)]
+                  (str/replace #"[\p{Cc}\p{Cf}\"]" "")
+                  str/trim
+                  cortar-preservando-a-extensao
+                  str/trim)]
     (if (str/blank? limpo) "anexo" limpo)))
 
 (defn tipo-de-midia

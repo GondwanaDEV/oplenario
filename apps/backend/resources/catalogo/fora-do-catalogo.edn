@@ -135,6 +135,12 @@
                                  :motivo "o requerente anexa arquivo ao proprio protocolo (manifestacao de ouvidoria identificada) na tela dele, como protocolar; e' upload de um cidadao autenticado, nao acao de agente da Casa"}
  :participacao/anexar-meu-lgpd {:categoria :so-tela
                                  :motivo "o requerente anexa arquivo ao proprio protocolo (solicitacao do titular) na tela dele, como protocolar; e' upload de um cidadao autenticado, nao acao de agente da Casa"}
+ :participacao/retirar-anexo-esic {:categoria :so-tela
+                                   :motivo "a secretaria retira um anexo do protocolo (pedido de e-SIC) por incidente de conteudo, na tela do balcao, com motivo e confirmacao; e' contencao, nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
+ :participacao/retirar-anexo-ouvidoria {:categoria :so-tela
+                                        :motivo "a secretaria retira um anexo do protocolo (manifestacao de ouvidoria) por incidente de conteudo, na tela do balcao, com motivo e confirmacao; e' contencao, nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
+ :participacao/retirar-anexo-lgpd {:categoria :so-tela
+                                   :motivo "a secretaria retira um anexo do protocolo (solicitacao do titular) por incidente de conteudo, na tela do balcao, com motivo e confirmacao; e' contencao, nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------
  :admin-sistema/descoberta {:categoria :supratenant
                             :motivo "descoberta publica do realm do operador para o login do console"}

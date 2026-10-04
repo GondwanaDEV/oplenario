@@ -25,8 +25,10 @@
   upload e a lista do detalhe."
   [a]
   (validar! wire/AnexoOut
-            {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a) :origem (:origem a)
-             :enviado-em (->str (:enviado-em a))}
+            (cond-> {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a) :origem (:origem a)
+                     :enviado-em (->str (:enviado-em a))}
+              (:retirado-em a) (assoc :retirado-em (->str (:retirado-em a)))
+              (:motivo-da-retirada a) (assoc :motivo-da-retirada (:motivo-da-retirada a)))
             "AnexoOut"))
 
 (defn- anexos [xs] (mapv anexo->wire xs))

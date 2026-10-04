@@ -32,7 +32,11 @@
    [:tipo-midia :string]
    [:bytes :int]
    [:origem [:enum "casa" "requerente"]]
-   [:enviado-em :string]])
+   [:enviado-em :string]
+   ;; RETIRADO (incidente de conteudo): quando, e por que. So' presentes se foi retirado. O arquivo saiu do object storage e
+   ;; o download e' 404; a linha segue na lista como registro. O MOTIVO so' o balcao le (o requerente ve so' que foi retirado).
+   [:retirado-em {:optional true} :string]
+   [:motivo-da-retirada {:optional true} :string]])
 
 (def PessoaOut
   "Quem pediu (e-SIC/LGPD). O CPF ja' sai mascarado do banco: '***.456.789-**'."

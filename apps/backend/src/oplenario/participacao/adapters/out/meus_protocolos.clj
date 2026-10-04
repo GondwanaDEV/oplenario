@@ -16,10 +16,12 @@
    :resposta (when-let [r (:resposta i)] {:corpo (:corpo r) :respondida-em (->str (:respondida-em r))})})
 
 (defn- anexos
-  "Os anexos por ALLOWLIST (as 6 chaves do contrato): nada de chave no object storage, sha256 nem quem enviou."
+  "Os anexos por ALLOWLIST (as 6 chaves do contrato + `retirado-em` quando foi retirado): nada de chave no object storage,
+  sha256, quem enviou nem o MOTIVO da retirada."
   [xs]
-  (mapv (fn [a] {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a)
-                 :origem (:origem a) :enviado-em (->str (:enviado-em a))})
+  (mapv (fn [a] (cond-> {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a)
+                         :origem (:origem a) :enviado-em (->str (:enviado-em a))}
+                  (:retirado-em a) (assoc :retirado-em (->str (:retirado-em a)))))
         xs))
 
 (defn- prorrogacao

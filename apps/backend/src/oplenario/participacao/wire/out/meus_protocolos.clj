@@ -38,7 +38,9 @@
    [:tipo-midia :string]
    [:bytes :int]
    [:origem [:enum "casa" "requerente"]]
-   [:enviado-em :string]])
+   [:enviado-em :string]
+   ;; retirado pela Casa (incidente de conteudo): so' QUANDO, nunca o motivo; sem link para baixar (o download e' 404)
+   [:retirado-em {:optional true} :string]])
 
 (def PedidoEsicItem
   (into [:map {:closed true}

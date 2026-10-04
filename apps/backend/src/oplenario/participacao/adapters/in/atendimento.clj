@@ -30,3 +30,14 @@
       (invalido! "corpo de prorrogacao do pedido invalido" {:campos (keys (me/humanize erros))}))
     (when (str/blank? (:justificativa mp)) (invalido! "justificativa obrigatoria nao pode ser vazia" {:campo :justificativa}))
     {:justificativa (:justificativa mp)}))
+
+(defn coagir-retirar-anexo
+  "Corpo JSON {motivo} (chaves STRING) -> {:motivo}, aparado. Motivo obrigatorio (ausente, nulo, vazio ou so' espacos -> 400)."
+  [json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {motivo}" {:campo :corpo}))
+  (let [mp (cond-> {} (contains? json-params "motivo") (assoc :motivo (get json-params "motivo")))]
+    (when-let [erros (m/explain wire/RetirarAnexoIn mp)]
+      (invalido! "corpo da retirada do anexo invalido" {:campos (keys (me/humanize erros))}))
+    (when (str/blank? (:motivo mp)) (invalido! "o motivo da retirada e obrigatorio" {:campo :motivo}))
+    {:motivo (str/trim (:motivo mp))}))

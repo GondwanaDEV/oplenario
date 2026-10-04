@@ -7,6 +7,8 @@ export interface AnexoOut {
   bytes: number;
   origem: "casa" | "requerente";
   enviadoEm: string;
+  retiradoEm?: string;
+  motivoDaRetirada?: string;
 }
 
 export interface PessoaOut {

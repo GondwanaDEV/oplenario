@@ -38,7 +38,8 @@
   wildcard (':id', de POST /comentarios/:id/moderar) no MESMO nivel de path sob '/comentarios' (mesma
   limitacao ja documentada abaixo p/ o disambiguador 'casa/'). Trocar a ORDEM dos segmentos evita a colisao
   sem inventar mais um segmento estatico."
-  (:require [oplenario.http :as http]
+  (:require [io.pedestal.interceptor.chain :as chain]
+            [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.arquivo :as arquivo]
             [oplenario.participacao.adapters.in.arquivar-ouvidoria :as adapters-in-arquivar]
@@ -410,6 +411,11 @@
     :conflito/tipo-de-anexo
     (http/json-resposta 415 {:erro (str "Tipo de arquivo não aceito. Aceitamos " anexo/descricao-dos-tipos
                                         ", e a extensão do nome tem de combinar com o tipo do arquivo.")})
+    :conflito/conteudo-do-anexo
+    (http/json-resposta 415 {:erro (str "O conteúdo do arquivo não confere com o formato do nome. Confira se é mesmo um arquivo "
+                                        "de um destes tipos: " anexo/descricao-dos-tipos ".")})
+    :conflito/cota-de-anexos
+    (http/json-resposta 409 {:erro "Você já enviou muitos arquivos nas últimas 24 horas: o espaço por pessoa tem um limite. Tente de novo mais tarde."})
     :conflito/anexo-sem-resposta
     (http/json-resposta 409 {:erro "Este protocolo ainda não tem resposta da Casa: anexe depois de responder."})
     :conflito/anexo-fora-da-janela
@@ -422,6 +428,25 @@
                                      (str "Este protocolo já tem " anexo/max-anexos-da-casa " anexos da Casa."))})
     nil))
 
+(defn- pre-conferir-anexo
+  "O interceptor que roda ANTES do multipart (e portanto antes de qualquer byte do corpo): confere, com o que o protocolo ja'
+  tem, que o alvo existe e e' da Casa e (cidadao) que quem pede e' o dono -> senao 404 uniforme; que cabe anexar (janela,
+  limite) -> senao 409. O instante da conferencia fica em `(:request :anexo-instante)` e e' o que vale para a janela, mesmo
+  que o upload demore. E' economia, nao garantia: o controller confere tudo de novo, e o Repo o limite e a cota na tx.
+  `pre-conferir` = (fn [repo relogio ator especie id] -> {:instante} | nil), que lanca o conflito."
+  [quem pre-conferir repo-participacao relogio especie]
+  {:name (keyword "oplenario.participacao.diplomat.http.in" (str "pre-conferir-anexo-" (name quem) "-" (name especie)))
+   :enter (fn [ctx]
+            (let [req (:request ctx)
+                  id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+                  recusa (fn [resp] (chain/terminate (assoc ctx :response resp)))]
+              (try
+                (if-let [{:keys [instante]} (pre-conferir repo-participacao relogio (:ator req) especie id)]
+                  (assoc-in ctx [:request :anexo-instante] instante)
+                  (recusa (http/json-resposta 404 {:erro "protocolo nao encontrado"})))
+                (catch clojure.lang.ExceptionInfo e
+                  (if-let [resp (erro-de-anexo quem e)] (recusa resp) (throw e))))))})
+
 (defn- anexar-handler
   "POST /atendimento/<especie>/:id/anexos (SERVIDOR, exige-papel; multipart, UM arquivo). 201 com o anexo (sem chave, sem
   sha256, sem quem enviou); 404 protocolo inexistente/de outra Casa; 415 tipo fora da lista; 409 sem resposta, fora da
@@ -430,7 +455,8 @@
   (fn [req]
     (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (try
-        (if-let [a (controllers/anexar-ao-atendimento! repo-participacao objeto-store relogio (:ator req) especie id (:anexo req))]
+        (if-let [a (controllers/anexar-ao-atendimento! repo-participacao objeto-store relogio (:ator req) especie id
+                                                                  (assoc (:anexo req) :instante (:anexo-instante req)))]
           (assoc (http/json-resposta 201 (adapters-out-atendimento/anexo->wire a))
                  :auditoria {:rotulo (str "anexo em " (:protocolo a)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
                              :recurso-id (str id)})
@@ -445,7 +471,8 @@
   (fn [req]
     (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (try
-        (if-let [a (controllers/anexar-do-requerente! repo-participacao objeto-store relogio (:ator req) especie id (:anexo req))]
+        (if-let [a (controllers/anexar-do-requerente! repo-participacao objeto-store relogio (:ator req) especie id
+                                                                     (assoc (:anexo req) :instante (:anexo-instante req)))]
           (assoc (http/json-resposta 201 (adapters-out-atendimento/anexo->wire a))
                  :auditoria {:rotulo (str "anexo em " (:protocolo a)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
                              :recurso-id (str id)})
@@ -470,8 +497,28 @@
   [repo-participacao objeto-store especie]
   (fn [req]
     (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
-          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))]
-      (baixar-resposta (controllers/baixar-anexo-do-atendimento repo-participacao objeto-store (:ator req) especie id aid)))))
+          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))
+          resposta (baixar-resposta (controllers/baixar-anexo-do-atendimento repo-participacao objeto-store (:ator req) especie id aid))]
+      ;; a secretaria que LE o arquivo de um cidadao fica na trilha (leitura sensivel): quem leu o que, e quando
+      (cond-> resposta
+        (= 200 (:status resposta))
+        (assoc :auditoria {:classe "leitura_sensivel" :rotulo "baixou um anexo do protocolo"
+                           :recurso-tipo (anexo/objeto-tipo-da-especie especie) :recurso-id (str id)})))))
+
+(defn- retirar-anexo-handler
+  "POST /atendimento/<especie>/:id/anexos/:anexo/retirar (SERVIDOR, exige-papel; `{motivo}` obrigatorio). Retira o anexo de
+  QUALQUER origem: o blob sai do object storage, o download vira 404 para todos, a lista o mostra retirado. Idempotente.
+  200 com o anexo (com `retirado-em` e `motivo-da-retirada`); 404 anexo/protocolo inexistente ou de outra Casa; 400 sem motivo."
+  [repo-participacao objeto-store relogio especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))
+          {:keys [motivo]} (adapters-in-atendimento/coagir-retirar-anexo (:json-params req))]
+      (if-let [a (controllers/retirar-anexo! repo-participacao objeto-store relogio (:ator req) especie id aid motivo)]
+        (assoc (http/json-resposta 200 (adapters-out-atendimento/anexo->wire a))
+               :auditoria {:rotulo "retirou um anexo do protocolo" :recurso-tipo (anexo/objeto-tipo-da-especie especie)
+                           :recurso-id (str id)})
+        (http/json-resposta 404 {:erro "anexo nao encontrado"})))))
 
 (defn- baixar-meu-anexo-handler
   "GET /portal/meus-protocolos/<especie>/:id/anexos/:anexo (REQUERENTE, so-auth): o anexo do PROPRIO protocolo. Quem nao e'
@@ -526,14 +573,27 @@
       ;; os ANEXOS da resposta: irmaos do detalhe (`:id` e depois um literal — o prefix-tree aceita, como em
       ;; `/comunicados/:id/anexos`). O upload e' multipart (nao `corpo-json`); o papel e' conferido ANTES de ler o corpo.
       ["/atendimento/esic/:id/anexos" :post
-       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :esic))
+       (servidor (pre-conferir-anexo :casa controllers/pre-conferir-anexo-da-casa repo-participacao relogio :esic)
+                anexo-multipart (anexar-handler repo-participacao objeto-store relogio :esic))
        :route-name :participacao/anexar-esic]
       ["/atendimento/ouvidoria/:id/anexos" :post
-       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :ouvidoria))
+       (servidor (pre-conferir-anexo :casa controllers/pre-conferir-anexo-da-casa repo-participacao relogio :ouvidoria)
+                anexo-multipart (anexar-handler repo-participacao objeto-store relogio :ouvidoria))
        :route-name :participacao/anexar-ouvidoria]
       ["/atendimento/lgpd/:id/anexos" :post
-       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :lgpd))
+       (servidor (pre-conferir-anexo :casa controllers/pre-conferir-anexo-da-casa repo-participacao relogio :lgpd)
+                anexo-multipart (anexar-handler repo-participacao objeto-store relogio :lgpd))
        :route-name :participacao/anexar-lgpd]
+      ;; RETIRAR um anexo (incidente de conteudo): o corpo e' JSON {motivo}; so' a secretaria. Irma do download (mesmo nivel)
+      ["/atendimento/esic/:id/anexos/:anexo/retirar" :post
+       (servidor it/corpo-json (retirar-anexo-handler repo-participacao objeto-store relogio :esic))
+       :route-name :participacao/retirar-anexo-esic]
+      ["/atendimento/ouvidoria/:id/anexos/:anexo/retirar" :post
+       (servidor it/corpo-json (retirar-anexo-handler repo-participacao objeto-store relogio :ouvidoria))
+       :route-name :participacao/retirar-anexo-ouvidoria]
+      ["/atendimento/lgpd/:id/anexos/:anexo/retirar" :post
+       (servidor it/corpo-json (retirar-anexo-handler repo-participacao objeto-store relogio :lgpd))
+       :route-name :participacao/retirar-anexo-lgpd]
       ["/atendimento/esic/:id/anexos/:anexo" :get
        (servidor (baixar-anexo-handler repo-participacao objeto-store :esic))
        :route-name :participacao/baixar-anexo-esic]
@@ -576,13 +636,16 @@
      ;; CIDADA: anexar ao PROPRIO pedido (so' o dono, 10 min do protocolo, ate' 5). `auth` SEM papel (como protocolar); o
      ;; upload e' multipart. NAO existe rota publica de upload: a manifestacao anonima nao tem dono, nao tem anexo.
      ["/portal/meus-protocolos/esic/:id/anexos" :post
-      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :esic)]
+      [auth (pre-conferir-anexo :requerente controllers/pre-conferir-anexo-do-requerente repo-participacao relogio :esic)
+       anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :esic)]
       :route-name :participacao/anexar-meu-esic]
      ["/portal/meus-protocolos/ouvidoria/:id/anexos" :post
-      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :ouvidoria)]
+      [auth (pre-conferir-anexo :requerente controllers/pre-conferir-anexo-do-requerente repo-participacao relogio :ouvidoria)
+       anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :ouvidoria)]
       :route-name :participacao/anexar-meu-ouvidoria]
      ["/portal/meus-protocolos/lgpd/:id/anexos" :post
-      [auth anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :lgpd)]
+      [auth (pre-conferir-anexo :requerente controllers/pre-conferir-anexo-do-requerente repo-participacao relogio :lgpd)
+       anexo-multipart (anexar-do-requerente-handler repo-participacao objeto-store relogio :lgpd)]
       :route-name :participacao/anexar-meu-lgpd]
      ["/portal/esic/pedidos/:id" :get
       [auth (meu-pedido-handler repo-participacao relogio)]

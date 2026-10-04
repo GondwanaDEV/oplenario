@@ -17,7 +17,8 @@
             [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.autorizacao :as authz]
             [oplenario.kernel.components.idp :as idp])
-  (:import (org.apache.commons.fileupload2.core AbstractFileUpload FileItemInput RequestContext)))
+  (:import (java.io FilterInputStream InputStream)
+           (org.apache.commons.fileupload2.core AbstractFileUpload FileItemInput RequestContext)))
 
 (set! *warn-on-reflection* true)
 
@@ -180,10 +181,70 @@
   "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
   (* 64 1024))
 
+(def max-envios-simultaneos
+  "Quantos uploads leem corpo AO MESMO TEMPO, no processo todo (anexos de comunicado e de atendimento). Cada um segura ate'
+  10 MB em memoria enquanto o pedido roda; sem teto, N conexoes lentas esgotam a heap. Saturado: 503 com Retry-After, sem
+  ler o corpo."
+  4)
+
+(def ^:private ^java.util.concurrent.Semaphore vagas-de-envio (java.util.concurrent.Semaphore. (int max-envios-simultaneos)))
+
+(def max-partes-do-envio
+  "Quantas partes (campos + arquivos) um multipart de anexo pode ter. A tela manda UMA; mais que isto e' lixo."
+  8)
+
+(def ^:private teto-do-cabecalho-da-parte
+  "O cabecalho Content-Disposition de uma parte, em caracteres. Acima disto o envio e' malformado (400): nenhum nome de
+  arquivo de verdade chega perto, e o limite poupa o scanner de uma linha de megabytes."
+  8192)
+
+(defn- separar-parametros
+  "Parte o cabecalho em parametros no `;` que esta FORA de aspas (`\\\"` e `\\\\` escapam dentro das aspas). Laco linear: sem
+  regex recursiva, sem recursao de pilha. Os escapes ficam no texto (quem desembrulha os resolve)."
+  [^String cd]
+  (let [n (.length cd)]
+    (loop [i 0 aspas? false escapado? false ^StringBuilder atual (StringBuilder.) acc []]
+      (if (>= i n)
+        (conj acc (str atual))
+        (let [ch (.charAt cd i)]
+          (cond
+            escapado?                      (recur (inc i) aspas? false (.append atual ch) acc)
+            (and aspas? (= ch \\))         (recur (inc i) aspas? true (.append atual ch) acc)
+            (= ch \")                      (recur (inc i) (not aspas?) false (.append atual ch) acc)
+            (and (= ch \;) (not aspas?))   (recur (inc i) aspas? false (StringBuilder.) (conj acc (str atual)))
+            :else                          (recur (inc i) aspas? false (.append atual ch) acc)))))))
+
+(defn- desembrulhar
+  "O valor de um parametro: entre aspas (resolve `\\x` -> x e para na aspa que fecha) ou como esta."
+  [^String v]
+  (if (str/starts-with? v "\"")
+    (let [sb (StringBuilder.) n (.length v)]
+      (loop [i 1]
+        (when (< i n)
+          (let [ch (.charAt v i)]
+            (cond (= ch \\) (when (< (inc i) n) (.append sb (.charAt v (inc i))) (recur (+ i 2)))
+                  (= ch \")  nil
+                  :else      (do (.append sb ch) (recur (inc i)))))))
+      (str sb))
+    v))
+
+(defn valor-do-filename
+  "O `filename` do cabecalho Content-Disposition `cd` (texto), ou nil se a parte nao tem. Aceita o valor entre aspas (com `\\\"`
+  e `\\\\` escapados) ou sem aspas, em qualquer caixa e com espacos em volta do `=`; `filename*=` (RFC 5987) nao e'
+  `filename`. LINEAR: um nome de 10 mil caracteres nao estoura a pilha (a regex anterior, `(?:[^\"\\\\]|\\\\.)*`, recursava por
+  caractere). Cabecalho acima de `teto-do-cabecalho-da-parte` -> ex-info `:cabecalho/grande` (a borda responde 400)."
+  [^String cd]
+  (when (> (.length cd) (long teto-do-cabecalho-da-parte))
+    (throw (ex-info "cabecalho da parte grande demais" {:tipo :cabecalho/grande})))
+  (some (fn [^String seg]
+          (when-let [i (str/index-of seg "=")]
+            (when (= "filename" (str/lower-case (str/trim (subs seg 0 i))))
+              (desembrulhar (str/trim (subs seg (inc i)))))))
+        (rest (separar-parametros cd))))
+
 (defn- nome-do-arquivo-da-parte
-  "O `filename` do cabecalho Content-Disposition da parte, lido do TEXTO do cabecalho (decodificado em UTF-8: a borda fixa
-  o encoding, nao depende de `LANG`). Aceita o valor entre aspas (com `\\\"` e `\\\\` escapados) ou sem aspas; nao confunde
-  `filename*=` (RFC 5987). nil se a parte nao tem `filename`.
+  "O `filename` da parte, lido do TEXTO do cabecalho Content-Disposition (decodificado em UTF-8: a borda fixa o encoding, nao
+  depende de `LANG`). nil se a parte nao tem `filename`.
 
   POR QUE NAO `FileItemInput/getName` (o que o Ring faz): em commons-fileupload2 ele passa o nome por `Paths.get` para
   validar, e numa JVM sem locale UTF-8 (`sun.jnu.encoding` ASCII — o container `clojure:*` de teste, um deploy com
@@ -191,67 +252,120 @@
   toca o disco (o arquivo vai ao object storage numa chave nossa)."
   [^FileItemInput item]
   (when-let [cd (some-> (.getHeaders item) (.getHeader "Content-Disposition"))]
-    (when-let [m (re-find #"(?i)filename\s*=\s*(?:\"((?:[^\"\\]|\\.)*)\"|([^;\s]+))" cd)]
-      (some-> (or (nth m 1) (nth m 2)) (str/replace #"\\(.)" "$1")))))
+    (valor-do-filename cd)))
+
+(defn- fluxo-limitado
+  "O corpo como fluxo que CONTA o que passa por ele e estoura `:corpo/grande` quando o total passa de `limite`. O teto do
+  corpo INTEIRO (arquivo + campos + cabecalhos de parte) vale pelo que e' LIDO, nao pelo `Content-Length` que o cliente
+  declara: um corpo chunked, sem tamanho declarado, tambem para no teto."
+  ^InputStream [^InputStream in limite]
+  (let [lidos (long-array 1)
+        conta! (fn [n]
+                 (when (pos? (long n))
+                   (let [total (+ (aget lidos 0) (long n))]
+                     (aset lidos 0 total)
+                     (when (> total (long limite)) (throw (ex-info "corpo grande demais" {:tipo :corpo/grande})))))
+                 n)]
+    (proxy [FilterInputStream] [in]
+      (read
+        ([] (let [b (.read in)] (when (>= b 0) (conta! 1)) b))
+        ([^bytes b off len] (conta! (.read in b (int off) (int len))))))))
 
 (defn- ler-arquivos-do-multipart
   "As partes de ARQUIVO do corpo `multipart/form-data`, ate' 2 (so' para saber se passou de UM; os campos de formulario sao
-  ignorados). Cada arquivo e' lido para memoria com teto de `max-bytes` (`:corpo/grande` se passar) e vem como
-  {:nome :tipo-midia :conteudo}. O encoding do cabecalho da parte e' UTF-8, explicito."
-  [req max-bytes]
-  (let [contexto (reify RequestContext
+  ignorados mas CONTADOS: mais de `max-partes-do-envio` partes e' `:partes/demais`). O 1o arquivo e' lido para memoria com
+  teto de `max-bytes` (`:corpo/grande` se passar) e vem como {:nome :tipo-midia :conteudo}; ao ver o cabecalho do 2o arquivo a
+  leitura PARA (o corpo dele nao e' lido). O corpo inteiro e' limitado em `limite-do-corpo` pelo que e' lido. O encoding do
+  cabecalho da parte e' UTF-8, explicito."
+  [req max-bytes limite-do-corpo]
+  (let [corpo (fluxo-limitado (:body req) limite-do-corpo)
+        contexto (reify RequestContext
                    (getContentType [_] (get-in req [:headers "content-type"]))
                    (getContentLength [_] (or (some-> (get-in req [:headers "content-length"]) parse-long) -1))
                    (getCharacterEncoding [_] "UTF-8")
-                   (getInputStream [_] (:body req)))
+                   (getInputStream [_] corpo))
         it (.getItemIterator ^AbstractFileUpload (proxy [AbstractFileUpload] []) contexto)]
-    (loop [arquivos []]
+    (loop [arquivos [] partes 0]
       (if (.hasNext it)
-        (let [^FileItemInput item (.next it)]
+        (let [^FileItemInput item (.next it)
+              partes (inc partes)]
+          (when (> partes (long max-partes-do-envio))
+            (throw (ex-info "partes demais no envio" {:tipo :partes/demais})))
           (cond
-            (.isFormField item) (recur arquivos)
+            (.isFormField item) (recur arquivos partes)
             (>= (count arquivos) 1) (conj arquivos nil)   ; o 2o arquivo: nao precisa ler nada
             :else (recur (conj arquivos {:nome (arquivo/nome-de-arquivo (nome-do-arquivo-da-parte item))
                                          :tipo-midia (arquivo/tipo-de-midia (.getContentType item))
-                                         :conteudo (ler-limitado (.getInputStream item) max-bytes)}))))
+                                         :conteudo (ler-limitado (.getInputStream item) max-bytes)})
+                         partes)))
         arquivos))))
+
+(defn- liberar-vaga!
+  "Devolve a vaga de envio do `ctx` UMA vez (o flag impede devolver em dobro: a recusa dentro do :enter e o :leave)."
+  [ctx]
+  (when-let [^java.util.concurrent.atomic.AtomicBoolean flag (::vaga ctx)]
+    (when (.compareAndSet flag true false) (.release vagas-de-envio)))
+  ctx)
+
+(defn- corpo-grande?
+  "A excecao, ou alguma causa dela, e' o estouro do teto do corpo?"
+  [e]
+  (boolean (some #(= :corpo/grande (:tipo (ex-data %))) (take-while some? (iterate ex-cause e)))))
 
 (defn anexo-multipart
   "Fabrica o interceptor do upload de anexo: `multipart/form-data` com UM arquivo (o campo pode ter qualquer nome; a
   tela usa `arquivo`). O arquivo e' lido para memoria com teto de `max-bytes` (o object storage recebe os bytes e o
-  sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/malformado/vazio -> 400. Resultado em
+  sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/partes demais/malformado/vazio -> 400. Resultado em
   `(:request :anexo)` {:nome :tipo-midia :conteudo}. So' a PARTE GENERICA mora aqui: quais tipos o modulo aceita, quantos
   e quando e' regra do `logic` de cada um (comunicacao, participacao). Nasceu em `comunicacao/diplomat/http/in` e foi
   movida sem mudar o comportamento (`participacao` nao pode importar `comunicacao`, §22.10).
+
+  ANTES de ler o corpo (nada disto toca o stream): `Content-Length` declarado acima do teto -> 413; e o TETO GLOBAL de envios
+  simultaneos (`max-envios-simultaneos`, semaforo do processo) — saturado -> 503 com `Retry-After`. A vaga fica com o envio
+  ate' o fim da cadeia (o conteudo segue em memoria enquanto o handler roda) e volta no :leave/:error. DEPOIS: o corpo
+  inteiro e' limitado pelo que e' LIDO (chunked tambem), e a leitura para no 1o arquivo.
+
+  Quem precisa saber se o pedido cabe ANTES de aceitar corpo (alvo existe, e' do dono, janela, limite) poe um interceptor
+  proprio antes deste: o do modulo, que conhece a regra.
 
   O NOME do arquivo e' lido dos cabecalhos da parte em UTF-8 explicito (`nome-do-arquivo-da-parte`): um nome acentuado
   passa em qualquer locale da JVM."
   [{:keys [max-bytes]}]
   (let [mb (quot (long max-bytes) (* 1024 1024))
-        grande (str "O anexo passa de " mb " MB.")]
+        grande (str "O anexo passa de " mb " MB.")
+        limite-do-corpo (+ (long max-bytes) folga-do-envelope)
+        malformado "Envie um arquivo por vez (campo arquivo)."]
     {:name ::anexo-multipart
      :enter (fn [ctx]
               (let [req (:request ctx)
                     tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
-                    recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))
+                    recusa (fn [ctx status msg] (liberar-vaga! ctx) (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))
                     multipart? (some-> (get-in req [:headers "content-type"]) str/lower-case (str/starts-with? "multipart/form-data"))]
                 (cond
-                  (and tamanho (> (long tamanho) (+ (long max-bytes) folga-do-envelope))) (recusa 413 grande)
-                  (not multipart?) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
+                  (and tamanho (> (long tamanho) limite-do-corpo)) (recusa ctx 413 grande)
+                  (not multipart?) (recusa ctx 400 malformado)
+                  (not (.tryAcquire vagas-de-envio))
+                  (chain/terminate
+                   (assoc ctx :response (assoc-in (http/json-resposta 503 {:erro "Há muitos envios de arquivo ao mesmo tempo. Tente de novo em alguns segundos."})
+                                                  [:headers "Retry-After"] "5")))
                   :else
-                  (try
-                    (let [arquivos (ler-arquivos-do-multipart req max-bytes)]
-                      (cond
-                        (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
-                        (nil? (first arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
-                        (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
-                        :else (assoc-in ctx [:request :anexo] (first arquivos))))
-                    (catch clojure.lang.ExceptionInfo e
-                      (if (= :corpo/grande (:tipo (ex-data e)))
-                        (recusa 413 grande)
-                        (recusa 400 "Envie um arquivo por vez (campo arquivo).")))
-                    (catch Exception _
-                      (recusa 400 "O envio do arquivo veio malformado."))))))}))
+                  (let [ctx (assoc ctx ::vaga (java.util.concurrent.atomic.AtomicBoolean. true))]
+                    (try
+                      (let [arquivos (ler-arquivos-do-multipart req max-bytes limite-do-corpo)]
+                        (cond
+                          (not= 1 (count arquivos)) (recusa ctx 400 malformado)
+                          (nil? (first arquivos)) (recusa ctx 400 malformado)
+                          (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa ctx 400 "O arquivo está vazio.")
+                          :else (assoc-in ctx [:request :anexo] (first arquivos))))
+                      (catch Exception e
+                        (cond
+                          (corpo-grande? e) (recusa ctx 413 grande)
+                          (= :partes/demais (:tipo (ex-data e))) (recusa ctx 400 malformado)
+                          (= :cabecalho/grande (:tipo (ex-data e))) (recusa ctx 400 "O envio do arquivo veio malformado.")
+                          (instance? clojure.lang.ExceptionInfo e) (recusa ctx 400 malformado)
+                          :else (recusa ctx 400 "O envio do arquivo veio malformado."))))))))
+     :leave liberar-vaga!
+     :error (fn [ctx ex] (liberar-vaga! ctx) (assoc ctx ::chain/error ex))}))
 
 (defn exige-papel
   "Interceptor de AUTORIZACAO GROSSA: exige o `papel` estatico (STRING — os papeis do snapshot sao strings) no

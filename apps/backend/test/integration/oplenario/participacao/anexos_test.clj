@@ -253,8 +253,8 @@
 (deftest o-sexto-anexo-409-sem-blob-orfao
   (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
         id (protocolo-respondido! c :lgpd (random-uuid) sec)]
-    (dotimes [i 5] (is (= 201 (:status (anexar svc ente sec "lgpd" id (str "a" i ".txt") "text/plain" "x")))))
-    (let [r (anexar svc ente sec "lgpd" id "sexto.txt" "text/plain" "x")]
+    (dotimes [i 5] (is (= 201 (:status (anexar svc ente sec "lgpd" id (str "a" i ".txt") "text/plain" (str "x" i))))))
+    (let [r (anexar svc ente sec "lgpd" id "sexto.txt" "text/plain" "x-sexto")]
       (is (= 409 (:status r)))
       (is (re-find #"5 anexos" (get-in r [:corpo :erro]))))
     (is (= 5 (count @(:m c))) "5 blobs, nao 6")))
@@ -277,7 +277,6 @@
                          ["planilha.xls" "application/vnd.ms-excel"]
                          ["folha.pdf" "text/plain"]                    ; extensao na lista, tipo de OUTRA coisa
                          ["foto.png" "image/jpeg"]
-                         ["folha.pdf" "application/octet-stream"]
                          ["semextensao" "application/pdf"]]]
       (let [r (anexar svc ente sec "esic" id nome tipo "conteudo")]
         (is (= 415 (:status r)) (str nome " " tipo))
@@ -343,7 +342,7 @@
   ;; exercitar so' o caminho do Repo.
   (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
         id (protocolo-respondido! c :esic (random-uuid) sec)]
-    (dotimes [i 5] (is (= 201 (:status (anexar svc ente sec "esic" id (str "a" i ".txt") "text/plain" "x")))))
+    (dotimes [i 5] (is (= 201 (:status (anexar svc ente sec "esic" id (str "a" i ".txt") "text/plain" (str "x" i))))))
     (let [antes (set (keys @(:m c)))
           r (anexar-direto (repo-que-confere-antes-de-todos-escreverem *repo* nil true) c sec id "corrida.txt" "y")]
       (is (= :conflito/anexos-demais (:tipo r)) "o Repo recusou o 6o, que passou da conferencia previa")
@@ -356,7 +355,7 @@
   ;; No fim: 5 linhas, 5 blobs, nenhum orfao.
   (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
         id (protocolo-respondido! c :esic (random-uuid) sec)]
-    (dotimes [i 4] (is (= 201 (:status (anexar svc ente sec "esic" id (str "a" i ".txt") "text/plain" "x")))))
+    (dotimes [i 4] (is (= 201 (:status (anexar svc ente sec "esic" id (str "a" i ".txt") "text/plain" (str "x" i))))))
     (let [barreira (java.util.concurrent.CyclicBarrier. 3)
           repo (repo-que-confere-antes-de-todos-escreverem *repo* barreira false)
           rs (->> (range 3)
@@ -436,7 +435,7 @@
   (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
         id (protocolo-respondido! c :esic (random-uuid) sec)]
     (doseq [nome ["100% pronto.txt" "a+b.txt" "coisa%20estranha.txt"]]
-      (is (= nome (get-in (anexar svc ente sec "esic" id nome "text/plain" "x") [:corpo :nome])) nome))))
+      (is (= nome (get-in (anexar svc ente sec "esic" id nome "text/plain" (str "x" nome)) [:corpo :nome])) nome))))
 
 ;; ---------------------------------------------------------------- o requerente ve a lista; o publico nao
 

@@ -192,10 +192,19 @@
   (atendimento-lgpd [this ente-id id]
     "A solicitacao do titular inteira para o balcao, numa tx: {:solicitacao :prazo :respostas} ou nil.")
   (anexar-ao-atendimento! [this ente-id m limite]
-    "UMA tx: serializa os anexos do MESMO protocolo (trava consultiva) e, se a `origem` (casa | requerente) ainda nao tem
-    `limite` anexos nele, grava o anexo (append-only). Ja' no limite -> :conflito/anexos-demais (o controller tira o blob
-    que subiu antes). `m` = {:id :objeto-tipo :objeto-id :origem :nome :tipo-midia :bytes :sha256 :chave-objeto
-    :enviado-por}. O protocolo ja' foi conferido (existe nesta Casa) pelo chamador. Devolve o anexo (kebab).")
+    "UMA tx: serializa os anexos do MESMO protocolo (trava consultiva) e, na ordem: (1) se ja' existe um anexo VIGENTE
+    com o mesmo sha256 neste protocolo e origem, devolve ESSE (`:reenvio true`, sem linha nova — o reenvio e' idempotente;
+    o chamador tira o blob que subiu a mais); (2) se a `origem` (casa | requerente) ja' tem `limite` anexos vigentes ->
+    :conflito/anexos-demais; (3) se `m` traz `:cota` {:max-bytes :desde} e a soma dos bytes que a identidade
+    (`:enviado-por`) anexou desde `:desde`, mais este, passa do teto -> :conflito/cota-de-anexos; (4) grava (append-only).
+    As recusas lancam ANTES de qualquer escrita (a tx volta): o chamador pode tirar o blob que subiu antes. `m` = {:id
+    :objeto-tipo :objeto-id :origem :nome :tipo-midia :bytes :sha256 :chave-objeto :enviado-por [:enviado-em] [:cota]}. O
+    protocolo ja' foi conferido (existe nesta Casa) pelo chamador. Devolve o anexo (kebab).")
+  (retirar-anexo! [this ente-id m]
+    "SERVIDOR — UMA tx: registra a RETIRADA do anexo (append-only, uma por anexo) e devolve o anexo lido de volta, com a
+    retirada que ficou (a primeira, se ja' estava retirado: idempotente, sem segunda linha). nil = o anexo nao existe neste
+    protocolo desta Casa. `m` = {:objeto-tipo :objeto-id :anexo-id :retirado-em :retirado-por :motivo}. O efeito no object
+    storage e' do controller.")
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     "O anexo do protocolo (objeto-tipo + objeto-id), ou nil.")
   (prorrogar-pedido! [this ente-id m]
@@ -592,15 +601,30 @@
            :prazo       (db-prazo/buscar-do-objeto tx ente-id "solicitacao_titular" id)
            :respostas   (db-resposta-titular/listar-da-solicitacao tx ente-id id)
            :anexos      (db-anexo/listar-do-objeto tx ente-id "solicitacao_titular" id)}))))
-  (anexar-ao-atendimento! [this ente-id {:keys [objeto-tipo objeto-id origem] :as m} limite]
+  (anexar-ao-atendimento! [this ente-id {:keys [objeto-tipo objeto-id origem sha256 cota] :as m} limite]
     (transacao this ente-id
       (fn [tx]
         (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
-        ;; o limite e' POR ORIGEM: os anexos da Casa nao tomam a vaga dos do requerente, e vice-versa
-        (when (>= (db-anexo/contar-da-origem tx ente-id objeto-tipo objeto-id origem) (long limite))
-          (throw (ex-info "o protocolo ja' tem o maximo de anexos desta origem"
-                          {:tipo :conflito/anexos-demais :origem origem :limite limite})))
-        (db-anexo/inserir! tx (assoc m :ente-id ente-id)))))
+        (if-let [igual (db-anexo/achar-igual tx ente-id objeto-tipo objeto-id origem sha256)]
+          (assoc igual :reenvio true)
+          (do
+            ;; o limite e' POR ORIGEM: os anexos da Casa nao tomam a vaga dos do requerente, e vice-versa; o retirado devolve a vaga
+            (when (>= (db-anexo/contar-da-origem tx ente-id objeto-tipo objeto-id origem) (long limite))
+              (throw (ex-info "o protocolo ja' tem o maximo de anexos desta origem"
+                              {:tipo :conflito/anexos-demais :origem origem :limite limite})))
+            (when cota
+              (let [usados (db-anexo/somar-bytes-do-requerente tx ente-id (:enviado-por m) (:desde cota))]
+                (when (> (+ usados (long (:bytes m))) (long (:max-bytes cota)))
+                  (throw (ex-info "a cota de disco do requerente nas ultimas 24 horas acabou"
+                                  {:tipo :conflito/cota-de-anexos :usados usados :cota (:max-bytes cota)})))))
+            (db-anexo/inserir! tx (assoc m :ente-id ente-id)))))))
+  (retirar-anexo! [this ente-id {:keys [objeto-tipo objeto-id anexo-id] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
+        (when (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)
+          (db-anexo/retirar! tx (assoc m :ente-id ente-id))
+          (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)))))
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))
   (prorrogar-pedido! [this ente-id m]

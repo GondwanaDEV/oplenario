@@ -42,12 +42,23 @@
   (testing "extensao na lista, tipo declarado de OUTRA coisa (incoerente) ou desconhecido"
     (doseq [[nome declarado] [["folha.pdf" "text/plain"] ["foto.png" "image/jpeg"] ["foto.jpg" "image/png"]
                               ["dados.csv" "application/pdf"] ["oficio.docx" "application/pdf"]
-                              ["folha.pdf" "application/octet-stream"] ["nota.txt" "text/html"]
+                              ["nota.txt" "text/html"]
                               ["planilha.xlsx" "application/vnd.ms-excel"]]]
       (is (nil? (anexo/classificar nome declarado)) (str nome " declarado " declarado))))
   (testing "a extensao e' a ULTIMA: pdf.exe e' exe; exe.pdf e' pdf"
     (is (nil? (anexo/classificar "folha.pdf.exe" "application/pdf")))
     (is (= "application/pdf" (anexo/classificar "exe.pdf" "application/pdf")))))
+
+(deftest tipo-declarado-vazio-ou-octet-stream-vale-quando-a-extensao-esta-na-lista
+  ;; o navegador que nao conhece .odt/.docx declara octet-stream (ou nada, e a borda normaliza para octet-stream): a
+  ;; extensao manda, e a ASSINATURA do conteudo e' que barra o impostor (ver `assinatura-confere?`)
+  (doseq [[nome canonico] [["oficio.odt" "application/vnd.oasis.opendocument.text"]
+                           ["oficio.docx" "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]
+                           ["folha.pdf" "application/pdf"] ["nota.txt" "text/plain"]]]
+    (is (= canonico (anexo/classificar nome "application/octet-stream")) nome))
+  (is (nil? (anexo/classificar "programa.exe" "application/octet-stream")) "extensao fora da lista: nunca")
+  (is (nil? (anexo/classificar "pagina.html" "application/octet-stream")))
+  (is (nil? (anexo/classificar "folha.pdf" "text/html")) "octet-stream e' o unico 'nao sei' aceito; outro tipo incoerente segue recusado"))
 
 (deftest a-extensao
   (is (= "pdf" (anexo/extensao "a.PDF")))
@@ -136,3 +147,56 @@
     (is (= 2 (count (anexo/da-origem anexos "casa"))))
     (is (= 3 (count (anexo/da-origem anexos "requerente"))))
     (is (= (anexo/da-casa anexos) (anexo/da-origem anexos "casa")))))
+
+;; ---------- a ASSINATURA do conteudo contra a extensao ----------
+
+(defn- bs ^bytes [& xs] (byte-array (map unchecked-byte xs)))
+(defn- txt ^bytes [^String x] (.getBytes x "UTF-8"))
+
+(deftest assinatura-do-conteudo-confere-com-a-extensao
+  (testing "PDF: %PDF- na abertura (ate' o primeiro KiB, a tolerancia da especificacao)"
+    (is (true? (anexo/assinatura-confere? "pdf" (txt "%PDF-1.7\n..."))))
+    (is (true? (anexo/assinatura-confere? "pdf" (txt (str "lixo\n" "%PDF-1.4")))) "preambulo curto antes do cabecalho")
+    (is (false? (anexo/assinatura-confere? "pdf" (txt (str (apply str (repeat 1100 "x")) "%PDF-1.4"))))
+        "depois do primeiro KiB, nao e' mais um PDF")
+    (is (false? (anexo/assinatura-confere? "pdf" (txt "MZ\u0090 this program cannot be run in DOS mode")))))
+  (testing "PNG e JPEG: os bytes magicos"
+    (is (true? (anexo/assinatura-confere? "png" (bs 0x89 0x50 0x4E 0x47 0x0D 0x0A 0x1A 0x0A 0 0))))
+    (is (false? (anexo/assinatura-confere? "png" (txt "%PDF-1.4"))))
+    (is (true? (anexo/assinatura-confere? "jpg" (bs 0xFF 0xD8 0xFF 0xE0 0))))
+    (is (true? (anexo/assinatura-confere? "jpeg" (bs 0xFF 0xD8 0xFF 0xDB 0))))
+    (is (false? (anexo/assinatura-confere? "jpg" (bs 0x89 0x50 0x4E 0x47)))))
+  (testing "DOCX/XLSX/ODT/ODS sao ZIP: PK\\x03\\x04"
+    (doseq [ext ["docx" "xlsx" "odt" "ods"]]
+      (is (true? (anexo/assinatura-confere? ext (bs 0x50 0x4B 0x03 0x04 0x14 0))) ext)
+      (is (false? (anexo/assinatura-confere? ext (txt "%PDF-1.4"))) ext)
+      (is (false? (anexo/assinatura-confere? ext (bs 0x50 0x4B 0x05 0x06))) (str ext " zip vazio nao e' documento"))))
+  (testing "TXT e CSV: texto, sem byte NUL nos primeiros 8 KiB"
+    (is (true? (anexo/assinatura-confere? "txt" (txt "ola\nmundo"))))
+    (is (true? (anexo/assinatura-confere? "csv" (txt "a;b\n1;2"))))
+    (is (false? (anexo/assinatura-confere? "txt" (bs 0x4D 0x5A 0x90 0x00 0x03))) "MZ... com NUL")
+    (is (false? (anexo/assinatura-confere? "csv" (bs 0x61 0x00 0x62))))
+    (is (true? (anexo/assinatura-confere? "txt" (byte-array (concat (repeat 8192 (byte 0x61)) [(byte 0)]))))
+        "o NUL depois dos 8 KiB nao conta: so' o comeco e' examinado"))
+  (testing "extensao fora da lista, ou sem extensao: nunca confere"
+    (is (false? (anexo/assinatura-confere? "exe" (txt "MZ"))))
+    (is (false? (anexo/assinatura-confere? nil (txt "%PDF-"))))))
+
+;; ---------- a cota de disco do cidadao (origem requerente) ----------
+
+(deftest cota-de-disco-do-requerente
+  (is (= (* 100 1024 1024) anexo/cota-do-requerente-bytes) "100 MB nas ultimas 24 h")
+  (is (= (java.time.Duration/ofHours 24) anexo/janela-da-cota))
+  (is (false? (anexo/cota-estourada? 0 anexo/max-bytes-anexo)))
+  (is (false? (anexo/cota-estourada? (- anexo/cota-do-requerente-bytes 10) 10)) "chegar ao teto, sem passar, cabe")
+  (is (true? (anexo/cota-estourada? (- anexo/cota-do-requerente-bytes 10) 11)))
+  (is (true? (anexo/cota-estourada? anexo/cota-do-requerente-bytes 1))))
+
+;; ---------- o anexo retirado nao conta para o limite ----------
+
+(deftest anexo-retirado-nao-conta-para-o-limite-de-cinco
+  (let [anexos [{:origem "requerente"} {:origem "requerente" :retirado-em (t "2026-07-03T12:00:00Z")} {:origem "casa"}
+                {:origem "casa" :retirado-em (t "2026-07-03T12:00:00Z")}]]
+    (is (= 1 (count (anexo/da-origem anexos "requerente"))))
+    (is (= 1 (count (anexo/da-casa anexos))))
+    (is (true? (anexo/pode-anexar-requerente? (t "2026-07-03T12:00:00Z") (count (anexo/da-origem anexos "requerente")) (t "2026-07-03T12:01:00Z"))))))

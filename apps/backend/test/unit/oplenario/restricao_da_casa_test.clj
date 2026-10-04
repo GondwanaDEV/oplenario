@@ -22,6 +22,8 @@
       "o documento que acompanha a resposta segue: anexar e' parte de responder")
   (is (every? #(r/escrita-permitida? :post %) [:participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd])
       "o cidadao anexa ao proprio protocolo: parte de protocolar (como `protocolar-esic`)")
+  (is (every? #(r/escrita-permitida? :post %) [:participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd])
+      "retirar um anexo e' contencao de incidente de conteudo: a Casa suspensa pode")
   (is (r/escrita-permitida? :post :exportacao-da-casa/gerar) "a Casa suspensa exporta (portabilidade, 9.6)")
   (is (r/escrita-permitida? :post :exportacao-da-casa/confirmar-recebimento))
   (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")
