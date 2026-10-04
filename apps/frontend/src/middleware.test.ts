@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { middleware } from "./middleware";
+import { readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { config, middleware } from "./middleware";
 
 const ORIGIN = "http://localhost:3000";
 
@@ -149,5 +151,42 @@ describe("middleware — o console do operador (ADR-0016) é outra esfera", () =
   it("o cookie do console não abre uma área de Casa", () => {
     const resp = middleware(req("/proposicoes", "sessao_operacao=segredo"));
     expect(new URL(resp.headers.get("location")!).pathname).toBe("/entrar");
+  });
+});
+
+// O gate é por allowlist, então rota nova sem entrada na lista fica aberta sem ninguém notar (eram 17 em
+// 04/10/2026). Este teste mede a lista contra as páginas que existem em disco.
+describe("middleware — toda página autenticada está atrás do gate", () => {
+  const APP = join(__dirname, "app");
+
+  function paginas(dir: string, prefixo: string): string[] {
+    return readdirSync(dir).flatMap((nome) => {
+      const caminho = join(dir, nome);
+      if (statSync(caminho).isDirectory()) return paginas(caminho, `${prefixo}/${nome}`);
+      return nome === "page.tsx" ? [prefixo] : [];
+    });
+  }
+
+  // `[id]` vira um valor qualquer: o gate decide pelo prefixo, não pelo parâmetro.
+  const rotas = [
+    ...["(interno)", "(vereador)", "(cidadao)"].flatMap((grupo) => paginas(join(APP, grupo), "")),
+    ...paginas(join(APP, "sessoes"), "/sessoes"),
+  ].map((rota) => rota.replace(/\[[^\]]+\]/g, "abc"));
+
+  it("mede páginas de verdade (se a pasta mudar de lugar, o teste não passa vazio)", () => {
+    expect(rotas.length).toBeGreaterThan(50);
+    expect(rotas).toContain("/atendimento");
+    expect(rotas).toContain("/sessoes/abc/conduzir");
+  });
+
+  it.each(rotas)("%s sem cookie → /entrar", (rota) => {
+    const resp = middleware(req(rota));
+    expect(resp.status).toBe(307);
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/entrar");
+  });
+
+  it.each(rotas)("%s está no matcher (sem isso o Next nem chama o middleware)", (rota) => {
+    const primeiro = `/${rota.split("/")[1]}`;
+    expect(config.matcher).toContain(`${primeiro}/:path*`);
   });
 });

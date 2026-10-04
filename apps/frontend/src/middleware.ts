@@ -19,32 +19,50 @@ import { NextResponse, type NextRequest } from "next/server";
 // função é testada diretamente (chamada em unit test não passa pelo roteador do Next, que é quem
 // interpreta `matcher`) — sem isto, uma rota pública chamada fora do runtime do Next seria gated por
 // engano.
+// Em ordem alfabética. `middleware.test.ts` mede esta lista contra as páginas que existem em disco: página nova
+// num grupo autenticado sem entrada aqui reprova o teste. `/sessoes` inteiro é autenticado (painel, folha, chamada,
+// condução, ata, transcrição, TV, audiência); as sessões que o público vê ficam em `/portal`.
 const PREFIXOS_PROTEGIDOS = [
   "/acompanhamentos",
   "/administracao",
+  "/agendar-sessao",
+  "/assistente",
   "/atas",
   "/atendimento",
+  "/auditoria",
+  "/busca",
+  "/cadastros",
+  "/caixa",
+  "/calendario",
+  "/comunicados",
+  "/conferencias",
   "/contas",
-  "/meus-protocolos",
   "/editor-proposicao",
   "/expediente",
   "/ficha-materia",
+  "/gravacoes",
+  "/inicio",
+  "/juridico",
+  "/meus-protocolos",
+  "/moderacao",
+  "/normas",
+  "/notificacoes",
   "/paineis",
   "/parecer",
   "/pauta-convocacao",
   "/pos-aprovacao",
   "/proposicoes",
+  "/propostas",
+  "/recebimentos",
+  "/requerimento",
+  "/sessoes",
+  "/tempos-da-tribuna",
   "/tramitacao",
   "/vereador",
   "/votar",
 ];
 
 function ehRotaProtegida(pathname: string): boolean {
-  if (/^\/sessoes\/[^/]+\/plenario$/.test(pathname)) return true;
-  // Etapa 5 fatia 6 (a FOLHA) — mesmo gate que /plenario: a folha é nominal e carrega o `motivo` da
-  // justificativa (LGPD, potencial dado de saúde), papel 'secretario' na borda real do backend. Esta
-  // checagem é só UX (evita round-trip a uma página que o servidor recusaria de qualquer forma).
-  if (/^\/sessoes\/[^/]+\/folha$/.test(pathname)) return true;
   return PREFIXOS_PROTEGIDOS.some(
     (prefixo) => pathname === prefixo || pathname.startsWith(`${prefixo}/`),
   );
@@ -90,27 +108,47 @@ export function middleware(request: NextRequest): NextResponse {
   return NextResponse.next();
 }
 
+// O Next exige o matcher como literal estático (não aceita `.map` sobre a lista acima); o teste confere que os
+// dois andam juntos.
 export const config = {
   matcher: [
     "/acompanhamentos/:path*",
     "/administracao/:path*",
+    "/agendar-sessao/:path*",
+    "/assistente/:path*",
     "/atas/:path*",
     "/atendimento/:path*",
+    "/auditoria/:path*",
+    "/busca/:path*",
+    "/cadastros/:path*",
+    "/caixa/:path*",
+    "/calendario/:path*",
+    "/comunicados/:path*",
+    "/conferencias/:path*",
     "/contas/:path*",
-    "/meus-protocolos/:path*",
     "/editor-proposicao/:path*",
     "/expediente/:path*",
     "/ficha-materia/:path*",
+    "/gravacoes/:path*",
+    "/inicio/:path*",
+    "/juridico/:path*",
+    "/meus-protocolos/:path*",
+    "/moderacao/:path*",
+    "/normas/:path*",
+    "/notificacoes/:path*",
     "/paineis/:path*",
     "/parecer/:path*",
     "/pauta-convocacao/:path*",
     "/pos-aprovacao/:path*",
     "/proposicoes/:path*",
+    "/propostas/:path*",
+    "/recebimentos/:path*",
+    "/requerimento/:path*",
+    "/sessoes/:path*",
+    "/tempos-da-tribuna/:path*",
     "/tramitacao/:path*",
     "/vereador/:path*",
     "/votar/:path*",
-    "/sessoes/:id/plenario",
-    "/sessoes/:id/folha",
     "/operacao",
     "/operacao/:path*",
   ],
