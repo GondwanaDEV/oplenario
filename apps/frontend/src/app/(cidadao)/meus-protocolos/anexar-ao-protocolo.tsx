@@ -71,7 +71,7 @@ export function AnexarAoProtocolo({
       )}
       <PainelDeEnvio
         itens={itens}
-        podeTentarDeNovo={podeAnexar}
+        podeTentarDeNovo={podeAnexar && !enviando}
         aoTentarDeNovo={(i) => void tentarDeNovo(i)}
         semJanela="Já não dá para anexar: passaram os 10 minutos depois de enviar o pedido, ou o pedido já tem 5 anexos seus."
       />

@@ -295,6 +295,46 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(urls).toEqual(["/api/portal/meus-protocolos/lgpd/s7/anexos", "/api/portal/meus-protocolos/ouvidoria/m7/anexos"]);
   });
 
+  it("anexo RETIRADO pela Câmara: aparece como retirado, com a data, sem link e sem o motivo", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p8", protocolo: "ESIC-2026-000008", assunto: "Folha", estado: "respondido", diasRestantes: 5,
+        resposta: { corpo: "Segue.", respondidaEm: "2026-07-10T15:00:00Z" },
+        anexos: [
+          { ...anexo("a1", "meu contrato.pdf", 2048, "application/pdf", "requerente"), retiradoEm: "2026-07-11T10:00:00Z" },
+          anexo("a2", "resposta.pdf", 1024, "application/pdf", "casa"),
+        ] }],
+    };
+    render(<ListaDeProtocolosComToken dados={dados} token={null} />);
+    const p8 = screen.getByText("ESIC-2026-000008").closest("li")!;
+    const seus = within(p8).getByRole("list", { name: "Seus anexos" });
+    expect(within(seus).getByText("meu contrato.pdf")).toBeTruthy();
+    expect(within(seus).getByText(/Retirado em/)).toBeTruthy();
+    expect(within(seus).queryByRole("link")).toBeNull();      // sem link: o download e' 404
+    expect(within(seus).queryByRole("button")).toBeNull();
+    // o da Casa, vigente, segue com link
+    expect(within(p8).getByRole("link", { name: "Baixar resposta.pdf" })).toBeTruthy();
+  });
+
+  it("F1: enquanto os arquivos sobem, o controle diz para não fechar a página e o aviso de saída está armado", async () => {
+    let termina!: () => void;
+    global.fetch = vi.fn(() => new Promise<Response>((r) => { termina = () => r({ ok: true, status: 201, json: async () => ({}) } as Response); })) as unknown as typeof fetch;
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p6", protocolo: "ESIC-2026-000006", assunto: "Folha", estado: "protocolado", diasRestantes: 20, anexos: [], podeAnexar: true }],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    const p6 = screen.getByText("ESIC-2026-000006").closest("li")!;
+    fireEvent.change(within(p6).getByLabelText(/Anexar arquivos ao pedido/), { target: { files: [new File(["x"], "contrato.pdf")] } });
+    fireEvent.click(within(p6).getByRole("button", { name: "Enviar os arquivos" }));
+    await waitFor(() => expect(within(p6).getByText(/Enviando anexos, não feche esta página/)).toBeTruthy());
+    const ev = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    termina();
+    await waitFor(() => expect(within(p6).queryByText(/Enviando anexos, não feche esta página/)).toBeNull());
+  });
+
   it("o nome do arquivo é texto, nunca HTML", () => {
     const dados: MeusProtocolos = {
       ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
