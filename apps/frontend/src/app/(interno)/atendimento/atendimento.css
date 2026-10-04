@@ -1,0 +1,85 @@
+/* /atendimento — o balcão de atendimento ao cidadão (e-SIC, ouvidoria, LGPD). Arquétipo fila + detalhe, o vocabulário de
+   /juridico e /conferencias (abas em cápsula, cartões de lista, painel de formulário). Cor só por token: o selo do prazo
+   usa as variantes de TEXTO (--acento-texto vencido, --aviso-texto vence hoje/perto — GUIDELINES §5.1: âmbar como tinta
+   é --aviso-texto), nunca o preenchimento como tinta. Padding só vertical: o gutter lateral é do .envelope. Prefixo atd-. */
+.atd { padding-top: 1.5rem; padding-bottom: 3rem; display: grid; gap: 1.1rem; align-content: start; min-width: 0; }
+.atd-cabeca { display: grid; gap: 0.4rem; max-width: 52rem; }
+.atd-cabeca h1 { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-28); letter-spacing: -0.015em; line-height: 1.15; color: var(--texto); overflow-wrap: anywhere; }
+.atd-detalhe .atd-cabeca h1 { font-size: var(--t-21); line-height: 1.3; }
+.atd-sub { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; overflow-wrap: anywhere; }
+.atd-voltar { justify-self: start; min-height: 44px; display: inline-flex; align-items: center; color: var(--marca); font-weight: 600; }
+.atd-erro { margin: 0; color: var(--acento-texto); }
+.atd-vazio, .atd-dica { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; }
+.atd-falta { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+.atd-ok, .atd-recibo { margin: 0; padding: 0.7rem 0.9rem; max-width: 52rem; border: 1px solid var(--linha); border-left: 3px solid var(--jade-medio); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.atd-recibo { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: center; justify-content: space-between; }
+.atd-recibo p { margin: 0; flex: 1 1 20rem; }
+.atd-alerta { margin: 0; max-width: 52rem; padding: 0.6rem 0.8rem; border-left: 3px solid var(--acento-texto); background: var(--surface); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+
+/* as filas */
+.atd-fila { display: grid; gap: 0.9rem; min-width: 0; }
+.atd-abas { display: grid; grid-template-columns: repeat(3, minmax(0, max-content)); gap: 0.4rem; }
+.atd-aba, .atd-filtro-botao { min-height: 44px; padding: 0 0.9rem; white-space: nowrap; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: var(--surface); color: var(--texto-2); font: inherit; font-size: var(--t-13); font-weight: 600; cursor: pointer; }
+.atd-aba { font-size: var(--t-16); }
+.atd-aba[aria-pressed="true"], .atd-filtro-botao[aria-pressed="true"] { border-color: var(--marca); color: var(--texto); background: color-mix(in srgb, var(--marca) 12%, transparent); }
+.atd-filtro { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+@media (max-width: 480px) {
+  .atd-abas { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.3rem; }
+  .atd-aba { padding: 0 0.4rem; font-size: var(--t-13); }
+}
+.atd-fila-cabeca { display: grid; gap: 0.25rem; max-width: 52rem; }
+.atd-fila-cabeca h2 { margin: 0; font-size: var(--t-16); font-weight: 600; color: var(--texto); }
+.atd-lei { margin: 0; color: var(--texto-2); font-size: var(--t-13); line-height: 1.5; }
+
+.atd-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; max-width: 52rem; }
+.atd-item a { display: grid; gap: 0.3rem; padding: 0.9rem 1.1rem; min-width: 0; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); color: var(--texto); text-decoration: none; }
+.atd-item a:hover, .atd-item a:focus-visible { border-color: var(--marca); }
+.atd-item-topo, .atd-ref { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin: 0; }
+.atd-protocolo { font-family: var(--mono); font-size: var(--t-12); font-weight: 700; letter-spacing: 0.04em; color: var(--texto-2); }
+.atd-titulo { font-weight: 600; overflow-wrap: anywhere; }
+.atd-linha { margin: 0; font-size: var(--t-13); color: var(--texto-2); }
+
+/* o selo do prazo: tinta + borda da mesma variante de texto (AA medido no token) */
+.atd-selo, .atd-chip { font-size: var(--t-12); font-weight: 700; padding: 0.1rem 0.55rem; border-radius: var(--raio-capsula); border: 1px solid var(--linha); color: var(--texto-2); white-space: nowrap; }
+/* GUIDELINES §5.1: --acento-texto sobre tint da propria telha cai a 4.10 — o selo pousa no --surface (5.12/5.61), e o
+   peso vem da borda dupla, nao de um fundo colorido */
+.atd-selo-vencido { border: 2px solid var(--acento-texto); color: var(--acento-texto); background: var(--surface); }
+.atd-selo-hoje { border: 2px solid var(--aviso-texto); color: var(--aviso-texto); background: var(--surface); }
+.atd-selo-perto { border-color: var(--aviso-texto); color: var(--aviso-texto); }
+.atd-selo-ok { border-color: var(--marca); color: var(--marca); }
+.atd-selo-encerrado { border-style: dashed; }
+.atd-chip-recurso { border-color: var(--cobalto-texto); color: var(--cobalto-texto); }
+
+/* o detalhe */
+.atd-bloco { max-width: 52rem; display: grid; gap: 0.5rem; min-width: 0; }
+.atd-bloco h2 { margin: 0; font-size: var(--t-16); font-weight: 600; color: var(--texto); display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.atd-pessoa { margin: 0; color: var(--texto); overflow-wrap: anywhere; }
+.atd-rotulo { color: var(--texto-2); font-size: var(--t-13); font-weight: 600; }
+.atd-texto { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; padding: 0.8rem 0.9rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); }
+.atd-recurso { padding: 0.8rem 0.9rem; border: 1px solid var(--linha); border-left: 3px solid var(--cobalto-texto); border-radius: 12px; background: var(--surface); }
+.atd-recurso .atd-texto { background: var(--surface-2); }
+.atd-historico { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.8rem; }
+.atd-historico li { display: grid; gap: 0.25rem; }
+.atd-historico p { margin: 0; }
+.atd-evento-titulo { font-weight: 600; color: var(--texto); }
+.atd-encerrado { font-style: italic; }
+
+/* formulários (ações e encarregado) */
+.atd-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.atd-form { max-width: 52rem; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.7rem; }
+.atd-aviso { margin: 0; padding-left: 0.7rem; border-left: 3px solid var(--aviso-texto); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.atd-campo { display: grid; gap: 0.3rem; min-width: 0; }
+.atd-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.atd-campo input, .atd-campo textarea {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2);
+  border: 1px solid var(--campo-borda); border-radius: var(--raio-sm);
+  padding: 0.6rem 0.7rem; width: 100%; min-height: 44px; box-sizing: border-box;
+}
+.atd-campo textarea { resize: vertical; line-height: 1.6; min-height: 6rem; }
+.atd-campo input:focus-visible, .atd-campo textarea:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+
+/* o encarregado de dados: bloco discreto no pé do balcão */
+.atd-encarregado { max-width: 52rem; margin-top: 0.8rem; padding: 0.9rem 1.1rem; border: 1px dashed var(--linha); border-radius: 12px; display: grid; gap: 0.5rem; }
+.atd-encarregado h2 { margin: 0; font-size: var(--t-13); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
+.atd-enc-atual { margin: 0; color: var(--texto); overflow-wrap: anywhere; line-height: 1.5; }
+.atd-encarregado .atd-form { border: 0; padding: 0; background: transparent; }

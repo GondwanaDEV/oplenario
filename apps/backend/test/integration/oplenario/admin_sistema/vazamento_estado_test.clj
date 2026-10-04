@@ -128,6 +128,8 @@
     :transparencia/seguir :transparencia/deixar-de-seguir
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
+    ;; o balcao de atendimento: a prorrogacao do e-SIC (LAI art. 11 §2º), irma da prorrogacao da ouvidoria
+    :participacao/prorrogar-pedido
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia
