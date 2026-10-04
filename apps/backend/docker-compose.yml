@@ -26,7 +26,8 @@ services:
     image: valkey/valkey:8
     restart: unless-stopped
     # Senha (`requirepass`) vinda de OPLENARIO_VALKEY_PASSWORD (.env; valor de dev no .env.example). Vazia = sem
-    # senha, que so' serve a dev/CI: fora de dev/test o backend nao sobe com o backplane :valkey sem senha. A
+    # senha, que so' serve a dev/CI: fora de dev/test o backend avisa em nivel error (e recusa subir com
+    # VALKEY_EXIGIR_SENHA=true) quando o backplane e' :valkey e nao ha' senha. A
     # variavel entra no container (e nao na linha de comando) para o healthcheck autenticar; `$$` adia a expansao
     # para o shell do container.
     environment:

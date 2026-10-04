@@ -47,7 +47,9 @@
      (get env "DB_PASSWORD")  (assoc-in [:db :password] (get env "DB_PASSWORD"))
      (get env "VALKEY_URI")       (assoc-in [:valkey :uri]            (get env "VALKEY_URI"))
      ;; A senha do Valkey vem SO' do ambiente (cofre do deploy) — o config.edn nao tem default. `rediss://` na
-     ;; VALKEY_URI liga o TLS. Fora de dev/test, backplane :valkey sem senha nao sobe (sistema/novo-sistema).
+     ;; VALKEY_URI liga o TLS. Fora de dev/test, backplane :valkey sem senha SOBE avisando em nivel error; com
+     ;; VALKEY_EXIGIR_SENHA=true (so' o literal "true") passa a recusar o boot (sistema/novo-sistema).
+     (get env "VALKEY_EXIGIR_SENHA") (assoc-in [:valkey :exigir-senha] (= "true" (get env "VALKEY_EXIGIR_SENHA")))
      (get env "VALKEY_USERNAME")  (assoc-in [:valkey :username]       (get env "VALKEY_USERNAME"))
      (get env "VALKEY_PASSWORD")  (assoc-in [:valkey :password]       (get env "VALKEY_PASSWORD"))
      (get env "TEMPO_REAL_BACKPLANE") (assoc-in [:tempo-real :backplane] (keyword (get env "TEMPO_REAL_BACKPLANE")))

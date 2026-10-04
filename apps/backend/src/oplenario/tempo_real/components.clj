@@ -204,7 +204,8 @@
      BYTES crus ao Carmine (`parse-raw`), que por isso NAO descongela Nippy. Escrever no Valkey nao faz o backend
      instanciar classe nem rodar leitor etiquetado — o valor estranho e' registrado e vira lacuna.
    - Autenticacao: senha por `VALKEY_PASSWORD` (ou na URI) e usuario opcional por `VALKEY_USERNAME`
-     (`spec-de-conexao`). Fora de dev/test, `sistema/novo-sistema` recusa subir com o backplane :valkey sem senha.
+     (`spec-de-conexao`). Fora de dev/test e sem senha, `sistema/novo-sistema` avisa em nivel error a cada boot;
+     com `VALKEY_EXIGIR_SENHA=true` recusa subir.
    - TLS: `VALKEY_URI=rediss://...`.
    - Rede: o Valkey fica so' na rede interna (no deploy; ver docs/27, secao do Valkey)."
   ([config] (canal-store-valkey config {}))

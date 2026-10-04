@@ -106,25 +106,27 @@ vivo do plenário (`tempo_real`, janela de 5 minutos) e só o `backend` fala com
 |---|---|
 | O que sai do Valkey nunca vira objeto (texto EDN de dado puro, sem Nippy na leitura) | código — nada a fazer |
 | O `backend` manda a senha (`VALKEY_PASSWORD`, ou na `VALKEY_URI`) e o usuário de ACL opcional (`VALKEY_USERNAME`) | código + variável no Dokploy |
-| Fora de `APP_ENV` dev/test, com `TEMPO_REAL_BACKPLANE=valkey` e sem senha, o `backend` **não sobe** (`Valkey sem senha fora de dev/test`) | código |
+| Fora de `APP_ENV` dev/test, com `TEMPO_REAL_BACKPLANE=valkey` e sem senha, o `backend` **sobe** e registra `Valkey sem senha em producao` em nível `error`, a cada boot | código |
+| Com `VALKEY_EXIGIR_SENHA=true`, o mesmo caso **não sobe** (`Valkey sem senha e VALKEY_EXIGIR_SENHA ligada`) | código + variável no Dokploy |
 | TLS: `VALKEY_URI=rediss://…` | variável no Dokploy + certificado no servidor |
 | O Valkey exigir a senha (`requirepass`) | **só no Dokploy** |
 | A porta 6379 não ser publicada | **só no Dokploy** |
 
-### Antes de promover a versão que exige a senha (uma vez)
+### Pôr a senha e ligar a exigência (uma vez, depois de promover)
 
-A ordem importa: a senha tem de existir no ambiente **antes** de essa versão subir. Sem ela o `backend` novo recusa o
-boot e a produção fica fora.
+Promover a versão não pede nada: sem senha ela sobe e avisa. A ordem abaixo é o que fecha o aviso.
 
-1. Abra o Environment do `backend` e leia a `VALKEY_URI`. Se já tem senha (`redis://:senha@…` ou
-   `redis://usuario:senha@…`), pule para o passo 4.
+1. Procure `Valkey sem senha em producao` nos Logs do `backend`. Se não aparece no último boot, a senha já existe:
+   pule para o passo 5.
 2. Gere uma senha longa e aleatória e ponha no Valkey (a senha do serviço no Dokploy, ou
    `valkey-server --requirepass <senha>` no comando). Faça o Deploy do Valkey.
-3. No `backend`, troque a `VALKEY_URI` para `redis://:<senha>@<appName-do-valkey>:6379` e faça o Deploy. A versão
-   que está no ar hoje já entende senha na URI. Entre os passos 2 e 3 o painel ao vivo para de atualizar (o relay
-   tenta de novo sozinho); faça fora de sessão. Confira os Logs do `backend` (subiu sem erro de Valkey) e um painel ao vivo.
-4. Só então promova a versão nova. Depois que ela subir, a senha pode sair da URI e ir para `VALKEY_PASSWORD` (senha
-   com `@`, `:` ou `/` só funciona assim, sem escapar).
+3. No `backend`, defina `VALKEY_PASSWORD` com a mesma senha e faça o Deploy. Entre os passos 2 e 3 o painel ao vivo
+   para de atualizar (o relay tenta de novo sozinho); faça fora de sessão.
+4. Confira nos Logs do `backend` que ele subiu, que o aviso **sumiu** e que um painel ao vivo atualiza.
+5. Só então defina `VALKEY_EXIGIR_SENHA=true` no `backend` e faça o Deploy. Daí em diante, perder a senha do
+   ambiente impede o boot em vez de deixar o Valkey aberto sem ninguém notar.
+
+Nunca ligue `VALKEY_EXIGIR_SENHA` antes do passo 4: sem a senha no ambiente o `backend` não sobe.
 
 Na primeira subida da versão nova, o que ainda estiver no canal no formato antigo é recusado e vira aviso de lacuna:
 quem está com o painel aberto recarrega o estado pelo snapshot. Passa em 5 minutos.
@@ -151,6 +153,6 @@ tem de encadear numa autoridade que ela conhece. O cliente valida a cadeia, mas 
 
 | Log | Causa |
 |---|---|
-| `Valkey sem senha fora de dev/test` | falta `VALKEY_PASSWORD` (ou a senha na `VALKEY_URI`) |
+| `Valkey sem senha e VALKEY_EXIGIR_SENHA ligada` | falta `VALKEY_PASSWORD` (ou a senha na `VALKEY_URI`); para subir já, tire `VALKEY_EXIGIR_SENHA` |
 | `NOAUTH` / `WRONGPASS` no start | o Valkey exige senha e o `backend` não tem, ou tem outra |
 | `Connection refused` | appName errado na `VALKEY_URI`, ou o Valkey fora do ar |

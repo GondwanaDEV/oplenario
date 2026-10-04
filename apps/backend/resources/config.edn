@@ -11,7 +11,8 @@
  :db     {:jdbc-url "jdbc:postgresql://localhost:5432/oplenario" :user "oplenario" :password "dev"
           :pool-max-size 10} ; dimensionar contra max_connections do PG / nº de réplicas (deploy)
  ;; Valkey: a senha NAO tem default aqui — vem de VALKEY_PASSWORD (ou embutida na VALKEY_URI); usuario de ACL
- ;; opcional em VALKEY_USERNAME; TLS = VALKEY_URI com `rediss://`.
+ ;; opcional em VALKEY_USERNAME; TLS = VALKEY_URI com `rediss://`. VALKEY_EXIGIR_SENHA=true faz o boot recusar
+ ;; o backplane :valkey sem senha fora de dev/test (sem ela, so' avisa em nivel error).
  :valkey {:uri "redis://localhost:6379"}
  ;; backplane do tempo real (§22.6 eixo G): :memoria (1 no / dev / teste) | :valkey (multi-no / prod).
  ;; Override por TEMPO_REAL_BACKPLANE. Prod multi-replica DEVE usar :valkey (a impl em memoria nao compartilha
