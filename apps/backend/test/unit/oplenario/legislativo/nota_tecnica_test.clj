@@ -40,6 +40,11 @@
     (is (= "Cabe." (:texto-limpo w)))
     (is (= "1970-01-01T00:00:00Z" (:decidida-em w)))
     (is (not-any? #{:decidida-por :execucao-id} (keys w)))
+    (testing "feature 8.4: `execucao-ia` (id na IA, p/ o 'Reportar erro') sai como string so' quando ha'"
+      (is (not (contains? w :execucao-ia)))
+      (let [id (random-uuid)]
+        (is (= (str id) (:execucao-ia (out/nota->wire (assoc n :execucao-ia id)))))
+        (is (not (contains? (out/nota->wire (assoc n :execucao-ia nil)) :execucao-ia)))))
     (is (= [(str (:id n))] (mapv :id (:itens (out/notas->wire [n])))))
     (testing "ADR-0019 Eixo 5: a fila diz se a Casa tem juridico ativo (padrao: nao)"
       (is (false? (:casa-com-juridico (out/notas->wire [n]))))
