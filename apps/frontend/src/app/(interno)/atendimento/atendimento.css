@@ -83,3 +83,14 @@
 .atd-encarregado h2 { margin: 0; font-size: var(--t-13); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
 .atd-enc-atual { margin: 0; color: var(--texto); overflow-wrap: anywhere; line-height: 1.5; }
 .atd-encarregado .atd-form { border: 0; padding: 0; background: transparent; }
+
+/* Os arquivos que acompanham a resposta: o seletor (antes do ato) e o resultado do envio (depois). */
+.atd-anexos input[type="file"] { font-size: var(--t-13); color: var(--texto); max-width: 100%; }
+.atd-arquivos, .atd-envio ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.atd-arquivos li, .atd-envio li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.8rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.atd-arquivo-nome { font-weight: 600; color: var(--texto); overflow-wrap: anywhere; flex: 1 1 12rem; }
+.atd-arquivo-info, .atd-arquivo-fase { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.atd-fase-erro { color: var(--acento-texto); font-family: var(--corpo); font-size: var(--t-13); }
+.atd-fase-ok { color: var(--marca); }
+.atd-envio { display: grid; gap: 0.6rem; max-width: 52rem; }
+.atd-envio > p { margin: 0; font-size: var(--t-13); color: var(--texto); }

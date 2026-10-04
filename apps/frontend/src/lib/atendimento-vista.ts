@@ -4,6 +4,7 @@
 // prazo que vale, o que cabe fazer) vem pronta do servidor — a tela não deduz nada.
 
 import { formatarData, formatarDataSimples, formatarHora } from "./formatar-data";
+import { TIPOS_ACEITOS_EM_TEXTO } from "./anexos-do-atendimento";
 import type { EventoOut } from "./contrato-atendimento.gen";
 
 export type Especie = "esic" | "ouvidoria" | "lgpd";
@@ -173,6 +174,8 @@ export type AcaoAtendimento =
   | "decidir-recurso"
   | "prorrogar"
   | "arquivar"
+  | "anexar"
+  | "baixar-anexo"
   | "encarregado"
   | "salvar-encarregado";
 
@@ -184,13 +187,17 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   "decidir-recurso": "Este recurso já foi decidido. Recarregue para ver a decisão.",
   prorrogar: "O prazo já foi prorrogado uma vez, ou não está mais correndo. A prorrogação só cabe uma vez, antes de vencer.",
   arquivar: "Esta manifestação já foi respondida ou arquivada. Recarregue para ver o que mudou.",
+  anexar: "A Casa não pode anexar agora: o protocolo ainda não tem resposta, passaram os 10 minutos depois dela ou já são 5 anexos.",
+  "baixar-anexo": "",
   encarregado: "",
   "salvar-encarregado": "",
 };
 
-export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento): string {
+/** `erroDoServidor` só vale ao ANEXAR: ali o servidor explica o que a pessoa pode corrigir (qual regra, em português). */
+export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento, erroDoServidor?: string): string {
   if (status === 0) return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
   if (status === 401) return "Sua sessão expirou. Entre de novo.";
+  if (acao === "anexar" || acao === "baixar-anexo") return mensagemDeErroDeAnexo(status, acao, erroDoServidor);
   if (status === 403) return "Esta área é da secretaria. Seu acesso não permite ver ou responder estes protocolos.";
   if (status === 404) return "Não encontramos este protocolo — ele pode não existir nesta Casa.";
   if (status === 409) return CONFLITO[acao] || "O protocolo mudou enquanto você trabalhava. Recarregue a página.";
@@ -209,6 +216,22 @@ export function avisoDaProrrogacao(especie: "esic" | "ouvidoria", identificacao?
   if (identificacao === "anonima")
     return `${regra} Esta manifestação é anônima: a justificativa fica só no registro da Casa, porque não há a quem mostrá-la.`;
   return `${regra} A justificativa é mostrada ao manifestante, no protocolo dele em "Meus protocolos": escreva pensando em quem vai ler.`;
+}
+
+function mensagemDeErroDeAnexo(status: number, acao: "anexar" | "baixar-anexo", erroDoServidor?: string): string {
+  if (acao === "baixar-anexo") {
+    if (status === 403) return "Só a secretaria baixa os anexos por aqui.";
+    if (status === 404) return "O anexo não foi encontrado.";
+    return "Não foi possível baixar agora. Tente de novo em instantes.";
+  }
+  if (status === 413) return "O arquivo passa de 10 MB, o limite por anexo.";
+  if (status === 415) return erroDoServidor || `Tipo de arquivo não aceito. Aceitamos ${TIPOS_ACEITOS_EM_TEXTO}.`;
+  if (status === 409) return erroDoServidor || CONFLITO.anexar;
+  if (status === 403) return "Só a secretaria anexa arquivos à resposta.";
+  if (status === 404) return "Não encontramos este protocolo para receber o anexo — ele pode não existir nesta Casa.";
+  if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
+  if (status === 400) return "O arquivo está vazio ou veio malformado. Escolha-o de novo.";
+  return "Não foi possível anexar agora. Tente de novo em instantes.";
 }
 
 export const TETO_RESPOSTA = 50000;

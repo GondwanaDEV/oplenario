@@ -76,6 +76,30 @@ describe("textos", () => {
   });
 });
 
+describe("os erros de anexar (a resposta do servidor explica o que a pessoa pode corrigir)", () => {
+  it("413, 415 e os 409 de anexar usam a frase do servidor; sem ela, uma frase honesta", () => {
+    expect(mensagemDeErroAtendimento(413, "anexar")).toBe("O arquivo passa de 10 MB, o limite por anexo.");
+    expect(mensagemDeErroAtendimento(415, "anexar", "Tipo de arquivo não aceito. Aceitamos PDF.")).toBe("Tipo de arquivo não aceito. Aceitamos PDF.");
+    expect(mensagemDeErroAtendimento(415, "anexar")).toMatch(/Tipo de arquivo não aceito\. Aceitamos PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS/);
+    expect(mensagemDeErroAtendimento(409, "anexar", "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram."))
+      .toMatch(/10 minutos/);
+    expect(mensagemDeErroAtendimento(409, "anexar")).toMatch(/não pode anexar agora/);
+    expect(mensagemDeErroAtendimento(403, "anexar")).toMatch(/só a secretaria/i);
+    expect(mensagemDeErroAtendimento(404, "anexar")).toMatch(/não encontramos/i);
+    expect(mensagemDeErroAtendimento(400, "anexar")).toMatch(/vazio ou veio malformado/);
+    expect(mensagemDeErroAtendimento(0, "anexar")).toMatch(/Falha de rede/);
+  });
+
+  it("a frase do servidor só vale em anexar: nas outras ações o 409 segue o texto de sempre", () => {
+    expect(mensagemDeErroAtendimento(409, "responder", "qualquer coisa do servidor")).toMatch(/já foi respondido ou encerrado/);
+  });
+
+  it("baixar: 404 e 403 em palavras", () => {
+    expect(mensagemDeErroAtendimento(404, "baixar-anexo")).toMatch(/anexo não foi encontrado/i);
+    expect(mensagemDeErroAtendimento(403, "baixar-anexo")).toMatch(/secretaria/i);
+  });
+});
+
 describe("o aviso do formulário de prorrogar", () => {
   it("diz que a justificativa é mostrada a quem pediu — e é honesto quando não há a quem mostrar (ouvidoria anônima)", () => {
     expect(avisoDaProrrogacao("esic")).toMatch(/exige justificativa\./);

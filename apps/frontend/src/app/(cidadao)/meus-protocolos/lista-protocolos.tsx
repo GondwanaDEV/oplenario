@@ -5,13 +5,16 @@
 // indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem). O protocolo
 // INDEFERIDO (e-SIC ou LGPD) mostra a fundamentação da Casa — a lei exige que a recusa diga as razões — e um selo
 // neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho. O protocolo PRORROGADO mostra as duas
-// datas e a justificativa da Câmara (LAI art. 11 §2º: o requerente é cientificado) — só aqui, no protocolo do dono.
+// datas e a justificativa da Câmara (LAI art. 11 §2º: o requerente é cientificado) — só aqui, no protocolo do dono. Os
+// ANEXOS da resposta (a resposta a um pedido costuma ser um documento) aparecem sob a resposta, com o download pela rota
+// do próprio requerente (o servidor devolve 404 a quem não é o dono).
 
 import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
 import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import type { Anexo, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import { ListaDeAnexos } from "../../anexos-do-atendimento";
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
@@ -150,6 +153,9 @@ function Item({
   dias,
   resposta,
   prorrogacao,
+  anexos,
+  rotaDoAnexo,
+  token,
   children,
 }: {
   protocolo: string;
@@ -159,6 +165,9 @@ function Item({
   dias: number | null;
   resposta: Resposta | null;
   prorrogacao?: Prorrogacao | null;
+  anexos?: Anexo[];
+  rotaDoAnexo: (anexoId: string) => string;
+  token: string | null;
   children?: React.ReactNode;
 }) {
   return (
@@ -175,10 +184,15 @@ function Item({
       </p>
       <PrazoProrrogado prorrogacao={prorrogacao} />
       <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
+      <ListaDeAnexos anexos={anexos} rotaDe={rotaDoAnexo} token={token} Titulo="h3" />
       {children}
     </li>
   );
 }
+
+/** O download do anexo, pela rota do REQUERENTE (so' o dono baixa; qualquer outro recebe 404). */
+const rotaDoAnexo = (especie: "esic" | "ouvidoria" | "lgpd", id: string) => (anexoId: string) =>
+  `/api/portal/meus-protocolos/${especie}/${encodeURIComponent(id)}/anexos/${encodeURIComponent(anexoId)}`;
 
 const rotuloDe = (lista: { valor: string; rotulo: string }[], v: string) => lista.find((o) => o.valor === v)?.rotulo ?? v;
 
@@ -201,7 +215,8 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
-                dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao}>
+                dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao} anexos={p.anexos}
+                rotaDoAnexo={rotaDoAnexo("esic", p.id)} token={token}>
                 {p.recurso ? (
                   <RecursoInterposto recurso={p.recurso} />
                 ) : (
@@ -223,7 +238,8 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.solicitacoesLgpd.map((s) => (
               <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDe(DIREITOS_LGPD, s.tipo)} estado={s.estado}
-                reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} />
+                reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} anexos={s.anexos}
+                rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token} />
             ))}
           </ul>
         )}
@@ -241,7 +257,7 @@ export function ListaProtocolos({
             {dados.manifestacoes.map((m) => (
               <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
                 estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
-                prorrogacao={m.prorrogacao} />
+                prorrogacao={m.prorrogacao} anexos={m.anexos} rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token} />
             ))}
           </ul>
         )}

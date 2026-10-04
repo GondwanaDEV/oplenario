@@ -153,6 +153,74 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(container.querySelector("li b")).toBeNull();
   });
 
+  const anexo = (id: string, nome: string, bytes: number, tipoMidia = "application/pdf") =>
+    ({ id, nome, tipoMidia, bytes, origem: "casa", enviadoEm: "2026-07-10T15:00:00Z" });
+
+  it("os anexos da resposta: nome, tamanho legível e formato (nunca o tipo cru), com link para baixar como arquivo", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [{ ...base, id: "p9", protocolo: "ESIC-2026-000009", assunto: "Folha", estado: "respondido", diasRestantes: 5,
+        resposta: { corpo: "Segue a planilha.", respondidaEm: "2026-07-10T15:00:00Z" },
+        anexos: [anexo("a1", "folha de 2025.pdf", 1536), anexo("a2", "dados.csv", 2 * 1024 * 1024, "text/csv")] }],
+      solicitacoesLgpd: [{ ...base, id: "s9", protocolo: "LGPD-2026-000009", tipo: "acessar", estado: "respondida", diasRestantes: 1,
+        resposta: { corpo: "Seus dados.", respondidaEm: "2026-07-10T15:00:00Z" }, anexos: [anexo("a3", "meus-dados.pdf", 100)] }],
+      manifestacoes: [{ ...base, id: "m9", protocolo: "OUV-2026-000009", tipo: "reclamacao", assunto: "Fila", estado: "respondida", diasRestantes: 1,
+        resposta: { corpo: "Ampliamos.", respondidaEm: "2026-07-10T15:00:00Z" }, anexos: [anexo("a4", "relatorio.odt", 100, "application/vnd.oasis.opendocument.text")] }],
+    };
+    render(<ListaProtocolos dados={dados} token={null} aoMudar={() => {}} />);
+    const p9 = screen.getByText("ESIC-2026-000009").closest("li")!;
+    const lista = within(p9).getByRole("list", { name: "Anexos da resposta" });
+    const itens = within(lista).getAllByRole("listitem");
+    expect(itens).toHaveLength(2);
+    expect(itens[0].textContent).toMatch(/folha de 2025\.pdf.*2 KB · PDF/);
+    expect(itens[1].textContent).toMatch(/dados\.csv.*2,0 MB · CSV/);
+    expect(p9.textContent).not.toMatch(/application\/pdf|text\/csv/);
+    // o link vai pela rota do requerente, da especie certa, e baixa como arquivo
+    const link = within(itens[0]).getByRole("link", { name: "Baixar folha de 2025.pdf" });
+    expect(link.getAttribute("href")).toBe("/api/portal/meus-protocolos/esic/p9/anexos/a1");
+    expect(link.hasAttribute("download")).toBe(true);
+    // lgpd e ouvidoria: a rota da propria especie
+    const s9 = screen.getByText("LGPD-2026-000009").closest("li")!;
+    expect(within(s9).getByRole("link", { name: "Baixar meus-dados.pdf" }).getAttribute("href")).toBe("/api/portal/meus-protocolos/lgpd/s9/anexos/a3");
+    const m9 = screen.getByText("OUV-2026-000009").closest("li")!;
+    expect(within(m9).getByRole("link", { name: "Baixar relatorio.odt" }).getAttribute("href")).toBe("/api/portal/meus-protocolos/ouvidoria/m9/anexos/a4");
+    expect(within(m9).getByText(/Texto \(ODT\)/)).toBeTruthy();
+  });
+
+  it("o nome do arquivo é texto, nunca HTML", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p8", protocolo: "ESIC-2026-000008", assunto: "x", estado: "respondido", diasRestantes: 1,
+        resposta: { corpo: "ok", respondidaEm: "2026-07-10T15:00:00Z" }, anexos: [anexo("a1", "<img src=x onerror=alert(1)>.pdf", 10)] }],
+    };
+    const { container } = render(<ListaProtocolos dados={dados} token={null} aoMudar={() => {}} />);
+    expect(screen.getByText(/<img src=x onerror=alert\(1\)>\.pdf/)).toBeTruthy();
+    expect(container.querySelector("img")).toBeNull();
+  });
+
+  it("sem anexo (lista vazia ou ausente), nenhum bloco de anexos", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [
+        { ...base, id: "p1", protocolo: "ESIC-2026-000001", assunto: "a", estado: "respondido", diasRestantes: 1, anexos: [] },
+        { ...base, id: "p2", protocolo: "ESIC-2026-000002", assunto: "b", estado: "respondido", diasRestantes: 1 },
+      ],
+    };
+    render(<ListaProtocolos dados={dados} token={null} aoMudar={() => {}} />);
+    expect(screen.queryByRole("list", { name: "Anexos da resposta" })).toBeNull();
+  });
+
+  it("no modo dev (token), o download sai pelos bytes: um botão, não um link cru", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p1", protocolo: "ESIC-2026-000001", assunto: "a", estado: "respondido", diasRestantes: 1,
+        anexos: [anexo("a1", "folha.pdf", 10)] }],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    expect(screen.getByRole("button", { name: "Baixar folha.pdf" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Baixar folha.pdf" })).toBeNull();
+  });
+
   it("pedido que já tem recurso mostra o recurso (e a decisão), sem oferecer recorrer de novo", () => {
     const comRecurso: MeusProtocolos = {
       ...DADOS,

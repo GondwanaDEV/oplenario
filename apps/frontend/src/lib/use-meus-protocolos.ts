@@ -21,9 +21,11 @@ type Base = {
 export type RecursoEsic = { protocolo: string; estado: string; reciboEm: string; resposta: Resposta | null };
 /** A prorrogação do prazo (LAI art. 11 §2º): as duas datas (AAAA-MM-DD), a justificativa da Câmara e quando foi (ISO). */
 export type Prorrogacao = { deData: string; paraData: string; justificativa: string; prorrogadoEm: string };
-export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null };
-export type SolicitacaoLgpd = Base & { tipo: string };
-export type Manifestacao = Base & { tipo: string; assunto: string; prorrogacao?: Prorrogacao | null };
+/** Um arquivo que a Casa juntou à resposta (o servidor não manda a chave do object storage nem quem enviou). */
+export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string };
+export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null; anexos?: Anexo[] };
+export type SolicitacaoLgpd = Base & { tipo: string; anexos?: Anexo[] };
+export type Manifestacao = Base & { tipo: string; assunto: string; prorrogacao?: Prorrogacao | null; anexos?: Anexo[] };
 export type MeusProtocolos = { pedidosEsic: PedidoEsic[]; solicitacoesLgpd: SolicitacaoLgpd[]; manifestacoes: Manifestacao[] };
 
 type Estado = "carregando" | "pronto" | "erro";

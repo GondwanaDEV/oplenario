@@ -29,11 +29,26 @@ import {
   tituloDoItem,
   type Especie,
 } from "@/lib/atendimento-vista";
-import { arquivar, decidirRecurso, indeferir, prorrogar, responder, useDetalheAtendimento, type DetalheOut } from "@/lib/use-atendimento";
+import {
+  anexar,
+  arquivar,
+  decidirRecurso,
+  indeferir,
+  prorrogar,
+  responder,
+  rotaDoAnexoNoBalcao,
+  useDetalheAtendimento,
+  type DetalheOut,
+} from "@/lib/use-atendimento";
+import type { ItemDeEnvio } from "@/lib/anexos-do-atendimento";
+import { tamanhoLegivel } from "@/lib/comunicacao-vista";
+import { ListaDeAnexos } from "@/app/anexos-do-atendimento";
 import type { DetalheEsicOut, DetalheLgpdOut, DetalheOuvidoriaOut, PessoaOut } from "@/lib/contrato-atendimento.gen";
 import { GuardSecretaria } from "../../../guard-secretaria";
 import { TopoInterno } from "../../../topo";
 import { SeloPrazo } from "../../fila-atendimento";
+import { PainelDeEnvio } from "../../envio-de-anexos";
+import { SeletorDeAnexos } from "../../seletor-de-anexos";
 import "../../atendimento.css";
 
 export default function PaginaProtocolo() {
@@ -52,7 +67,29 @@ function Conteudo() {
   const especie = especieValida(tipo) ? tipo : null;
   const { estado, recarregar } = useDetalheAtendimento(token, especie, id ?? null);
   const [recibo, setRecibo] = useState<string | null>(null);
+  // os anexos da resposta sobem DEPOIS do ato (a rota de anexo pede a resposta ja' gravada), um a um
+  const [envio, setEnvio] = useState<ItemDeEnvio[]>([]);
   const voltar = comToken(`/atendimento${especie ? `?aba=${especie}` : ""}`, token);
+  const podeAnexar = estado.fase === "pronto" && Boolean((estado.dado.acoes as { podeAnexar?: boolean }).podeAnexar);
+
+  async function enviarAnexos(lista: ItemDeEnvio[], indices: number[]) {
+    if (!especie || !id) return;
+    for (const i of indices) {
+      setEnvio((xs) => xs.map((x, j) => (j === i ? { ...x, fase: "enviando", mensagem: undefined } : x)));
+      const r = await anexar(token, especie, id, lista[i].arquivo);
+      setEnvio((xs) => xs.map((x, j) => (j === i ? (r.ok ? { ...x, fase: "ok" } : { ...x, fase: "erro", mensagem: r.mensagem }) : x)));
+    }
+    recarregar(); // a lista de anexos e o `pode-anexar` do detalhe passam a valer o que o servidor tem agora
+  }
+
+  async function concluir(texto: string, arquivos: File[]) {
+    setRecibo(texto);
+    recarregar();
+    if (arquivos.length === 0) return;
+    const lista: ItemDeEnvio[] = arquivos.map((arquivo) => ({ arquivo, fase: "esperando" }));
+    setEnvio(lista);
+    await enviarAnexos(lista, lista.map((_, i) => i));
+  }
 
   return (
     <>
@@ -68,9 +105,9 @@ function Conteudo() {
             <Link className="btn btn-primaria" href={voltar}>Voltar à fila</Link>
           </div>
         )}
+        <PainelDeEnvio itens={envio} podeTentarDeNovo={podeAnexar} aoTentarDeNovo={(i) => void enviarAnexos(envio, [i])} />
         {especie && estado.fase === "pronto" && (
-          <Protocolo especie={especie} d={estado.dado} token={token}
-            aoConcluir={(texto) => { setRecibo(texto); recarregar(); }} />
+          <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} />
         )}
       </main>
     </>
@@ -86,11 +123,12 @@ function Pessoa({ rotulo, p }: { rotulo: string; p: PessoaOut | null }) {
   );
 }
 
-function Protocolo({ especie, d, token, aoConcluir }: {
+function Protocolo({ especie, id, d, token, aoConcluir }: {
   especie: Especie;
+  id: string;
   d: DetalheOut;
   token: string | null;
-  aoConcluir: (recibo: string) => void;
+  aoConcluir: (recibo: string, arquivos: File[]) => void;
 }) {
   const info = ESPECIES.find((e) => e.especie === especie)!;
   const prazo = linhaDoPrazo(d);
@@ -164,6 +202,8 @@ function Protocolo({ especie, d, token, aoConcluir }: {
         )}
       </section>
 
+      <ListaDeAnexos anexos={d.anexos} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
+
       <Acoes especie={especie} d={d} token={token} aoConcluir={aoConcluir} />
     </>
   );
@@ -196,14 +236,18 @@ const FORM: Record<Acao, { botao: string; rotulo: string; enviar: string; envian
   },
 };
 
+// o que acompanha-se de arquivo: a resposta, o indeferimento e a decisao do recurso (prorrogar e arquivar nao tem documento)
+const COM_ANEXOS: Acao[] = ["responder", "indeferir", "decidir-recurso"];
+
 function Acoes({ especie, d, token, aoConcluir }: {
   especie: Especie;
   d: DetalheOut;
   token: string | null;
-  aoConcluir: (recibo: string) => void;
+  aoConcluir: (recibo: string, arquivos: File[]) => void;
 }) {
   const [acao, setAcao] = useState<Acao | null>(null);
   const [texto, setTexto] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   // o indeferimento é irreversível: um passo de confirmação mostra o texto que a pessoa vai ler antes de enviar
@@ -239,6 +283,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
   function abrir(x: Acao) {
     setAcao(x);
     setTexto("");
+    setArquivos([]);
     setErro(null);
     setConfirmando(false);
   }
@@ -262,7 +307,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
     if (r.ok) {
       setAcao(null);
       setConfirmando(false);
-      aoConcluir(textoDoRecibo(acao, r.em, d.protocolo));
+      aoConcluir(textoDoRecibo(acao, r.em, d.protocolo), COM_ANEXOS.includes(acao) ? arquivos : []);
     } else {
       setErro(r.mensagem);
       // o erro volta para o editor (com o texto intacto): quem escreveu a fundamentação não a perde antes de recarregar
@@ -287,6 +332,11 @@ function Acoes({ especie, d, token, aoConcluir }: {
             Você vai indeferir o {d.protocolo}. Esta ação é definitiva e não pode ser desfeita. A pessoa vai ler esta fundamentação:
           </p>
           <p className="atd-texto">{texto.trim()}</p>
+          {arquivos.length > 0 && (
+            <p className="atd-aviso">
+              Vão junto, como anexo da resposta: {arquivos.map((a) => `${a.name} (${tamanhoLegivel(a.size)})`).join("; ")}.
+            </p>
+          )}
           <div className="atd-acoes">
             <button type="button" className="btn btn-primaria" disabled={enviando} onClick={enviar}>
               {enviando ? f.enviando : "Confirmar o indeferimento"}
@@ -305,6 +355,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
             <textarea id="atd-texto" value={texto} rows={acao === "prorrogar" ? 4 : 10} maxLength={f.teto + 200}
               onChange={(e) => setTexto(e.target.value)} />
           </div>
+          {COM_ANEXOS.includes(acao) && <SeletorDeAnexos arquivos={arquivos} aoMudar={setArquivos} desabilitado={enviando} />}
           {falta && <p className="atd-falta">{falta}</p>}
           {erro && <p className="atd-erro" role="alert">{erro}</p>}
           <div className="atd-acoes">

@@ -5,9 +5,10 @@ const estado = vi.hoisted(() => ({
   papeis: ["secretario"] as string[],
   params: { tipo: "esic", id: "p1" } as Record<string, string>,
   aba: null as string | null,
+  token: "tk" as string | null,
 }));
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ token: "tk" }),
+  useAuth: () => ({ token: estado.token }),
   usePapeis: () => ({ papeis: estado.papeis, estado: "pronto" }),
 }));
 vi.mock("../topo", () => ({ TopoInterno: ({ area }: { area: string }) => <div data-testid="topo">{area}</div> }));
@@ -26,7 +27,11 @@ type Chamada = { metodo: string; url: string; body: unknown };
 function mockar(rotas: Record<string, Rota | ((c: Chamada) => Rota)>) {
   const chamadas: Chamada[] = [];
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const c: Chamada = { metodo: init?.method ?? "GET", url: String(url), body: init?.body ? JSON.parse(String(init.body)) : undefined };
+    // o upload de anexo e' multipart (FormData): o corpo registrado e' o nome e o tamanho do arquivo do campo `arquivo`
+    const corpo = init?.body instanceof FormData
+      ? { arquivo: (init.body.get("arquivo") as File).name, tamanho: (init.body.get("arquivo") as File).size }
+      : init?.body ? JSON.parse(String(init.body)) : undefined;
+    const c: Chamada = { metodo: init?.method ?? "GET", url: String(url), body: corpo };
     chamadas.push(c);
     const r = rotas[`${c.metodo} ${c.url.split("?")[0]}`];
     const rota = typeof r === "function" ? r(c) : r;
@@ -57,6 +62,8 @@ afterEach(() => {
   estado.papeis = ["secretario"];
   estado.params = { tipo: "esic", id: "p1" };
   estado.aba = null;
+  estado.token = "tk";
+  vi.unstubAllEnvs();
 });
 
 describe("guard", () => {
@@ -443,6 +450,232 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     await screen.findByRole("heading", { name: "Denúncia: Obra parada" });
     expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
     expect(screen.getByRole("button", { name: "Arquivar sem resposta" })).toBeTruthy();
+  });
+
+  // ---------------------------------------------------------------- os anexos da resposta
+
+  const arquivo = (nome: string, tamanho = 100, tipo = "") => new File([new Uint8Array(tamanho)], nome, { type: tipo });
+  const escolher = (rotulo: RegExp, arquivos: File[]) =>
+    fireEvent.change(screen.getByLabelText(rotulo), { target: { files: arquivos } });
+  const abertoComAnexar = (podeAnexar: boolean) =>
+    detalheEsic({ acoes: { "pode-responder": true, "pode-indeferir": true, "pode-prorrogar": true, "pode-anexar": podeAnexar, "recurso-pendente-id": null } });
+  const fechadoComAnexar = (podeAnexar: boolean, anexos: unknown[] = []) =>
+    detalheEsic({ estado: "respondido", aberto: false, "dias-restantes": null, anexos,
+      historico: [{ tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" }],
+      acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": false, "pode-anexar": podeAnexar, "recurso-pendente-id": null } });
+  const anexoOut = (id: string, nome: string, tamanho: number, tipo = "application/pdf") =>
+    ({ id, nome, "tipo-midia": tipo, bytes: tamanho, origem: "casa", "enviado-em": "2026-07-03T15:00:00Z" });
+  const posts = (c: Chamada[], sufixo: string) => c.filter((x) => x.metodo === "POST" && x.url.endsWith(sufixo));
+
+  it("responder com anexos: o seletor barra o que não pode ir; depois do ato, os arquivos sobem um a um", async () => {
+    let respondido = false;
+    const resolvers: (() => void)[] = [];
+    const chamadas: Chamada[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const corpo = init?.body instanceof FormData
+        ? { arquivo: (init.body.get("arquivo") as File).name } : init?.body ? JSON.parse(String(init.body)) : undefined;
+      const c: Chamada = { metodo: init?.method ?? "GET", url: String(url), body: corpo };
+      chamadas.push(c);
+      const json = (status: number, b: unknown) => ({ ok: status < 300, status, json: async () => b }) as Response;
+      if (c.metodo === "GET") return json(200, respondido ? fechadoComAnexar(true) : abertoComAnexar(false));
+      if (c.url.endsWith("/resposta")) { respondido = true; return json(200, { "respondida-em": "2026-07-03T15:00:00Z" }); }
+      await new Promise<void>((r) => resolvers.push(r));   // cada anexo so' termina quando o teste deixa
+      return json(201, anexoOut(`n${resolvers.length}`, (corpo as { arquivo: string }).arquivo, 100));
+    }) as unknown as typeof fetch;
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+
+    // o seletor: o que vale esta escrito, e o que nao pode ir e' recusado com o motivo, ANTES de enviar
+    expect(screen.getByText(/Até 5 arquivos de até 10 MB: PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS\./)).toBeTruthy();
+    expect((screen.getByLabelText(/Anexar arquivos à resposta/) as HTMLInputElement).accept).toBe(".pdf,.png,.jpg,.jpeg,.txt,.csv,.docx,.xlsx,.odt,.ods");
+    escolher(/Anexar arquivos à resposta/, [arquivo("folha.pdf"), arquivo("dados.csv"), arquivo("programa.exe"), arquivo("enorme.pdf", 10 * 1024 * 1024 + 1)]);
+    const lista = screen.getByRole("list", { name: "Arquivos escolhidos" });
+    expect(within(lista).getAllByRole("listitem").map((l) => l.textContent)).toEqual([
+      expect.stringContaining("folha.pdf"), expect.stringContaining("dados.csv"),
+    ]);
+    const recusas = screen.getByRole("alert").textContent ?? "";
+    expect(recusas).toMatch(/“programa.exe” não é de um tipo aceito/);
+    expect(recusas).toMatch(/“enorme.pdf” passa de 10 MB/);
+    // remover um da lista
+    fireEvent.click(within(lista).getByRole("button", { name: "Remover dados.csv" }));
+    expect(within(lista).getAllByRole("listitem")).toHaveLength(1);
+    escolher(/Anexar arquivos à resposta/, [arquivo("dados.csv")]);
+
+    fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue em anexo." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+
+    // 1o o ATO (a resposta), 2o os arquivos — um por vez: o 2o so' comeca quando o 1o termina
+    await waitFor(() => expect(posts(chamadas, "/anexos")).toHaveLength(1));
+    expect(chamadas.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual(["/api/esic/pedidos/p1/resposta", "/api/atendimento/esic/p1/anexos"]);
+    expect(posts(chamadas, "/anexos")[0].body).toEqual({ arquivo: "folha.pdf" });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(posts(chamadas, "/anexos")).toHaveLength(1);
+    resolvers[0]();
+    await waitFor(() => expect(posts(chamadas, "/anexos")).toHaveLength(2));
+    expect(posts(chamadas, "/anexos")[1].body).toEqual({ arquivo: "dados.csv" });
+    resolvers[1]();
+    expect(await screen.findByText("2 arquivos anexados.")).toBeTruthy();
+    const painel = screen.getByRole("list", { name: "Envio dos anexos" });
+    expect(within(painel).getAllByText("anexado")).toHaveLength(2);
+  });
+
+  it("falha parcial: diz qual arquivo falhou e por quê, e deixa tentar de novo enquanto cabe anexar", async () => {
+    let tentativas = 0;
+    let podeAnexar = true;
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: podeAnexar ? abertoComAnexar(true) : fechadoComAnexar(false) }),
+      "POST /api/esic/pedidos/p1/resposta": { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } },
+      "POST /api/atendimento/esic/p1/anexos": (ch) => {
+        const nome = (ch.body as { arquivo: string }).arquivo;
+        if (nome === "ruim.pdf" && ++tentativas === 1)
+          return { status: 415, corpo: { erro: "Tipo de arquivo não aceito. Aceitamos PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS, e a extensão do nome tem de combinar com o tipo do arquivo." } };
+        return { status: 201, corpo: anexoOut(`n-${nome}`, nome, 100) };
+      },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo("bom.pdf"), arquivo("ruim.pdf"), arquivo("outro.txt")]);
+    fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+
+    expect(await screen.findByText("2 arquivos anexados; 1 não foi anexado.")).toBeTruthy();
+    const painel = screen.getByRole("list", { name: "Envio dos anexos" });
+    const itens = within(painel).getAllByRole("listitem");
+    expect(itens[0].textContent).toMatch(/bom.pdf.*anexado/);
+    expect(itens[1].textContent).toMatch(/ruim.pdf.*não foi anexado: Tipo de arquivo não aceito\./);
+    expect(itens[2].textContent).toMatch(/outro.txt.*anexado/);
+    expect(posts(c, "/anexos").map((x) => (x.body as { arquivo: string }).arquivo)).toEqual(["bom.pdf", "ruim.pdf", "outro.txt"]);
+
+    // tentar de novo SO' o que falhou — e só enquanto o servidor diz que cabe anexar
+    fireEvent.click(within(painel).getByRole("button", { name: "Tentar de novo o anexo ruim.pdf" }));
+    await waitFor(() => expect(within(painel).getAllByText("anexado")).toHaveLength(3));
+    expect(posts(c, "/anexos")).toHaveLength(4);
+    expect(screen.getByText("3 arquivos anexados.")).toBeTruthy();
+    expect(within(painel).queryByRole("button", { name: /Tentar de novo/ })).toBeNull();
+    podeAnexar = false;
+  });
+
+  it("passada a janela, o 'tentar de novo' fica desligado e a tela diz por quê", async () => {
+    // o ato deu certo, mas ao recarregar o servidor ja' diz `pode-anexar` falso (janela de 10 min ou 5 anexos)
+    mockar({
+      "GET /api/atendimento/esic/p1": ((n: { v: number }) => () => ({ corpo: n.v++ === 0 ? abertoComAnexar(false) : fechadoComAnexar(false) }))({ v: 0 }),
+      "POST /api/esic/pedidos/p1/resposta": { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } },
+      "POST /api/atendimento/esic/p1/anexos": { status: 409, corpo: { erro: "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram." } },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo("a.pdf")]);
+    fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+    expect(await screen.findByText("O arquivo não foi anexado.")).toBeTruthy();
+    const painel = screen.getByRole("list", { name: "Envio dos anexos" });
+    expect(within(painel).getByText(/não foi anexado: Os anexos vão junto com a resposta: os 10 minutos/)).toBeTruthy();
+    const botao = await within(painel).findByRole("button", { name: "Tentar de novo o anexo a.pdf" });
+    await waitFor(() => expect((botao as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByText(/Já não cabe anexar: passaram os 10 minutos depois da resposta, ou a Casa já tem 5 anexos\./)).toBeTruthy();
+  });
+
+  it("indeferir: os arquivos só sobem depois da confirmação; decidir o recurso também tem o seletor; prorrogar e arquivar não", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: abertoComAnexar(false) },
+      "POST /api/esic/pedidos/p1/indeferir": { corpo: { "indeferido-em": "2026-07-03T15:00:00Z" } },
+      "POST /api/atendimento/esic/p1/anexos": { status: 201, corpo: anexoOut("n1", "fundamento.pdf", 100) },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Indeferir" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo("fundamento.pdf")]);
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Dado pessoal de terceiros." } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+    // o passo de confirmacao mostra o que vai: o texto e os arquivos; nada enviado ainda
+    const confirmar = screen.getByRole("group", { name: "Confirmar o indeferimento" });
+    expect(within(confirmar).getByText(/fundamento.pdf/)).toBeTruthy();
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    fireEvent.click(within(confirmar).getByRole("button", { name: "Confirmar o indeferimento" }));
+    expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+    expect(c.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual(["/api/esic/pedidos/p1/indeferir", "/api/atendimento/esic/p1/anexos"]);
+  });
+
+  it("decidir o recurso aceita anexos; prorrogar e arquivar não mostram o seletor", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: detalheEsic({
+        estado: "respondido",
+        recurso: { id: "r1", protocolo: "REC-2026-000001", motivo: "Faltou o valor.", estado: "protocolado",
+          "recebido-em": "2026-07-02T12:00:00Z", "decidido-em": null, "prazo-vigente": "2026-07-12", "dias-restantes": 9, prorrogado: false },
+        acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": true, "pode-anexar": false, "recurso-pendente-id": "r1" },
+      }) },
+      "POST /api/esic/recursos/r1/decisao": { corpo: { "decidido-em": "2026-07-03T16:00:00Z" } },
+      "POST /api/atendimento/esic/p1/anexos": { status: 201, corpo: anexoOut("n1", "decisao.pdf", 100) },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar o prazo (+10 dias)" }));
+    expect(screen.queryByLabelText(/Anexar arquivos à resposta/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Decidir o recurso" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo("decisao.pdf")]);
+    fireEvent.change(screen.getByLabelText("Decisão sobre o recurso"), { target: { value: "Provido." } });
+    fireEvent.click(screen.getByRole("button", { name: "Registrar a decisão" }));
+    expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+    expect(c.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual(["/api/esic/recursos/r1/decisao", "/api/atendimento/esic/p1/anexos"]);
+  });
+
+  it("ouvidoria e LGPD: o upload vai para a rota da sua espécie", async () => {
+    for (const [tipo, id, rotaAto, corpoAto, detalhe] of [
+      ["ouvidoria", "m1", "/api/ouvidoria/manifestacoes/m1/resposta", { "respondida-em": "2026-07-03T15:00:00Z" },
+        { id: "m1", protocolo: "OUV-2026-000004", tipo: "denuncia", assunto: "Obra", descricao: "Na rua A.", identificacao: "identificada",
+          estado: "protocolada", historico: [], anexos: [], acoes: { "pode-responder": true, "pode-arquivar": true, "pode-prorrogar": true, "pode-anexar": false }, ...prazo(20) }],
+      ["lgpd", "s1", "/api/lgpd/solicitacoes/s1/resposta", { "respondida-em": "2026-07-03T15:00:00Z" },
+        { id: "s1", protocolo: "LGPD-2026-000002", tipo: "acessar", detalhe: null, estado: "protocolada",
+          titular: { nome: "Titular", "cpf-mascarado": "***.111.222-**" }, historico: [], anexos: [], acoes: { "pode-responder": true, "pode-indeferir": true, "pode-anexar": false }, ...prazo(5) }],
+    ] as [string, string, string, unknown, unknown][]) {
+      estado.params = { tipo, id };
+      const c = mockar({
+        [`GET /api/atendimento/${tipo}/${id}`]: { corpo: detalhe },
+        [`POST ${rotaAto}`]: { corpo: corpoAto },
+        [`POST /api/atendimento/${tipo}/${id}/anexos`]: { status: 201, corpo: anexoOut("n1", "doc.pdf", 100) },
+      });
+      const { unmount } = render(<PaginaProtocolo />);
+      fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+      escolher(/Anexar arquivos à resposta/, [arquivo("doc.pdf")]);
+      fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue." } });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+      expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+      expect(c.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual([rotaAto, `/api/atendimento/${tipo}/${id}/anexos`]);
+      unmount();
+      cleanup();
+    }
+  });
+
+  it("o detalhe lista 'Anexos da resposta' com nome, tamanho e formato (nunca o tipo cru) e o download", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [
+      anexoOut("a1", "folha de 2025.pdf", 1536, "application/pdf"),
+      anexoOut("a2", "dados.csv", 20, "text/csv"),
+    ]) } });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexos da resposta" });
+    const itens = within(secao).getAllByRole("listitem");
+    expect(itens).toHaveLength(2);
+    expect(itens[0].textContent).toMatch(/folha de 2025\.pdf.*2 KB · PDF/);
+    expect(itens[1].textContent).toMatch(/dados\.csv.*20 B · CSV/);
+    expect(secao.textContent).not.toMatch(/application\/pdf|text\/csv/);
+    // modo dev (token no header): o download sai pelos bytes, com um botao por anexo
+    expect(within(itens[0]).getByRole("button", { name: "Baixar folha de 2025.pdf" })).toBeTruthy();
+  });
+
+  it("o download no modo real é um link direto para o anexo, como arquivo", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+    estado.token = null;
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [anexoOut("a1", "folha.pdf", 100)]) } });
+    render(<PaginaProtocolo />);
+    const link = await screen.findByRole("link", { name: "Baixar folha.pdf" });
+    expect(link.getAttribute("href")).toBe("/api/atendimento/esic/p1/anexos/a1");
+    expect(link.hasAttribute("download")).toBe(true);
+  });
+
+  it("sem anexo, a seção nem aparece", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, []) } });
+    render(<PaginaProtocolo />);
+    await screen.findByText("Este protocolo está encerrado: não há o que responder.");
+    expect(screen.queryByRole("region", { name: "Anexos da resposta" })).toBeNull();
   });
 
   it("fila que não existe no endereço: frase, sem buscar", () => {
