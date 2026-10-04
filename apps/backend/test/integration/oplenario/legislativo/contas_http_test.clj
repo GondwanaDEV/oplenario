@@ -323,6 +323,29 @@
                (get-in (chamar ente sec :get (str "/contas/" id "/documentos/" (get-in longo [:corpo :id])))
                        [:headers "Content-Type"])))))))
 
+(deftest tipo-invalido-e-recusado-antes-de-ler-o-corpo
+  ;; o ?tipo= so' era conferido no handler, DEPOIS de o parser ler ate' 10 MB para a memoria e segurar uma das vagas de envio.
+  ;; A prova de que agora vem antes: com o tipo errado, o defeito do CORPO (arquivo vazio, corpo que nem e' multipart) nao
+  ;; chega a ser visto — a resposta e' a do tipo.
+  (let [ente (random-uuid)
+        id (get-in (registrar! ente) [:corpo :id])
+        do-tipo (:corpo (enviar-documento ente sec id "foto" "x.pdf" "x"))]
+    (is (some? (:erro do-tipo)))
+    (testing "arquivo vazio com tipo valido: a recusa e' do corpo"
+      (is (= {:erro "O arquivo está vazio."} (:corpo (enviar-documento ente sec id "outro" "x.pdf" "")))))
+    (testing "arquivo vazio com tipo invalido: a recusa e' do tipo, o corpo nao foi lido"
+      (let [r (enviar-documento ente sec id "foto" "x.pdf" "")]
+        (is (= 400 (:status r)))
+        (is (= do-tipo (:corpo r)))))
+    (testing "sem ?tipo=: idem"
+      (let [r (pt/response-for *svc* :post (str "/contas/" id "/documentos")
+                               :headers (assoc (cab ente sec) "Content-Type" "text/plain") :body "isto nao e' multipart")]
+        (is (= 400 (:status r)))
+        (is (= do-tipo (ler r)))))
+    (testing "a ordem nao mudou para quem nao tem o papel: 403, e a prestacao inexistente com tipo valido segue 404"
+      (is (= 403 (:status (enviar-documento ente ver id "foto" "x.pdf" "x"))))
+      (is (= 404 (:status (enviar-documento ente sec (random-uuid) "outro" "x.pdf" "x")))))))
+
 (deftest parametros-so-o-admin-ente-muda
   (let [ente (random-uuid)]
     (is (= {:prazo-defesa-dias 15 :prazo-julgamento-dias 60 :padrao true}

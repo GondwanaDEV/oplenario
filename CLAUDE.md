@@ -169,6 +169,14 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
     protocolo; a secretaria retira um anexo errado, com motivo;
   - o upload (também o dos comunicados) confere o pedido antes de ler o corpo e tem teto de 4 envios simultâneos e de
     um por pessoa (`oplenario.interceptors/anexo-multipart`);
+  - **todo upload passa por esse parser (04/10/2026, PRs #99 e #100)**, inclusive os documentos das contas, que antes
+    usavam o multipart do Ring:
+    - nome de arquivo de até 255 caracteres acentuados é aceito (o cabeçalho da parte tem teto de 2048 bytes; o padrão
+      da commons-fileupload2 2.0.0-M5, 512, devolvia 400 "malformado");
+    - tipo de mídia declarado acima de 200 caracteres é guardado como `application/octet-stream`;
+    - rota nova de upload usa a fábrica, nunca o `multipart-params` do Ring, que não expõe o teto;
+    - nas contas, o `?tipo=` é conferido antes de ler o corpo; a existência da prestação continua depois, e o caso 14
+      da `fumaca-hml` depende disso (envia a uma prestação inexistente para exercitar o parser sem gravar nada).
   - **complemento da resposta:** depois da janela, a secretaria acrescenta um texto imutável a um protocolo já
     respondido (`participacao.complemento`); não mexe em estado nem prazo e reabre por 10 minutos a janela de anexos da Casa.
 - **Login e gate (04/10/2026):** `?redirect=/.//host` não escapa mais da origem depois do login, e o middleware cobre
