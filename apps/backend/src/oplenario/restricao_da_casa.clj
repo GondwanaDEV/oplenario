@@ -38,6 +38,9 @@
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     :participacao/prorrogar-pedido
+    ;; o complemento da resposta (ADR-0022) e' a Casa terminando de responder: o direito do cidadao a resposta completa nao
+    ;; depende do contrato da Casa
+    :participacao/complementar-esic :participacao/complementar-ouvidoria :participacao/complementar-lgpd
     ;; o indeferimento fundamentado e' o outro jeito de responder (LAI art. 11 §1º II; LGPD art. 18 §4º): o prazo corre igual
     :participacao/indeferir-pedido :participacao/indeferir-solicitacao
     ;; o documento que acompanha a resposta (a resposta a um pedido costuma SER um arquivo): anexar e' parte de responder.

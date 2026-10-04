@@ -397,6 +397,28 @@
       (responder-op #(controllers/prorrogar-pedido! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
 
+;; ---------- o complemento da resposta (e-SIC, ouvidoria, LGPD): um texto, JSON ----------
+
+(defn- complementar-handler
+  "POST /atendimento/<especie>/:id/complementos (SERVIDOR, exige-papel; corpo JSON {corpo}, o texto obrigatorio). Acrescenta um
+  COMPLEMENTO a um protocolo que a Casa ja' respondeu, a qualquer tempo (ADR-0022): nao muda estado nem prazo. 201 com o
+  complemento (id, texto, instante — nunca quem escreveu); 400 texto vazio/grande; 404 protocolo inexistente ou de outra
+  Casa; 409 em palavras se a Casa ainda nao respondeu (protocolo aberto, ou manifestacao so' arquivada)."
+  [repo-participacao relogio especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-atendimento/coagir-complemento (:json-params req))]
+      (try
+        (if-let [c (controllers/complementar-resposta! repo-participacao relogio (:ator req) especie id entrada)]
+          (assoc (http/json-resposta 201 (adapters-out-atendimento/complemento->wire c))
+                 :auditoria {:rotulo "complementou a resposta do protocolo" :recurso-tipo (anexo/objeto-tipo-da-especie especie)
+                             :recurso-id (str id)})
+          (http/json-resposta 404 {:erro "protocolo nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/complemento-sem-resposta (:tipo (ex-data e)))
+            (http/json-resposta 409 {:erro "Responda o pedido antes de complementar."})
+            (throw e)))))))
+
 ;; ---------- anexos da resposta (e-SIC, ouvidoria, LGPD): um arquivo por requisicao, multipart ----------
 
 (def ^:private anexo-multipart
@@ -584,6 +606,16 @@
        (servidor (pre-conferir-anexo :casa controllers/pre-conferir-anexo-da-casa repo-participacao relogio :lgpd)
                 anexo-multipart (anexar-handler repo-participacao objeto-store relogio :lgpd))
        :route-name :participacao/anexar-lgpd]
+      ;; o COMPLEMENTO da resposta (ADR-0022): irmao de `/anexos` (`:id` e depois um literal). Corpo JSON, so' a secretaria.
+      ["/atendimento/esic/:id/complementos" :post
+       (servidor it/corpo-json (complementar-handler repo-participacao relogio :esic))
+       :route-name :participacao/complementar-esic]
+      ["/atendimento/ouvidoria/:id/complementos" :post
+       (servidor it/corpo-json (complementar-handler repo-participacao relogio :ouvidoria))
+       :route-name :participacao/complementar-ouvidoria]
+      ["/atendimento/lgpd/:id/complementos" :post
+       (servidor it/corpo-json (complementar-handler repo-participacao relogio :lgpd))
+       :route-name :participacao/complementar-lgpd]
       ;; RETIRAR um anexo (incidente de conteudo): o corpo e' JSON {motivo}; so' a secretaria. Irma do download (mesmo nivel)
       ["/atendimento/esic/:id/anexos/:anexo/retirar" :post
        (servidor it/corpo-json (retirar-anexo-handler repo-participacao objeto-store relogio :esic))

@@ -11,6 +11,12 @@ export interface AnexoOut {
   motivoDaRetirada?: string;
 }
 
+export interface ComplementoOut {
+  id: string;
+  corpo: string;
+  complementadoEm: string;
+}
+
 export interface PessoaOut {
   nome: string;
   cpfMascarado: string;
@@ -77,7 +83,7 @@ export interface FilaLgpdOut {
 }
 
 export interface EventoOut {
-  tipo: "resposta" | "indeferimento" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento";
+  tipo: "resposta" | "indeferimento" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento" | "complemento";
   em: string;
   texto: string;
   por: string | null;
@@ -103,6 +109,7 @@ export interface AcoesEsicOut {
   podeIndeferir: boolean;
   podeProrrogar: boolean;
   podeAnexar: boolean;
+  podeComplementar: boolean;
   recursoPendenteId: string | null;
 }
 
@@ -111,12 +118,14 @@ export interface AcoesOuvidoriaOut {
   podeArquivar: boolean;
   podeProrrogar: boolean;
   podeAnexar: boolean;
+  podeComplementar: boolean;
 }
 
 export interface AcoesLgpdOut {
   podeResponder: boolean;
   podeIndeferir: boolean;
   podeAnexar: boolean;
+  podeComplementar: boolean;
 }
 
 export interface DetalheEsicOut {

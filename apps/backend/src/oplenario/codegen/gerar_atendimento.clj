@@ -11,6 +11,7 @@
 (def manifesto
   "Folhas ANTES de quem as aninha (referencia nomeada por igualdade estrutural)."
   [["AnexoOut" atendimento/AnexoOut]
+   ["ComplementoOut" atendimento/ComplementoOut]
    ["PessoaOut" atendimento/PessoaOut]
    ["RecursoPendenteOut" atendimento/RecursoPendenteOut]
    ["ItemEsicOut" atendimento/ItemEsicOut]

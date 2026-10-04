@@ -134,5 +134,5 @@
                                :texto "Eliminar contraria obrigacao legal." :por nil}]}
             w (out-atendimento/lgpd->wire lgpd)]
         (is (= "indeferimento" (:tipo (first (:historico w)))))
-        (is (= {:pode-responder false :pode-indeferir false :pode-anexar false} (:acoes w))
+        (is (= {:pode-responder false :pode-indeferir false :pode-anexar false :pode-complementar false} (:acoes w))
             "o contrato ganhou `pode-anexar`; sem a chave no dominio, vira false (boolean, nunca nil)")))))

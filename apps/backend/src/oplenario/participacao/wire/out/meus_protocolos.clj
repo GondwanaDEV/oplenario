@@ -28,6 +28,16 @@
    [:justificativa :string]
    [:prorrogado-em :string]])
 
+(def Complemento
+  "O COMPLEMENTO DA RESPOSTA, para o PROPRIO requerente ler (ADR-0022): o texto que a Casa acrescentou a um protocolo ja'
+  respondido, e quando. So' estas tres chaves — quem escreveu (servidor) nunca sai. Em ordem de chegada. Texto livre da
+  Casa: o consumidor escapa antes de renderizar como HTML. NUNCA vai para o acompanhamento PUBLICO por protocolo (que nem
+  mostra o texto da resposta) — so' para o dono autenticado."
+  [:map {:closed true}
+   [:id :string]
+   [:corpo :string]
+   [:complementado-em :string]])
+
 (def Anexo
   "Um arquivo do protocolo, para a PROPRIA cidada baixar (`/portal/meus-protocolos/<especie>/<id>/anexos/<anexo>`) — o da
   Casa (na resposta) ou o dela (no pedido), pela `origem`: id, nome, tipo, tamanho, de quem veio e quando. Nunca a chave no object storage, o sha256 nem quem enviou. O nome e'
@@ -52,6 +62,8 @@
          [:prorrogacao [:maybe Prorrogacao]]
          ;; os arquivos do protocolo ([] se nao ha): os da Casa na resposta e os do requerente no pedido (`origem`)
          [:anexos [:vector Anexo]]
+         ;; o que a Casa acrescentou DEPOIS de responder ([] se nada), em ordem de chegada
+         [:complementos [:vector Complemento]]
          ;; o requerente ainda pode juntar arquivo ao PROPRIO pedido? (10 minutos do protocolo, ate' 5 seus)
          [:pode-anexar :boolean]
          ;; o recurso ja' interposto (V1: um por pedido) — a tela o mostra no lugar do botao de recorrer
@@ -66,6 +78,7 @@
          [:tipo (km/enum-de logic/tipos-solicitacao-titular)]
          [:estado (km/enum-de logic/estados-solicitacao-titular)]
          [:anexos [:vector Anexo]]
+         [:complementos [:vector Complemento]]
          [:pode-anexar :boolean]]
         prazo))
 
@@ -79,6 +92,7 @@
          ;; nesta lista (nao ha dono persistido): ninguem a recebe aqui.
          [:prorrogacao [:maybe Prorrogacao]]
          [:anexos [:vector Anexo]]
+         [:complementos [:vector Complemento]]
          [:pode-anexar :boolean]]
         prazo))
 

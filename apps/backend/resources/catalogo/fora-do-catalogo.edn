@@ -111,6 +111,12 @@
                                  :motivo "indeferir com fundamentacao (LAI art. 11 §1º II) e' ato do servidor que le o pedido na tela, como responder; o agente nao le o pedido"}
  :participacao/indeferir-solicitacao {:categoria :so-tela
                                       :motivo "indeferir com fundamentacao (LGPD art. 18 §4º) e' ato do encarregado que le a solicitacao na tela, como responder; o agente nao le dado pessoal do titular antes do [GAP] juridico"}
+ :participacao/complementar-esic {:categoria :so-tela
+                                  :motivo "complementar a resposta e' ato do servidor que le o protocolo na tela (pedido de e-SIC, dado pessoal do cidadao); o agente nao le o protocolo do cidadao antes do [GAP] juridico (LGPD art. 33)"}
+ :participacao/complementar-ouvidoria {:categoria :so-tela
+                                       :motivo "complementar a resposta e' ato do servidor que le o protocolo na tela (manifestacao de ouvidoria, dado pessoal do cidadao); o agente nao le o protocolo do cidadao antes do [GAP] juridico (LGPD art. 33)"}
+ :participacao/complementar-lgpd {:categoria :so-tela
+                                  :motivo "complementar a resposta e' ato do encarregado que le a solicitacao na tela (solicitacao do titular, dado pessoal do cidadao); o agente nao le o protocolo do cidadao antes do [GAP] juridico (LGPD art. 33)"}
  :participacao/anexar-esic {:categoria :so-tela
                                  :motivo "anexar o documento da resposta e' ato do servidor que le o protocolo na tela (pedido de e-SIC, dado pessoal do cidadao); o agente nao le o protocolo nem manda arquivo"}
  :participacao/baixar-anexo-esic {:categoria :so-tela
