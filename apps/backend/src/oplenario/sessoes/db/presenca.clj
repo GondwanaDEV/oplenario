@@ -121,6 +121,24 @@
                   {:sessao-id sessao-id :instante instante :ente-id ente-id
                    :projecao [:vereador_id :tipo :modalidade :fonte :ocorrido_em :registrado_em]})))))
 
+(defn presenca-corrente-do-vereador
+  "O ULTIMO evento de presenca de UM vereador na sessao ate' `instante`, ou nil (nenhum evento ate' la').
+  E' `presenca-corrente` restrita a um vereador — a MESMA subquery canonica
+  (`logic/ultimos-eventos-por-vereador-q`), filtrada por fora pela chave do `DISTINCT ON`. Nao e' uma quarta
+  redacao da ordem de desempate: o cockpit do vereador (`GET /sessoes/:id/presenca/minha`) precisa dizer
+  'presente' pelo MESMO criterio que a chamada da Mesa e o quorum do motor usam, senao o celular ofereceria o
+  voto a quem a policy conta ausente. O filtro externo sobre a coluna do `DISTINCT ON` e' empurrado pelo
+  planner para dentro da subquery (o indice `idx_presenca_evento_corrente` serve o caso)."
+  [tx ente-id sessao-id vereador-id instante]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select [:u.vereador_id :u.tipo :u.modalidade :u.fonte :u.ocorrido_em]
+                  :from [[(logic/ultimos-eventos-por-vereador-q
+                           {:sessao-id sessao-id :instante instante :ente-id ente-id
+                            :projecao [:vereador_id :tipo :modalidade :fonte :ocorrido_em]})
+                          :u]]
+                  :where [:= :u.vereador_id vereador-id]}))))
+
 ;; ---------- Etapa 6 fatia 2 — leituras EM LOTE (insumo da apuracao de assiduidade) ----------
 ;; A apuracao le' um PERIODO inteiro (ate' 400 sessoes) de uma vez — reabrir `presenca-corrente`/
 ;; `listar-justificativas-da-sessao` sessao a sessao seria o mesmo carry N+1 que a fatia 1 fechou para o

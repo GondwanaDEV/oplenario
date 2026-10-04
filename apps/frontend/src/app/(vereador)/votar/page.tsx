@@ -32,8 +32,14 @@ export default function VotarPage() {
 
   // `comVotacao: true` (fatia "demo-tres-consertos" #2b): o cockpit é EXATAMENTE quem mais precisa da
   // recuperação de votação — é ele quem vota — e independe de `comQuorum` (o cockpit continua fora do
-  // polling de quórum/tribuna, ver a docstring de `usePlenario`).
-  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token, { comVotacao: true });
+  // polling de quórum/tribuna, ver a docstring de `usePlenario`). `comMinhaPresenca: true` (docs/16, "A
+  // Trilha 3 vira gate"): a PRÓPRIA presença hidratada por snapshot no page-load e a cada reconexão — sem
+  // ela, quem já estava presente e abria o cockpit depois da janela de replay (~5 min) voltava a ver
+  // "Confirme sua presença". Só aqui: a rota exige o papel 'vereador', que o telão/TV não têm.
+  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token, {
+    comVotacao: true,
+    comMinhaPresenca: true,
+  });
   const { confirmar, estado: estadoConfirmar, erro: erroConfirmar } = useConfirmarPresenca(token);
   const { votar, estado: estadoVotar, erro: erroVotar } = useMeuVoto(token);
   // fatia "demo-tres-consertos" #2 — achado ao vivo: a tela inteira era "Sim/Não/Abster" sem dizer SOBRE

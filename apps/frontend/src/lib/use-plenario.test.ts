@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor, cleanup } from "@testing-library/react";
 import { usePlenario, TIMEOUT_REBUSCA_MS } from "./use-plenario";
 import { numeroDoTelao } from "./plenario-reducer";
+import { derivarMeuVoto } from "./meu-voto-vista";
 
 // Sem `globals` no vitest, o RTL não desmonta sozinho: um hook de um teste anterior seguia montado, com o
 // relógio de 500ms REAL lendo o `Date.now()` FALSO do teste seguinte — num runner lento ele disparava a
@@ -571,5 +572,146 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
 
     // a vt2 (ao vivo) sobrevive — não é sobrescrita pelo snapshot velho da vt1
     expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+  });
+});
+
+describe("usePlenario — a PRÓPRIA presença do vereador por snapshot (docs/16, 'A Trilha 3 vira gate')", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  // O CORPO REAL de GET /sessoes/:id/presenca/minha, em kebab-case, como `adapters/out/presenca/
+  // minha-presenca->wire` o emite (conferido contra a fonte, `MinhaPresencaOut`).
+  const minhaPresencaCrua = {
+    "vereador-id": "v-eu",
+    presente: true,
+    "ocorrido-em": "2026-05-21T22:01:00.472913Z",
+    modalidade: "plenario",
+  };
+  const votacaoAbertaCrua = {
+    "votacao-id": "vt1",
+    modalidade: "nominal",
+    "objeto-tipo": "proposicao",
+    "objeto-id": "p1",
+    votos: [],
+  };
+  const ok = (corpo: unknown) => () => ({ ok: true, status: 200, json: async () => corpo }) as Response;
+
+  it("O CASO DA FATIA: revisita fora da janela de replay (nenhum evento SSE) já oferece o voto, não 'Confirme sua presença'", async () => {
+    const f = fetchFake({ "/presenca/minha": ok(minhaPresencaCrua), "/votacao-aberta": ok(votacaoAbertaCrua) });
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true, comMinhaPresenca: true }));
+    await waitFor(() => expect(result.current.estado?.presentes).toEqual(["v-eu"]));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+    expect(derivarMeuVoto(result.current.estado, "v-eu").ciclo).toBe("pode-votar");
+    expect(contarChamadas(f, "/presenca/minha")).toBe(1);
+  });
+
+  it("SEM `comMinhaPresenca` (telão, TV, Mesa — sem papel 'vereador') a rota NÃO é chamada", async () => {
+    const f = fetchFake({ "/presenca/minha": ok(minhaPresencaCrua), "/votacao-aberta": ok(votacaoAbertaCrua) });
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true, comVotacao: true }));
+    await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+    expect(contarChamadas(f, "/presenca/minha")).toBe(0);
+    expect(result.current.estado!.presentes).toEqual([]);
+  });
+
+  it("falha da rota (403/404/rede) degrada SEM MENTIR: o cockpit fica com o que o SSE mostrou, a conexão segue", async () => {
+    for (const falha of [
+      () => ({ ok: false, status: 404, json: async () => ({}) }) as Response,
+      () => Promise.reject(new TypeError("rede caiu")),
+    ]) {
+      global.fetch = fetchFake({ "/presenca/minha": falha, "/votacao-aberta": ok(votacaoAbertaCrua) });
+      const { result, unmount } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true, comMinhaPresenca: true }));
+      await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+      expect(result.current.estado!.presentes).toEqual([]);
+      expect(result.current.conexao).toBe("ao-vivo");
+      expect(derivarMeuVoto(result.current.estado, "v-eu").ciclo).toBe("sem-presenca");
+      unmount();
+    }
+  });
+
+  it("PRECEDÊNCIA — a SAÍDA do vereador chegada pelo SSE com o GET em voo não é desfeita pelo snapshot atrasado", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const emVoo = deferido<Response>();
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/presenca/minha": () => emVoo.promise,
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comMinhaPresenca: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo"); // GET /presenca/minha já disparou e está em voo
+
+    await act(async () => {
+      sse.enviar("presenca.registrada", 1, {
+        "sessao-id": "s1", "vereador-id": "v-eu", tipo: "saida", modalidade: "plenario",
+        fonte: "manual_secretaria", "ocorrido-em": "2026-05-21T22:30:00Z",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.presentes).toEqual([]);
+
+    // a resposta de T0 chega dizendo "presente" (o servidor a montou antes da saída)
+    await act(async () => {
+      emVoo.resolve({ ok: true, status: 200, json: async () => minhaPresencaCrua } as Response);
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.presentes).toEqual([]);
+  });
+
+  it("descarte por precedência pede UMA retentativa — um evento RETROATIVO não deixa o cockpit preso em 'ausente'", async () => {
+    // A Mesa corrige a chamada: registra uma SAÍDA retroativa das 22:00, depois da entrada das 22:01 (que é
+    // a última pela ordem do servidor — o vereador segue presente). Ela chega pelo SSE com o GET em voo: o
+    // snapshot é descartado (correto: ele é anterior ao evento) e o SSE sozinho diria "ausente". A
+    // retentativa, montada depois do evento, reconcilia com o servidor.
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const primeira = deferido<Response>();
+    let chamadas = 0;
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/presenca/minha": () => (++chamadas === 1 ? primeira.promise : ok(minhaPresencaCrua)()),
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comMinhaPresenca: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo");
+
+    await act(async () => {
+      sse.enviar("presenca.registrada", 1, {
+        "sessao-id": "s1", "vereador-id": "v-eu", tipo: "saida", modalidade: "plenario",
+        fonte: "manual_secretaria", "ocorrido-em": "2026-05-21T22:00:00Z",
+      });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    await act(async () => {
+      primeira.resolve({ ok: true, status: 200, json: async () => minhaPresencaCrua } as Response);
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.presentes).toEqual([]); // descartado: chegou um evento dele em voo
+
+    await ateQue(() => result.current.estado?.presentes.length === 1, 100); // o relógio refaz o GET
+    expect(chamadas).toBe(2);
+    expect(result.current.estado!.presentes).toEqual(["v-eu"]);
+  });
+
+  it("toda RECONEXÃO re-hidrata a presença (uma queda maior que a retenção do canal perde eventos em silêncio)", async () => {
+    vi.useFakeTimers();
+    let conexoes = 0;
+    const f = fetchFake({
+      "/presenca/minha": ok(minhaPresencaCrua),
+      // 1a conexão do SSE cai (erro de rede) 1s depois — com a hidratação da carga já resolvida, para a
+      // re-hidratação da reconexão não ser engolida pela guarda de in-flight; a 2a fica pendurada (ao vivo)
+      "/plenario": () =>
+        ++conexoes === 1
+          ? new Promise<Response>((_, rej) => setTimeout(() => rej(new TypeError("queda")), 1000))
+          : new Promise<Response>(() => {}),
+    });
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comMinhaPresenca: true }));
+    await ateQue(() => result.current.estado?.presentes.length === 1);
+    expect(contarChamadas(f, "/presenca/minha")).toBe(1); // a carga
+    await ateQue(() => contarChamadas(f, "/presenca/minha") === 2, 50); // a queda re-hidrata
+    expect(conexoes).toBeGreaterThanOrEqual(1);
+    expect(result.current.estado!.presentes).toEqual(["v-eu"]);
   });
 });

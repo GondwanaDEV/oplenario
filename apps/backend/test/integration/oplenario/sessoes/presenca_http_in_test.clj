@@ -347,3 +347,93 @@
                            :post "/sessoes/nao-e-uuid/presenca/confirmar"
                            :headers (com-json (token ente (random-uuid))))]
     (is (= 400 (:status r)) "sessao :id malformado no path -> 400, nunca 500")))
+
+;; ---------- GET /sessoes/:id/presenca/minha (o cockpit hidrata a propria presenca por snapshot) ----------
+
+(defn- fake-repo-minha-presenca
+  "RepoSessoes fake de `minha-presenca`: `sessao-fn` resolve a sessao (nil = inexistente no tenant) e
+  `eventos` = {vereador-id ultimo-evento} — o que o Repo real devolveria do banco. Grava em `cap` o
+  vereador-id que o controller PEDIU, para provar que ele vem do ator e nao do request. Devolve o MESMO
+  formato do Repo real ({:sessao :instante :ultimo-evento})."
+  [sessao-fn eventos cap]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-sessoes/RepoSessoes
+    (minha-presenca [_ ente-id sessao-id vereador-id agora]
+      (reset! cap vereador-id)
+      (when-let [s (sessao-fn ente-id sessao-id)]
+        {:sessao s :instante agora :ultimo-evento (get eventos vereador-id)}))))
+
+(defn- url-minha [sid] (str "/sessoes/" sid "/presenca/minha"))
+(def ^:private t-entrada (Instant/parse "2026-06-30T14:00:00.123456Z"))
+
+(deftest minha-presenca-presente-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) outro (random-uuid) cap (atom nil)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica ente id))
+                                         {vid {:vereador-id vid :tipo "entrada" :modalidade "plenario"
+                                               :fonte "autoatendimento" :ocorrido-em t-entrada}}
+                                         cap)
+        ;; o `vereador-id` do query-string e' ignorado: a rota responde 'EU estou?', nunca 'X esta?'.
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid))
+                           :get (str (url-minha sid) "?vereador-id=" outro)
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (= {:vereador-id (str vid) :presente true :ocorrido-em (str t-entrada) :modalidade "plenario"}
+           (ler-json r))
+        "presente pelo ULTIMO evento (entrada), com o instante que o cliente compara com o SSE")
+    (is (= vid @cap) "o Repo recebeu o vereador RESOLVIDO do ator, nunca o do request")))
+
+(deftest minha-presenca-ausente-depois-da-saida-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica ente id))
+                                         {vid {:vereador-id vid :tipo "saida" :modalidade "plenario"
+                                               :fonte "manual_secretaria" :ocorrido-em t-entrada}}
+                                         (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid))
+                           :get (url-minha sid) :headers (com-json (token ente (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (false? (:presente body)) "ultimo evento = saida -> ausente (a mesma regra do quorum)")
+    (is (= (str t-entrada) (:ocorrido-em body)) "a saida carrega o instante: um snapshot de saida tambem e' ordenavel")))
+
+(deftest minha-presenca-sem-evento-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica ente id)) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] vid))
+                           :get (url-minha sid) :headers (com-json (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (= {:vereador-id (str vid) :presente false} (ler-json r))
+        "sem evento: ausente, SEM ocorrido-em/modalidade (nunca null num contrato fechado)")))
+
+(deftest minha-presenca-sem-cadastro-vinculado-404
+  (let [ente (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica ente id)) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] nil))
+                           :get (url-minha (random-uuid)) :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)) "resolver-vereador nil -> 404 (mesma semantica de /presenca/confirmar)")))
+
+(deftest minha-presenca-sessao-inexistente-404
+  (let [ente (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ _] nil) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :get (url-minha (random-uuid)) :headers (com-json (token ente (random-uuid))))]
+    (is (= 404 (:status r)))))
+
+(deftest minha-presenca-casa-alheia-403
+  (let [ente (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica (random-uuid) id)) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :get (url-minha (random-uuid)) :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "sessao de ente alheio -> pode-ver-sessao? nega -> 403")))
+
+(deftest minha-presenca-sem-papel-vereador-403
+  (let [ente (random-uuid)
+        repo-s (fake-repo-minha-presenca (fn [_ id] (sessao-canonica ente id)) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"secretario"} repo-s (fn [_ _] (random-uuid)))
+                           :get (url-minha (random-uuid)) :headers (com-json (token ente (random-uuid))))]
+    (is (= 403 (:status r)) "o telao/a Mesa nao tem papel 'vereador': a rota nao e' deles")))
+
+(deftest minha-presenca-sem-token-401
+  (let [repo-s (fake-repo-minha-presenca (fn [_ _] nil) {} (atom nil))
+        r (pt/response-for (service-fn-confirmar #{"vereador"} repo-s (fn [_ _] (random-uuid)))
+                           :get (url-minha (random-uuid)) :headers {"Content-Type" "application/json"})]
+    (is (= 401 (:status r)))))

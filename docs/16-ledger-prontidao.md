@@ -2618,6 +2618,17 @@ presença volta a ver "Confirme sua presença" (o voto em si não se perde: `ja-
 snapshot da própria presença no page-load, irmão do `hidratarVotacao`; até lá o E5 cobre a confirmação e a
 2ª visita DENTRO da janela, e diz isso no comentário.
 
+**Consertado (04/10/2026):** `GET /sessoes/:id/presenca/minha` (papel `vereador`, o vereador resolvido do ator
+como em `/presenca/confirmar`) devolve `{vereador-id, presente, ocorrido-em?, modalidade?}` pelo último evento
+até o instante de avaliação — a mesma subquery canônica da chamada e do quórum (`MinhaPresencaOut`, fora do
+catálogo como `:so-tela`). No front, `hidratarMinhaPresenca` (irmã de `hidratarVotacao`) põe/tira o vereador de
+`presentes` com duas guardas em que o SSE vence: precedência POR VEREADOR (evento dele chegado com o GET em voo
+descarta o snapshot, e o hook pede uma retentativa) e ordem numérica por `presencaEm`. O `usePlenario` só chama
+a rota com `comMinhaPresenca` (o cockpit `/votar`; telão e TV não têm o papel), no page-load e em toda
+reconexão; falha degrada para o que o SSE mostrou. O E5 ("CTA não reaparece numa segunda visita") passou a
+provar a revisita fora da janela de forma determinística: bloqueia o SSE da página e exige o grupo de voto só
+pelos snapshots.
+
 **Medição (local, roteiro do job, cada rodada com DB recriado e `next dev` frio):** antes do conserto do E3,
 6 rodadas deram 5 × 90 passed e 1 × 89 passed + 1 flaky (o E3 da hidratação, salvo pelo `retries: 2` do
 describe — que esconde o flake mas não o explica). Depois: **3 rodadas seguidas, 90 passed · 0 flaky · 9

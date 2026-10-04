@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
@@ -438,6 +438,112 @@ describe("votação — recuperação de estado sem nenhum evento SSE (fatia 'de
     const comAbertura = aplicarEvento(aberta(), votacaoAberta(1));
     expect(falharVotacao(comAbertura)).toEqual(comAbertura);
     expect(falharVotacao(aberta())).toEqual(aberta());
+  });
+});
+
+describe("presença do PRÓPRIO vereador — hidratação de GET /sessoes/:id/presenca/minha", () => {
+  // O defeito (docs/16, "A Trilha 3 vira gate"): `presentes` só era alimentado pelo SSE, e o replay do canal
+  // guarda ~5 min. O vereador JÁ presente que abria o cockpit depois disso via "Confirme sua presença" com a
+  // votação nominal aberta. O snapshot resolve; as guardas abaixo impedem que ele minta contra o SSE.
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+  const comVotacao = () =>
+    hidratarVotacao(aberta(), { votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1", votos: [] }, 0);
+  const pres = (seq: number, vereador: string, tipo: string, ocorridoEm: string): EventoPlenario => ({
+    tipo: "presenca.registrada",
+    seq,
+    dados: { "sessao-id": "s1", "vereador-id": vereador, tipo, modalidade: "plenario", fonte: "manual_secretaria", "ocorrido-em": ocorridoEm },
+  });
+  const t1000 = "2026-05-21T22:00:00.123456Z";
+  const t1010 = "2026-05-21T22:10:00Z";
+
+  it("o CASO DA FATIA: revisita sem nenhum evento SSE — o snapshot põe o vereador presente e o cockpit oferece o voto", () => {
+    const antes = comVotacao();
+    expect(derivarMeuVoto(antes, "eu").ciclo).toBe("sem-presenca");
+    const e = hidratarMinhaPresenca(antes, { vereadorId: "eu", presente: true, ocorridoEm: t1000, modalidade: "plenario" }, {});
+    expect(e.presentes).toEqual(["eu"]);
+    expect(e.presencaEm.eu).toBe(Date.parse(t1000));
+    expect(derivarMeuVoto(e, "eu").ciclo).toBe("pode-votar");
+  });
+
+  it("snapshot ausente (saiu) tira o vereador de `presentes`; sem nenhum evento, ausente sem instante", () => {
+    const presente = hidratarMinhaPresenca(aberta(), { vereadorId: "eu", presente: true, ocorridoEm: t1000 }, {});
+    const saiu = hidratarMinhaPresenca(presente, { vereadorId: "eu", presente: false, ocorridoEm: t1010 }, {});
+    expect(saiu.presentes).toEqual([]);
+    expect(saiu.presencaEm.eu).toBe(Date.parse(t1010));
+    const nunca = hidratarMinhaPresenca(aberta(), { vereadorId: "eu", presente: false }, {});
+    expect(nunca.presentes).toEqual([]);
+    expect(nunca.presencaEm).toEqual({});
+  });
+
+  it("mexe SÓ no vereador do snapshot: os outros presentes do SSE ficam, e o quórum não é tocado", () => {
+    const sse = aplicarEvento(aberta(), pres(1, "outro", "entrada", t1000));
+    const e = hidratarMinhaPresenca(sse, { vereadorId: "eu", presente: true, ocorridoEm: t1000 }, sse.presencaEventoSeq);
+    expect(e.presentes).toEqual(["outro", "eu"]);
+    expect(e.quorum).toBe(sse.quorum);
+    expect(e.precisaRehidratar).toBe(sse.precisaRehidratar);
+  });
+
+  it("PRECEDÊNCIA — um evento DESTE vereador chegado com o GET em voo vence: o snapshot é descartado", () => {
+    // T0: o hook captura `presencaEventoSeq` e dispara o GET (o servidor ainda o via presente). Em voo, a
+    // Mesa registra a SAÍDA e o SSE a entrega. A resposta atrasada não pode devolvê-lo ao plenário.
+    const t0 = aberta();
+    const seqNoDisparo = t0.presencaEventoSeq;
+    const saiu = aplicarEvento(t0, pres(1, "eu", "saida", t1010));
+    const e = hidratarMinhaPresenca(saiu, { vereadorId: "eu", presente: true, ocorridoEm: t1000 }, seqNoDisparo);
+    expect(e).toBe(saiu);
+    expect(e.presentes).toEqual([]);
+  });
+
+  it("PRECEDÊNCIA pega o que a ORDEM não pega — empate de instante decidido pela fonte no servidor", () => {
+    // O snapshot em voo diz "presente" pela confirmação do celular às 22:10 (autoatendimento). No MESMO
+    // instante a secretaria registra a saída (manual_secretaria vence o desempate de fonte no servidor). Pela
+    // guarda de ORDEM o snapshot empataria e seria aplicado — devolvendo ao plenário quem a Mesa tirou.
+    const t0 = aberta();
+    const seqNoDisparo = t0.presencaEventoSeq;
+    const saiu = aplicarEvento(t0, pres(1, "eu", "saida", t1010));
+    const e = hidratarMinhaPresenca(saiu, { vereadorId: "eu", presente: true, ocorridoEm: t1010 }, seqNoDisparo);
+    expect(e.presentes).toEqual([]);
+  });
+
+  it("PRECEDÊNCIA é por vereador — a rajada da chamada (eventos dos OUTROS) não descarta o snapshot", () => {
+    const t0 = aberta();
+    const seqNoDisparo = t0.presencaEventoSeq;
+    const rajada = [pres(1, "a", "entrada", t1000), pres(2, "b", "entrada", t1000)].reduce(aplicarEvento, t0);
+    const e = hidratarMinhaPresenca(rajada, { vereadorId: "eu", presente: true, ocorridoEm: t1000 }, seqNoDisparo);
+    expect(e.presentes).toEqual(["a", "b", "eu"]);
+  });
+
+  it("ORDEM — snapshot mais VELHO que o último evento já aplicado não ressuscita estado superado", () => {
+    // O SSE já mostrou a saída das 22:10; um snapshot com a entrada das 22:00 é anterior (ex.: o GET foi
+    // respondido por uma réplica atrasada) e não pode recolocar o vereador presente.
+    const sse = aplicarEvento(aberta(), pres(1, "eu", "saida", t1010));
+    const e = hidratarMinhaPresenca(sse, { vereadorId: "eu", presente: true, ocorridoEm: t1000 }, sse.presencaEventoSeq);
+    expect(e).toBe(sse);
+    // e snapshot SEM evento não desfaz o que o SSE já mostrou
+    const viu = aplicarEvento(aberta(), pres(1, "eu", "entrada", t1000));
+    expect(hidratarMinhaPresenca(viu, { vereadorId: "eu", presente: false }, viu.presencaEventoSeq)).toBe(viu);
+  });
+
+  it("ORDEM — snapshot MAIS NOVO que o SSE aplica (comparação numérica, nunca textual)", () => {
+    // '...22:00:00.123456Z' (6 casas) e '...22:00:00.123Z' empatam em ms; o snapshot posterior (22:10) vence.
+    const sse = aplicarEvento(aberta(), pres(1, "eu", "entrada", t1000));
+    const e = hidratarMinhaPresenca(sse, { vereadorId: "eu", presente: false, ocorridoEm: t1010 }, sse.presencaEventoSeq);
+    expect(e.presentes).toEqual([]);
+    const empate = hidratarMinhaPresenca(sse, { vereadorId: "eu", presente: true, ocorridoEm: "2026-05-21T22:00:00.123Z" }, sse.presencaEventoSeq);
+    expect(empate.presentes).toEqual(["eu"]);
+  });
+
+  it("depois do snapshot, um evento SSE mais VELHO (replay) não o desfaz — a guarda de ordem do reducer vale dos dois lados", () => {
+    const snap = hidratarMinhaPresenca(aberta(), { vereadorId: "eu", presente: false, ocorridoEm: t1010 }, {});
+    const replay = aplicarEvento(snap, pres(1, "eu", "entrada", t1000));
+    expect(replay.presentes).toEqual([]);
+  });
+
+  it("corpo de forma inesperada não lança e não muda nada", () => {
+    const e = aberta();
+    expect(hidratarMinhaPresenca(e, null, {})).toBe(e);
+    expect(hidratarMinhaPresenca(e, { presente: true } as never, {})).toBe(e);
+    expect(hidratarMinhaPresenca(e, { vereadorId: "eu", presente: "sim" } as never, {})).toBe(e);
   });
 });
 
