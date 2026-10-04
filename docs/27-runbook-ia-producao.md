@@ -96,3 +96,23 @@ Na ordem em que já aconteceu:
 5. **`ia-api` fora do ar** — Logs do app no Dokploy.
 
 O `backend` loga o motivo como `plataforma de IA indisponivel` (`integracao_ia/diplomat/http/out.clj`).
+
+## 7. Anexos: reconciliar o banco com o object storage (comando do `backend`)
+
+Compara os anexos do balcão (`participacao.anexo`, `atendimento/<ente>/<protocolo>/<id>`) e dos comunicados (`comunicacao.anexo`,
+`comunicados/<ente>/<comunicado>/<id>`) com os blobs do storage, uma Casa por vez (leitura na transação do tenant). Mesmo terminal
+do app `backend`; **não há agendador**, é comando de operação ([ADR-0022](adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), Eixo 3).
+
+```
+java -jar oplenario.jar reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]
+```
+
+- **Padrão: só relata.** Por Casa e por pasta: linhas (e quantas retiradas), blobs, a lista de **blob sem linha** (upload que gravou o
+  arquivo e falhou antes do INSERT) e a de **linha sem blob**. Cada lista mostra até 200 itens e traz o total verdadeiro ao lado.
+- **Anexo retirado não é divergência:** a retirada apaga o blob de propósito. Retirado que ainda tem blob aparece como órfão "anexo retirado".
+- **`--apagar-orfaos`:** remove do **storage** só o blob sem linha com **mais de 24 h** (upload em curso tem blob antes da linha); o recente é
+  listado como "recente, nao apaga". Nunca apaga nem altera linha do banco; imprime cada blob apagado e cada falha.
+- **Linha sem blob** é só relatada: o arquivo se perdeu e a decisão (pedir o reenvio, retirar o anexo) é da secretaria.
+- **Casa:** sem `--ente`, todas as do registro; `--ente` precisa estar no registro (senão sai com 2: confira o `DATABASE_URL`). Casa `encerrado` ou
+  com o apagamento em curso (ADR-0018) não é tocada.
+- **Código de saída:** `0` íntegro (ou só o que o `--apagar-orfaos` limpou) · `1` sobrou divergência · `2` uso ou Casa fora do registro.

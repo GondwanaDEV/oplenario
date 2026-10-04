@@ -29,7 +29,10 @@
   (leitura [this ente-id id] "Uma linha por destinatario, com o caminho e a hora de cada marca.")
   (anexar! [this ente-id comunicado-id anexo limite]
     "Grava o anexo serializando os do mesmo comunicado; ja' com `limite` anexos -> :conflito/anexos-demais.")
-  (anexo [this ente-id comunicado-id anexo-id] "O anexo do comunicado, ou nil."))
+  (anexo [this ente-id comunicado-id anexo-id] "O anexo do comunicado, ou nil.")
+  (chaves-de-anexos [this ente-id]
+    "Toda chave de blob que a Casa tem em `comunicacao.anexo`: [{:chave :retirado?}] (`retirado?` sempre false:
+    comunicado nao retira anexo). Para a reconciliacao banco x object storage (`oplenario.reconciliar-anexos`)."))
 
 (defn- hidratar [tx ente-id c]
   (when c
@@ -103,7 +106,9 @@
           (throw (ex-info "o comunicado ja' tem o maximo de anexos" {:tipo :conflito/anexos-demais :limite limite})))
         (db/inserir-anexo! tx (assoc a :ente-id ente-id :comunicado-id comunicado-id)))))
   (anexo [_ ente-id comunicado-id anexo-id]
-    (tenancy/com-tenant* (:ds datasource) ente-id #(db/anexo % ente-id comunicado-id anexo-id))))
+    (tenancy/com-tenant* (:ds datasource) ente-id #(db/anexo % ente-id comunicado-id anexo-id)))
+  (chaves-de-anexos [_ ente-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(db/chaves-de-anexos % ente-id))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

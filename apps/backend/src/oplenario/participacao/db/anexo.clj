@@ -129,3 +129,18 @@
     ["INSERT INTO participacao.anexo_retirada (ente_id, anexo_id, retirado_em, retirado_por, motivo)
       VALUES (?, ?, ?, ?, ?) ON CONFLICT (ente_id, anexo_id) DO NOTHING"
      ente-id anexo-id retirado-em retirado-por motivo]))
+
+(defn chaves-da-casa
+  "Toda chave de blob que a Casa tem em `participacao.anexo`, com `retirado?` (ha' linha em `anexo_retirada`) .
+  Para a reconciliacao com o object storage: o anexo RETIRADO nao tem blob de proposito. So' SELECT, sem limite: a
+  comparacao precisa do conjunto inteiro."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (mapv (fn [r] {:chave (:chave r) :retirado? (boolean (:retirado r))})
+        (jdbc/execute! tx
+          (sql/format {:select [[:a.chave_objeto :chave] [[:is-not :r.anexo_id nil] :retirado]]
+                       :from [[:participacao.anexo :a]]
+                       :left-join [[:participacao.anexo_retirada :r] [:and [:= :r.ente_id :a.ente_id] [:= :r.anexo_id :a.id]]]
+                       :where [:= :a.ente_id ente-id]
+                       :order-by [[:a.chave_objeto :asc]]})
+          {:builder-fn rs/as-unqualified-maps})))
