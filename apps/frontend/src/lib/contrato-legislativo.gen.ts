@@ -563,4 +563,5 @@ export interface NotaTecnicaOut {
   textoFinal: string | null;
   criadaEm: string;
   decididaEm: string | null;
+  execucaoIa?: string | null;
 }
