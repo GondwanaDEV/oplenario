@@ -1014,12 +1014,15 @@
 (def teto-fila 200)
 
 (defn registrar-nota-tecnica!
-  "O rascunho do agente (o `ator` de agente institucional: agente e execucao vem do `:via`, nunca da entrada). nil =
-  proposicao inexistente nesta Casa."
-  [repo-legislativo ator {:keys [proposicao-id texto citacoes paragrafos-sem-fonte incerteza motivos-incerteza modelo]}]
+  "O rascunho do agente (o `ator` de agente institucional: agente e execucao da CREDENCIAL vem do `:via`, nunca da
+  entrada). `execucao-ia` (opcional) e' o id da execucao NA IA: so' guardado, como chave de correlacao do 'Reportar
+  erro' (8.4) — nao e' identidade nem autoridade e nenhuma decisao le esse valor. nil = proposicao inexistente nesta Casa."
+  [repo-legislativo ator {:keys [proposicao-id texto citacoes paragrafos-sem-fonte incerteza motivos-incerteza modelo
+                                 execucao-ia]}]
   (let [via (:via ator)]
     (repo/registrar-nota-tecnica! repo-legislativo (:ente-id ator)
                                   {:proposicao-id proposicao-id :agente (:agente via) :execucao-id (:execucao-id via)
+                                   :execucao-ia execucao-ia
                                    :texto texto :citacoes (or citacoes []) :paragrafos-sem-fonte (or paragrafos-sem-fonte [])
                                    :incerteza incerteza :motivos-incerteza (or motivos-incerteza []) :modelo-llm-id modelo})))
 

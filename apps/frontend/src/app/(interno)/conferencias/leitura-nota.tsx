@@ -5,9 +5,10 @@
 // (/conferencias/:id) e pela nota na fila do jurídico (/juridico/notas/:id, ADR-0019 Eixo 5) — a mesma leitura nas duas.
 
 import { rotuloDaCitacao, paragrafosDoRascunho } from "@/lib/rascunho-ata-vista";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import type { NotaTecnicaOut } from "@/lib/contrato-legislativo.gen";
 
-export function LeituraDaNota({ n }: { n: NotaTecnicaOut }) {
+export function LeituraDaNota({ n, token = null }: { n: NotaTecnicaOut; token?: string | null }) {
   const paragrafos = paragrafosDoRascunho(n.texto, n.citacoes, n.paragrafosSemFonte);
   return (
     <>
@@ -28,6 +29,9 @@ export function LeituraDaNota({ n }: { n: NotaTecnicaOut }) {
           </p>
         ))}
       </article>
+
+      {/* 8.4: só a nota registrada com o id da execução na IA (as anteriores não têm) oferece o reporte */}
+      {n.execucaoIa && <ReportarErroIa execucaoId={n.execucaoIa} token={token} />}
 
       {n.citacoes.length > 0 && (
         <section className="conf-fontes" aria-label="Dispositivos citados">

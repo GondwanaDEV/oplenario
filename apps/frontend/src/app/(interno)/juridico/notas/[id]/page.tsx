@@ -92,7 +92,7 @@ function Nota({ n, token, ehJuridico, enviando, erro, usar }: {
             <b>Rascunho produzido por IA.</b> Não é parecer nem decisão: confira cada ponto. {AVISO_TEXTO_DE_IA}
           </p>
           {aviso && <p className="conf-aviso" role="note">{aviso}</p>}
-          <LeituraDaNota n={n} />
+          <LeituraDaNota n={n} token={token} />
           {erro && <p className="conf-erro" role="alert">{erro}</p>}
           {ehJuridico ? (
             <section className="conf-confirma" aria-label="Usar como rascunho">

@@ -35,4 +35,6 @@
                                     (:citacoes n))
                     :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte n))
                     :motivos-incerteza (vec (:motivos-incerteza n))
-                    :modelo-llm-id (:modelo-llm-id n) :texto-final (:texto-final n)})))
+                    :modelo-llm-id (:modelo-llm-id n) :texto-final (:texto-final n)}
+                   ;; so' quando ha' (nota anterior a 8.4 fica sem o campo); a execucao da CREDENCIAL nao sai
+                   (when-let [ia (:execucao-ia n)] {:execucao-ia (str ia)}))))
