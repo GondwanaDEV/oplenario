@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
 import {
@@ -36,10 +36,12 @@ import {
   indeferir,
   prorrogar,
   responder,
+  retirarAnexo,
   rotaDoAnexoNoBalcao,
   useDetalheAtendimento,
   type DetalheOut,
 } from "@/lib/use-atendimento";
+import { dicaDosAnexosDaResposta } from "@/lib/anexos-do-atendimento";
 import { useEnvioDeAnexos } from "@/lib/use-envio-de-anexos";
 import { tamanhoLegivel } from "@/lib/comunicacao-vista";
 import { ListaDeAnexos } from "@/app/anexos-do-atendimento";
@@ -66,10 +68,15 @@ function Conteudo() {
   const { token } = useAuth();
   const { tipo, id } = useParams<{ tipo: string; id: string }>();
   const especie = especieValida(tipo) ? tipo : null;
-  const { estado, recarregar } = useDetalheAtendimento(token, especie, id ?? null);
+  const { estado, recarregar, atualizando } = useDetalheAtendimento(token, especie, id ?? null);
   const [recibo, setRecibo] = useState<string | null>(null);
+  const refRecibo = useRef<HTMLDivElement>(null);
+  const refResultado = useRef<HTMLDivElement>(null);
   const voltar = comToken(`/atendimento${especie ? `?aba=${especie}` : ""}`, token);
-  const podeAnexar = estado.fase === "pronto" && Boolean((estado.dado.acoes as { podeAnexar?: boolean }).podeAnexar);
+  // "ainda cabe anexar?" tem TRES respostas: sim, nao e NAO SEI (o detalhe esta sendo relido, ou a releitura falhou). "Nao sei"
+  // nao e' "nao pode": nao dizemos que passaram os 10 minutos sem o servidor ter dito.
+  const podeAnexar: boolean | null =
+    estado.fase === "pronto" && !atualizando ? Boolean((estado.dado.acoes as { podeAnexar?: boolean }).podeAnexar) : null;
   // os anexos da resposta sobem DEPOIS do ato (a rota de anexo pede a resposta ja' gravada), um a um; no fim, o detalhe é
   // relido: a lista de anexos e o `pode-anexar` passam a valer o que o servidor tem agora
   const { itens: envio, enviar: enviarAnexos, tentarDeNovo, enviando } = useEnvioDeAnexos(async (arquivo) => {
@@ -84,6 +91,22 @@ function Conteudo() {
     await enviarAnexos(arquivos);
   }
 
+  // depois do ato, o recibo (e o envio dos anexos, logo abaixo) vao para a vista: ficariam acima da dobra, e quem usa leitor de
+  // tela precisa ouvir o que aconteceu
+  useEffect(() => {
+    if (!recibo) return;
+    refRecibo.current?.focus();
+    refResultado.current?.scrollIntoView?.({ block: "start" });
+  }, [recibo]);
+
+  async function retirar(anexoId: string, motivo: string): Promise<string | null> {
+    if (!especie || !id) return "Endereço inválido: este protocolo não existe.";
+    const r = await retirarAnexo(token, especie, id, anexoId, motivo);
+    if (!r.ok) return r.mensagem;
+    recarregar();
+    return null;
+  }
+
   return (
     <>
       <TopoInterno area="Atendimento" />
@@ -92,15 +115,28 @@ function Conteudo() {
         {!especie && <p className="atd-erro" role="alert">Endereço inválido: esta fila não existe.</p>}
         {especie && estado.fase === "carregando" && <p role="status">Carregando o protocolo…</p>}
         {especie && estado.fase === "erro" && <p className="atd-erro" role="alert">{estado.mensagem}</p>}
-        {recibo && (
-          <div className="atd-recibo" role="status">
-            <p>{recibo}</p>
-            <Link className="btn btn-primaria" href={voltar}>Voltar à fila</Link>
-          </div>
-        )}
-        <PainelDeEnvio itens={envio} podeTentarDeNovo={podeAnexar} aoTentarDeNovo={(i) => void tentarDeNovo(i)} />
+        <div ref={refResultado} className="atd-resultado">
+          {recibo && (
+            <div ref={refRecibo} tabIndex={-1} className="atd-recibo" role="status">
+              <p>{recibo}</p>
+              {/* enquanto os anexos sobem, sair levaria os que faltam: o link fica inativo ate' terminar */}
+              {enviando ? (
+                <span className="btn btn-primaria atd-inativo" aria-disabled="true">Voltar à fila</span>
+              ) : (
+                <Link className="btn btn-primaria" href={voltar}>Voltar à fila</Link>
+              )}
+            </div>
+          )}
+          <PainelDeEnvio
+            itens={envio}
+            podeTentarDeNovo={podeAnexar !== false && !enviando}
+            incerto={podeAnexar === null}
+            aoTentarDeNovo={(i) => void tentarDeNovo(i)}
+          />
+        </div>
         {especie && estado.fase === "pronto" && (
-          <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} aoAnexar={enviarAnexos} enviandoAnexos={enviando} />
+          <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} aoAnexar={enviarAnexos}
+            enviandoAnexos={enviando} aoRetirar={retirar} />
         )}
       </main>
     </>
@@ -116,7 +152,7 @@ function Pessoa({ rotulo, p }: { rotulo: string; p: PessoaOut | null }) {
   );
 }
 
-function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos }: {
+function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos, aoRetirar }: {
   especie: Especie;
   id: string;
   d: DetalheOut;
@@ -125,6 +161,8 @@ function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos
   /** O controle avulso "Anexar arquivo" (enquanto `pode-anexar`): o mesmo envio um a um do formulário. */
   aoAnexar: (arquivos: File[]) => void;
   enviandoAnexos: boolean;
+  /** Retirar um anexo (incidente de conteúdo): devolve a frase do erro, ou null se deu certo. */
+  aoRetirar: (anexoId: string, motivo: string) => Promise<string | null>;
 }) {
   const info = ESPECIES.find((e) => e.especie === especie)!;
   const prazo = linhaDoPrazo(d);
@@ -136,6 +174,8 @@ function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos
   const doPedido = anexos.filter((a) => a.origem === "requerente");
   const daResposta = anexos.filter((a) => a.origem !== "requerente");
   const podeAnexar = Boolean((d.acoes as { podeAnexar?: boolean }).podeAnexar);
+  // manifestação ANONIMA nao tem dono: o arquivo anexado a resposta fica so' no registro da Casa (ninguem o baixa)
+  const anonima = ouv?.identificacao === "anonima";
 
   return (
     <>
@@ -203,38 +243,40 @@ function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos
       </section>
 
       {/* duas listas, duas origens: o que o requerente juntou ao pedido e o que a Casa juntou à resposta (nunca misturadas) */}
-      <ListaDeAnexos titulo="Anexos do pedido" anexos={doPedido} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
-      <ListaDeAnexos titulo="Anexos da resposta" anexos={daResposta} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
+      <ListaDeAnexos titulo="Anexos do pedido" anexos={doPedido} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)}
+        token={token} aoRetirar={aoRetirar} />
+      <ListaDeAnexos titulo="Anexos da resposta" anexos={daResposta} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)}
+        token={token} aoRetirar={aoRetirar} />
 
-      {podeAnexar && <AnexarAvulso aoEnviar={(arquivos) => void aoAnexar(arquivos)} enviando={enviandoAnexos} />}
+      {podeAnexar && <AnexarAvulso aoEnviar={(arquivos) => void aoAnexar(arquivos)} enviando={enviandoAnexos} anonima={anonima} />}
 
-      <Acoes especie={especie} d={d} token={token} aoConcluir={aoConcluir} />
+      <Acoes especie={especie} d={d} token={token} aoConcluir={aoConcluir} desabilitado={enviandoAnexos} anonima={anonima} />
     </>
   );
 }
 
-const FORM: Record<Acao, { botao: string; rotulo: string; enviar: string; enviando: string; oQue: string; teto: number; aviso: string }> = {
+const FORM: Record<Acao, { botao: string; titulo: string; rotulo: string; enviar: string; enviando: string; oQue: string; teto: number; aviso: string }> = {
   responder: {
-    botao: "Responder", rotulo: "Resposta ao cidadão", enviar: "Enviar a resposta", enviando: "Enviando…",
+    botao: "Responder", titulo: "Responder ao cidadão", rotulo: "Resposta ao cidadão", enviar: "Enviar a resposta", enviando: "Enviando…",
     oQue: "a resposta", teto: TETO_RESPOSTA,
     aviso: "A resposta é definitiva: depois de enviada, encerra o protocolo e não pode ser editada.",
   },
   indeferir: {
-    botao: "Indeferir", rotulo: "Fundamentação do indeferimento", enviar: "Revisar o indeferimento", enviando: "Enviando…",
+    botao: "Indeferir", titulo: "Indeferir o pedido", rotulo: "Fundamentação do indeferimento", enviar: "Revisar o indeferimento", enviando: "Enviando…",
     oQue: "a fundamentação", teto: TETO_RESPOSTA,
     aviso: "O indeferimento é definitivo: encerra o protocolo, não pode ser desfeito, e a pessoa lê a fundamentação. A lei exige que a recusa diga as razões — escreva o motivo e, se houver, o dispositivo legal.",
   },
   "decidir-recurso": {
-    botao: "Decidir o recurso", rotulo: "Decisão sobre o recurso", enviar: "Registrar a decisão", enviando: "Registrando…",
+    botao: "Decidir o recurso", titulo: "Decidir o recurso", rotulo: "Decisão sobre o recurso", enviar: "Registrar a decisão", enviando: "Registrando…",
     oQue: "a decisão", teto: TETO_RESPOSTA, aviso: "A decisão é definitiva e encerra o recurso.",
   },
   prorrogar: {
-    botao: "Prorrogar o prazo", rotulo: "Justificativa da prorrogação", enviar: "Prorrogar", enviando: "Prorrogando…",
+    botao: "Prorrogar o prazo", titulo: "Prorrogar o prazo", rotulo: "Justificativa da prorrogação", enviar: "Prorrogar", enviando: "Prorrogando…",
     oQue: "a justificativa", teto: TETO_JUSTIFICATIVA,
     aviso: "A prorrogação só pode ser feita uma vez e exige justificativa.",
   },
   arquivar: {
-    botao: "Arquivar sem resposta", rotulo: "Motivo do arquivamento", enviar: "Arquivar", enviando: "Arquivando…",
+    botao: "Arquivar sem resposta", titulo: "Arquivar a manifestação", rotulo: "Motivo do arquivamento", enviar: "Arquivar", enviando: "Arquivando…",
     oQue: "o motivo", teto: TETO_RESPOSTA,
     aviso: "Arquivar encerra a manifestação sem resposta de mérito — use quando ela não é da competência da Câmara ou não tem como ser apurada.",
   },
@@ -243,11 +285,15 @@ const FORM: Record<Acao, { botao: string; rotulo: string; enviar: string; envian
 // o que acompanha-se de arquivo: a resposta, o indeferimento e a decisao do recurso (prorrogar e arquivar nao tem documento)
 const COM_ANEXOS: Acao[] = ["responder", "indeferir", "decidir-recurso"];
 
-function Acoes({ especie, d, token, aoConcluir }: {
+function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = false }: {
   especie: Especie;
   d: DetalheOut;
   token: string | null;
   aoConcluir: (recibo: string, arquivos: File[]) => void;
+  /** Os anexos da resposta anterior ainda estao subindo: nada de segundo ato no meio do envio. */
+  desabilitado?: boolean;
+  /** Manifestação anônima: o arquivo anexado fica só no registro da Casa (a dica do seletor muda). */
+  anonima?: boolean;
 }) {
   const [acao, setAcao] = useState<Acao | null>(null);
   const [texto, setTexto] = useState("");
@@ -256,6 +302,17 @@ function Acoes({ especie, d, token, aoConcluir }: {
   const [erro, setErro] = useState<string | null>(null);
   // o indeferimento é irreversível: um passo de confirmação mostra o texto que a pessoa vai ler antes de enviar
   const [confirmando, setConfirmando] = useState(false);
+  // para onde vai o foco depois de trocar de passo (o editor <-> a confirmacao): o titulo do grupo, que o leitor de tela anuncia
+  // (um ref, nao estado: o foco e' um efeito da troca de passo, nao algo que a tela renderiza)
+  const foco = useRef<"confirmar" | "editor" | null>(null);
+  const tituloDaConfirmacao = useRef<HTMLHeadingElement>(null);
+  const tituloDoEditor = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const alvo = foco.current;
+    foco.current = null;
+    if (alvo === "confirmar") tituloDaConfirmacao.current?.focus();
+    else if (alvo === "editor") tituloDoEditor.current?.focus();
+  }, [confirmando]);
 
   const a = d.acoes as {
     podeResponder: boolean;
@@ -324,7 +381,8 @@ function Acoes({ especie, d, token, aoConcluir }: {
       {!acao && (
         <div className="atd-acoes">
           {cabem.map((x, i) => (
-            <button key={x} type="button" className={i === 0 ? "btn btn-primaria" : "btn btn-contorno"} onClick={() => abrir(x)}>
+            <button key={x} type="button" className={i === 0 ? "btn btn-primaria" : "btn btn-contorno"} disabled={desabilitado}
+              onClick={() => abrir(x)}>
               {x === "prorrogar" ? `${FORM.prorrogar.botao} (+${dias} dias)` : FORM[x].botao}
             </button>
           ))}
@@ -332,6 +390,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
       )}
       {acao && f && confirmando && (
         <div className="atd-form" role="group" aria-label="Confirmar o indeferimento">
+          <h3 ref={tituloDaConfirmacao} tabIndex={-1} className="atd-confirmar-titulo">Confirmar o indeferimento</h3>
           <p className="atd-aviso">
             Você vai indeferir o {d.protocolo}. Esta ação é definitiva e não pode ser desfeita. A pessoa vai ler esta fundamentação:
           </p>
@@ -345,7 +404,8 @@ function Acoes({ especie, d, token, aoConcluir }: {
             <button type="button" className="btn btn-primaria" disabled={enviando} onClick={enviar}>
               {enviando ? f.enviando : "Confirmar o indeferimento"}
             </button>
-            <button type="button" className="btn btn-fantasma" disabled={enviando} onClick={() => setConfirmando(false)}>
+            <button type="button" className="btn btn-fantasma" disabled={enviando}
+              onClick={() => { foco.current = "editor"; setConfirmando(false); }}>
               Voltar e editar
             </button>
           </div>
@@ -353,18 +413,22 @@ function Acoes({ especie, d, token, aoConcluir }: {
       )}
       {acao && f && !confirmando && (
         <div className="atd-form" role="group" aria-label={f.botao}>
+          <h3 ref={tituloDoEditor} tabIndex={-1} className="atd-form-titulo">{f.titulo}</h3>
           <p className="atd-aviso">{aviso}</p>
           <div className="atd-campo">
             <label htmlFor="atd-texto">{f.rotulo}</label>
             <textarea id="atd-texto" value={texto} rows={acao === "prorrogar" ? 4 : 10} maxLength={f.teto + 200}
               onChange={(e) => setTexto(e.target.value)} />
           </div>
-          {COM_ANEXOS.includes(acao) && <SeletorDeAnexos arquivos={arquivos} aoMudar={setArquivos} desabilitado={enviando} />}
+          {COM_ANEXOS.includes(acao) && (
+            <SeletorDeAnexos arquivos={arquivos} aoMudar={setArquivos} desabilitado={enviando}
+              id="atd-anexos" dica={dicaDosAnexosDaResposta(anonima)} />
+          )}
           {falta && <p className="atd-falta">{falta}</p>}
           {erro && <p className="atd-erro" role="alert">{erro}</p>}
           <div className="atd-acoes">
             <button type="button" className="btn btn-primaria" disabled={enviando || falta !== null}
-              onClick={acao === "indeferir" ? () => setConfirmando(true) : enviar}>
+              onClick={acao === "indeferir" ? () => { setErro(null); foco.current = "confirmar"; setConfirmando(true); } : enviar}>
               {enviando ? f.enviando : acao === "prorrogar" ? `${f.enviar} por mais ${dias} dias` : f.enviar}
             </button>
             <button type="button" className="btn btn-fantasma" disabled={enviando} onClick={() => setAcao(null)}>

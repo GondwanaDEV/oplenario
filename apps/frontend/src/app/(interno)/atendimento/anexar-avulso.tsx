@@ -8,7 +8,16 @@
 import { useId, useState } from "react";
 import { SeletorDeAnexos } from "../../seletor-de-anexos";
 
-export function AnexarAvulso({ aoEnviar, enviando }: { aoEnviar: (arquivos: File[]) => void; enviando: boolean }) {
+export function AnexarAvulso({
+  aoEnviar,
+  enviando,
+  anonima = false,
+}: {
+  aoEnviar: (arquivos: File[]) => void;
+  enviando: boolean;
+  /** Manifestação anônima: o arquivo fica só no registro da Casa (ninguém o baixa) — a dica diz isso. */
+  anonima?: boolean;
+}) {
   const [arquivos, setArquivos] = useState<File[]>([]);
   const idTitulo = useId();
   const idCampo = useId();
@@ -21,7 +30,9 @@ export function AnexarAvulso({ aoEnviar, enviando }: { aoEnviar: (arquivos: File
       <SeletorDeAnexos
         id={idCampo}
         rotulo="Escolher arquivos para anexar à resposta"
-        dica="Eles sobem quando você clicar em anexar, e quem pediu os baixa no protocolo dele."
+        dica={anonima
+          ? "Eles sobem quando você clicar em anexar. Esta manifestação é anônima: o arquivo fica só no registro da Casa, porque não há quem o baixe."
+          : "Eles sobem quando você clicar em anexar, e quem pediu os baixa no protocolo dele."}
         arquivos={arquivos}
         aoMudar={setArquivos}
         desabilitado={enviando}

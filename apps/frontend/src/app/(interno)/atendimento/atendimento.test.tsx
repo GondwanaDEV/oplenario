@@ -521,10 +521,10 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
 
   it("falha parcial: diz qual arquivo falhou e por quê, e deixa tentar de novo enquanto cabe anexar", async () => {
     let tentativas = 0;
-    let podeAnexar = true;
+    let respondido = false;   // o mock reflete o estado DEPOIS do ato: respondido, e a janela de anexar aberta
     const c = mockar({
-      "GET /api/atendimento/esic/p1": () => ({ corpo: podeAnexar ? abertoComAnexar(true) : fechadoComAnexar(false) }),
-      "POST /api/esic/pedidos/p1/resposta": { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } },
+      "GET /api/atendimento/esic/p1": () => ({ corpo: respondido ? fechadoComAnexar(true) : abertoComAnexar(false) }),
+      "POST /api/esic/pedidos/p1/resposta": () => { respondido = true; return { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } }; },
       "POST /api/atendimento/esic/p1/anexos": (ch) => {
         const nome = (ch.body as { arquivo: string }).arquivo;
         if (nome === "ruim.pdf" && ++tentativas === 1)
@@ -552,7 +552,6 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     expect(posts(c, "/anexos")).toHaveLength(4);
     expect(screen.getByText("3 arquivos anexados.")).toBeTruthy();
     expect(within(painel).queryByRole("button", { name: /Tentar de novo/ })).toBeNull();
-    podeAnexar = false;
   });
 
   it("passada a janela, o 'tentar de novo' fica desligado e a tela diz por quê", async () => {
@@ -755,6 +754,249 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     render(<PaginaProtocolo />);
     await screen.findByText("Este protocolo está encerrado: não há o que responder.");
     expect(screen.queryByRole("region", { name: "Anexos da resposta" })).toBeNull();
+  });
+
+
+  // ---------------------------------------------------------------- rodada de correcoes: F1, F2, F5-F8, F10, F18 + retirar (B4)
+
+  /** Um fetch roteavel em que o POST de anexo SO' termina quando o teste manda (para olhar a tela no meio do envio). */
+  function comAnexoPendente(detalhes: { antes: unknown; depois: unknown; rotaAto?: string; corpoAto?: unknown }) {
+    const rota = detalhes.rotaAto ?? "/api/esic/pedidos/p1/resposta";
+    const pendentes: ((r: Response) => void)[] = [];
+    let ato = false;
+    const chamadas: Chamada[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const metodo = init?.method ?? "GET";
+      const corpo = init?.body instanceof FormData ? { arquivo: (init.body.get("arquivo") as File).name }
+        : init?.body ? JSON.parse(String(init.body)) : undefined;
+      chamadas.push({ metodo, url: String(url), body: corpo });
+      const json = (status: number, b: unknown) => ({ ok: status < 300, status, json: async () => b }) as Response;
+      if (metodo === "GET") return json(200, ato ? detalhes.depois : detalhes.antes);
+      if (String(url) === rota) { ato = true; return json(200, detalhes.corpoAto ?? { "respondida-em": "2026-07-03T15:00:00Z" }); }
+      return new Promise<Response>((r) => pendentes.push(r));
+    }) as unknown as typeof fetch;
+    const terminar = (i: number, status = 201, b: unknown = anexoOut(`n${i}`, "a.pdf", 100)) =>
+      pendentes[i]({ ok: status < 300, status, json: async () => b } as Response);
+    return { chamadas, pendentes, terminar };
+  }
+  const responderComArquivo = async (nome = "a.pdf") => {
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo(nome)]);
+    fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+  };
+
+  it("F1: enquanto os anexos sobem a tela avisa, o aviso de saída está armado e 'Voltar à fila' não leva a lugar nenhum", async () => {
+    const m = comAnexoPendente({ antes: abertoComAnexar(false), depois: fechadoComAnexar(true) });
+    render(<PaginaProtocolo />);
+    await responderComArquivo();
+    await waitFor(() => expect(m.pendentes).toHaveLength(1));
+    expect(screen.getByText(/Enviando anexos, não feche esta página/)).toBeTruthy();
+    const recibo = screen.getAllByRole("status").find((e) => /Resposta ao ESIC/.test(e.textContent ?? ""))!;
+    expect(within(recibo).queryByRole("link", { name: "Voltar à fila" })).toBeNull();
+    const inativo = within(recibo).getByText("Voltar à fila");
+    expect(inativo.getAttribute("aria-disabled")).toBe("true");
+    expect(inativo.hasAttribute("href")).toBe(false);
+    const ev = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    m.terminar(0);
+    await waitFor(() => expect(screen.queryByText(/Enviando anexos, não feche esta página/)).toBeNull());
+    expect(within(recibo).getByRole("link", { name: "Voltar à fila" }).getAttribute("href")).toBe("/atendimento?aba=esic&token=tk");
+    const livre = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(livre);
+    expect(livre.defaultPrevented).toBe(false);
+  });
+
+  it("F5: os botões de ato ficam desligados enquanto os anexos sobem (nada de segundo ato no meio)", async () => {
+    const m = comAnexoPendente({ antes: abertoComAnexar(false), depois: abertoComAnexar(true) });
+    render(<PaginaProtocolo />);
+    await responderComArquivo();
+    await waitFor(() => expect(m.pendentes).toHaveLength(1));
+    const botao = await screen.findByRole("button", { name: "Indeferir" });
+    expect((botao as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Responder" }) as HTMLButtonElement).disabled).toBe(true);
+    m.terminar(0);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Indeferir" }) as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it("F8: depois do ato o recibo recebe o foco e a área do resultado é rolada para a vista", async () => {
+    const rolar = vi.fn();
+    Element.prototype.scrollIntoView = rolar;
+    mockar({
+      "GET /api/atendimento/esic/p1": { corpo: abertoComAnexar(false) },
+      "POST /api/esic/pedidos/p1/resposta": { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+    fireEvent.change(screen.getByLabelText("Resposta ao cidadão"), { target: { value: "Segue." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar a resposta" }));
+    const recibo = await screen.findByRole("status");
+    await waitFor(() => expect(document.activeElement).toBe(recibo));
+    expect(rolar).toHaveBeenCalled();
+  });
+
+  it("F2: manifestação ANÔNIMA — a dica dos anexos não diz que quem pediu baixa: o arquivo fica só no registro da Casa", async () => {
+    estado.params = { tipo: "ouvidoria", id: "m1" };
+    const base = { id: "m1", protocolo: "OUV-2026-000004", tipo: "denuncia", assunto: "Obra parada", descricao: "Na rua A.",
+      identificacao: "anonima", anexos: [], ...prazo(20) };
+    mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: { ...base, estado: "protocolada", historico: [],
+      acoes: { "pode-responder": true, "pode-arquivar": true, "pode-prorrogar": true, "pode-anexar": false } } } });
+    const { unmount } = render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Responder" }));
+    const dica = screen.getByText(/Até 5 arquivos de até 10 MB/).textContent ?? "";
+    expect(dica).toMatch(/só no registro da Casa/);
+    expect(dica).not.toMatch(/quem pediu os baixa/);
+    unmount();
+    cleanup();
+    // e o controle avulso (depois da resposta) diz o mesmo
+    mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: { ...base, estado: "respondida", aberto: false, "dias-restantes": null,
+      historico: [{ tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" }],
+      acoes: { "pode-responder": false, "pode-arquivar": false, "pode-prorrogar": false, "pode-anexar": true } } } });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexar arquivo" });
+    expect(secao.textContent).toMatch(/só no registro da Casa/);
+    expect(secao.textContent).not.toMatch(/quem pediu os baixa/);
+  });
+
+  it("F6: 'não sei' não é 'não pode' — com o detalhe sem resposta (rede), o retry fica ligado e a tela diz que não deu para confirmar", async () => {
+    let gets = 0;
+    let anexos = 0;
+    let respondido = false;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const metodo = init?.method ?? "GET";
+      const json = (status: number, b: unknown) => ({ ok: status < 300, status, json: async () => b }) as Response;
+      if (metodo === "GET") {
+        gets++;
+        if (respondido && gets === 2) throw new TypeError("rede caiu");   // a releitura depois do ato falha
+        return json(200, respondido ? fechadoComAnexar(true) : abertoComAnexar(false));
+      }
+      if (String(url).endsWith("/resposta")) { respondido = true; return json(200, { "respondida-em": "2026-07-03T15:00:00Z" }); }
+      anexos++;
+      return anexos === 1 ? json(500, {}) : json(201, anexoOut("n1", "a.pdf", 100));
+    }) as unknown as typeof fetch;
+    render(<PaginaProtocolo />);
+    await responderComArquivo();
+    const botao = await screen.findByRole("button", { name: "Tentar de novo o anexo a.pdf" });
+    await waitFor(() => expect(screen.getByText(/Não deu para confirmar se ainda cabe anexar/)).toBeTruthy());
+    expect(screen.queryByText(/Já não cabe anexar/)).toBeNull();
+    expect((botao as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(botao);
+    expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+  });
+
+  it("F10: falha de rede ao anexar não diz 'nada foi gravado': diz que não deu para confirmar e que tentar de novo é seguro", async () => {
+    let anexos = 0;
+    let respondido = false;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const metodo = init?.method ?? "GET";
+      const json = (status: number, b: unknown) => ({ ok: status < 300, status, json: async () => b }) as Response;
+      if (metodo === "GET") return json(200, respondido ? fechadoComAnexar(true) : abertoComAnexar(false));
+      if (String(url).endsWith("/resposta")) { respondido = true; return json(200, { "respondida-em": "2026-07-03T15:00:00Z" }); }
+      if (++anexos === 1) throw new TypeError("rede caiu");
+      return json(201, anexoOut("n1", "a.pdf", 100));
+    }) as unknown as typeof fetch;
+    render(<PaginaProtocolo />);
+    await responderComArquivo();
+    const falha = await screen.findByText(/não foi anexado:/);
+    expect(falha.textContent).toMatch(/não deu para confirmar/);
+    expect(falha.textContent).toMatch(/seguro/);
+    expect(falha.textContent).not.toMatch(/Nada foi gravado/);
+  });
+
+  it("413 no anexo: a frase diz o limite de 10 MB e qual arquivo", async () => {
+    let respondido = false;
+    mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: respondido ? fechadoComAnexar(true) : abertoComAnexar(false) }),
+      "POST /api/esic/pedidos/p1/resposta": () => { respondido = true; return { corpo: { "respondida-em": "2026-07-03T15:00:00Z" } }; },
+      "POST /api/atendimento/esic/p1/anexos": { status: 413, corpo: { erro: "O anexo passa de 10 MB." } },
+    });
+    render(<PaginaProtocolo />);
+    await responderComArquivo("grande.pdf");
+    const falha = await screen.findByText(/não foi anexado: O arquivo passa de 10 MB, o limite por anexo\./);
+    expect(falha.closest("li")!.textContent).toMatch(/grande\.pdf/);
+  });
+
+  it("F7: indeferir — o foco vai para o título ao entrar na confirmação e ao voltar; o erro antigo some", async () => {
+    let tentativa = 0;
+    mockar({
+      "GET /api/atendimento/esic/p1": { corpo: abertoComAnexar(false) },
+      "POST /api/esic/pedidos/p1/indeferir": () => ++tentativa === 1
+        ? { status: 500, corpo: {} } : { corpo: { "indeferido-em": "2026-07-03T15:00:00Z" } },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Indeferir" }));
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Dado pessoal de terceiros." } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Confirmar o indeferimento" })));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    // o servidor falhou: volta ao editor, com o erro
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível|tente de novo|erro/i);
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+    expect(screen.queryByRole("alert")).toBeNull();   // o erro de antes nao acompanha a confirmacao
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Confirmar o indeferimento" })));
+    fireEvent.click(screen.getByRole("button", { name: "Voltar e editar" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Indeferir o pedido" })));
+  });
+
+  // ---- B4: retirar anexo (a secretaria, com motivo obrigatório e confirmação)
+
+  const anexoRetirado = (id: string, nome: string, origem: string, motivo = "contém dado pessoal de terceiros") =>
+    ({ ...anexoOut(id, nome, 100, "application/pdf", origem), "retirado-em": "2026-07-04T10:00:00Z", "motivo-da-retirada": motivo });
+
+  it("retirar: botão por anexo, motivo obrigatório, confirmação — e a lista se relê", async () => {
+    let retirado = false;
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: fechadoComAnexar(false, [
+        retirado ? anexoRetirado("a1", "contrato.pdf", "requerente") : anexoOut("a1", "contrato.pdf", 100, "application/pdf", "requerente"),
+        anexoOut("a2", "resposta.pdf", 100),
+      ]) }),
+      "POST /api/atendimento/esic/p1/anexos/a1/retirar": () => { retirado = true; return { corpo: anexoRetirado("a1", "contrato.pdf", "requerente") }; },
+    });
+    render(<PaginaProtocolo />);
+    const doPedido = await screen.findByRole("region", { name: "Anexos do pedido" });
+    fireEvent.click(within(doPedido).getByRole("button", { name: "Retirar contrato.pdf" }));
+    const grupo = screen.getByRole("group", { name: "Retirar o anexo contrato.pdf" });
+    const confirmar = within(grupo).getByRole("button", { name: "Confirmar a retirada" }) as HTMLButtonElement;
+    expect(confirmar.disabled).toBe(true);   // sem motivo, nao confirma
+    expect(within(grupo).getByText(/não pode ser desfeita|definitiv/i)).toBeTruthy();
+    fireEvent.change(within(grupo).getByLabelText("Motivo da retirada"), { target: { value: "   " } });
+    expect(confirmar.disabled).toBe(true);
+    fireEvent.change(within(grupo).getByLabelText("Motivo da retirada"), { target: { value: "  contém dado pessoal de terceiros  " } });
+    expect(confirmar.disabled).toBe(false);
+    fireEvent.click(confirmar);
+    await waitFor(() => expect(c.some((x) => x.url.endsWith("/a1/retirar"))).toBe(true));
+    expect(c.find((x) => x.url.endsWith("/a1/retirar"))!.body).toEqual({ motivo: "contém dado pessoal de terceiros" });
+    // o detalhe foi relido: o anexo aparece como retirado, com a data e o motivo (so' o balcao o ve), sem download nem novo "Retirar"
+    const depois = await screen.findByRole("region", { name: "Anexos do pedido" });
+    await waitFor(() => expect(within(depois).getByText(/Retirado em/)).toBeTruthy());
+    expect(within(depois).getByText(/contém dado pessoal de terceiros/)).toBeTruthy();
+    expect(within(depois).queryByRole("button", { name: /Baixar contrato\.pdf/ })).toBeNull();
+    expect(within(depois).queryByRole("link", { name: /Baixar contrato\.pdf/ })).toBeNull();
+    expect(within(depois).queryByRole("button", { name: /Retirar contrato\.pdf/ })).toBeNull();
+    // o outro anexo (da Casa) segue com download e com "Retirar"
+    const daResposta = screen.getByRole("region", { name: "Anexos da resposta" });
+    expect(within(daResposta).getByRole("button", { name: "Baixar resposta.pdf" })).toBeTruthy();
+    expect(within(daResposta).getByRole("button", { name: "Retirar resposta.pdf" })).toBeTruthy();
+  });
+
+  it("retirar: cancelar não envia nada; a falha do servidor aparece e o motivo digitado fica", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [anexoOut("a2", "resposta.pdf", 100)]) },
+      "POST /api/atendimento/esic/p1/anexos/a2/retirar": { status: 404, corpo: { erro: "anexo nao encontrado" } },
+    });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexos da resposta" });
+    fireEvent.click(within(secao).getByRole("button", { name: "Retirar resposta.pdf" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar a retirada" }));
+    expect(screen.queryByRole("group", { name: /Retirar o anexo/ })).toBeNull();
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    fireEvent.click(within(secao).getByRole("button", { name: "Retirar resposta.pdf" }));
+    fireEvent.change(screen.getByLabelText("Motivo da retirada"), { target: { value: "arquivo errado" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar a retirada" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível|não encontr|Não encontramos/i);
+    expect((screen.getByLabelText("Motivo da retirada") as HTMLTextAreaElement).value).toBe("arquivo errado");
   });
 
   it("fila que não existe no endereço: frase, sem buscar", () => {
