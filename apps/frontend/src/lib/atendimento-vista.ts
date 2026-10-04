@@ -300,3 +300,17 @@ export function faltaNoEncarregado(e: { nome: string; rotulo: string; email: str
   if (!/^[^\s@]+@[^\s@]+$/.test(e.email.trim())) return "O e-mail parece incompleto.";
   return null;
 }
+
+/** Passos do indeferimento que recebem o foco no título: o editor e a confirmação. */
+export type PassoDoIndeferimento = "confirmar" | "editor";
+
+/**
+ * Que título recebe o foco NESTE commit. O pedido de foco é gravado no clique e lido por um efeito; um efeito
+ * atrasado do commit ANTERIOR (a volta ao editor depois de o servidor falhar) roda depois do clique seguinte e não
+ * pode gastar um pedido que é do passo que ainda vai aparecer. Só vale o pedido que casa com o passo na tela.
+ */
+export function tituloQueRecebeOFoco(pedido: PassoDoIndeferimento | null, confirmando: boolean): PassoDoIndeferimento | null {
+  if (pedido === "confirmar" && confirmando) return "confirmar";
+  if (pedido === "editor" && !confirmando) return "editor";
+  return null;
+}

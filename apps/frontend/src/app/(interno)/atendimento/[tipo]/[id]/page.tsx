@@ -27,7 +27,9 @@ import {
   textoDoRecibo,
   tituloDoEvento,
   tituloDoItem,
+  tituloQueRecebeOFoco,
   type Especie,
+  type PassoDoIndeferimento,
 } from "@/lib/atendimento-vista";
 import {
   anexar,
@@ -304,14 +306,16 @@ function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = 
   const [confirmando, setConfirmando] = useState(false);
   // para onde vai o foco depois de trocar de passo (o editor <-> a confirmacao): o titulo do grupo, que o leitor de tela anuncia
   // (um ref, nao estado: o foco e' um efeito da troca de passo, nao algo que a tela renderiza)
-  const foco = useRef<"confirmar" | "editor" | null>(null);
+  const foco = useRef<PassoDoIndeferimento | null>(null);
   const tituloDaConfirmacao = useRef<HTMLHeadingElement>(null);
   const tituloDoEditor = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
-    const alvo = foco.current;
+    // só gasta o pedido quando este commit é o do passo pedido (ver `tituloQueRecebeOFoco`)
+    const alvo = tituloQueRecebeOFoco(foco.current, confirmando);
+    if (alvo === null) return;
     foco.current = null;
     if (alvo === "confirmar") tituloDaConfirmacao.current?.focus();
-    else if (alvo === "editor") tituloDoEditor.current?.focus();
+    else tituloDoEditor.current?.focus();
   }, [confirmando]);
 
   const a = d.acoes as {
