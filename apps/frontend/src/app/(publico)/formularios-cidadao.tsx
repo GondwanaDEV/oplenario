@@ -5,9 +5,14 @@
 // e-SIC e LGPD seguem o mesmo arquétipo (hero + faixa da lei + form-card + trilho). Sem sessão, o form-card vira o
 // convite do gov.br, que volta a ESTE formulário. Enviado, vira o recibo: o protocolo é a prova e o marco do prazo.
 //
-// Fora, por não existir no backend: o anexo da ouvidoria e o cartão "Ouvidor responsável" do design.
+// Anexos do pedido (e-SIC, LGPD e ouvidoria IDENTIFICADA): o seletor está no formulário, mas os arquivos só sobem depois que
+// o protocolo existe (a rota de anexo pede o protocolo gravado, e só o dono anexa). Com o recibo na mão, a tela acha o id
+// do protocolo em "Meus protocolos" (o recibo traz só o número) e envia os arquivos um a um, mostrando cada resultado junto
+// do recibo, com o motivo da falha e o "tentar de novo". Manifestação ANÔNIMA não tem anexo: não há dono para a rota.
+//
+// Fora, por não existir no backend: o cartão "Ouvidor responsável" do design.
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { buscarPublico } from "@/lib/portal-api";
 import { hrefEntrarComGovbr } from "@/lib/participar-vista";
 import {
@@ -24,8 +29,12 @@ import {
 import { formatarData, formatarHora } from "@/lib/formatar-data";
 import { avisoNoRecibo } from "@/lib/faixa-acesso-restrito";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
+import { useEnvioDeAnexos } from "@/lib/use-envio-de-anexos";
+import { acharIdDoProtocolo, anexarAoMeuProtocolo, type EspecieDoPortal } from "@/lib/use-meus-protocolos";
 import type { EstadoSessaoCidada } from "@/lib/use-sessao-cidada";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
+import { PainelDeEnvio } from "../envio-de-anexos";
+import { SeletorDeAnexos } from "../seletor-de-anexos";
 import "./participacao.css";
 import "./participar.css";
 
@@ -109,36 +118,60 @@ function ReciboProtocolo({
   recibo,
   ente,
   anonima = false,
+  saidaBloqueada = false,
+  children,
 }: {
   titulo: string;
   recibo: Recibo;
   ente: string;
   anonima?: boolean;
+  /** Os anexos ainda estao subindo: os links de saida ficam inativos (sair levaria os arquivos que faltam). */
+  saidaBloqueada?: boolean;
+  /** Logo ABAIXO do cartao (fora do `role=status`, que releria o recibo inteiro a cada mudanca): o resultado do envio dos anexos. */
+  children?: ReactNode;
 }) {
+  const cartao = useRef<HTMLDivElement>(null);
+  // o recibo e' o que a pessoa veio buscar: ele recebe o foco (e a rolagem) assim que aparece
+  useEffect(() => {
+    cartao.current?.focus();
+    cartao.current?.scrollIntoView?.({ block: "start" });
+  }, []);
   return (
-    <div className="pf-card pf-recibo" role="status">
-      <span className="eyebrow">Recibo</span>
-      <h2>{titulo}</h2>
-      <p className="pf-protocolo">{recibo.protocolo}</p>
-      <p className="pf-ajuda">
-        Recebido em {formatarData(recibo.reciboEm)} às {formatarHora(recibo.reciboEm)}. Este recibo é a prova do seu
-        pedido e o <b>marco em que o prazo começa a contar</b>.
-      </p>
-      {recibo.acessoRestritoDesde && <p className="pf-ajuda pf-restrito">{avisoNoRecibo(recibo.acessoRestritoDesde)}</p>}
-      {anonima ? (
+    <div className="pf-recibo-bloco">
+      <div ref={cartao} tabIndex={-1} className="pf-card pf-recibo" role="status">
+        <span className="eyebrow">Recibo</span>
+        <h2>{titulo}</h2>
+        <p className="pf-protocolo">{recibo.protocolo}</p>
         <p className="pf-ajuda">
-          <b>Guarde este número:</b> sem identificação, é só por ele que você acompanha a resposta.
+          Recebido em {formatarData(recibo.reciboEm)} às {formatarHora(recibo.reciboEm)}. Este recibo é a prova do seu
+          pedido e o <b>marco em que o prazo começa a contar</b>.
         </p>
-      ) : (
-        <p className="pf-acoes">
-          <a className="btn btn-primaria" href="/meus-protocolos">
-            Acompanhar em Meus protocolos
-          </a>
-          <a className="btn btn-contorno" href={`/portal/casa/${ente}`}>
-            Voltar ao portal
-          </a>
-        </p>
-      )}
+        {recibo.acessoRestritoDesde && <p className="pf-ajuda pf-restrito">{avisoNoRecibo(recibo.acessoRestritoDesde)}</p>}
+        {anonima ? (
+          <p className="pf-ajuda">
+            <b>Guarde este número:</b> sem identificação, é só por ele que você acompanha a resposta.
+          </p>
+        ) : (
+          <p className="pf-acoes">
+            {saidaBloqueada ? (
+              <>
+                <span className="btn btn-primaria anx-inativo" aria-disabled="true">Acompanhar em Meus protocolos</span>
+                <span className="btn btn-contorno anx-inativo" aria-disabled="true">Voltar ao portal</span>
+              </>
+            ) : (
+              <>
+                <a className="btn btn-primaria" href="/meus-protocolos">
+                  Acompanhar em Meus protocolos
+                </a>
+                <a className="btn btn-contorno" href={`/portal/casa/${ente}`}>
+                  Voltar ao portal
+                </a>
+              </>
+            )}
+          </p>
+        )}
+      </div>
+      {children}
     </div>
   );
 }
@@ -172,24 +205,94 @@ export function Campo({
   );
 }
 
-// Validação local + envio + recibo — o mesmo ciclo nos três formulários.
-function useFormulario(token: string | null) {
+// Validação local + envio + recibo + anexos do pedido — o mesmo ciclo nos três formulários.
+//
+// Os anexos sobem DEPOIS do recibo (a rota pede o protocolo gravado e só o dono anexa). O recibo traz o NÚMERO, não o id: o id
+// vem de "Meus protocolos". Entre o recibo e o primeiro arquivo há a BUSCA do id: a tela diz "Enviando seus anexos…" já nesse
+// intervalo (nada de silêncio), e, se a busca falha (rede, 401, 5xx, protocolo não achado), os arquivos ficam em memória, a
+// tela lista os nomes e oferece "Tentar de novo" (refaz a busca E o envio) — a pessoa não perde o que escolheu.
+function useFormulario(token: string | null, especie: EspecieDoPortal) {
   const { enviar, estado, erro } = useEnvioCidadao(token);
   const [falta, setFalta] = useState<string | null>(null);
   const [recibo, setRecibo] = useState<Recibo | null>(null);
-  async function submeter<T>(montado: Resultado<T>, caminho: string) {
+  const [fase, setFase] = useState<"ocioso" | "buscando" | "falhou">("ocioso");
+  const [pendentes, setPendentes] = useState<File[]>([]);
+  const idDoProtocolo = useRef<string | null>(null);
+  const anexos = useEnvioDeAnexos(async (arquivo) => {
+    if (!idDoProtocolo.current) return { ok: false, mensagem: "Não achamos o protocolo para receber o anexo." };
+    const r = await anexarAoMeuProtocolo(token, especie, idDoProtocolo.current, arquivo);
+    return r.ok ? { ok: true } : { ok: false, mensagem: r.mensagem };
+  });
+
+  /** Acha o id do protocolo e sobe os `arquivos`. Em falha da busca, guarda os arquivos para o "tentar de novo". */
+  async function enviarOsAnexos(protocolo: string, arquivos: File[]) {
+    setPendentes(arquivos);
+    setFase("buscando");
+    const id = await acharIdDoProtocolo(token, especie, protocolo);
+    if (!id) {
+      setFase("falhou");
+      return;
+    }
+    idDoProtocolo.current = id;
+    setFase("ocioso");
+    setPendentes([]);
+    await anexos.enviar(arquivos);
+  }
+
+  async function submeter<T>(montado: Resultado<T>, caminho: string, arquivos: File[] = []) {
     if (!montado.ok) {
       setFalta(MENSAGEM_CAMPO[montado.campo] ?? "Confira os campos.");
       return;
     }
     setFalta(null);
+    let r: Recibo;
     try {
-      setRecibo(await enviar<Recibo>(caminho, montado.corpo));
+      r = await enviar<Recibo>(caminho, montado.corpo);
+      setRecibo(r);
     } catch {
-      // `erro` já traz a mensagem
+      return; // `erro` já traz a mensagem
     }
+    if (arquivos.length > 0) await enviarOsAnexos(r.protocolo, arquivos);
   }
-  return { submeter, recibo, enviando: estado === "enviando", mensagem: falta ?? erro };
+
+  const saidaBloqueada = fase === "buscando" || anexos.enviando;
+  // o que mostrar ABAIXO do recibo, fora do cartao `role=status`: a busca do id, a falha dela (com os nomes) ou o resultado de cada arquivo
+  const resultadoDosAnexos = (
+    <>
+      {fase === "buscando" && (
+        <section className="anx-envio" aria-label="Envio dos anexos">
+          <p className="anx-nao-feche"><b>Enviando anexos, não feche esta página.</b></p>
+          <p role="status">Enviando seus anexos…</p>
+        </section>
+      )}
+      {fase === "falhou" && recibo && (
+        <section className="anx-envio" aria-label="Envio dos anexos">
+          <p className="pf-ajuda" role="status">
+            O pedido foi registrado, mas não conseguimos enviar os arquivos agora. Anexe em Meus protocolos: vale até 10
+            minutos depois de enviar o pedido. Os arquivos que você escolheu continuam aqui:
+          </p>
+          <ul className="anx-pendentes" aria-label="Arquivos que não foram enviados">
+            {pendentes.map((a, i) => (
+              <li key={`${a.name}:${i}`}>{a.name}</li>
+            ))}
+          </ul>
+          <div>
+            <button type="button" className="btn btn-contorno btn-mini" aria-label="Tentar de novo o envio dos anexos"
+              onClick={() => void enviarOsAnexos(recibo.protocolo, pendentes)}>
+              Tentar de novo
+            </button>
+          </div>
+        </section>
+      )}
+      <PainelDeEnvio
+        itens={anexos.itens}
+        podeTentarDeNovo={!anexos.enviando}
+        aoTentarDeNovo={(i) => void anexos.tentarDeNovo(i)}
+        semJanela="Já não dá para anexar: passaram os 10 minutos depois de enviar o pedido, ou o pedido já tem 5 anexos seus."
+      />
+    </>
+  );
+  return { submeter, recibo, enviando: estado === "enviando", mensagem: falta ?? erro, resultadoDosAnexos, saidaBloqueada };
 }
 
 export function Alerta({ mensagem }: { mensagem: string | null }) {
@@ -198,6 +301,34 @@ export function Alerta({ mensagem }: { mensagem: string | null }) {
       {mensagem}
     </p>
   ) : null;
+}
+
+/** O seletor dos anexos do pedido: o mesmo dos balcões, com a regra dita em palavras. */
+function AnexosDoPedido({
+  id,
+  rotulo,
+  arquivos,
+  aoMudar,
+  desabilitado,
+}: {
+  id: string;
+  rotulo: string;
+  arquivos: File[];
+  aoMudar: (a: File[]) => void;
+  desabilitado: boolean;
+}) {
+  return (
+    <div className="pf-campo pf-anexos">
+      <SeletorDeAnexos
+        id={id}
+        rotulo={rotulo}
+        arquivos={arquivos}
+        aoMudar={aoMudar}
+        desabilitado={desabilitado}
+        dica="Eles sobem logo depois que você enviar o pedido; depois de 10 minutos não dá mais para anexar."
+      />
+    </div>
+  );
 }
 
 function Enviar({ rotulo, enviando }: { rotulo: string; enviando: boolean }) {
@@ -238,9 +369,10 @@ function PrazoLista({ itens }: { itens: ReactNode[] }) {
 // ---------------------------------------------------------------- e-SIC
 
 export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "esic");
   const [assunto, setAssunto] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
 
   let card: ReactNode;
   if (sessao.estado !== "cidada") {
@@ -253,7 +385,7 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
       />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} />;
+    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} saidaBloqueada={f.saidaBloqueada}>{f.resultadoDosAnexos}</ReciboProtocolo>;
   } else {
     card = (
       <form
@@ -261,7 +393,7 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void f.submeter(corpoEsic({ assunto, descricao }), "/portal/esic/pedidos");
+          void f.submeter(corpoEsic({ assunto, descricao }), "/portal/esic/pedidos", arquivos);
         }}
       >
         <h2>Novo pedido de informação</h2>
@@ -276,6 +408,8 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
             placeholder="Ex.: a lista dos contratos de limpeza assinados em 2025, com valores e empresas."
             onChange={(e) => setDescricao(e.target.value)} />
         </Campo>
+        <AnexosDoPedido id="esic-anexos" rotulo="Anexar documentos ao pedido (opcional)" arquivos={arquivos}
+          aoMudar={setArquivos} desabilitado={f.enviando} />
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar pedido" enviando={f.enviando} />
       </form>
@@ -301,9 +435,10 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
 // ---------------------------------------------------------------- LGPD
 
 export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: Sessao; tipoInicial: string }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "lgpd");
   const [tipo, setTipo] = useState(tipoInicial);
   const [detalhe, setDetalhe] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
   const voltar = `/portal/casa/${ente}/lgpd/novo${tipoInicial ? `?tipo=${tipoInicial}` : ""}`;
 
   let card: ReactNode;
@@ -313,7 +448,7 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         porque="Os pedidos sobre os seus dados exigem identificação formal: a Câmara só responde ao próprio titular." />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} />;
+    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} saidaBloqueada={f.saidaBloqueada}>{f.resultadoDosAnexos}</ReciboProtocolo>;
   } else {
     card = (
       <form
@@ -321,7 +456,7 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void f.submeter(corpoLgpd({ tipo, detalhe }), "/portal/lgpd/solicitacoes");
+          void f.submeter(corpoLgpd({ tipo, detalhe }), "/portal/lgpd/solicitacoes", arquivos);
         }}
       >
         <h2>O que você quer pedir</h2>
@@ -346,6 +481,8 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         <Campo id="lgpd-detalhe" rotulo="Detalhe (opcional)" dica="Ex.: qual dado corrigir e o valor certo.">
           <textarea id="lgpd-detalhe" value={detalhe} maxLength={LIMITES.detalhe} onChange={(e) => setDetalhe(e.target.value)} />
         </Campo>
+        <AnexosDoPedido id="lgpd-anexos" rotulo="Anexar documentos ao pedido (opcional)" arquivos={arquivos}
+          aoMudar={setArquivos} desabilitado={f.enviando} />
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar pedido" enviando={f.enviando} />
       </form>
@@ -414,12 +551,15 @@ function AcompanharManifestacao({ ente }: { ente: string }) {
 }
 
 export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "ouvidoria");
   const [tipo, setTipo] = useState("reclamacao");
   const [assunto, setAssunto] = useState("");
   const [descricao, setDescricao] = useState("");
   const [anonima, setAnonima] = useState(false);
   const [enviadaAnonima, setEnviadaAnonima] = useState(false);
+  const [arquivos, setArquivos] = useState<File[]>([]);
+  // quantos arquivos ja' escolhidos foram DESCARTADOS ao marcar "sem me identificar" (anonima nao leva anexo): a tela avisa
+  const [descartados, setDescartados] = useState(0);
 
   let card: ReactNode;
   if (sessao.estado !== "cidada") {
@@ -428,7 +568,12 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
         porque="Mesmo para manifestar sem se identificar, entre com o gov.br: se escolher o anonimato, seu nome não fica registrado na manifestação." />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Manifestação registrada" recibo={f.recibo} ente={ente} anonima={enviadaAnonima} />;
+    card = (
+      <ReciboProtocolo titulo="Manifestação registrada" recibo={f.recibo} ente={ente} anonima={enviadaAnonima}
+        saidaBloqueada={f.saidaBloqueada}>
+        {f.resultadoDosAnexos}
+      </ReciboProtocolo>
+    );
   } else {
     card = (
       <form
@@ -437,7 +582,8 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
         onSubmit={(e) => {
           e.preventDefault();
           setEnviadaAnonima(anonima);
-          void f.submeter(corpoManifestacao({ tipo, assunto, descricao, anonima }), "/portal/ouvidoria/manifestacoes");
+          // anônima não tem dono, então não tem anexo: nada além da manifestação é enviado
+          void f.submeter(corpoManifestacao({ tipo, assunto, descricao, anonima }), "/portal/ouvidoria/manifestacoes", anonima ? [] : arquivos);
         }}
       >
         <h2>Nova manifestação</h2>
@@ -472,14 +618,23 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
         <fieldset className="pf-ident">
           <legend className="sr-only">Como deseja se identificar</legend>
           <label className="pf-op">
-            <input type="radio" name="ident" checked={!anonima} onChange={() => setAnonima(false)} />
+            <input type="radio" name="ident" checked={!anonima}
+              onChange={() => {
+                setAnonima(false);
+                setDescartados(0);
+              }} />
             <span className="t">
               <b>Identificar-me</b>
               <span>Você acompanha a resposta e pode receber retorno individual. Seus dados ficam protegidos pela LGPD.</span>
             </span>
           </label>
           <label className="pf-op">
-            <input type="radio" name="ident" checked={anonima} onChange={() => setAnonima(true)} />
+            <input type="radio" name="ident" checked={anonima}
+              onChange={() => {
+                setAnonima(true);
+                setDescartados(arquivos.length);
+                setArquivos([]); // sem identificação não há anexo: o que foi escolhido não vai
+              }} />
             <span className="t">
               <b>Manifestar sem me identificar</b>
               <span>
@@ -489,6 +644,21 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
             </span>
           </label>
         </fieldset>
+        {anonima ? (
+          <>
+            <p className="pf-ajuda">
+              Manifestação anônima não leva anexo: sem identificação, ninguém é dono do protocolo para juntar arquivos a ele.
+            </p>
+            {descartados > 0 && (
+              <p className="pf-ajuda" role="status">
+                {descartados === 1 ? "O arquivo que você escolheu foi descartado." : `Os ${descartados} arquivos que você escolheu foram descartados.`}
+              </p>
+            )}
+          </>
+        ) : (
+          <AnexosDoPedido id="ouv-anexos" rotulo="Anexar documentos à manifestação (opcional)" arquivos={arquivos}
+            aoMudar={setArquivos} desabilitado={f.enviando} />
+        )}
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar manifestação" enviando={f.enviando} />
       </form>

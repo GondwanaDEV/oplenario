@@ -3,6 +3,21 @@
  :deps {org.clojure/clojure                     {:mvn/version "1.12.0"}
         io.pedestal/pedestal.service            {:mvn/version "0.7.2"}
         io.pedestal/pedestal.jetty              {:mvn/version "0.7.2"}
+        ;; O PARSER DE UPLOAD multipart (anexos dos comunicados e do balcao, documentos das contas) e' o
+        ;; commons-fileupload2-core — usado DIRETO em `oplenario.interceptors/anexo-multipart` e pelo multipart do Ring.
+        ;; Ele chegava TRANSITIVO, pelo ring-core 1.12.0 do Pedestal 0.7.2, na 2.0.0-M1 — dentro da faixa do
+        ;; CVE-2025-48976 / GHSA-vv7r-c36w-3prj (>= 2.0.0-M1, < 2.0.0-M4: cabecalho de parte do multipart sem teto
+        ;; suficiente = DoS), conferido em osv.dev e no GitHub Advisory em 04/10/2026. As duas linhas abaixo sao
+        ;; DECLARADAS de proposito e andam EM PAR: a API do fileupload mudou entre milestones
+        ;; (`RequestContext/isMultipartRelated` e' novo, `setFileSizeMax` virou `setMaxFileSize`) e o ring-core 1.12.0
+        ;; com a M4 morre em `AbstractMethodError` no primeiro upload (medido). ring-core 1.14.2 e' o primeiro que traz
+        ;; a correcao (M4); do 1.15.4 em diante vem a M5. Trocar uma sem a outra, so' depois de rodar
+        ;; `oplenario.multipart-limite-test` (a trava) e os testes de upload.
+        ;; EFEITO da correcao: o cabecalho de cada parte passa a ter teto de 512 bytes (eram 10 KB), e o Ring nao expoe
+        ;; esse teto — nome de arquivo acima de ~410 bytes em UTF-8 volta 400.
+        ;; Pedestal 0.8.x ja' declara ring-core 1.15.x, mas e' troca de linha (Jetty 12): frente propria.
+        ring/ring-core                          {:mvn/version "1.15.5"}
+        org.apache.commons/commons-fileupload2-core {:mvn/version "2.0.0-M5"}
         com.stuartsierra/component              {:mvn/version "1.1.0"}
         com.github.seancorfield/next.jdbc       {:mvn/version "1.3.955"}
         com.github.seancorfield/honeysql        {:mvn/version "2.6.1230"}

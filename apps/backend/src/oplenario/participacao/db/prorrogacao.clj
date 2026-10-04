@@ -38,3 +38,17 @@
      (sql/format {:select cols :from [:participacao.prorrogacao]
                   :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:= :objeto_id objeto-id]]
                   :order-by [[:criado_em :desc] [:id :desc]]}))))
+
+(defn listar-por-objetos
+  "As prorrogacoes de VARIOS objetos do MESMO tipo, numa UNICA consulta (ente, objeto_tipo, objeto_id IN ids) — a vista
+  'meus protocolos' le a lista inteira sem uma ida ao banco por item. Mais antigas primeiro (o chamador fica com a ultima,
+  a mais recente, por objeto). `ids` vazio -> [] sem consultar (IN () nao e' SQL valido)."
+  [tx ente-id objeto-tipo ids]
+  {:pre [(some? ente-id) (some? objeto-tipo)]}
+  (if (empty? ids)
+    []
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select cols :from [:participacao.prorrogacao]
+                    :where [:and [:= :ente_id ente-id] [:= :objeto_tipo objeto-tipo] [:in :objeto_id ids]]
+                    :order-by [[:prorrogado_em :asc] [:id :asc]]})))))

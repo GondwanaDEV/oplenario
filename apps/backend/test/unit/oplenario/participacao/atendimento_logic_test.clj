@@ -52,17 +52,17 @@
 (deftest acoes-cabiveis-por-estado
   (let [pendente {:estado "pendente" :vence-em (d "2026-07-20")}]
     (testing "e-SIC"
-      (is (= {:pode-responder true :pode-prorrogar true :recurso-pendente-id nil}
+      (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar true :recurso-pendente-id nil}
              (logic/acoes-do-balcao :esic {:estado "protocolado" :prazo pendente})))
-      (is (= {:pode-responder true :pode-prorrogar false :recurso-pendente-id nil}
+      (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar false :recurso-pendente-id nil}
              (logic/acoes-do-balcao :esic {:estado "protocolado"
                                            :prazo (assoc pendente :prorrogado-ate (d "2026-07-30"))}))
           "prorrogar so' uma vez")
-      (is (= {:pode-responder true :pode-prorrogar false :recurso-pendente-id nil}
+      (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar false :recurso-pendente-id nil}
              (logic/acoes-do-balcao :esic {:estado "protocolado" :prazo (assoc pendente :estado "vencida")}))
           "prazo ja' vencido nao prorroga (a CAS exige pendente)")
       (let [rid (random-uuid)]
-        (is (= {:pode-responder false :pode-prorrogar false :recurso-pendente-id rid}
+        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :recurso-pendente-id rid}
                (logic/acoes-do-balcao :esic {:estado "respondido" :prazo (assoc pendente :estado "cumprida")
                                              :recurso {:id rid :estado "protocolado"}})))))
     (testing "ouvidoria"
@@ -71,8 +71,8 @@
       (is (= {:pode-responder false :pode-arquivar false :pode-prorrogar false}
              (logic/acoes-do-balcao :ouvidoria {:estado "arquivada" :prazo (assoc pendente :estado "cancelada")}))))
     (testing "LGPD"
-      (is (= {:pode-responder true} (logic/acoes-do-balcao :lgpd {:estado "protocolada"})))
-      (is (= {:pode-responder false} (logic/acoes-do-balcao :lgpd {:estado "respondida"}))))))
+      (is (= {:pode-responder true :pode-indeferir true} (logic/acoes-do-balcao :lgpd {:estado "protocolada"})))
+      (is (= {:pode-responder false :pode-indeferir false} (logic/acoes-do-balcao :lgpd {:estado "respondida"}))))))
 
 (deftest ouvidoria-so-diz-se-e-identificada
   (is (= "anonima" (logic/identificacao-da-manifestacao {:anonima true})))

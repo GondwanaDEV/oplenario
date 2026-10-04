@@ -5,9 +5,13 @@
 // rotas de servidor que já existiam no módulo participacao, com o corpo EXATO que cada uma aceita:
 //   · responder  — POST /api/esic/pedidos/{id}/resposta · /api/ouvidoria/manifestacoes/{id}/resposta ·
 //                  /api/lgpd/solicitacoes/{id}/resposta, todas {corpo}
+//   · indeferir  — POST /api/esic/pedidos/{id}/indeferir · /api/lgpd/solicitacoes/{id}/indeferir, ambas {fundamentacao}
 //   · recurso    — POST /api/esic/recursos/{id}/decisao {corpo}
 //   · prorrogar  — POST /api/esic/pedidos/{id}/prorrogar · /api/ouvidoria/manifestacoes/{id}/prorrogar, {justificativa}
 //   · arquivar   — POST /api/ouvidoria/manifestacoes/{id}/arquivar {motivo}
+//   · anexar     — POST /api/atendimento/{especie}/{id}/anexos (multipart, campo `arquivo`, UM por chamada, DEPOIS do ato)
+//   · baixar     — GET  /api/atendimento/{especie}/{id}/anexos/{anexo} (a secretaria; o cidadão tem a rota dele)
+//   · retirar    — POST /api/atendimento/{especie}/{id}/anexos/{anexo}/retirar ({motivo}; incidente de conteúdo)
 //   · encarregado — GET/PUT /api/lgpd/encarregado {nome, rotulo, email}
 // A authz real é o backend (papel `secretario`); aqui só se traduz cada resposta em frase honesta. Uma rota que falha
 // vira erro na tela, nunca uma lista vazia fingindo.
@@ -15,9 +19,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
+import { CAMPO_DO_ANEXO } from "./anexos-do-atendimento";
 import { semCredencial } from "./modo";
 import { mensagemDeErroAtendimento, type AcaoAtendimento, type Especie, type Situacao } from "./atendimento-vista";
 import type {
+  AnexoOut,
   DetalheEsicOut,
   DetalheLgpdOut,
   DetalheOuvidoriaOut,
@@ -39,20 +45,29 @@ async function pedir<T>(
   token: string | null,
   caminho: string,
   acao: AcaoAtendimento,
-  init: { method?: string; corpo?: unknown } = {},
+  init: { method?: string; corpo?: unknown; arquivo?: File } = {},
 ): Promise<Resultado<T>> {
   if (semCredencial(token)) return { ok: false, status: 401, mensagem: mensagemDeErroAtendimento(401, acao) };
   try {
-    const r = await apiFetch(caminho, {
-      token: token ?? undefined,
-      cache: "no-store",
-      method: init.method,
-      ...(init.corpo !== undefined
-        ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(init.corpo) }
-        : {}),
-    });
+    // multipart (anexo): SEM Content-Type — o navegador põe o boundary
+    let extra: RequestInit = {};
+    if (init.arquivo) {
+      const fd = new FormData();
+      fd.append(CAMPO_DO_ANEXO, init.arquivo, init.arquivo.name);
+      extra = { body: fd };
+    } else if (init.corpo !== undefined) {
+      extra = { headers: { "Content-Type": "application/json" }, body: JSON.stringify(init.corpo) };
+    }
+    const r = await apiFetch(caminho, { token: token ?? undefined, cache: "no-store", method: init.method, ...extra });
     const corpo = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, status: r.status, mensagem: mensagemDeErroAtendimento(r.status, acao) };
+    if (!r.ok) {
+      const erro = (corpo as { erro?: unknown })?.erro;
+      return {
+        ok: false,
+        status: r.status,
+        mensagem: mensagemDeErroAtendimento(r.status, acao, typeof erro === "string" ? erro : undefined),
+      };
+    }
     return { ok: true, dado: camelizarChaves(corpo) as T };
   } catch {
     return { ok: false, status: 0, mensagem: mensagemDeErroAtendimento(0, acao) };
@@ -66,16 +81,21 @@ function useCarregar<T>(token: string | null, caminho: string | null, acao: Acao
     estado: { fase: "carregando" },
   });
   const [rev, setRev] = useState(0);
+  // `atualizando`: uma RELEITURA pedida por `recarregar` esta' em voo. O dado na tela e' o de antes dela: quem decide algo a
+  // partir do dado (ex.: "ainda cabe anexar?") trata esse intervalo como "nao sei", nunca como o valor velho.
+  const [atualizando, setAtualizando] = useState(false);
   useEffect(() => {
     if (!caminho || semCredencial(token)) return;
     let vivo = true;
     (async () => {
       const r = await pedir<T>(token, caminho, acao);
-      if (vivo)
+      if (vivo) {
         setCarga({
           caminho,
           estado: r.ok ? { fase: "pronto", dado: r.dado } : { fase: "erro", status: r.status, mensagem: r.mensagem },
         });
+        setAtualizando(false);
+      }
     })();
     return () => {
       vivo = false;
@@ -90,8 +110,11 @@ function useCarregar<T>(token: string | null, caminho: string | null, acao: Acao
       : carga.caminho === caminho
         ? carga.estado
         : { fase: "carregando" };
-  const recarregar = useCallback(() => setRev((n) => n + 1), []);
-  return { estado, recarregar };
+  const recarregar = useCallback(() => {
+    setAtualizando(true);
+    setRev((n) => n + 1);
+  }, []);
+  return { estado, recarregar, atualizando };
 }
 
 const enc = encodeURIComponent;
@@ -117,6 +140,23 @@ export function responder(token: string | null, especie: Especie, id: string, co
   return pedir<{ respondidaEm: string }>(token, RESPONDER[especie](id), "responder", { method: "POST", corpo: { corpo } });
 }
 
+/** Indeferir (recusa fundamentada: LAI art. 11 §1º II no e-SIC; LGPD art. 18 §4º): devolve o instante do ato
+ *  (`indeferidoEm` no pedido, `indeferidaEm` na solicitação — a chave segue o gênero do estado; aqui já normalizado). */
+export async function indeferir(
+  token: string | null,
+  especie: "esic" | "lgpd",
+  id: string,
+  fundamentacao: string,
+): Promise<Resultado<{ indeferidoEm: string }>> {
+  const caminho = especie === "esic" ? `/api/esic/pedidos/${enc(id)}/indeferir` : `/api/lgpd/solicitacoes/${enc(id)}/indeferir`;
+  const r = await pedir<{ indeferidoEm?: string; indeferidaEm?: string }>(token, caminho, "indeferir", {
+    method: "POST",
+    corpo: { fundamentacao },
+  });
+  if (!r.ok) return r;
+  return { ok: true, dado: { indeferidoEm: r.dado.indeferidoEm ?? r.dado.indeferidaEm ?? "" } };
+}
+
 /** Decidir o recurso do e-SIC: devolve {decididoEm}. */
 export function decidirRecurso(token: string | null, recursoId: string, corpo: string) {
   return pedir<{ decididoEm: string }>(token, `/api/esic/recursos/${enc(recursoId)}/decisao`, "decidir-recurso", {
@@ -138,6 +178,51 @@ export function arquivar(token: string | null, id: string, motivo: string) {
     method: "POST",
     corpo: { motivo },
   });
+}
+
+// ---- os anexos da resposta ----
+
+/** O endereço do anexo no balcão (a secretaria). O requerente tem o dele em /portal/meus-protocolos/... */
+export const rotaDoAnexoNoBalcao = (especie: Especie, id: string, anexoId: string) =>
+  `/api/atendimento/${especie}/${enc(id)}/anexos/${enc(anexoId)}`;
+
+/** Um anexo por chamada, DEPOIS do ato (a rota pede a resposta já gravada). Devolve o anexo criado. */
+export function anexar(token: string | null, especie: Especie, id: string, arquivo: File) {
+  return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos`, "anexar", { method: "POST", arquivo });
+}
+
+/** RETIRAR um anexo (incidente de conteúdo): o arquivo sai do armazenamento, o download vira 404 para todos e a vaga do limite
+ *  volta. Motivo obrigatório. Idempotente: retirar de novo devolve a mesma retirada. Devolve o anexo, com `retiradoEm`. */
+export function retirarAnexo(token: string | null, especie: Especie, id: string, anexoId: string, motivo: string) {
+  return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos/${enc(anexoId)}/retirar`, "retirar-anexo", {
+    method: "POST",
+    corpo: { motivo },
+  });
+}
+
+/** Modo DEV (token no header): o link cru não leva o `Authorization`, então baixa pelos bytes e dispara o download aqui
+ *  (mesma escolha dos anexos de comunicado). No modo real a tela usa um link direto — o cookie vai junto. */
+export async function baixarAnexoComToken(token: string, caminho: string, nome: string): Promise<Resultado<null>> {
+  let blob: Blob;
+  try {
+    const r = await apiFetch(caminho, { token, cache: "no-store" });
+    if (!r.ok) return { ok: false, status: r.status, mensagem: mensagemDeErroAtendimento(r.status, "baixar-anexo") };
+    blob = await r.blob();
+  } catch {
+    return { ok: false, status: 0, mensagem: mensagemDeErroAtendimento(0, "baixar-anexo") };
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nome;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  return { ok: true, dado: null };
 }
 
 // ---- o encarregado de dados da Casa ----

@@ -4,18 +4,13 @@
   `lido` para o destinatario. Comunicado que o ator nao pode ver responde 404 (nao confirma que existe).
 
   `hoje` (o dia civil da Casa) e `agora` vem do relogio injetado, lidos aqui na borda via o controller."
-  (:require [clojure.string :as str]
-            [oplenario.comunicacao.adapters.in.comunicado :as adapters-in]
+  (:require [oplenario.comunicacao.adapters.in.comunicado :as adapters-in]
             [oplenario.comunicacao.adapters.out.comunicado :as adapters-out]
             [oplenario.comunicacao.controllers :as controllers]
             [oplenario.comunicacao.logic :as logic]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
-            [io.pedestal.interceptor.chain :as chain]
-            [ring.middleware.multipart-params :as multipart])
-  (:import (java.io InputStream)
-           (java.net URLEncoder)
-           (java.nio.charset StandardCharsets)))
+            [oplenario.kernel.arquivo :as arquivo]))
 
 (set! *warn-on-reflection* true)
 
@@ -107,54 +102,10 @@
 
 ;; ---------- anexos (fatia 2): um arquivo por requisicao, multipart ----------
 
-(defn- ler-ate
-  "Le o stream ate' `teto` bytes; passou -> :corpo/grande (nunca aloca alem do teto + 1 bloco)."
-  ^bytes [^InputStream in teto]
-  (let [out (java.io.ByteArrayOutputStream.)
-        buf (byte-array 8192)]
-    (loop [total 0]
-      (let [n (.read in buf)]
-        (if (neg? n)
-          (.toByteArray out)
-          (let [t (+ total (long n))]
-            (when (> t (long teto)) (throw (ex-info "arquivo grande demais" {:tipo :corpo/grande})))
-            (.write out buf 0 n)
-            (recur t)))))))
-
-(def ^:private folga-do-envelope
-  "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
-  (* 64 1024))
-
+;; O interceptor do upload (`it/anexo-multipart`) e' o compartilhado do host; aqui so' o teto de 10 MB do comunicado.
 (def anexo-multipart
-  "Interceptor do upload de anexo: `multipart/form-data` com UM arquivo (o campo pode se chamar `arquivo`). O arquivo e'
-  lido para memoria com teto de 10 MB (o object storage recebe os bytes e o sha256 sai deles); corpo acima do teto ->
-  413, sem arquivo/mais de um/malformado -> 400. Resultado em `(:request :anexo)` {:nome :tipo-midia :conteudo}."
-  {:name ::anexo-multipart
-   :enter (fn [ctx]
-            (let [req (:request ctx)
-                  tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
-                  recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))]
-              (if (and tamanho (> (long tamanho) (+ logic/max-bytes-anexo folga-do-envelope)))
-                (recusa 413 "O anexo passa de 10 MB.")
-                (try
-                  (let [params (:multipart-params
-                                (multipart/multipart-params-request
-                                 req {:max-file-count 1
-                                      :store (fn [{:keys [filename content-type stream]}]
-                                               {:nome (logic/nome-de-arquivo filename)
-                                                :tipo-midia (logic/tipo-de-midia content-type)
-                                                :conteudo (ler-ate stream logic/max-bytes-anexo)})}))
-                        arquivos (filter #(and (map? %) (:conteudo %)) (vals params))]
-                    (cond
-                      (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
-                      (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
-                      :else (assoc-in ctx [:request :anexo] (first arquivos))))
-                  (catch clojure.lang.ExceptionInfo e
-                    (if (= :corpo/grande (:tipo (ex-data e)))
-                      (recusa 413 "O anexo passa de 10 MB.")
-                      (recusa 400 "Envie um arquivo por vez (campo arquivo).")))
-                  (catch Exception _
-                    (recusa 400 "O envio do arquivo veio malformado."))))))})
+  "O interceptor do upload de anexo do comunicado: o generico do host com o teto de `logic/max-bytes-anexo`."
+  (it/anexo-multipart {:max-bytes logic/max-bytes-anexo}))
 
 (defn- anexar-handler [deps]
   (fn [req]
@@ -165,13 +116,6 @@
               :auditoria {:rotulo (:nome a) :recurso-tipo "comunicado" :recurso-id (str (:comunicado-id a))})
        nao-encontrado))))
 
-(defn- content-disposition
-  "attachment com o nome em ASCII (fallback) e em UTF-8 (RFC 5987) — o nome ja' vem sem aspas nem controle."
-  [nome]
-  (let [ascii (str/replace nome #"[^\x20-\x7E]" "_")
-        utf8 (str/replace (URLEncoder/encode ^String nome StandardCharsets/UTF_8) "+" "%20")]
-    (str "attachment; filename=\"" ascii "\"; filename*=UTF-8''" utf8)))
-
 (defn- baixar-anexo-handler [deps]
   (fn [req]
     (if-let [{:keys [anexo stream]} (let [id (adapters-in/id-do-path req :id)
@@ -180,7 +124,7 @@
       {:status 200
        :headers {"Content-Type" (:tipo-midia anexo)
                  "Content-Length" (str (:bytes anexo))
-                 "Content-Disposition" (content-disposition (:nome anexo))}
+                 "Content-Disposition" (arquivo/content-disposition (:nome anexo))}
        :body stream}
       nao-encontrado)))
 

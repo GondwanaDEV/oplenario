@@ -153,8 +153,16 @@ describe("PainelTribuna — cronômetro", () => {
 
   it("+1 min concede 60s; Aparte concede aparte", async () => {
     montar({ tribuna: { sessaoId: "s1", oradorAtual: orador(), marcosCronometro: [], inscritos: [] } });
+    // a 1ª ação demora a responder: enquanto ela está em voo os botões ficam desabilitados
+    registrarEventoCronometro.mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ok: true }), 30)),
+    );
     fireEvent.click(screen.getByRole("button", { name: /\+1 min/ }));
     await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "tempo_adicional_concedido", 60));
+    const aparte = screen.getByRole("button", { name: /^Aparte$/ }) as HTMLButtonElement;
+    expect(aparte.disabled).toBe(true);
+    // clicar com o botão desabilitado não faz nada: o teste clicava cedo demais e falhava sob carga no CI
+    await waitFor(() => expect(aparte.disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: /^Aparte$/ }));
     await waitFor(() => expect(registrarEventoCronometro).toHaveBeenCalledWith("f1", "aparte_concedido", undefined));
   });

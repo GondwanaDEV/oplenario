@@ -382,8 +382,12 @@ jobs:
               const ie = fe.body?.itens ?? [], io = fo.body?.itens ?? [], il = fl.body?.itens ?? [];
               const de = ie[0] ? await api(cSec, `/api/atendimento/esic/${ie[0].id}`) : { status: 0, body: null };
               const dout = io[0] ? await api(cSec, `/api/atendimento/ouvidoria/${io[0].id}`) : { status: 0, body: null };
+              // Os ids saem do texto antes de procurar CPF: o uuid da demo e' so' digito (…-000000000420) e casava
+              // com o padrao de CPF, reprovando o sigilo sem vazamento nenhum.
+              const semIds = JSON.stringify(dout.body || {})
+                .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '');
               const sigilo = dout.body && !('manifestante' in dout.body) && !('requerente' in dout.body)
-                && !/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(JSON.stringify(dout.body));
+                && !/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(semIds);
               const ver = await api(cVer, '/api/atendimento/esic');
               const p = await cSec.newPage();
               await p.goto(`${B}/atendimento`, { waitUntil: 'domcontentloaded', timeout: 30000 });

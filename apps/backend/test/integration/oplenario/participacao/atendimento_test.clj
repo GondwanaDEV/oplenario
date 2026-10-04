@@ -110,7 +110,7 @@
         (is (= "Maria das Dores" (get-in d [:requerente :nome])))
         (is (= (str "***." (subs cpf 3 6) "." (subs cpf 6 9) "-**") (get-in d [:requerente :cpf-mascarado])))
         (is (not (str/includes? (json/write-value-as-string d) cpf)) "o CPF inteiro nunca sai")
-        (is (= {:pode-responder true :pode-prorrogar true :recurso-pendente-id nil} (:acoes d)))
+        (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar true :pode-anexar false :recurso-pendente-id nil} (:acoes d)))
         (is (= 12 (:dias-restantes d)))
         (is (= [] (:historico d)))))
     (testing "prorrogar (LAI art. 11 §2º): +10 sobre o vencimento original, uma vez so'"
@@ -132,7 +132,7 @@
       (let [rec (controllers/interpor-recurso! *repo* (relogio "2026-07-03T17:00:00Z") (cidadao ente eu) (:id p)
                                                {:motivo "Faltou o valor."})
             d (ver)]
-        (is (= {:pode-responder false :pode-prorrogar false :recurso-pendente-id (str (:id rec))} (:acoes d)))
+        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :pode-anexar true :recurso-pendente-id (str (:id rec))} (:acoes d)))
         (is (:aberto d) "o recurso pendente mantem o item aberto")
         (is (= {:protocolo (:protocolo rec) :motivo "Faltou o valor." :estado "protocolado"}
                (select-keys (:recurso d) [:protocolo :motivo :estado])))
@@ -173,14 +173,14 @@
         (is (not-any? #(contains? % eu) @chamados) "o manifestante nunca chega ao seam de pessoas")
         (is (= {:prazo-vigente "2026-08-19" :prorrogado true :dias-restantes 47}
                (select-keys d [:prazo-vigente :prorrogado :dias-restantes])) "prorrogada por igual periodo")
-        (is (= {:pode-responder true :pode-arquivar true :pode-prorrogar false} (:acoes d)))
+        (is (= {:pode-responder true :pode-arquivar true :pode-prorrogar false :pode-anexar false} (:acoes d)))
         (is (= "Ouvidor" (:por (first (:historico d)))) "quem prorrogou pela Casa, sim, pelo nome")))
     (testing "arquivar: o motivo vira 'arquivamento' no historico e o item sai dos abertos"
       (controllers/arquivar-manifestacao! *repo* hoje sec (:id anon) {:motivo "Fora da competencia da Camara."})
       (let [d (out/ouvidoria->wire (controllers/atendimento-ouvidoria *repo* hoje (pessoas chamados) sec (:id anon)))]
         (is (= "anonima" (:identificacao d)))
         (is (= [["arquivamento" "Fora da competencia da Camara."]] (map (juxt :tipo :texto) (:historico d))))
-        (is (= {:pode-responder false :pode-arquivar false :pode-prorrogar false} (:acoes d))))
+        (is (= {:pode-responder false :pode-arquivar false :pode-prorrogar false :pode-anexar false} (:acoes d))))
       (is (= [(:protocolo ident)] (map :protocolo (:itens (fila sec :ouvidoria "abertos")))))
       (is (= [(:protocolo anon)] (map :protocolo (:itens (fila sec :ouvidoria "respondidos"))))))))
 
@@ -201,7 +201,7 @@
       (is (not (str/includes? (json/write-value-as-string d) cpf)))
       (is (= "Quero ver o que a Camara guarda." (:detalhe d)))
       (is (= [["resposta" "Encarregada"]] (map (juxt :tipo :por) (:historico d))))
-      (is (= {:pode-responder false} (:acoes d)))
+      (is (= {:pode-responder false :pode-indeferir false :pode-anexar true} (:acoes d)))
       (is (empty? (:itens (fila sec :lgpd "abertos")))))))
 
 ;; ---------------------------------------------------------------- a borda HTTP

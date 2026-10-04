@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:atraso": "vitest run -c vitest.atraso.config.ts"
   },
   "dependencies": {
     "next": "16.2.9",

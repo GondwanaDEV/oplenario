@@ -17,6 +17,9 @@
 (defn emitir-pedido-respondido! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-pedido/respondido ente-id payload)))
 
+(defn emitir-pedido-indeferido! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-pedido/indeferido ente-id payload)))
+
 (defn emitir-recurso-protocolado! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-recurso/protocolado ente-id payload)))
 
@@ -31,6 +34,9 @@
 
 (defn emitir-solicitacao-titular-respondida! [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev-titular/respondida ente-id payload)))
+
+(defn emitir-solicitacao-titular-indeferida! [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev-titular/indeferida ente-id payload)))
 
 ;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
 

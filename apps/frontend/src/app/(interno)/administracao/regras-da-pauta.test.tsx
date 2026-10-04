@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { RegrasDaPauta } from "./regras-da-pauta";
 
 // ADR-0019 fatia 3: o bloco "Regras da pauta" do admin_ente — o padrão dito como padrão, as quatro opções, a
@@ -54,7 +54,11 @@ describe("RegrasDaPauta", () => {
     expect(chamadas.filter((c) => c.metodo === "PUT")).toHaveLength(0);
     fireEvent.change(campo, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar regras da pauta" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("Só o administrador da Casa muda a regra da pauta.");
+    // a recusa do servidor chega depois: `findByRole("alert")` devolvia na hora o alerta ANTERIOR (o da validação
+    // local, ainda na tela) e a asserção do texto dependia de a resposta já ter sido pintada. Espera-se o texto.
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe("Só o administrador da Casa muda a regra da pauta."),
+    );
     expect(chamadas.find((c) => c.metodo === "PUT")?.body).toEqual({ "quem-publica": "mesa", "antecedencia-minima-horas": null });
   });
 });

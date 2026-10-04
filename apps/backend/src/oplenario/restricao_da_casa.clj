@@ -29,11 +29,20 @@
   #{;; os protocolos do cidadao — o direito de pedir nao depende do contrato da Casa
     :participacao/protocolar-esic :participacao/interpor-recurso :participacao/protocolar-manifestacao
     :participacao/solicitar-titular :participacao/comentar :participacao/denunciar-comentario
+    ;; anexar ao proprio protocolo e' parte de protocolar: o direito de pedir (com o documento) nao depende do contrato
+    :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
+    ;; retirar um anexo e' CONTENCAO de incidente de conteudo: a Casa suspensa continua podendo tirar o que nao devia estar la'
+    :participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd
     :transparencia/seguir :transparencia/deixar-de-seguir
     ;; os servidores respondendo aos protocolos do cidadao (prazo legal correndo)
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     :participacao/prorrogar-pedido
+    ;; o indeferimento fundamentado e' o outro jeito de responder (LAI art. 11 §1º II; LGPD art. 18 §4º): o prazo corre igual
+    :participacao/indeferir-pedido :participacao/indeferir-solicitacao
+    ;; o documento que acompanha a resposta (a resposta a um pedido costuma SER um arquivo): anexar e' parte de responder.
+    ;; Baixar e' GET e ja' passa.
+    :participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
     :paineis/marcar-notificacao-lida

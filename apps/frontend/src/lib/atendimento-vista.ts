@@ -4,6 +4,7 @@
 // prazo que vale, o que cabe fazer) vem pronta do servidor — a tela não deduz nada.
 
 import { formatarData, formatarDataSimples, formatarHora } from "./formatar-data";
+import { MENSAGEM_DE_REDE_NO_ANEXO, TIPOS_ACEITOS_EM_TEXTO } from "./anexos-do-atendimento";
 import type { EventoOut } from "./contrato-atendimento.gen";
 
 export type Especie = "esic" | "ouvidoria" | "lgpd";
@@ -146,6 +147,8 @@ export function tituloDoEvento(e: EventoOut): string {
   switch (e.tipo) {
     case "resposta":
       return "Resposta da Casa";
+    case "indeferimento":
+      return "Indeferimento (fundamentação da Casa)";
     case "recurso":
       return `Recurso do requerente${e.protocolo ? ` (${e.protocolo})` : ""}`;
     case "decisao-recurso":
@@ -167,9 +170,13 @@ export type AcaoAtendimento =
   | "listar"
   | "abrir"
   | "responder"
+  | "indeferir"
   | "decidir-recurso"
   | "prorrogar"
   | "arquivar"
+  | "anexar"
+  | "baixar-anexo"
+  | "retirar-anexo"
   | "encarregado"
   | "salvar-encarregado";
 
@@ -177,22 +184,67 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   listar: "",
   abrir: "",
   responder: "Este protocolo já foi respondido ou encerrado por outra pessoa. Recarregue para ver o que mudou.",
+  indeferir: "Este protocolo já foi respondido ou indeferido por outra pessoa. Recarregue para ver o que mudou.",
   "decidir-recurso": "Este recurso já foi decidido. Recarregue para ver a decisão.",
   prorrogar: "O prazo já foi prorrogado uma vez, ou não está mais correndo. A prorrogação só cabe uma vez, antes de vencer.",
   arquivar: "Esta manifestação já foi respondida ou arquivada. Recarregue para ver o que mudou.",
+  anexar: "A Casa não pode anexar agora: o protocolo ainda não tem resposta, passaram os 10 minutos depois dela ou já são 5 anexos.",
+  "baixar-anexo": "",
+  "retirar-anexo": "",
   encarregado: "",
   "salvar-encarregado": "",
 };
 
-export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento): string {
-  if (status === 0) return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
+/** `erroDoServidor` só vale ao ANEXAR: ali o servidor explica o que a pessoa pode corrigir (qual regra, em português). */
+export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento, erroDoServidor?: string): string {
+  if (status === 0) {
+    if (acao === "anexar") return MENSAGEM_DE_REDE_NO_ANEXO;
+    if (acao === "retirar-anexo") return "Falha de rede: não deu para confirmar a retirada. Tente de novo; retirar duas vezes tem o mesmo efeito de uma.";
+    return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
+  }
   if (status === 401) return "Sua sessão expirou. Entre de novo.";
+  if (acao === "retirar-anexo") {
+    if (status === 403) return "Só a secretaria retira anexos.";
+    if (status === 404) return "Não encontramos este anexo — ele pode não existir neste protocolo.";
+    if (status === 400) return "Escreva o motivo da retirada.";
+    if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
+    return "Não foi possível retirar agora. Tente de novo em instantes.";
+  }
+  if (acao === "anexar" || acao === "baixar-anexo") return mensagemDeErroDeAnexo(status, acao, erroDoServidor);
   if (status === 403) return "Esta área é da secretaria. Seu acesso não permite ver ou responder estes protocolos.";
   if (status === 404) return "Não encontramos este protocolo — ele pode não existir nesta Casa.";
   if (status === 409) return CONFLITO[acao] || "O protocolo mudou enquanto você trabalhava. Recarregue a página.";
   if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
   if (status === 400) return "Confira o texto e tente de novo.";
   return "Não foi possível concluir agora. Tente de novo em instantes.";
+}
+
+/** O aviso do formulário de prorrogar. A LAI (art. 11 §2º) exige que a justificativa seja dada a conhecer ao requerente:
+ *  ela aparece no protocolo dele em "Meus protocolos". Numa manifestação ANÔNIMA não há dono persistido, então não há a
+ *  quem mostrá-la — o aviso diz isso em vez de prometer o que não acontece. */
+export function avisoDaProrrogacao(especie: "esic" | "ouvidoria", identificacao?: "identificada" | "anonima"): string {
+  const regra = "A prorrogação só pode ser feita uma vez e exige justificativa.";
+  if (especie === "esic")
+    return `${regra} A justificativa é mostrada ao requerente, no protocolo dele em "Meus protocolos": escreva pensando em quem vai ler.`;
+  if (identificacao === "anonima")
+    return `${regra} Esta manifestação é anônima: a justificativa fica só no registro da Casa, porque não há a quem mostrá-la.`;
+  return `${regra} A justificativa é mostrada ao manifestante, no protocolo dele em "Meus protocolos": escreva pensando em quem vai ler.`;
+}
+
+function mensagemDeErroDeAnexo(status: number, acao: "anexar" | "baixar-anexo", erroDoServidor?: string): string {
+  if (acao === "baixar-anexo") {
+    if (status === 403) return "Só a secretaria baixa os anexos por aqui.";
+    if (status === 404) return "O anexo não foi encontrado.";
+    return "Não foi possível baixar agora. Tente de novo em instantes.";
+  }
+  if (status === 413) return "O arquivo passa de 10 MB, o limite por anexo.";
+  if (status === 415) return erroDoServidor || `Tipo de arquivo não aceito. Aceitamos ${TIPOS_ACEITOS_EM_TEXTO}.`;
+  if (status === 409) return erroDoServidor || CONFLITO.anexar;
+  if (status === 403) return "Só a secretaria anexa arquivos à resposta.";
+  if (status === 404) return "Não encontramos este protocolo para receber o anexo — ele pode não existir nesta Casa.";
+  if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
+  if (status === 400) return "O arquivo está vazio ou veio malformado. Escolha-o de novo.";
+  return "Não foi possível anexar agora. Tente de novo em instantes.";
 }
 
 export const TETO_RESPOSTA = 50000;
@@ -208,7 +260,7 @@ export function faltaNoTexto(texto: string, teto: number, oQue: string): string 
 
 /** O recibo que fica na tela depois de uma ação. */
 export function textoDoRecibo(
-  acao: "responder" | "decidir-recurso" | "prorrogar" | "arquivar",
+  acao: "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar",
   quandoIso: string,
   protocolo: string,
 ): string {
@@ -216,6 +268,8 @@ export function textoDoRecibo(
     return `Prazo do ${protocolo} prorrogado até ${formatarDataSimples(quandoIso)}. A nova data já aparece para quem acompanha o protocolo.`;
   const q = quando(quandoIso);
   if (acao === "arquivar") return `${protocolo} arquivado em ${q}. O motivo fica registrado no protocolo.`;
+  if (acao === "indeferir")
+    return `${protocolo} indeferido em ${q}. A fundamentação fica registrada no protocolo e a pessoa a lê em "Meus protocolos".`;
   if (acao === "decidir-recurso") return `Decisão do recurso do ${protocolo} registrada em ${q}.`;
   return `Resposta ao ${protocolo} registrada em ${q}.`;
 }
@@ -244,5 +298,19 @@ export function faltaNoEncarregado(e: { nome: string; rotulo: string; email: str
   if (!e.rotulo.trim()) return "Escreva como o cargo aparece no portal (ex.: Encarregada de Dados).";
   if (!e.email.trim()) return "Escreva o e-mail de contato.";
   if (!/^[^\s@]+@[^\s@]+$/.test(e.email.trim())) return "O e-mail parece incompleto.";
+  return null;
+}
+
+/** Passos do indeferimento que recebem o foco no título: o editor e a confirmação. */
+export type PassoDoIndeferimento = "confirmar" | "editor";
+
+/**
+ * Que título recebe o foco NESTE commit. O pedido de foco é gravado no clique e lido por um efeito; um efeito
+ * atrasado do commit ANTERIOR (a volta ao editor depois de o servidor falhar) roda depois do clique seguinte e não
+ * pode gastar um pedido que é do passo que ainda vai aparecer. Só vale o pedido que casa com o passo na tela.
+ */
+export function tituloQueRecebeOFoco(pedido: PassoDoIndeferimento | null, confirmando: boolean): PassoDoIndeferimento | null {
+  if (pedido === "confirmar" && confirmando) return "confirmar";
+  if (pedido === "editor" && !confirmando) return "editor";
   return null;
 }

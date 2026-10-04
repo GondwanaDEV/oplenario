@@ -13,6 +13,7 @@
   registro append-only de `db/prorrogacao` + emit, na MESMA tx (aborta sem escrever/emitir se a CAS nao
   transicionou — a 2a tentativa nao deixa rastro espurio)."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.participacao.db.anexo :as db-anexo]
             [oplenario.participacao.db.atendimento :as db-atendimento]
             [oplenario.participacao.db.comentario :as db-comentario]
             [oplenario.participacao.db.denuncia-comentario :as db-denuncia]
@@ -49,6 +50,12 @@
      + INSERT resposta_esic(pedido_id) (append-only) + cumpre o prazo do PEDIDO (prazo_ativo -> cumprida) + emit
      `pedido_esic.respondido` (outbox, mesma tx). `m` = {:pedido-id :resposta-id :corpo :respondido-por
      :respondida-em}. Devolve {:respondida-em :protocolo} ou nil (pedido ja terminal/inexistente).")
+  (indeferir-pedido! [this ente-id m]
+    "SERVIDOR — UMA tx: CAS pedido protocolado|em_analise -> indeferido (nil = ja terminal, aborta sem escrever) +
+     INSERT resposta_esic(pedido_id) (append-only — a FUNDAMENTACAO e' a resposta, na mesma tabela do responder) +
+     cumpre o prazo do PEDIDO (negar e' responder dentro do prazo) + emit `pedido_esic.indeferido` (outbox, mesma
+     tx). `m` = {:pedido-id :resposta-id :fundamentacao :indeferido-por :indeferido-em}. Devolve {:indeferido-em
+     :protocolo} ou nil (pedido ja terminal/inexistente).")
   (interpor-recurso! [this ente-id m]
     "CIDADAO — UMA tx: sequencial gapless 'recurso_esic:<ano>' + INSERT recurso_esic (instancia) + INSERT
      prazo_ativo(objeto_tipo=recurso_esic) pendente com vence_em PROPRIO (relogio independente do pedido) + emit
@@ -99,6 +106,11 @@
      aborta) + INSERT resposta_titular (append-only) + cumpre o prazo do TITULAR (prazo_ativo -> cumprida) +
      emit `solicitacao_titular.respondida`. `m` = {:solicitacao-id :resposta-id :corpo :respondido-por
      :respondida-em}. Devolve {:respondida-em} ou nil (solicitacao ja terminal/inexistente).")
+  (indeferir-solicitacao! [this ente-id m]
+    "SERVIDOR/Encarregado — UMA tx: CAS solicitacao protocolada|em_analise -> indeferida (nil = ja terminal, aborta) +
+     INSERT resposta_titular (append-only — a FUNDAMENTACAO, LGPD art. 18 §4º) + cumpre o prazo do TITULAR + emit
+     `solicitacao_titular.indeferida`. `m` = {:solicitacao-id :resposta-id :fundamentacao :indeferido-por
+     :indeferida-em}. Devolve {:indeferida-em :protocolo} ou nil (solicitacao ja terminal/inexistente).")
   (definir-encarregado! [this ente-id m]
     "SERVIDOR — UPSERT do contato do Encarregado/DPO (1 por ente; ON CONFLICT ente_id). `m` = {:id :nome :rotulo
      :email :atualizado-por}. Devolve o mapa kebab da linha.")
@@ -164,7 +176,9 @@
   (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11).")
   (meus-protocolos [this ente-id identidade-id]
     "O que a pessoa protocolou nesta Casa, cada item com o seu prazo, numa UNICA tx: {:pedidos-esic
-    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora.")
+    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora. e-SIC e ouvidoria
+    levam tambem `:prorrogacao` (a mais recente do objeto, ou nil) e as tres especies levam `:anexos` (os da resposta,
+    [] se nao ha) — lidos em lote, uma consulta por especie, nao por item.")
   ;; ---- BALCAO interno de atendimento (6.1/6.2/5.10): o que a secretaria le para responder ----
   (fila-do-balcao [this ente-id especie situacao]
     "A fila da `especie` (:esic|:ouvidoria|:lgpd) na `situacao` (abertos|respondidos|todos), numa tx: [{:item :prazo
@@ -177,6 +191,22 @@
     traz o manifestante (a tabela o tem); quem o tira do caminho e' o controller, que nunca o le.")
   (atendimento-lgpd [this ente-id id]
     "A solicitacao do titular inteira para o balcao, numa tx: {:solicitacao :prazo :respostas} ou nil.")
+  (anexar-ao-atendimento! [this ente-id m limite]
+    "UMA tx: serializa os anexos do MESMO protocolo (trava consultiva) e, na ordem: (1) se ja' existe um anexo VIGENTE
+    com o mesmo sha256 neste protocolo e origem, devolve ESSE (`:reenvio true`, sem linha nova — o reenvio e' idempotente;
+    o chamador tira o blob que subiu a mais); (2) se a `origem` (casa | requerente) ja' tem `limite` anexos vigentes ->
+    :conflito/anexos-demais; (3) se `m` traz `:cota` {:max-bytes :desde} e a soma dos bytes que a identidade
+    (`:enviado-por`) anexou desde `:desde`, mais este, passa do teto -> :conflito/cota-de-anexos; (4) grava (append-only).
+    As recusas lancam ANTES de qualquer escrita (a tx volta): o chamador pode tirar o blob que subiu antes. `m` = {:id
+    :objeto-tipo :objeto-id :origem :nome :tipo-midia :bytes :sha256 :chave-objeto :enviado-por [:enviado-em] [:cota]}. O
+    protocolo ja' foi conferido (existe nesta Casa) pelo chamador. Devolve o anexo (kebab).")
+  (retirar-anexo! [this ente-id m]
+    "SERVIDOR — UMA tx: registra a RETIRADA do anexo (append-only, uma por anexo) e devolve o anexo lido de volta, com a
+    retirada que ficou (a primeira, se ja' estava retirado: idempotente, sem segunda linha). nil = o anexo nao existe neste
+    protocolo desta Casa. `m` = {:objeto-tipo :objeto-id :anexo-id :retirado-em :retirado-por :motivo}. O efeito no object
+    storage e' do controller.")
+  (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
+    "O anexo do protocolo (objeto-tipo + objeto-id), ou nil.")
   (prorrogar-pedido! [this ente-id m]
     "SERVIDOR — a prorrogacao do pedido e-SIC (LAI art. 11 §2º), pelo MESMO mecanismo generico de
     `prorrogar-manifestacao!` (CAS 1x + registro append-only + emit), com objeto_tipo 'pedido_esic'. Devolve
@@ -225,6 +255,25 @@
           (producers/emitir-pedido-respondido! bus tx ente-id
             {:pedido-id pedido-id :protocolo (:protocolo pedido) :respondida-em (str respondida-em)})
           {:respondida-em respondida-em :protocolo (:protocolo pedido)}))))
+  (indeferir-pedido! [this ente-id {:keys [pedido-id resposta-id fundamentacao indeferido-por indeferido-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit), como o responder: so grava a fundamentacao/cumpre o prazo se o pedido AINDA
+        ;; esta aberto. nil = ja terminal (respondido/indeferido) -> aborta sem inserir nada (a borda desambigua 409).
+        (when-let [pedido (db-pedido/indeferir! tx {:id pedido-id :ente-id ente-id})]
+          ;; a fundamentacao E' a resposta: mesma tabela append-only, mesmo `corpo` (a leitura do cidadao e o historico
+          ;; do balcao a distinguem pelo ESTADO do pedido, que so' tem um desfecho).
+          (db-resposta/inserir! tx {:id resposta-id :ente-id ente-id :pedido-id pedido-id :recurso-id nil
+                                    :corpo fundamentacao :respondido-por indeferido-por :respondida-em indeferido-em})
+          ;; INVARIANTE (Inv.10, a mesma do responder): o pedido so vira terminal ATOMICO com o fechamento do seu
+          ;; prazo. Sem prazo aberto = prazo orfao -> aborta a tx (500 auditavel, tipo != :conflito -> nao 409).
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "pedido_esic" :objeto-id pedido-id
+                                           :cumprida-em indeferido-em})
+            (throw (ex-info "prazo do pedido nao estava aberto ao indeferir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "pedido_esic" :objeto-id pedido-id})))
+          (producers/emitir-pedido-indeferido! bus tx ente-id
+            {:pedido-id pedido-id :protocolo (:protocolo pedido) :indeferido-em (str indeferido-em)})
+          {:indeferido-em indeferido-em :protocolo (:protocolo pedido)}))))
   (interpor-recurso! [this ente-id {:keys [recurso-id pedido-id ano instancia motivo recibo-em vence-em
                                            prazo-id base-dias prazo-fonte-ref created-by]}]
     ;; IDEMPOTENCIA: a UNIQUE(ente, pedido, instancia) da mig 0040 barra o double-click/retry do cidadao (o
@@ -343,6 +392,23 @@
           (producers/emitir-solicitacao-titular-respondida! bus tx ente-id
             {:solicitacao-id solicitacao-id :respondida-em (str respondida-em)})
           {:respondida-em respondida-em :protocolo (:protocolo solic)}))))
+  (indeferir-solicitacao! [this ente-id {:keys [solicitacao-id resposta-id fundamentacao indeferido-por indeferida-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit), como o responder: nil = ja terminal -> aborta sem escrever (409 na borda).
+        (when-let [solic (db-solicitacao/indeferir! tx {:id solicitacao-id :ente-id ente-id})]
+          (db-resposta-titular/inserir! tx {:id resposta-id :ente-id ente-id :solicitacao-id solicitacao-id
+                                            :corpo fundamentacao :respondido-por indeferido-por
+                                            :respondida-em indeferida-em})
+          ;; INVARIANTE (Inv.10): so vira terminal ATOMICO com o fechamento do prazo (CONTADOR SEPARADO do e-SIC).
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "solicitacao_titular"
+                                           :objeto-id solicitacao-id :cumprida-em indeferida-em})
+            (throw (ex-info "prazo da solicitacao do titular nao estava aberto ao indeferir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "solicitacao_titular"
+                             :objeto-id solicitacao-id})))
+          (producers/emitir-solicitacao-titular-indeferida! bus tx ente-id
+            {:solicitacao-id solicitacao-id :indeferida-em (str indeferida-em)})
+          {:indeferida-em indeferida-em :protocolo (:protocolo solic)}))))
   (definir-encarregado! [this ente-id {:keys [id nome rotulo email atualizado-por]}]
     (transacao this ente-id
       (fn [tx]
@@ -470,17 +536,33 @@
                                          :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))
                                          :resposta (last (respostas tx ente-id (:id i)))})
                                 itens))]
-          {:pedidos-esic      (mapv (fn [{:keys [item] :as linha}]
-                                      ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
-                                      (assoc linha :recurso
-                                             (when-let [r (db-recurso/ultimo-do-pedido tx ente-id (:id item))]
-                                               (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))
-                                    (com-prazo "pedido_esic" db-resposta/listar-do-pedido
-                                               (db-pedido/listar-por-solicitante tx ente-id identidade-id)))
-           :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
-                                         (db-solicitacao/listar-por-titular tx ente-id identidade-id))
-           :manifestacoes     (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
-                                         (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))}))))
+          ;; a PRORROGACAO (LAI art. 11 §2º — o requerente e' cientificado da justificativa) e os ANEXOS da resposta: UMA
+          ;; consulta por especie para todos os itens da lista (nao uma por item). Da prorrogacao fica a mais recente por
+          ;; objeto (a CAS de prorrogar admite so' uma por prazo); dos anexos, todos, na ordem em que chegaram.
+          (let [ids (fn [linhas] (mapv #(get-in % [:item :id]) linhas))
+                com-prorrogacao (fn [objeto-tipo linhas]
+                                  (let [por-objeto (->> (db-prorrogacao/listar-por-objetos tx ente-id objeto-tipo (ids linhas))
+                                                        (reduce (fn [m p] (assoc m (:objeto-id p) p)) {}))]
+                                    (mapv #(assoc % :prorrogacao (get por-objeto (get-in % [:item :id]))) linhas)))
+                com-anexos (fn [objeto-tipo linhas]
+                             (let [por-objeto (group-by :objeto-id (db-anexo/listar-por-objetos tx ente-id objeto-tipo (ids linhas)))]
+                               (mapv #(assoc % :anexos (get por-objeto (get-in % [:item :id]) [])) linhas)))]
+            {:pedidos-esic      (->> (com-prazo "pedido_esic" db-resposta/listar-do-pedido
+                                                (db-pedido/listar-por-solicitante tx ente-id identidade-id))
+                                     (com-prorrogacao "pedido_esic")
+                                     (com-anexos "pedido_esic")
+                                     (mapv (fn [{:keys [item] :as linha}]
+                                             ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
+                                             (assoc linha :recurso
+                                                    (when-let [r (db-recurso/ultimo-do-pedido tx ente-id (:id item))]
+                                                      (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))))
+             :solicitacoes-lgpd (->> (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
+                                                (db-solicitacao/listar-por-titular tx ente-id identidade-id))
+                                     (com-anexos "solicitacao_titular"))
+             :manifestacoes     (->> (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
+                                                (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))
+                                     (com-prorrogacao "manifestacao_ouvidoria")
+                                     (com-anexos "manifestacao_ouvidoria"))})))))
   ;; ---- BALCAO interno de atendimento ----
   (fila-do-balcao [this ente-id especie situacao]
     (transacao this ente-id
@@ -497,6 +579,7 @@
            :prazo        (db-prazo/buscar-do-objeto tx ente-id "pedido_esic" id)
            :respostas    (db-resposta/listar-do-pedido tx ente-id id)
            :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "pedido_esic" id)
+           :anexos       (db-anexo/listar-do-objeto tx ente-id "pedido_esic" id)
            ;; V1: uma instancia de recurso por pedido (UNIQUE (pedido, instancia))
            :recurso      (when-let [r (db-recurso/ultimo-do-pedido tx ente-id id)]
                            (assoc r :prazo (db-prazo/buscar-do-objeto tx ente-id "recurso_esic" (:id r))
@@ -508,6 +591,7 @@
           {:manifestacao manif
            :prazo        (db-prazo/buscar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
            :respostas    (db-resposta-ouvidoria/listar-da-manifestacao tx ente-id id)
+           :anexos       (db-anexo/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
            :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)}))))
   (atendimento-lgpd [this ente-id id]
     (transacao this ente-id
@@ -515,7 +599,34 @@
         (when-let [solic (db-solicitacao/buscar tx ente-id id)]
           {:solicitacao solic
            :prazo       (db-prazo/buscar-do-objeto tx ente-id "solicitacao_titular" id)
-           :respostas   (db-resposta-titular/listar-da-solicitacao tx ente-id id)}))))
+           :respostas   (db-resposta-titular/listar-da-solicitacao tx ente-id id)
+           :anexos      (db-anexo/listar-do-objeto tx ente-id "solicitacao_titular" id)}))))
+  (anexar-ao-atendimento! [this ente-id {:keys [objeto-tipo objeto-id origem sha256 cota] :as m} limite]
+    (transacao this ente-id
+      (fn [tx]
+        (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
+        (if-let [igual (db-anexo/achar-igual tx ente-id objeto-tipo objeto-id origem sha256)]
+          (assoc igual :reenvio true)
+          (do
+            ;; o limite e' POR ORIGEM: os anexos da Casa nao tomam a vaga dos do requerente, e vice-versa; o retirado devolve a vaga
+            (when (>= (db-anexo/contar-da-origem tx ente-id objeto-tipo objeto-id origem) (long limite))
+              (throw (ex-info "o protocolo ja' tem o maximo de anexos desta origem"
+                              {:tipo :conflito/anexos-demais :origem origem :limite limite})))
+            (when cota
+              (let [usados (db-anexo/somar-bytes-do-requerente tx ente-id (:enviado-por m) (:desde cota))]
+                (when (> (+ usados (long (:bytes m))) (long (:max-bytes cota)))
+                  (throw (ex-info "a cota de disco do requerente nas ultimas 24 horas acabou"
+                                  {:tipo :conflito/cota-de-anexos :usados usados :cota (:max-bytes cota)})))))
+            (db-anexo/inserir! tx (assoc m :ente-id ente-id)))))))
+  (retirar-anexo! [this ente-id {:keys [objeto-tipo objeto-id anexo-id] :as m}]
+    (transacao this ente-id
+      (fn [tx]
+        (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
+        (when (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)
+          (db-anexo/retirar! tx (assoc m :ente-id ente-id))
+          (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)))))
+  (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
+    (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))
   (prorrogar-pedido! [this ente-id m]
     (prorrogar-prazo-impl this ente-id (assoc m :objeto-tipo "pedido_esic"))))
 
