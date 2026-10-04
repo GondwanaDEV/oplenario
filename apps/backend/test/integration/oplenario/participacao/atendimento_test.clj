@@ -275,6 +275,17 @@
         (is (empty? (:itens (ler (pt/response-for sec :get "/atendimento/esic?situacao=todos" :headers (cabecalhos outra))))))
         (doseq [[caminho] (drop 3 gets)]
           (is (= 404 (:status (pt/response-for sec :get caminho :headers (cabecalhos outra)))) caminho))))
+    (testing "o encarregado da propria Casa: 404 antes de definir; depois, o contato salvo; 403 fora da secretaria"
+      (is (= 404 (:status (pt/response-for sec :get "/lgpd/encarregado" :headers (cabecalhos ente)))))
+      (is (= 200 (:status (pt/response-for sec :put "/lgpd/encarregado" :headers (cabecalhos ente)
+                                           :body (json/write-value-as-string {:nome "Camila" :rotulo "Encarregada de Dados"
+                                                                              :email "dados@camara.leg.br"})))))
+      (is (= {:nome "Camila" :rotulo "Encarregada de Dados" :email "dados@camara.leg.br"}
+             (ler (pt/response-for sec :get "/lgpd/encarregado" :headers (cabecalhos ente)))))
+      (is (= 404 (:status (pt/response-for sec :get "/lgpd/encarregado" :headers (cabecalhos (random-uuid)))))
+          "o de outra Casa nao aparece")
+      (is (= 403 (:status (pt/response-for (service-fn #{"vereador"}) :get "/lgpd/encarregado"
+                                           :headers (cabecalhos ente))))))
     (testing "prorrogar o e-SIC pela borda: 200 com a data nova; de novo, 409; sem justificativa, 400"
       (let [ir #(pt/response-for sec :post (str "/esic/pedidos/" (:id p) "/prorrogar") :headers (cabecalhos ente)
                                  :body (json/write-value-as-string %))]

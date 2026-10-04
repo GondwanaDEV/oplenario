@@ -101,6 +101,8 @@
                                       :motivo "detalhe da manifestacao de ouvidoria; o texto do cidadao fica na tela do servidor (Lei 13.460 art. 10 §7º)"}
  :participacao/atendimento-lgpd {:categoria :so-tela
                                  :motivo "detalhe da solicitacao do titular com nome e CPF mascarado; dado pessoal fica na tela do servidor"}
+ :participacao/encarregado-da-casa {:categoria :so-tela
+                                    :motivo "o balcao le o contato do encarregado da propria Casa para editar; o contato publico ja' esta' no portal"}
  :participacao/prorrogar-pedido {:categoria :so-tela
                                  :motivo "prorrogar o prazo da LAI e' ato do servidor que le o pedido na tela, como responder; o agente nao le o pedido"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------

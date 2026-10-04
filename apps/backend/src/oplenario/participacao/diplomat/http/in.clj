@@ -372,6 +372,16 @@
       (responder-op #(controllers/prorrogar-pedido! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
 
+(defn- encarregado-da-casa-handler
+  "GET /lgpd/encarregado (SERVIDOR, exige-papel): o contato do Encarregado da Casa do ATOR, para o balcao mostrar e
+  editar sem conhecer o id do ente (a tela interna nao o tem). A mesma projecao publica {nome, rotulo, email} — o
+  contato e' publico por lei (LGPD art. 41 §1º). Sem encarregado definido -> 404."
+  [repo-participacao]
+  (fn [req]
+    (if-let [dpo (controllers/encarregado-publico repo-participacao (get-in req [:ator :ente-id]))]
+      (http/json-resposta 200 (adapters-out-encarregado/publico->wire dpo))
+      (http/json-resposta 404 {:erro "encarregado nao definido"}))))
+
 (defn- rotas-do-balcao
   "As rotas do balcao (SERVIDOR, exige-papel 'secretario'), FORA de /portal. `/atendimento/<especie>` e
   `/atendimento/<especie>/:id`: o nivel 2 e' sempre literal (esic|ouvidoria|lgpd) e o :id fica sozinho no nivel 3 —
@@ -398,6 +408,8 @@
                                             controllers/atendimento-lgpd adapters-out-atendimento/lgpd->wire))
        :route-name :participacao/atendimento-lgpd]
       ;; LAI art. 11 §2º: +10 dias, uma vez, com justificativa — irma de /esic/pedidos/:id/resposta (mesmo nivel)
+      ["/lgpd/encarregado" :get (servidor (encarregado-da-casa-handler repo-participacao))
+       :route-name :participacao/encarregado-da-casa]
       ["/esic/pedidos/:id/prorrogar" :post
        (servidor it/corpo-json (prorrogar-pedido-handler repo-participacao relogio))
        :route-name :participacao/prorrogar-pedido]}))
