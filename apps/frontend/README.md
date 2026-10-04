@@ -56,6 +56,10 @@ docker compose exec frontend npm run lint
 docker compose exec frontend npm run build
 ```
 
+Teste que reprova "do nada" no CI: `docker compose exec frontend npm run test:atraso -- <arquivo>` roda a mesma
+suíte com os mocks e a pintura do React atrasados em 40 ms. Quem depende de a resposta já ter chegado reprova
+sempre. Não é gate; como ler o resultado (e os falsos vermelhos conhecidos) está em `vitest.atraso.setup.ts`.
+
 Para o painel funcionar end-to-end é preciso uma sessão existente + um ator com vínculo ativo (seed) e
 o token de dev correspondente — ver carry de E2E no relatório do slice.
 
