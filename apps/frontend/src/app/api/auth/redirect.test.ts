@@ -60,3 +60,25 @@ describe("destinoPorPapeis — cada persona na sua home", () => {
     expect(destinoPorPapeis(null)).toBe(DESTINO_POS_LOGIN);
   });
 });
+
+// Achado da frente "url-sem-dados" (12/09/2026), refeito sobre a main: `resolved.origin === origin` não basta.
+// O parser resolve o dot-segment e o caminho canonicalizado passa a começar com `//` — e quem consome o
+// retorno faz `new URL(caminho, origin)`, que lê `//host` como outra origem.
+describe("redirect com dot-segment não escapa da origem", () => {
+  const HOSTIS = ["/.//evil.example", "/..//evil.example", "/a/..//evil.example", "/%2e//evil.example", "/./\\evil.example"];
+
+  it.each(HOSTIS)("resolveRedirectPath(%s) cai no destino padrão", (candidato) => {
+    const caminho = resolveRedirectPath(candidato, ORIGIN);
+    expect(caminho).toBe(DESTINO_POS_LOGIN);
+    expect(new URL(caminho, ORIGIN).origin).toBe(ORIGIN);
+  });
+
+  it.each(HOSTIS)("pedidoDeRedirect(%s) é descartado", (candidato) => {
+    expect(pedidoDeRedirect(candidato, ORIGIN)).toBeNull();
+  });
+
+  it("caminho legítimo com ponto segue honrado", () => {
+    expect(resolveRedirectPath("/atendimento/../atas?x=1", ORIGIN)).toBe("/atas?x=1");
+    expect(pedidoDeRedirect("/contas/./abc", ORIGIN)).toBe("/contas/abc");
+  });
+});
