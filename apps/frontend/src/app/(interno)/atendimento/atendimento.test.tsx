@@ -402,6 +402,36 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     expect(post.body).toEqual({ fundamentacao: "Dados mantidos por obrigação legal (LGPD art. 16, I)." });
   });
 
+  it("prorrogar avisa, no formulário, que a justificativa é mostrada ao requerente (e-SIC)", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic() } });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar o prazo (+10 dias)" }));
+    expect(screen.getByText(/exige justificativa\. A justificativa é mostrada ao requerente/)).toBeTruthy();
+    // só texto: o fluxo é o mesmo (rótulo, botão de enviar desabilitado até escrever)
+    expect((screen.getByRole("button", { name: "Prorrogar por mais 10 dias" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByLabelText("Justificativa da prorrogação")).toBeTruthy();
+  });
+
+  it("ouvidoria: identificada vê o aviso do manifestante; anônima é avisada de que a justificativa não tem a quem ser mostrada", async () => {
+    estado.params = { tipo: "ouvidoria", id: "m1" };
+    const ouv = (identificacao: string) => ({
+      id: "m1", protocolo: "OUV-2026-000004", tipo: "denuncia", assunto: "Obra parada", descricao: "Na rua A.",
+      identificacao, estado: "protocolada", historico: [],
+      acoes: { "pode-responder": true, "pode-arquivar": true, "pode-prorrogar": true }, ...prazo(20),
+    });
+    mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: ouv("identificada") } });
+    const { unmount } = render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar o prazo (+30 dias)" }));
+    expect(screen.getByText(/A justificativa é mostrada ao manifestante/)).toBeTruthy();
+    unmount();
+
+    mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: ouv("anonima") } });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Prorrogar o prazo (+30 dias)" }));
+    expect(screen.getByText(/manifestação é anônima/)).toBeTruthy();
+    expect(screen.queryByText(/é mostrada ao manifestante/)).toBeNull();
+  });
+
   it("ouvidoria não ganha Indeferir (ela já tem Arquivar)", async () => {
     estado.params = { tipo: "ouvidoria", id: "m1" };
     mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: {

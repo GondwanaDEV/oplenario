@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  avisoDaProrrogacao,
   especieValida,
   faltaNoEncarregado,
   faltaNoTexto,
@@ -72,6 +73,21 @@ describe("textos", () => {
     expect(textoDoRecibo("indeferir", "2026-07-03T15:00:00Z", "ESIC-2026-000001")).toMatch(
       /^ESIC-2026-000001 indeferido em \d{2}\/\d{2}\/2026, .*A fundamentação fica registrada no protocolo/,
     );
+  });
+});
+
+describe("o aviso do formulário de prorrogar", () => {
+  it("diz que a justificativa é mostrada a quem pediu — e é honesto quando não há a quem mostrar (ouvidoria anônima)", () => {
+    expect(avisoDaProrrogacao("esic")).toMatch(/exige justificativa\./);
+    expect(avisoDaProrrogacao("esic")).toMatch(/A justificativa é mostrada ao requerente/);
+    expect(avisoDaProrrogacao("ouvidoria", "identificada")).toMatch(/A justificativa é mostrada ao manifestante/);
+    const anonima = avisoDaProrrogacao("ouvidoria", "anonima");
+    expect(anonima).toMatch(/manifestação é anônima/);
+    expect(anonima).toMatch(/só no registro da Casa/);
+    expect(anonima).not.toMatch(/é mostrada ao/);
+    // a regra de sempre continua na frente
+    for (const a of [avisoDaProrrogacao("esic"), avisoDaProrrogacao("ouvidoria", "identificada"), anonima])
+      expect(a.startsWith("A prorrogação só pode ser feita uma vez e exige justificativa.")).toBe(true);
   });
 });
 

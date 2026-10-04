@@ -199,6 +199,18 @@ export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento)
   return "Não foi possível concluir agora. Tente de novo em instantes.";
 }
 
+/** O aviso do formulário de prorrogar. A LAI (art. 11 §2º) exige que a justificativa seja dada a conhecer ao requerente:
+ *  ela aparece no protocolo dele em "Meus protocolos". Numa manifestação ANÔNIMA não há dono persistido, então não há a
+ *  quem mostrá-la — o aviso diz isso em vez de prometer o que não acontece. */
+export function avisoDaProrrogacao(especie: "esic" | "ouvidoria", identificacao?: "identificada" | "anonima"): string {
+  const regra = "A prorrogação só pode ser feita uma vez e exige justificativa.";
+  if (especie === "esic")
+    return `${regra} A justificativa é mostrada ao requerente, no protocolo dele em "Meus protocolos": escreva pensando em quem vai ler.`;
+  if (identificacao === "anonima")
+    return `${regra} Esta manifestação é anônima: a justificativa fica só no registro da Casa, porque não há a quem mostrá-la.`;
+  return `${regra} A justificativa é mostrada ao manifestante, no protocolo dele em "Meus protocolos": escreva pensando em quem vai ler.`;
+}
+
 export const TETO_RESPOSTA = 50000;
 export const TETO_JUSTIFICATIVA = 5000;
 

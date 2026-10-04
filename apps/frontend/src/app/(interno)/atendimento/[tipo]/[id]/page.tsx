@@ -16,6 +16,7 @@ import {
   AVISO_IDENTIDADE_OUVIDORIA,
   ESPECIES,
   TETO_JUSTIFICATIVA,
+  avisoDaProrrogacao,
   TETO_RESPOSTA,
   especieValida,
   faltaNoTexto,
@@ -228,6 +229,11 @@ function Acoes({ especie, d, token, aoConcluir }: {
 
   const dias = especie === "esic" ? 10 : 30;
   const f = acao ? FORM[acao] : null;
+  // o aviso do prorrogar depende de a quem a justificativa é mostrada (ouvidoria anônima: a ninguém)
+  const aviso =
+    acao === "prorrogar" && especie !== "lgpd"
+      ? avisoDaProrrogacao(especie, "identificacao" in d ? d.identificacao : undefined)
+      : f?.aviso;
   const falta = f ? faltaNoTexto(texto, f.teto, f.oQue) : null;
 
   function abrir(x: Acao) {
@@ -293,7 +299,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
       )}
       {acao && f && !confirmando && (
         <div className="atd-form" role="group" aria-label={f.botao}>
-          <p className="atd-aviso">{f.aviso}</p>
+          <p className="atd-aviso">{aviso}</p>
           <div className="atd-campo">
             <label htmlFor="atd-texto">{f.rotulo}</label>
             <textarea id="atd-texto" value={texto} rows={acao === "prorrogar" ? 4 : 10} maxLength={f.teto + 200}
