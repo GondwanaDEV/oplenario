@@ -18,6 +18,18 @@
  */
 export const DESTINO_POS_LOGIN = "/inicio";
 
+/**
+ * `resolved.origin === origin` não basta. `/.//evil.example`, `/..//evil.example` e `/%2e//evil.example`
+ * resolvem same-origin (o que vem depois da 1ª barra é caminho, não autoridade), mas o dot-segment resolvido
+ * deixa o caminho começando com `//`. Quem consome o retorno faz `new URL(caminho, origin)` e lê `//host` como
+ * outra origem. Por isso o caminho JÁ resolvido nunca pode começar com uma 2ª barra, normal ou invertida.
+ */
+function caminhoSeguro(resolved: URL): string | null {
+  const caminho = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  if (caminho.startsWith("//") || caminho.startsWith("/\\")) return null;
+  return caminho;
+}
+
 export function resolveRedirectPath(candidate: string | null, origin: string): string {
   if (!candidate) return DESTINO_POS_LOGIN;
   try {
@@ -28,7 +40,7 @@ export function resolveRedirectPath(candidate: string | null, origin: string): s
     // é seguro redirecionar; usar a forma resolvida fecha a distância entre "o que validamos" e "o
     // que usamos" (T9 callback consome isto do cookie pkce, onde o texto bruto nunca foi
     // re-examinado por outro código).
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    return caminhoSeguro(resolved) ?? DESTINO_POS_LOGIN;
   } catch {
     return DESTINO_POS_LOGIN;
   }
@@ -48,7 +60,7 @@ export function pedidoDeRedirect(candidate: string | null, origin: string): stri
   try {
     const resolved = new URL(candidate, origin);
     if (resolved.origin !== origin) return null; // hostil/externo: descarta e deixa o papel decidir
-    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    return caminhoSeguro(resolved);
   } catch {
     return null;
   }

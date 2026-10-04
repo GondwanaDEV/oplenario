@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { useResumo } from "@/lib/use-resumo";
 import { paragrafosDoRascunho, rotuloDaCitacao } from "@/lib/rascunho-ata-vista";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import {
   TETO_TEXTO_RESUMO,
   avisoDoResumo,
@@ -61,6 +62,7 @@ export function PainelResumo({ proposicaoId, token = null }: { proposicaoId: str
       <RevisaoDoRascunho
         rascunhoId={rascunho.rascunhoId}
         lerRascunho={r.lerRascunho}
+        token={token}
         voltar={() => setModo("ler")}
         usar={(c) => editar(c.textoLimpo, c.rascunhoId)}
       />
@@ -160,8 +162,9 @@ export function PainelResumo({ proposicaoId, token = null }: { proposicaoId: str
   );
 }
 
-function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar }: {
+function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar, token }: {
   rascunhoId: string;
+  token: string | null;
   lerRascunho: (id: string) => Promise<RascunhoResumoOut>;
   voltar: () => void;
   usar: (c: RascunhoResumoOut) => void;
@@ -232,6 +235,7 @@ function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar }: {
           </ol>
         </details>
       )}
+      {conteudo.execucaoIa && <ReportarErroIa execucaoId={conteudo.execucaoIa} token={token} />}
       <div className="resumo-acoes">
         <button type="button" className="btn btn-primaria" onClick={() => usar(conteudo)}>Usar este rascunho</button>
         <button type="button" className="btn btn-fantasma" onClick={voltar}>Voltar</button>

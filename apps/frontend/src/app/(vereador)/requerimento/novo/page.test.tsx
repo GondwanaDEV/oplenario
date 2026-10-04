@@ -210,6 +210,25 @@ describe("Novo requerimento — o copiloto (B.7)", () => {
     expect((screen.getByRole("button", { name: "Ver o texto formatado" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("a justificativa com o id da execução na IA oferece 'Reportar erro' (8.4); sem id, não oferece", async () => {
+    for (const execucaoIa of ["e-ia-req-1", undefined]) {
+      pedirCopiloto.mockResolvedValue({
+        tipo: "preenchido",
+        resposta: {
+          preenchimento: { modeloId: "m1", ementa: "Informações sobre a obra", campos: { destinatario: "Obras", justificativa: "Art. 25." } },
+          justificativa: { campo: "justificativa", citacoes: [], paragrafosSemFonte: [], incerteza: "normal", modelo: "fake-1", execucaoIa },
+          indisponivel: null,
+        },
+      });
+      montar();
+      fireEvent.change(screen.getByLabelText("Descreva o que quer pedir"), { target: { value: "pedir informações sobre a obra" } });
+      fireEvent.click(screen.getByRole("button", { name: "Preencher com o assistente" }));
+      await screen.findByText("Rascunho do assistente — revise antes de assinar");
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(execucaoIa !== undefined);
+      cleanup();
+    }
+  });
+
   it("assistente fora: a mensagem manda preencher à mão, nada é tocado", async () => {
     pedirCopiloto.mockResolvedValue({ tipo: "nada", mensagem: "O assistente está indisponível agora. Preencha o formulário." });
     montar();

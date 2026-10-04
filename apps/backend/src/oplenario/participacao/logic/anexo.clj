@@ -119,14 +119,21 @@
   indeferimento (a mesma tabela de respostas) e, no e-SIC, a DECISAO do recurso. Na ouvidoria o ARQUIVAMENTO nao conta:
   e' encerrar sem resposta de merito (a justificativa vai na mesma tabela), nao ha documento a entregar.
 
-  `dados` = {:estado :respostas [{:respondida-em}] :recurso {:respostas [{:respondida-em}]}} — o que os detalhes do
-  balcao ja' leem."
-  [especie {:keys [estado respostas recurso]}]
+  O COMPLEMENTO DA RESPOSTA (ADR-0022) tambem conta, mas so' DEPOIS de haver resposta: reabre a janela da Casa por mais 10
+  minutos. (Um complemento nunca existe sem resposta; a guarda e' so' para o dado inconsistente nao abrir janela.)
+
+  `dados` = {:estado :respostas [{:respondida-em}] :recurso {:respostas [{:respondida-em}]} :complementos
+  [{:complementado-em}]} — o que os detalhes do balcao ja' leem."
+  [especie {:keys [estado respostas recurso complementos]}]
   (when-not (and (= :ouvidoria especie) (not= "respondida" estado))
-    (->> (concat respostas (:respostas recurso))
-         (keep :respondida-em)
-         (sort)
-         (last))))
+    (when-let [resposta (->> (concat respostas (:respostas recurso))
+                             (keep :respondida-em)
+                             (sort)
+                             (last))]
+      (->> (keep :complementado-em complementos)
+           (cons resposta)
+           (sort)
+           (last)))))
 
 (defn na-janela?
   "A Casa ainda pode anexar? So' ate' 10 minutos depois do ultimo ato de resposta (o proprio minuto 10 vale)."

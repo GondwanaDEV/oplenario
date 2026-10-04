@@ -159,6 +159,8 @@ export function tituloDoEvento(e: EventoOut): string {
         : "Prazo prorrogado";
     case "arquivamento":
       return "Arquivada sem resposta de mérito";
+    case "complemento":
+      return "Complemento da resposta";
   }
 }
 
@@ -174,6 +176,7 @@ export type AcaoAtendimento =
   | "decidir-recurso"
   | "prorrogar"
   | "arquivar"
+  | "complementar"
   | "anexar"
   | "baixar-anexo"
   | "retirar-anexo"
@@ -188,6 +191,7 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   "decidir-recurso": "Este recurso já foi decidido. Recarregue para ver a decisão.",
   prorrogar: "O prazo já foi prorrogado uma vez, ou não está mais correndo. A prorrogação só cabe uma vez, antes de vencer.",
   arquivar: "Esta manifestação já foi respondida ou arquivada. Recarregue para ver o que mudou.",
+  complementar: "Responda o pedido antes de complementar: a Casa ainda não respondeu este protocolo.",
   anexar: "A Casa não pode anexar agora: o protocolo ainda não tem resposta, passaram os 10 minutos depois dela ou já são 5 anexos.",
   "baixar-anexo": "",
   "retirar-anexo": "",
@@ -217,6 +221,16 @@ export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento,
   if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
   if (status === 400) return "Confira o texto e tente de novo.";
   return "Não foi possível concluir agora. Tente de novo em instantes.";
+}
+
+/** O aviso do formulário de complementar a resposta (ADR-0022). O complemento é um ato imutável; quem pediu o lê no protocolo
+ *  dele em "Meus protocolos". Numa manifestação ANÔNIMA não há dono persistido: o aviso diz que fica só no registro da Casa. */
+export function avisoDoComplemento(identificacao?: "identificada" | "anonima"): string {
+  const regra =
+    "O complemento é definitivo: fica no histórico com o seu nome e a hora, não pode ser editado nem apagado, e não muda o estado nem o prazo do protocolo.";
+  if (identificacao === "anonima")
+    return `${regra} Esta manifestação é anônima: o complemento fica só no registro da Casa, porque não há a quem mostrá-lo.`;
+  return `${regra} A pessoa o lê, junto da resposta, no protocolo dela em "Meus protocolos": escreva pensando em quem vai ler. Se juntar arquivos, você tem 10 minutos depois do envio.`;
 }
 
 /** O aviso do formulário de prorrogar. A LAI (art. 11 §2º) exige que a justificativa seja dada a conhecer ao requerente:
@@ -260,7 +274,7 @@ export function faltaNoTexto(texto: string, teto: number, oQue: string): string 
 
 /** O recibo que fica na tela depois de uma ação. */
 export function textoDoRecibo(
-  acao: "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar",
+  acao: "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar" | "complementar",
   quandoIso: string,
   protocolo: string,
 ): string {
@@ -268,6 +282,8 @@ export function textoDoRecibo(
     return `Prazo do ${protocolo} prorrogado até ${formatarDataSimples(quandoIso)}. A nova data já aparece para quem acompanha o protocolo.`;
   const q = quando(quandoIso);
   if (acao === "arquivar") return `${protocolo} arquivado em ${q}. O motivo fica registrado no protocolo.`;
+  if (acao === "complementar")
+    return `Complemento à resposta do ${protocolo} registrado em ${q}. Ele já aparece no histórico e para quem acompanha o protocolo.`;
   if (acao === "indeferir")
     return `${protocolo} indeferido em ${q}. A fundamentação fica registrada no protocolo e a pessoa a lê em "Meus protocolos".`;
   if (acao === "decidir-recurso") return `Decisão do recurso do ${protocolo} registrada em ${q}.`;

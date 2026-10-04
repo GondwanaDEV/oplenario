@@ -104,13 +104,36 @@ respostas dos servidores e dos protocolos do cidadão.
 | `POST /esic/pedidos/:id/indeferir` · `POST /lgpd/solicitacoes/:id/indeferir` | `secretario` |
 | `POST /atendimento/{esic,ouvidoria,lgpd}/:id/anexos` · `GET …/anexos/:anexo` · `POST …/anexos/:anexo/retirar` | `secretario` |
 | `POST /portal/meus-protocolos/{esic,ouvidoria,lgpd}/:id/anexos` · `GET …/anexos/:anexo` | o dono do protocolo |
+| `POST /atendimento/{esic,ouvidoria,lgpd}/:id/complementos` (corpo `{corpo}`) | `secretario` |
 
-Migration: `20261004000184-participacao-anexo` (`participacao.anexo` e `participacao.anexo_retirada`).
+Migrations: `20261004000184-participacao-anexo` (`participacao.anexo` e `participacao.anexo_retirada`) e
+`20261004000185-participacao-complemento` (`participacao.complemento`).
+
+## Complemento da resposta
+
+A Casa acrescenta um texto a um protocolo que já respondeu, mesmo depois de a janela de 10 minutos dos anexos fechar.
+
+1. **Ato próprio e imutável.** Insert-only em `participacao.complemento` (RLS por Casa), com autor e instante. O texto é
+   obrigatório e tem os mesmos limites do texto da resposta (1 a 50000). Sem limite numérico de complementos.
+2. **Quando cabe.** Só com ato de resposta da Casa: respondido, indeferido ou (e-SIC) recurso decidido. Na ouvidoria, depois da
+   resposta; a manifestação só arquivada não aceita. Protocolo aberto dá 409: "Responda o pedido antes de complementar."
+3. **Não mexe em estado nem em prazo.** Não reabre recurso e não conta como nova resposta nas métricas (não há evento).
+4. **Reabre a janela de anexos da Casa** por 10 minutos: o complemento passa a ser o "último ato de resposta" da origem
+   `casa` (`logic/anexo/ultimo-ato-de-resposta`). O limite de 5 por protocolo e origem e a janela do requerente não mudam.
+5. **Quem vê.** O histórico do balcão (evento `complemento`, com o nome de quem escreveu) e o dono em
+   `GET /portal/meus-protocolos` (`complementos`: id, texto e instante; nunca o autor), em ordem de chegada. As rotas públicas
+   por número de protocolo não mostram o texto da resposta, então também não mostram o do complemento. Na ouvidoria vale a
+   regra de identidade de sempre (Lei 13.460, art. 10 §7º): o balcão nomeia só quem agiu pela Casa, e a manifestação anônima
+   não tem dono a quem mostrar.
+6. **Fora do agente.** `fora-do-catalogo.edn` (`:so-tela`, dado pessoal). Entra na allowlist da Casa suspensa, junto das
+   respostas dos servidores.
+7. **Sem corrida a tratar.** Ter resposta só cresce (uma resposta nunca some), então a conferência prévia não envelhece e a
+   gravação não precisa de CAS.
 
 ## Fora, de propósito
 
 - Antivírus.
-- Substituir um anexo, e resposta complementar depois da janela.
+- Substituir um anexo.
 - Pré-visualização do arquivo no navegador.
 - Rotina de reconciliação entre o banco e o object storage (blob sem linha, linha sem blob).
 - Confirmação antes de responder, arquivar e prorrogar. Só o indeferimento tem.

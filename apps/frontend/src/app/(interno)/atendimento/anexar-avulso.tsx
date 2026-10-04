@@ -25,7 +25,7 @@ export function AnexarAvulso({
     <section className="anx-controle" aria-label="Anexar arquivo">
       <h2 id={idTitulo}>Anexar arquivo</h2>
       <p className="anx-dica">
-        Ainda dá para juntar arquivos à resposta: vale até 10 minutos depois da resposta (ou da decisão), e até 5 anexos da Casa.
+        Ainda dá para juntar arquivos à resposta: vale até 10 minutos depois da resposta, da decisão ou do complemento, e até 5 anexos da Casa.
       </p>
       <SeletorDeAnexos
         id={idCampo}

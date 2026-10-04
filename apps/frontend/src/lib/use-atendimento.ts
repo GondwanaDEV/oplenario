@@ -9,6 +9,7 @@
 //   · recurso    — POST /api/esic/recursos/{id}/decisao {corpo}
 //   · prorrogar  — POST /api/esic/pedidos/{id}/prorrogar · /api/ouvidoria/manifestacoes/{id}/prorrogar, {justificativa}
 //   · arquivar   — POST /api/ouvidoria/manifestacoes/{id}/arquivar {motivo}
+//   · complementar — POST /api/atendimento/{especie}/{id}/complementos {corpo} (depois de responder, a qualquer tempo)
 //   · anexar     — POST /api/atendimento/{especie}/{id}/anexos (multipart, campo `arquivo`, UM por chamada, DEPOIS do ato)
 //   · baixar     — GET  /api/atendimento/{especie}/{id}/anexos/{anexo} (a secretaria; o cidadão tem a rota dele)
 //   · retirar    — POST /api/atendimento/{especie}/{id}/anexos/{anexo}/retirar ({motivo}; incidente de conteúdo)
@@ -178,6 +179,14 @@ export function arquivar(token: string | null, id: string, motivo: string) {
     method: "POST",
     corpo: { motivo },
   });
+}
+
+/** Complementar a resposta de um protocolo que a Casa já respondeu (ADR-0022): ato próprio e imutável, que não muda estado nem
+ *  prazo. Devolve {id, corpo, complementadoEm}. Reabre por 10 minutos a janela de anexos da Casa (o detalhe relido diz). */
+export function complementar(token: string | null, especie: Especie, id: string, corpo: string) {
+  return pedir<{ id: string; corpo: string; complementadoEm: string }>(
+    token, `/api/atendimento/${especie}/${enc(id)}/complementos`, "complementar", { method: "POST", corpo: { corpo } },
+  );
 }
 
 // ---- os anexos da resposta ----

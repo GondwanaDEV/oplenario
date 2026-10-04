@@ -48,7 +48,8 @@
                              (:citacoes r))
              :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte r))
              :modelo-llm-id (:modelo-llm-id ponteiro) :prompt-versao (:prompt-versao ponteiro)
-             :desatualizado (not= texto-base-sha256 (:texto-base-sha256 ponteiro))}
+             :desatualizado (not= texto-base-sha256 (:texto-base-sha256 ponteiro))
+             :execucao-ia (not-empty (some-> (:execucao-id r) str))}
             "rascunho da IA viola o contrato RascunhoResumoOut"))
 
 (defn recibo->wire [v]

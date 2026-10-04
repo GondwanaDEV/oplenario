@@ -24,6 +24,8 @@
       "o cidadao anexa ao proprio protocolo: parte de protocolar (como `protocolar-esic`)")
   (is (every? #(r/escrita-permitida? :post %) [:participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd])
       "retirar um anexo e' contencao de incidente de conteudo: a Casa suspensa pode")
+  (is (every? #(r/escrita-permitida? :post %) [:participacao/complementar-esic :participacao/complementar-ouvidoria :participacao/complementar-lgpd])
+      "complementar a resposta e' a Casa terminando de responder (prazo legal): segue na suspensao, junto das respostas")
   (is (r/escrita-permitida? :post :exportacao-da-casa/gerar) "a Casa suspensa exporta (portabilidade, 9.6)")
   (is (r/escrita-permitida? :post :exportacao-da-casa/confirmar-recebimento))
   (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")

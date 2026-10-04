@@ -408,4 +408,34 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(url).toBe("/api/portal/esic/pedidos/p2/recursos");
     expect(JSON.parse(String(init?.body))).toEqual({ motivo: "Faltaram os valores." });
   });
+
+  it("o complemento da resposta: aparece depois da resposta, em ordem, rotulado e com data; sem complemento, nada", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [
+        {
+          ...base, id: "p9", protocolo: "ESIC-2026-000009", assunto: "Diárias", estado: "respondido", diasRestantes: null,
+          resposta: { corpo: "Segue a planilha.", respondidaEm: "2026-07-10T15:00:00Z" },
+          complementos: [
+            { id: "c1", corpo: "Segue também o anexo II.", complementadoEm: "2026-07-10T18:00:00Z" },
+            { id: "c2", corpo: "Corrigimos o valor da linha 4.", complementadoEm: "2026-07-11T12:00:00Z" },
+          ],
+        },
+        { ...base, id: "p8", protocolo: "ESIC-2026-000008", assunto: "Frota", estado: "respondido", diasRestantes: null,
+          resposta: { corpo: "Segue.", respondidaEm: "2026-07-10T15:00:00Z" }, complementos: [] },
+      ],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    const p9 = screen.getByText("ESIC-2026-000009").closest("li")!;
+    const cabecas = within(p9).getAllByText(/^Complemento da resposta ·/);
+    expect(cabecas).toHaveLength(2);
+    expect(within(p9).getByText("Segue também o anexo II.")).toBeTruthy();
+    expect(within(p9).getByText("Corrigimos o valor da linha 4.")).toBeTruthy();
+    // a ordem do texto da tela: resposta, 1o complemento, 2o complemento
+    const texto = p9.textContent ?? "";
+    expect(texto.indexOf("Segue a planilha.")).toBeLessThan(texto.indexOf("Segue também o anexo II."));
+    expect(texto.indexOf("Segue também o anexo II.")).toBeLessThan(texto.indexOf("Corrigimos o valor da linha 4."));
+    const p8 = screen.getByText("ESIC-2026-000008").closest("li")!;
+    expect(within(p8).queryByText(/Complemento da resposta/)).toBeNull();
+  });
 });

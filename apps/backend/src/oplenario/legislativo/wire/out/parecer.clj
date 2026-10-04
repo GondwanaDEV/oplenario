@@ -64,14 +64,16 @@
 (def AnaliseCopilotoOut
   "O rascunho da analise de constitucionalidade e juridicidade, ja' conferido pelo core: `texto` e' o texto LIMPO (sem
   as marcas de citacao; os `[confirmar: ...]` ficam) que vai para o campo Analise do editor; `pontos-a-confirmar` sao
-  recalculados pelo core a partir dele. Nunca e' parecer: o relator revisa e salva pelo fluxo de sempre."
+  recalculados pelo core a partir dele. `execucao-ia` = o id da execucao NA IA (feature 8.4): so' ele permite o 'Reportar
+  erro'; ausente, a tela nao oferece. Nunca e' parecer: o relator revisa e salva pelo fluxo de sempre."
   [:map {:closed true}
    [:texto :string]
    [:citacoes [:sequential CitacaoAnaliseOut]]
    [:paragrafos-sem-fonte [:sequential :int]]
    [:pontos-a-confirmar [:sequential :string]]
    [:incerteza (km/enum-de #{"normal" "revisar_com_atencao"})]
-   [:modelo :string]])
+   [:modelo :string]
+   [:execucao-ia {:optional true} [:maybe :string]]])
 
 (def CopilotoAnaliseOut
   "POST /legislativo/pareceres/:id/copiloto e /meu/pareceres/:id/copiloto. `normas`: a Casa nao publicou normas de

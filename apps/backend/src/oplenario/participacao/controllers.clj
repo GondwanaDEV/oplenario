@@ -10,7 +10,8 @@
             [oplenario.kernel.tempo :as tempo]
             [oplenario.participacao.components.repositorio :as repo]
             [oplenario.participacao.logic :as logic]
-            [oplenario.participacao.logic.anexo :as anexo])
+            [oplenario.participacao.logic.anexo :as anexo]
+            [oplenario.participacao.logic.complemento :as complemento])
   (:import (java.security MessageDigest)
            (java.time ZoneId)))
 
@@ -112,6 +113,11 @@
   [anexos]
   (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em]) anexos))
 
+(defn- complementos-do-detalhe
+  "Os complementos da resposta como o REQUERENTE os ve: id, texto e quando. Nunca quem escreveu (identidade de servidor)."
+  [complementos]
+  (mapv #(select-keys % [:id :corpo :complementado-em]) complementos))
+
 (defn- anexos-do-balcao
   "Os anexos como a SECRETARIA os ve: os do requerente mais, se retirado, o motivo da retirada (que o requerente nao le)."
   [anexos]
@@ -127,13 +133,14 @@
   corpo do pedido)."
   [repo-participacao ator relogio]
   (let [com-prazo (fn [linhas]
-                    (mapv (fn [{:keys [item prazo resposta recurso prorrogacao anexos]}]
+                    (mapv (fn [{:keys [item prazo resposta recurso prorrogacao anexos complementos]}]
                             (cond-> (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
                                            :dias-restantes (dias-restantes-do-prazo relogio prazo)
                                            :resposta (some-> resposta (select-keys [:corpo :respondida-em]))
                                            :prorrogacao (some-> prorrogacao
                                                                 (select-keys [:de-data :para-data :justificativa :prorrogado-em]))
                                            :anexos (anexos-do-detalhe anexos)
+                                           :complementos (complementos-do-detalhe complementos)
                                            ;; o requerente ainda pode juntar arquivo ao PROPRIO pedido? (10 min do protocolo, ate' 5)
                                            :pode-anexar (anexo/pode-anexar-requerente?
                                                          (:recibo-em item) (count (anexo/da-origem anexos "requerente"))
@@ -513,13 +520,16 @@
                  :de-data (:de-data p) :para-data (:para-data p)})
         prorrogacoes))
 
+(defn- complementos->historico [complementos]
+  (mapv (fn [c] {:tipo "complemento" :em (:complementado-em c) :texto (:corpo c) :por-id (:complementado-por c)}) complementos))
+
 (defn- cronologico [& listas] (vec (sort-by :em (apply concat listas))))
 
 (defn atendimento-esic
   "O pedido e-SIC `id` para o balcao: o texto, o requerente (nome + CPF mascarado), o prazo que vale, o recurso (se
   houver), o historico (respostas, recurso e decisao, prorrogacao) e as acoes cabiveis. nil = inexistente na Casa."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [pedido prazo respostas recurso prorrogacoes anexos]}
+  (when-let [{:keys [pedido prazo respostas recurso prorrogacoes anexos complementos]}
              (repo/atendimento-esic repo-participacao (:ente-id ator) id)]
     (let [hoje        (hoje-civil relogio)
           aberto?     (logic/aberto-no-balcao? :esic {:estado (:estado pedido) :recurso recurso})
@@ -530,7 +540,8 @@
                                      [{:tipo "recurso" :em (:recibo-em recurso) :texto (:motivo recurso)
                                        :protocolo (:protocolo recurso)}])
                                    (respostas->historico "decisao-recurso" (:respostas recurso))
-                                   (prorrogacoes->historico prorrogacoes))
+                                   (prorrogacoes->historico prorrogacoes)
+                                   (complementos->historico complementos))
           solicitante (:solicitante-identidade-id pedido)
           por-id      (pessoas-por-id pessoas (cons solicitante (map :por-id historico)))]
       (merge (select-keys pedido [:id :protocolo :assunto :descricao :estado :recibo-em])
@@ -542,20 +553,24 @@
               :historico  (com-nomes historico por-id)
               :anexos     (anexos-do-balcao anexos)
               :acoes      (assoc (logic/acoes-do-balcao :esic {:estado (:estado pedido) :recurso recurso :prazo prazo})
-                                 :pode-anexar (pode-anexar? :esic {:estado (:estado pedido) :respostas respostas :recurso recurso}
-                                                            anexos relogio))}
+                                 :pode-anexar (pode-anexar? :esic {:estado (:estado pedido) :respostas respostas :recurso recurso
+                                                                   :complementos complementos}
+                                                            anexos relogio)
+                                 :pode-complementar (complemento/pode-complementar?
+                                                     :esic {:estado (:estado pedido) :respostas respostas :recurso recurso}))}
              (logic/leitura-do-prazo (logic/prazo-vigente-esic {:prazo prazo :recurso recurso}) aberto? hoje)))))
 
 (defn atendimento-ouvidoria
   "A manifestacao `id` para o balcao: tipo, assunto, texto, SE e' identificada (nunca quem — Lei 13.460 art. 10 §7º),
   o prazo que vale, o historico (resposta ou arquivamento, prorrogacao) e as acoes cabiveis. nil = inexistente."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [manifestacao prazo respostas prorrogacoes anexos]}
+  (when-let [{:keys [manifestacao prazo respostas prorrogacoes anexos complementos]}
              (repo/atendimento-ouvidoria repo-participacao (:ente-id ator) id)]
     (let [aberto?   (logic/aberto-no-balcao? :ouvidoria manifestacao)
           ;; a mesma tabela guarda a resposta de merito e a justificativa do arquivamento (a linha so' tem um desfecho)
           tipo      (if (= "arquivada" (:estado manifestacao)) "arquivamento" "resposta")
-          historico (cronologico (respostas->historico tipo respostas) (prorrogacoes->historico prorrogacoes))
+          historico (cronologico (respostas->historico tipo respostas) (prorrogacoes->historico prorrogacoes)
+                                 (complementos->historico complementos))
           ;; so' quem AGIU pela Casa: o manifestante nunca entra no seam
           por-id    (pessoas-por-id pessoas (map :por-id historico))]
       (merge (select-keys manifestacao [:id :protocolo :tipo :assunto :descricao :estado :recibo-em])
@@ -564,19 +579,22 @@
               :historico     (com-nomes historico por-id)
               :anexos        (anexos-do-balcao anexos)
               :acoes         (assoc (logic/acoes-do-balcao :ouvidoria {:estado (:estado manifestacao) :prazo prazo})
-                                    :pode-anexar (pode-anexar? :ouvidoria {:estado (:estado manifestacao) :respostas respostas}
-                                                               anexos relogio))}
+                                    :pode-anexar (pode-anexar? :ouvidoria {:estado (:estado manifestacao) :respostas respostas
+                                                                           :complementos complementos}
+                                                               anexos relogio)
+                                    :pode-complementar (complemento/pode-complementar?
+                                                        :ouvidoria {:estado (:estado manifestacao) :respostas respostas}))}
              (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
 
 (defn atendimento-lgpd
   "A solicitacao do titular `id` para o balcao: o direito pedido, o detalhe, o titular (nome + CPF mascarado), o prazo
   que vale, o historico e as acoes cabiveis. nil = inexistente."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [solicitacao prazo respostas anexos]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
+  (when-let [{:keys [solicitacao prazo respostas anexos complementos]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
     (let [aberto?   (logic/aberto-no-balcao? :lgpd solicitacao)
           ;; a mesma tabela guarda a resposta e a fundamentacao do indeferimento (a solicitacao so' tem um desfecho)
           tipo      (if (= "indeferida" (:estado solicitacao)) "indeferimento" "resposta")
-          historico (cronologico (respostas->historico tipo respostas))
+          historico (cronologico (respostas->historico tipo respostas) (complementos->historico complementos))
           titular   (:titular-identidade-id solicitacao)
           por-id    (pessoas-por-id pessoas (cons titular (map :por-id historico)))]
       (merge (select-keys solicitacao [:id :protocolo :tipo :detalhe :estado :recibo-em])
@@ -585,8 +603,11 @@
               :historico (com-nomes historico por-id)
               :anexos    (anexos-do-balcao anexos)
               :acoes     (assoc (logic/acoes-do-balcao :lgpd {:estado (:estado solicitacao)})
-                                :pode-anexar (pode-anexar? :lgpd {:estado (:estado solicitacao) :respostas respostas}
-                                                           anexos relogio))}
+                                :pode-anexar (pode-anexar? :lgpd {:estado (:estado solicitacao) :respostas respostas
+                                                                  :complementos complementos}
+                                                           anexos relogio)
+                                :pode-complementar (complemento/pode-complementar?
+                                                    :lgpd {:estado (:estado solicitacao) :respostas respostas}))}
              (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
 
 (defn prorrogar-pedido!
@@ -629,16 +650,34 @@
   (case especie
     :esic      (when-let [d (repo/atendimento-esic repo-participacao ente-id id)]
                  {:protocolo (get-in d [:pedido :protocolo]) :linha (:pedido d)
-                  :dados {:estado (get-in d [:pedido :estado]) :respostas (:respostas d) :recurso (:recurso d)}
+                  :dados {:estado (get-in d [:pedido :estado]) :respostas (:respostas d) :recurso (:recurso d)
+                           :complementos (:complementos d)}
                   :anexos (:anexos d)})
     :ouvidoria (when-let [d (repo/atendimento-ouvidoria repo-participacao ente-id id)]
                  {:protocolo (get-in d [:manifestacao :protocolo]) :linha (:manifestacao d)
-                  :dados {:estado (get-in d [:manifestacao :estado]) :respostas (:respostas d)}
+                  :dados {:estado (get-in d [:manifestacao :estado]) :respostas (:respostas d) :complementos (:complementos d)}
                   :anexos (:anexos d)})
     :lgpd      (when-let [d (repo/atendimento-lgpd repo-participacao ente-id id)]
                  {:protocolo (get-in d [:solicitacao :protocolo]) :linha (:solicitacao d)
-                  :dados {:estado (get-in d [:solicitacao :estado]) :respostas (:respostas d)}
+                  :dados {:estado (get-in d [:solicitacao :estado]) :respostas (:respostas d) :complementos (:complementos d)}
                   :anexos (:anexos d)})))
+
+;; ========================= COMPLEMENTO DA RESPOSTA (ADR-0022) =========================
+
+(defn complementar-resposta!
+  "SERVIDOR (papel exigido na rota) acrescenta um COMPLEMENTO ao protocolo `id` da `especie` que a Casa ja' respondeu — depois
+  da janela de anexos, se for o caso. Ato PROPRIO e imutavel (insert-only, com autor e instante): nao muda estado nem prazo,
+  nao reabre recurso e nao e' uma nova resposta para as metricas. O unico efeito alem do texto: conta como o ultimo ato de
+  resposta da Casa e reabre por 10 minutos a janela de anexos da origem `casa` (`logic.anexo/ultimo-ato-de-resposta`).
+  nil = protocolo inexistente/de outra Casa (404); ainda sem resposta da Casa (aberto, ou manifestacao so' arquivada) ->
+  :conflito/complemento-sem-resposta (409). `complementado-por` INJETADO do ator (nunca do corpo). Devolve o complemento (kebab)."
+  [repo-participacao relogio ator especie id {:keys [corpo]}]
+  (when-let [{:keys [dados]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (when-not (complemento/pode-complementar? especie dados)
+      (throw (ex-info "o protocolo ainda nao tem resposta da Casa" {:tipo :conflito/complemento-sem-resposta})))
+    (repo/complementar! repo-participacao (:ente-id ator)
+      {:id (ids/novo-id) :objeto-tipo (anexo/objeto-tipo-da-especie especie) :objeto-id id :corpo corpo
+       :complementado-em (tempo/agora relogio) :complementado-por (:identidade-id ator)})))
 
 (defn- tipo-do-anexo!
   "O tipo CANONICO do arquivo, ou a recusa 415: (1) a extensao tem de estar na lista e o tipo declarado ser coerente com ela

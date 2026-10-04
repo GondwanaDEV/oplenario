@@ -104,7 +104,7 @@ function EditorDoRelator({ dados, token, id }: { dados: ParecerEditorOut; token:
       <p className="red-aj">Constitucionalidade, juridicidade e técnica legislativa.</p>
       <textarea id="red-analise" value={analise} onChange={(e) => setAnalise(e.target.value)} rows={10} />
       {dados.objetoTipo === "proposicao" && (
-        <CopilotoAnalise pedir={() => pedirAnalise(token, "meu", id)} analiseAtual={analise} aoUsar={setAnalise} />
+        <CopilotoAnalise pedir={() => pedirAnalise(token, "meu", id)} analiseAtual={analise} aoUsar={setAnalise} token={token} />
       )}
 
       {erro && (

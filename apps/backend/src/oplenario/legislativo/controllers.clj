@@ -1081,10 +1081,12 @@
               p (some->> (:preenchimento r) (conferir-preenchimento modelos))
               j (:justificativa r)
               j (when (and p j (contains? (:campos p) (:campo j)))
-                  {:campo (:campo j)
-                   :citacoes (mapv #(select-keys % [:fonte-id :rotulo :trecho :status]) (:citacoes j))
-                   :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte j))
-                   :incerteza (str (:incerteza j)) :modelo (str (:modelo j))})]
+                  (cond-> {:campo (:campo j)
+                           :citacoes (mapv #(select-keys % [:fonte-id :rotulo :trecho :status]) (:citacoes j))
+                           :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte j))
+                           :incerteza (str (:incerteza j)) :modelo (str (:modelo j))}
+                    ;; 8.4: o id da execucao NA IA (nunca inventado): sem ele a tela nao oferece o reporte
+                    (not (str/blank? (some-> (:execucao-id j) str))) (assoc :execucao-ia (str (:execucao-id j)))))]
           {:preenchimento p :justificativa j :indisponivel (get-in r [:indisponivel :mensagem])})))))
 
 ;; ========================= ADR-0019: caminho da comissao + parecer juridico =========================
@@ -1304,11 +1306,13 @@
         sem-fonte (filterv int? (:paragrafos-sem-fonte a))
         tudo-conferido? (and (seq citacoes) (every? #(= "conferida" (:status %)) citacoes) (empty? sem-fonte))
         analise (when-not (str/blank? texto)
-                  {:texto texto :citacoes citacoes :paragrafos-sem-fonte sem-fonte
-                   :pontos-a-confirmar (logic/pontos-a-confirmar texto)
-                   :incerteza (if (and tudo-conferido? normas-publicadas? (= "normal" (:incerteza a)))
-                                "normal" "revisar_com_atencao")
-                   :modelo (str (or (:modelo a) ""))})]
+                  (cond-> {:texto texto :citacoes citacoes :paragrafos-sem-fonte sem-fonte
+                           :pontos-a-confirmar (logic/pontos-a-confirmar texto)
+                           :incerteza (if (and tudo-conferido? normas-publicadas? (= "normal" (:incerteza a)))
+                                        "normal" "revisar_com_atencao")
+                           :modelo (str (or (:modelo a) ""))}
+                    ;; 8.4: o id da execucao NA IA (nunca inventado): sem ele a tela nao oferece o reporte
+                    (not (str/blank? (some-> (:execucao-id a) str))) (assoc :execucao-ia (str (:execucao-id a)))))]
     {:analise analise
      :normas (cond (not normas-publicadas?) "sem-normas"
                    (some #(and (str/starts-with? (:fonte-id %) "norma:") (= "conferida" (:status %))) (:citacoes analise))
