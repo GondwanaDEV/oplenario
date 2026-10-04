@@ -14,8 +14,10 @@
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo]
+            [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.autorizacao :as authz]
-            [oplenario.kernel.components.idp :as idp]))
+            [oplenario.kernel.components.idp :as idp]
+            [ring.middleware.multipart-params :as multipart]))
 
 (set! *warn-on-reflection* true)
 
@@ -171,6 +173,49 @@
   chaves esperadas p/ keyword. JSON malformado -> 400 fail-closed (nunca 500). Reusavel por toda rota de escrita
   no fan-out W3+; o Pedestal 0.7 default-interceptors NAO parseia corpo."
   (assoc (corpo-json-ate max-corpo-bytes) :name ::corpo-json))
+
+;; ---------- upload de UM arquivo (multipart) — compartilhado por todo modulo que recebe anexo ----------
+
+(def ^:private folga-do-envelope
+  "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
+  (* 64 1024))
+
+(defn anexo-multipart
+  "Fabrica o interceptor do upload de anexo: `multipart/form-data` com UM arquivo (o campo pode ter qualquer nome; a
+  tela usa `arquivo`). O arquivo e' lido para memoria com teto de `max-bytes` (o object storage recebe os bytes e o
+  sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/malformado/vazio -> 400. Resultado em
+  `(:request :anexo)` {:nome :tipo-midia :conteudo}. So' a PARTE GENERICA mora aqui: quais tipos o modulo aceita, quantos
+  e quando e' regra do `logic` de cada um (comunicacao, participacao). Nasceu em `comunicacao/diplomat/http/in` e foi
+  movida sem mudar o comportamento (`participacao` nao pode importar `comunicacao`, §22.10)."
+  [{:keys [max-bytes]}]
+  (let [mb (quot (long max-bytes) (* 1024 1024))
+        grande (str "O anexo passa de " mb " MB.")]
+    {:name ::anexo-multipart
+     :enter (fn [ctx]
+              (let [req (:request ctx)
+                    tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
+                    recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))]
+                (if (and tamanho (> (long tamanho) (+ (long max-bytes) folga-do-envelope)))
+                  (recusa 413 grande)
+                  (try
+                    (let [params (:multipart-params
+                                  (multipart/multipart-params-request
+                                   req {:max-file-count 1
+                                        :store (fn [{:keys [filename content-type stream]}]
+                                                 {:nome (arquivo/nome-de-arquivo filename)
+                                                  :tipo-midia (arquivo/tipo-de-midia content-type)
+                                                  :conteudo (ler-limitado stream max-bytes)})}))
+                          arquivos (filter #(and (map? %) (:conteudo %)) (vals params))]
+                      (cond
+                        (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
+                        (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
+                        :else (assoc-in ctx [:request :anexo] (first arquivos))))
+                    (catch clojure.lang.ExceptionInfo e
+                      (if (= :corpo/grande (:tipo (ex-data e)))
+                        (recusa 413 grande)
+                        (recusa 400 "Envie um arquivo por vez (campo arquivo).")))
+                    (catch Exception _
+                      (recusa 400 "O envio do arquivo veio malformado."))))))}))
 
 (defn exige-papel
   "Interceptor de AUTORIZACAO GROSSA: exige o `papel` estatico (STRING — os papeis do snapshot sao strings) no

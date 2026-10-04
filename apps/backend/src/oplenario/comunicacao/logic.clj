@@ -10,7 +10,8 @@
   - quem ve o comunicado e o painel de leitura (Eixo 4: a Casa responde por eles, nao so' quem clicou em enviar);
   - o PRAZO de ciencia (fatia 3): vencido e' calculado na leitura, nunca por agendador;
   - o protocolo `COM-AAAA-NNNNNN` (Eixo 5) e a janela de anexos (fatia 2)."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [oplenario.kernel.arquivo :as arquivo])
   (:import (java.time Duration Instant LocalDate)))
 
 (set! *warn-on-reflection* true)
@@ -165,23 +166,15 @@
   (str "comunicados/" ente-id "/" comunicado-id "/" anexo-id))
 
 (defn nome-de-arquivo
-  "O nome que o navegador mandou, como nome de exibicao seguro: so' o ultimo segmento do caminho, sem caractere de
-  controle nem aspas, aparado e com teto. Vazio -> \"anexo\"."
+  "O nome que o navegador mandou, como nome de exibicao seguro (a limpeza vive em `kernel/arquivo`, compartilhada com os
+  anexos do atendimento). Vazio -> \"anexo\"."
   [s]
-  (let [base (last (str/split (str s) #"[/\\]"))
-        limpo (-> (or base "")
-                  (str/replace #"[\p{Cntrl}\"]" "")
-                  str/trim)
-        limpo (if (> (count limpo) 200) (subs limpo 0 200) limpo)]
-    (if (str/blank? limpo) "anexo" limpo)))
+  (arquivo/nome-de-arquivo s))
 
 (defn tipo-de-midia
   "O content-type declarado da parte, se tem a forma `tipo/subtipo`; senao octet-stream (o navegador baixa)."
   [s]
-  (let [t (some-> s (str/split #";") first str/trim str/lower-case)]
-    (if (and t (re-matches #"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}" t))
-      t
-      "application/octet-stream")))
+  (arquivo/tipo-de-midia s))
 
 ;; ---------- leitura (Eixo 4) ----------
 
