@@ -72,6 +72,31 @@ describe("PainelAssistente", () => {
     expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
   });
 
+  it("8.4: resposta com o id da execução na IA oferece 'Reportar erro', que vai ao core com esse id", async () => {
+    const comId = SSE.replace('"contaminado":false}', '"contaminado":false,"execucao-ia":"ia-7"}');
+    const fetchMock = mockar(comId);
+    render(<PainelAssistente token="tok" />);
+    fireEvent.change(screen.getByLabelText("Sua pergunta"), { target: { value: "situação do PL 11/2026?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reportar erro" }));
+    fireEvent.click(screen.getByRole("radio", { name: "A fonte não diz isso" }));
+    fetchMock.mockImplementation(async () => ({ ok: true, status: 200, json: async () => ({ reportado: true }) }) as Response);
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    expect(await screen.findByText("Obrigado — isso entra na revisão da IA.")).toBeTruthy();
+    const [url, init] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/ia/execucoes/ia-7/reportes");
+    expect(JSON.parse(init.body as string)).toEqual({ categoria: "citacao_errada" });
+  });
+
+  it("8.4: sem o id da execução na IA, nada de 'Reportar erro' (não há o que reportar)", async () => {
+    mockar(SSE);
+    render(<PainelAssistente token="tok" />);
+    fireEvent.change(screen.getByLabelText("Sua pergunta"), { target: { value: "situação do PL 11/2026?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    await screen.findByText(/Resposta escrita por IA/);
+    expect(screen.queryByRole("button", { name: "Reportar erro" })).toBeNull();
+  });
+
   it("no app do vereador pede o conjunto do vereador (quem tem os dois papéis não cai no da secretaria)", async () => {
     const fetchMock = mockar(SSE);
     render(<PainelAssistente token="tok" publico="vereador" />);

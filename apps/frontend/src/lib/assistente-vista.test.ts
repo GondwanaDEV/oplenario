@@ -16,6 +16,15 @@ describe("lerConversa", () => {
     expect(c.resposta?.paragrafosSemFonte).toEqual([]);
     expect(c.execucaoId).toBe("e1");
     expect(c.indisponivel).toBeNull();
+    expect(c.resposta?.execucaoIa).toBeUndefined();
+  });
+
+  it("8.4: a resposta pode trazer o id da execução NA IA (para o 'reportar erro'), distinto do `fim`", () => {
+    const c = lerConversa(
+      'event: resposta\ndata: {"texto":"x","citacoes":[],"paragrafos-sem-fonte":[],"incerteza":"normal","modelo":"m","contaminado":false,"execucao-ia":"ia-7"}\n\nevent: fim\ndata: {"execucao-id":"e1"}\n\n',
+    );
+    expect(c.resposta?.execucaoIa).toBe("ia-7");
+    expect(c.execucaoId).toBe("e1");
   });
 
   it("indisponível e lixo no meio não quebram", () => {

@@ -15,6 +15,9 @@ export type RespostaAgente = {
   incerteza: string;
   modelo: string;
   contaminado: boolean;
+  /** Feature 8.4: o id da execução NO satélite (o registro da Camada de Confiança o conhece) — é o que o "Reportar
+   *  erro" manda. Opcional: core antigo não envia. Não confundir com `Conversa.execucaoId` (o da credencial). */
+  execucaoIa?: string;
 };
 
 export type PropostaNaConversa = { id: string; titulo: string; ritual: string };
