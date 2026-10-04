@@ -10,10 +10,10 @@
   color: var(--texto-2); margin: 0 0 0.2rem;
 }
 .tempos-tribuna h1 {
-  font-family: var(--display); font-weight: 600; font-size: var(--t-24);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-21);
   letter-spacing: -0.01em; color: var(--texto); margin: 0;
 }
-.tempos-tribuna .subtitulo { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-14); max-width: 62ch; }
+.tempos-tribuna .subtitulo { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-13); max-width: 62ch; }
 
 .tempos-tribuna .regras {
   margin: 0; padding: 0.9rem 1rem 0.9rem 2rem; border-radius: var(--raio);
@@ -40,7 +40,7 @@
 .tempos-tribuna .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
 .tempos-tribuna .campo input {
   padding: 0.6rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px; min-height: 44px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-15);
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-16);
 }
 .tempos-tribuna .campo-tempo input,
 .tempos-tribuna .campo-fase input { font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -60,7 +60,7 @@
 }
 .tempos-tribuna .campo-fase label { font-weight: 500; color: var(--texto-2); }
 
-.tempos-tribuna .comando .salvo { margin: 0; font-size: var(--t-14); color: var(--marca); font-weight: 600; }
+.tempos-tribuna .comando .salvo { margin: 0; font-size: var(--t-13); color: var(--marca); font-weight: 600; }
 
 .tempos-tribuna .erro-inline {
   margin: 0.3rem 0 0; padding: 0.4rem 0.6rem; border-radius: 8px; font-size: var(--t-13);
@@ -71,9 +71,9 @@
 .tempos-tribuna .nota-terminal {
   margin: 0; padding: 0.9rem 1rem; border-radius: var(--raio-2, 10px);
   background: var(--surface-2); border: 1px solid var(--linha);
-  font-size: var(--t-14); color: var(--texto-2);
+  font-size: var(--t-13); color: var(--texto-2);
 }
 
 /* barra fixa de salvar: a .comando do chassi (mesma da config-ente) — aqui só o texto dela */
-.tempos-tribuna .comando-titulo { margin: 0; font-weight: 600; font-size: var(--t-14); color: var(--texto); }
+.tempos-tribuna .comando-titulo { margin: 0; font-weight: 600; font-size: var(--t-13); color: var(--texto); }
 .tempos-tribuna .comando .erro-inline { margin-top: 0.3rem; }

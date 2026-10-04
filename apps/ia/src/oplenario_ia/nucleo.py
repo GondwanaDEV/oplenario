@@ -214,12 +214,19 @@ class Nucleo:
         )
 
     def reportar_erro(self, artefato: Artefato, quem: str, categoria: CategoriaReporte) -> None:
+        self.registrar_reporte(artefato.execucao_id, artefato.ente_id, artefato.operacao, quem, categoria)
+
+    def registrar_reporte(
+        self, execucao_id: str, ente_id: str, operacao: str, quem: str, categoria: CategoriaReporte
+    ) -> None:
+        """O "reportar erro" que chega DEPOIS, pela tela (feature 8.4): o artefato já foi entregue e não fica guardado,
+        então o reporte se ancora na execução do registro. Só a categoria (vocabulário fixo) — nunca texto (B4)."""
         self._registro.anexar(
             ReporteErro(
-                execucao_id=artefato.execucao_id,
+                execucao_id=execucao_id,
                 instante=self._agora(),
-                ente_id=artefato.ente_id,
-                operacao=artefato.operacao,
+                ente_id=ente_id,
+                operacao=operacao,
                 quem=quem,
                 categoria=categoria,
             )

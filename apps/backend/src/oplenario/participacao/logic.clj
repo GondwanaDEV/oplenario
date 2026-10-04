@@ -381,3 +381,84 @@
   "A transicao `de`->`para` do ciclo da manifestacao e' legal? (pura — so o grafo fixo). Terminais nao transicionam."
   [de para]
   (contains? (get transicoes-manifestacao de) para))
+
+;; ---- prorrogacao do e-SIC: +10 dias, uma vez, com justificativa (LAI art. 11 §2º) ----
+(def dias-prorrogacao-esic
+  "LAI 12.527/2011 art. 11 §2º: o prazo de 20 dias 'podera ser prorrogado por mais 10 (dez) dias, mediante
+  justificativa expressa, da qual sera cientificado o requerente'. [GAP] de conteudo: corridos-vs-uteis (o mesmo do
+  pedido) -> V1 = DIA-CORRIDO. Usa o MESMO mecanismo generico de prorrogacao (1x, CAS em db/prazo-ativo/prorrogar!)."
+  10)
+
+(defn vence-prorrogado-esic
+  "Nova data de vencimento do pedido e-SIC apos a UNICA prorrogacao possivel (+10, LAI art. 11 §2º), somada a partir
+  do `vence-em-original` (a CAS so' prorroga quando prorrogado_ate ainda e' nil)."
+  ^LocalDate [^LocalDate vence-em-original]
+  (.plusDays vence-em-original (long dias-prorrogacao-esic)))
+
+;; ========================= BALCAO interno de atendimento (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD) =========================
+;; A secretaria ve e responde, numa fila por especie, o que o cidadao protocolou. Aqui so' a derivacao PURA: o que
+;; esta' aberto, o prazo que vale (o MESMO `vencimento-efetivo`/`dias-restantes` do acompanhamento do cidadao — nenhuma
+;; contagem nova; corridos-vs-uteis segue [GAP]) e as acoes cabiveis no estado atual, para a tela nao deduzir regra.
+
+(def situacoes-do-balcao
+  "Filtro da fila: `abertos` (o que pede acao da Casa — o default), `respondidos` (encerrados: respondido, indeferido,
+  arquivado) ou `todos`."
+  #{"abertos" "respondidos" "todos"})
+
+(defn pedido-aberto?
+  "O pedido e-SIC ainda espera resposta (nao chegou a respondido|indeferido)?"
+  [estado]
+  (not (terminal-pedido? estado)))
+
+(defn recurso-pendente?
+  "O recurso e-SIC ainda espera decisao?"
+  [recurso]
+  (boolean (and recurso (not (terminal-recurso? (:estado recurso))))))
+
+(defn aberto-no-balcao?
+  "O item ainda pede acao da Casa? e-SIC: o pedido sem resposta OU um recurso sem decisao (o servidor tem de decidir).
+  Ouvidoria/LGPD: o estado nao e' terminal."
+  [especie {:keys [estado recurso]}]
+  (case especie
+    :esic      (or (pedido-aberto? estado) (recurso-pendente? recurso))
+    :ouvidoria (not (terminal-manifestacao? estado))
+    :lgpd      (not (terminal-solicitacao-titular? estado))))
+
+(defn leitura-do-prazo
+  "O prazo que vale no balcao: o vencimento EFETIVO (respeita a prorrogacao), se foi prorrogado e os dias restantes
+  contra `hoje` (negativo = vencido; 0 = ultimo dia). Os dias so' contam enquanto o item esta' aberto — encerrado, o
+  prazo nao corre mais (nil). `prazo` nil (inconsistencia) -> tudo nil/false, nunca NPE."
+  [prazo aberto? hoje]
+  (let [venc (some-> prazo vencimento-efetivo)]
+    {:prazo-vigente  venc
+     :prorrogado     (boolean (:prorrogado-ate prazo))
+     :dias-restantes (when (and aberto? venc) (dias-restantes venc hoje))}))
+
+(defn prazo-vigente-esic
+  "O prazo que vale num item do e-SIC: o do RECURSO enquanto ele espera decisao (relogio proprio); senao, o do pedido."
+  [{:keys [prazo recurso]}]
+  (if (recurso-pendente? recurso) (:prazo recurso) prazo))
+
+(defn pode-prorrogar?
+  "A prorrogacao (1x so') cabe? So' com o item aberto, o prazo AINDA pendente e nunca prorrogado — a mesma condicao da
+  CAS `db/prazo-ativo/prorrogar!` (que e' quem garante de fato, race-safe; aqui e' so' para a tela)."
+  [aberto? prazo]
+  (boolean (and aberto? prazo (= "pendente" (:estado prazo)) (nil? (:prorrogado-ate prazo)))))
+
+(defn acoes-do-balcao
+  "As acoes cabiveis no estado atual, por especie. e-SIC: responder o pedido aberto, prorrogar o prazo DO PEDIDO e
+  decidir o recurso pendente (o id vem junto). Ouvidoria: responder, arquivar e prorrogar. LGPD: responder."
+  [especie {:keys [estado recurso prazo]}]
+  (let [aberto? (aberto-no-balcao? especie {:estado estado :recurso recurso})]
+    (case especie
+      :esic      {:pode-responder      (pedido-aberto? estado)
+                  :pode-prorrogar      (pode-prorrogar? (pedido-aberto? estado) prazo)
+                  :recurso-pendente-id (when (recurso-pendente? recurso) (:id recurso))}
+      :ouvidoria {:pode-responder aberto? :pode-arquivar aberto? :pode-prorrogar (pode-prorrogar? aberto? prazo)}
+      :lgpd      {:pode-responder aberto?})))
+
+(defn identificacao-da-manifestacao
+  "Lei 13.460 art. 10 §7º: a identificacao do manifestante e' informacao pessoal com acesso restrito. O balcao so'
+  sabe SE a manifestacao e' identificada — nunca quem."
+  [{:keys [anonima]}]
+  (if anonima "anonima" "identificada"))

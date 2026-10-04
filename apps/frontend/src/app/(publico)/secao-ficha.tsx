@@ -18,7 +18,7 @@ import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
-import { AcompanharMateria, ComporComentario } from "./participar-materia";
+import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
 import "./participacao.css";
 
@@ -203,6 +203,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
                 <div className="corpo">
                   <span className="quando">{formatarData(c.criadoEm)}</span>
                   <p>{c.corpo}</p>
+                  <DenunciarComentario ente={ente} proposicaoId={proposicaoId} comentarioId={c.id} sessao={sessao} />
                 </div>
               </li>
             ))}

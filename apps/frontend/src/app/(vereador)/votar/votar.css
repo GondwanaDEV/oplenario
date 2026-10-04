@@ -26,7 +26,7 @@
 /* fatia "demo-tres-consertos" #2: O QUE está em votação — nunca some, nunca fica em branco (ver
    titulo-objeto-votacao.ts). Peso maior que `.voto-nota` (é o cabeçalho da matéria, não uma nota
    secundária), mesma paleta escura da ilha-palco. */
-.titulo-objeto-votacao { font-family: var(--corpo); font-weight: 700; font-size: var(--t-15); color: var(--palco-texto); margin: 0.9rem 0 0; line-height: 1.4; }
+.titulo-objeto-votacao { font-family: var(--corpo); font-weight: 700; font-size: var(--t-16); color: var(--palco-texto); margin: 0.9rem 0 0; line-height: 1.4; }
 
 .voto-nota { font-size: var(--t-13); color: var(--palco-texto-2); margin: 0.9rem 0 0; line-height: 1.5; }
 .voto-erro { font-size: var(--t-13); color: #FFD9CB; margin: 0.6rem 0 0; font-weight: 600; }

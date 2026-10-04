@@ -12,10 +12,10 @@
   border: 1px solid var(--linha); background: var(--surface);
 }
 .inicio-sessao h1 {
-  font-family: var(--display); font-weight: 600; font-size: var(--t-24);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-21);
   letter-spacing: -0.01em; color: var(--texto); margin: 0.2rem 0 0;
 }
-.inicio-detalhe { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-14); }
+.inicio-detalhe { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-13); }
 
 /* Sessão viva ganha acento — é a única situação em que a Mesa precisa agir AGORA. */
 .inicio-sessao--ao-vivo { border-color: color-mix(in srgb, var(--marca) 45%, var(--linha)); }
@@ -45,7 +45,7 @@
   border: 1px solid var(--linha); border-radius: var(--raio);
   background: var(--surface); color: var(--texto); text-decoration: none;
 }
-.atalho b { font-size: var(--t-14); font-weight: 600; }
+.atalho b { font-size: var(--t-13); font-weight: 600; }
 .atalho span { font-size: var(--t-13); color: var(--texto-2); }
 .atalho:hover { border-color: var(--texto-2); background: var(--realce); }
 .atalho:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }

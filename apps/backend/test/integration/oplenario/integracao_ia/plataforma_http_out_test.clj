@@ -81,3 +81,20 @@
   (com-servidor 503 "{}" (fn [url _] (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url url :segredo "s"}) "e")))))
   (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url "http://127.0.0.1:9" :segredo "s"}) "e")) "IA fora do ar")
   (is (indisponivel? #(out/apagar-ente (out/plataforma-ia {:url nil :segredo nil}) "e")) "nao configurada"))
+
+(deftest reportar-erro-posta-quem-e-categoria
+  ;; Feature 8.4: o reporte vai ao registro da Camada de Confianca do satelite; 404 = execucao que nao e' desta Casa
+  (com-servidor 200 "{\"execucao-id\":\"x1\",\"reportado\":true}"
+    (fn [url visto]
+      (let [r (out/reportar-erro (out/plataforma-ia {:url url :segredo "s"}) "e1" "x1"
+                                 {:quem "p1" :categoria "citacao_errada"})]
+        (is (true? (:reportado r)))
+        (is (= {:path "/v1/entes/e1/execucoes/x1/reportes" :auth "Bearer s" :metodo "POST"}
+               (select-keys @visto [:path :auth :metodo])))
+        (is (= {"quem" "p1" "categoria" "citacao_errada"} (json/read-value (:corpo @visto)))))))
+  (com-servidor 404 "{}" (fn [url _] (is (nil? (out/reportar-erro (out/plataforma-ia {:url url :segredo "s"}) "e" "x"
+                                                                  {:quem "p" :categoria "outro"})))))
+  (com-servidor 503 "{}" (fn [url _] (is (indisponivel? #(out/reportar-erro (out/plataforma-ia {:url url :segredo "s"})
+                                                                             "e" "x" {:quem "p" :categoria "outro"})))))
+  (is (indisponivel? #(out/reportar-erro (out/plataforma-ia {:url nil :segredo nil}) "e" "x"
+                                         {:quem "p" :categoria "outro"}))))

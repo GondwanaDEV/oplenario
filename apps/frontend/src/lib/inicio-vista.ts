@@ -79,6 +79,7 @@ export const ATALHOS_SECRETARIA: AcaoInicio[] = [
   { rotulo: "Agendar sessão", href: "/agendar-sessao", tom: "neutra", descricao: "Marcar a próxima sessão" },
   { rotulo: "Vereadores", href: "/cadastros/vereadores", tom: "neutra", descricao: "Cadastro, Mesa e comissões" },
   { rotulo: "Calendário", href: "/calendario", tom: "neutra", descricao: "Sessões e prazos de compliance" },
+  { rotulo: "Atendimento ao cidadão", href: "/atendimento", tom: "neutra", descricao: "e-SIC, ouvidoria e LGPD, pelo prazo" },
   { rotulo: "Moderação", href: "/moderacao", tom: "neutra", descricao: "Fila de comentários do portal" },
   { rotulo: "Painéis da Mesa", href: "/paineis/mesa", tom: "neutra", descricao: "Compliance e pendências" },
 ];

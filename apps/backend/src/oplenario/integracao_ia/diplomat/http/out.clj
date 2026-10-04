@@ -47,6 +47,11 @@
     "Onda E (`observabilidade-ia`): a saude da IA em TODAS as Casas nas ultimas `horas` (1-168) — volume, latencia
     p50/p95, o que nao rodou e por que, custo, por capacidade e por fornecedor/modelo, e a serie por hora. Sem ente e
     sem texto: so' o console do operador le. Lanca `:ia/indisponivel`.")
+  (reportar-erro [this ente-id execucao-id pedido]
+    "Feature 8.4: a pessoa reporta, pela tela, que a resposta da execucao `execucao-id` (o id NA IA) esta' errada.
+    `pedido` = {:quem :categoria} (categoria do vocabulario fixo do registro — sem texto livre, o registro e' SEM
+    conteudo). -> {:execucao-id :reportado true}, ou nil (a execucao nao e' desta Casa, nao existe ou nao entregou
+    artefato). Idempotente por pessoa no satelite. Lanca `:ia/indisponivel`.")
   (apagar-ente [this ente-id]
     "ADR-0018 (Eixo 4.5): apaga no satelite TUDO da Casa encerrada (fila, transcricoes, rascunhos, indice, registro,
     orcamento) — o core nao toca o schema `ia`. -> {:ente_id :apagados {\"ia.tabela\" n} :total n}. Idempotente (de
@@ -118,6 +123,9 @@
   (observabilidade [_ horas]
     (or (ler-json url segredo cliente (str "/v1/observabilidade?horas=" (long horas)))
         (indisponivel! "observabilidade sem resposta")))
+  (reportar-erro [_ ente-id execucao-id pedido]
+    (ler-json url segredo cliente (str "/v1/entes/" ente-id "/execucoes/" execucao-id "/reportes") pedido
+              (Duration/ofSeconds 5)))
   (apagar-ente [_ ente-id]
     (apagar-json url segredo cliente (str "/v1/entes/" ente-id))))
 

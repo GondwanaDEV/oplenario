@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { AcompanharMateria, ComporComentario } from "./participar-materia";
+import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
 
 const ENTE = "10000000-0000-0000-0000-000000000001";
 const PID = "p1";
@@ -86,5 +86,92 @@ describe("AcompanharMateria (cartão 'Quer acompanhar?')", () => {
   it("anônima: o cartão leva ao gov.br", () => {
     render(<AcompanharMateria ente={ENTE} proposicaoId={PID} sessao={{ estado: "anonima", token: null }} />);
     expect(screen.getByRole("link", { name: /entrar com gov\.br e acompanhar/i }).getAttribute("href")).toContain("via=govbr");
+  });
+});
+
+describe("DenunciarComentario (feature 6.3)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  const CID = "c-9";
+  const ROTA = `POST /api/portal/comentarios/${CID}/denunciar`;
+
+  it("anônima: 'Denunciar' leva ao gov.br e volta a esta matéria", () => {
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "anonima", token: null }} />);
+    const link = screen.getByRole("link", { name: /denunciar/i });
+    expect(link.getAttribute("href")).toContain("via=govbr");
+    expect(decodeURIComponent(link.getAttribute("href")!)).toContain(`/portal/casa/${ENTE}/materias/${PID}`);
+  });
+
+  it("outra Casa: manda entrar por esta Câmara", () => {
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "outra-casa", token: null }} />);
+    expect(screen.getByRole("link", { name: /denunciar/i }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/participar`);
+  });
+
+  it("cidadã: abre o motivo, envia e confirma", async () => {
+    mockFetch({ [ROTA]: { status: 200, corpo: { denunciado: true } } });
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^denunciar$/i }));
+    fireEvent.change(screen.getByLabelText(/o que há de errado/i), { target: { value: "  Ofensa pessoal.  " } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar denúncia/i }));
+    });
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Recebemos sua denúncia; a Câmara vai analisar\./));
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(String(url)).toBe(`/api/portal/comentarios/${CID}/denunciar`);
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ motivo: "Ofensa pessoal." });
+  });
+
+  it("motivo é opcional: em branco manda corpo vazio", async () => {
+    mockFetch({ [ROTA]: { status: 200, corpo: { denunciado: true } } });
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^denunciar$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar denúncia/i }));
+    });
+    await screen.findByText(/Recebemos sua denúncia/);
+    const [, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toEqual({});
+  });
+
+  it("denunciar de novo mostra a mesma confirmação (idempotente)", async () => {
+    mockFetch({ [ROTA]: { status: 200, corpo: { denunciado: true } } });
+    const { unmount } = render(
+      <DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />,
+    );
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(screen.getByRole("button", { name: /^denunciar$/i }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /enviar denúncia/i }));
+      });
+      await screen.findByText(/Recebemos sua denúncia; a Câmara vai analisar\./);
+      if (i === 0) {
+        unmount();
+        render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />);
+      }
+    }
+    expect(vi.mocked(global.fetch).mock.calls.length).toBe(2);
+  });
+
+  it("cancelar fecha o formulário sem enviar", () => {
+    mockFetch({});
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^denunciar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByLabelText(/o que há de errado/i)).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("comentário que sumiu: erro em linguagem de gente", async () => {
+    mockFetch({ [ROTA]: { status: 404, corpo: {} } });
+    render(<DenunciarComentario ente={ENTE} proposicaoId={PID} comentarioId={CID} sessao={{ estado: "cidada", token: "tok" }} />);
+    fireEvent.click(screen.getByRole("button", { name: /^denunciar$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /enviar denúncia/i }));
+    });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/não está mais disponível/));
   });
 });

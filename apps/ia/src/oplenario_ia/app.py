@@ -15,7 +15,7 @@ from typing import Annotated, Any, Protocol
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from oplenario_ia import __version__
 from oplenario_ia.agente import laco
@@ -29,10 +29,14 @@ from oplenario_ia.confianca.cota import Cota, Fonte
 from oplenario_ia.confianca.observabilidade import janela, observar
 from oplenario_ia.confianca.registro import (
     ApagaPorEnte,
+    CategoriaReporte,
     ConsultaConsumo,
+    ConsultaExecucao,
     RegistroConfianca,
+    RegistroExecucao,
     RegistroJsonl,
     RegistroMemoria,
+    ReporteErro,
 )
 from oplenario_ia.config import Config, carregar
 from oplenario_ia.erros import ErroIA, para_estruturado
@@ -64,9 +68,19 @@ class PedidoBusca(BaseModel):
     limite: int = Field(default=20, ge=1, le=50)
 
 
-class _Registro(RegistroConfianca, ConsultaConsumo, ApagaPorEnte, Protocol):
-    """O registro que a API usa: anexa execuções, responde o consumo da Casa (B.9) e apaga a Casa encerrada
-    (ADR-0018)."""
+class PedidoReporte(BaseModel):
+    """Feature 8.4: quem reporta (o id da pessoa no core — identificador, não conteúdo) e a categoria do vocabulário
+    fixo do registro. Sem texto livre: o registro é SEM conteúdo (B4)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quem: str = Field(min_length=1, max_length=100)
+    categoria: CategoriaReporte
+
+
+class _Registro(RegistroConfianca, ConsultaConsumo, ConsultaExecucao, ApagaPorEnte, Protocol):
+    """O registro que a API usa: anexa execuções, responde o consumo da Casa (B.9), acha os eventos de uma execução
+    (8.4) e apaga a Casa encerrada (ADR-0018)."""
 
 
 def criar_app(
@@ -301,6 +315,21 @@ def criar_app(
         except ValueError as e:
             raise HTTPException(400, str(e)) from e
         return c.model_dump(mode="json", by_alias=True)
+
+    @app.post("/v1/entes/{ente_id}/execucoes/{execucao_id}/reportes", dependencies=[Depends(servico)])
+    def reportar_erro(ente_id: str, execucao_id: str, pedido: PedidoReporte) -> dict[str, Any]:
+        """Feature 8.4: a pessoa diz, pela tela, que uma resposta da IA está errada. Só vale para uma execução DESTA
+        Casa que entregou um artefato (outra Casa, inexistente ou que não rodou: 404, como se não existisse). O reporte
+        vai pelo núcleo ao registro da Camada de Confiança — é o que o painel da Casa conta em "erros reportados". A
+        mesma pessoa reportando de novo não conta duas vezes (a resposta é a mesma)."""
+        reg = registro_do_app()
+        eventos = reg.eventos_da_execucao(ente_id, execucao_id)
+        execucao = next((e for e in eventos if isinstance(e, RegistroExecucao) and e.resultado == "artefato"), None)
+        if execucao is None:
+            raise HTTPException(404, "execução não encontrada")
+        if not any(isinstance(e, ReporteErro) and e.quem == pedido.quem for e in eventos):
+            nucleo_do_app().registrar_reporte(execucao_id, ente_id, execucao.operacao, pedido.quem, pedido.categoria)
+        return {"execucao-id": execucao_id, "reportado": True}
 
     @app.delete("/v1/entes/{ente_id}", dependencies=[Depends(servico)])
     def apagar_ente(ente_id: str) -> dict[str, Any]:

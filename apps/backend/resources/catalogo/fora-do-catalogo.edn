@@ -11,6 +11,8 @@
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
  :agente/perguntar {:categoria :so-tela
                     :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
+ :agente/reportar-erro-ia {:categoria :so-tela
+                           :motivo "a pessoa avalia a resposta da IA que leu (feature 8.4); o agente nao avalia a si mesmo"}
  :integracao-ia/norma-dispositivos {:categoria :servico
                                     :motivo "fronteira de servico com o satelite: a IA le os dispositivos vigentes para o indice (B.4b)"}
  :normas/importar-versao {:categoria :so-tela
@@ -85,6 +87,26 @@
  ;; ---------- formularios do cidadao (ADR-0015): o que a cidada protocolou ----------
  :participacao/meus-protocolos {:categoria :so-tela
                                 :motivo "lista da propria cidada para acompanhar o que protocolou; agente do cidadao e' pos-V1 (docs/26 §4)"}
+ ;; ---------- o balcao interno de atendimento (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD) ----------
+ ;; O pedido do cidadao carrega dado pessoal (nome do requerente, o texto que ele escreveu, a identificacao de quem
+ ;; manifestou a ouvidoria — Lei 13.460 art. 10 §7º); levar isso ao modelo de linguagem espera o [GAP] juridico do
+ ;; fornecedor real (DPA, LGPD art. 33). Ate' la', o balcao e' so' da tela.
+ :participacao/fila-esic {:categoria :so-tela
+                          :motivo "fila do balcao de e-SIC da secretaria; pedido do cidadao com dado pessoal nao vai ao agente antes do [GAP] juridico (LGPD art. 33)"}
+ :participacao/fila-ouvidoria {:categoria :so-tela
+                               :motivo "fila do balcao da ouvidoria; manifestacao do cidadao nao vai ao agente antes do [GAP] juridico (Lei 13.460 art. 10 §7º, LGPD art. 33)"}
+ :participacao/fila-lgpd {:categoria :so-tela
+                          :motivo "fila do balcao LGPD; o pedido do titular e' dado pessoal por definicao e nao vai ao agente antes do [GAP] juridico"}
+ :participacao/atendimento-esic {:categoria :so-tela
+                                 :motivo "detalhe do pedido de e-SIC com o nome do requerente; dado pessoal fica na tela do servidor (LGPD art. 33 [GAP])"}
+ :participacao/atendimento-ouvidoria {:categoria :so-tela
+                                      :motivo "detalhe da manifestacao de ouvidoria; o texto do cidadao fica na tela do servidor (Lei 13.460 art. 10 §7º)"}
+ :participacao/atendimento-lgpd {:categoria :so-tela
+                                 :motivo "detalhe da solicitacao do titular com nome e CPF mascarado; dado pessoal fica na tela do servidor"}
+ :participacao/encarregado-da-casa {:categoria :so-tela
+                                    :motivo "o balcao le o contato do encarregado da propria Casa para editar; o contato publico ja' esta' no portal"}
+ :participacao/prorrogar-pedido {:categoria :so-tela
+                                 :motivo "prorrogar o prazo da LAI e' ato do servidor que le o pedido na tela, como responder; o agente nao le o pedido"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------
  :admin-sistema/descoberta {:categoria :supratenant
                             :motivo "descoberta publica do realm do operador para o login do console"}

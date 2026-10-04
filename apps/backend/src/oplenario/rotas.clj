@@ -778,6 +778,10 @@
         (into (comunicacao-http/rotas (assoc deps-comunicacao :auth auth)))
         (into (participacao-http/rotas {:auth auth :repo-participacao repo-participacao
                                         :resolver-ente-publico participacao-http/resolver-ente-publico-uuid
+                                        ;; o balcao de atendimento: nome + CPF ja' MASCARADO no banco (leitura estreita;
+                                        ;; participacao nunca importa identidade, §22.10)
+                                        :pessoas (fn [ids] (repo-identidade-comp/pessoas-com-cpf-mascarado
+                                                             repo-identidade ids))
                                         ;; ADR-0018: o recibo dos protocolos diz que a Casa esta' com o sistema restrito
                                         :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                         :relogio relogio-producao}))

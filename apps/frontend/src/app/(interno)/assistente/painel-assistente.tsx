@@ -3,7 +3,8 @@
 // O corpo do /assistente: a conversa desta visita e o campo. Recebe o `token` por prop para ser testável sem
 // <AuthProvider> (mesmo split de painel-busca.tsx). Cada resposta mostra O QUE o assistente consultou (os passos) e
 // de onde veio cada frase (as citações conferidas contra o que o sistema devolveu). Assistente fora do ar não trava
-// nada: a mensagem manda seguir pela tela (R-IA-1).
+// nada: a mensagem manda seguir pela tela (R-IA-1). Sob cada resposta, "Reportar erro" (feature 8.4) quando o core
+// mandou o id da execução na IA.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -11,6 +12,7 @@ import { comRotuloDoPasso, rotuloDoPasso, type Conversa } from "@/lib/assistente
 import { avisoDoRascunho, paragrafosDoRascunho, rotuloDaCitacao } from "@/lib/rascunho-ata-vista";
 import { useAssistente } from "@/lib/use-assistente";
 import { comToken } from "@/lib/nav";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 
 export const SUGESTOES_SECRETARIA = [
   "Qual a situação do PL 11/2026?",
@@ -93,6 +95,7 @@ function Resposta({ conversa, token }: { conversa: Conversa; token: string | nul
             </details>
           )}
           <p className="assistente-selo-ia">Resposta escrita por IA a partir do sistema da Casa · {resposta.modelo}</p>
+          {resposta.execucaoIa && <ReportarErroIa execucaoId={resposta.execucaoIa} token={token} />}
         </>
       )}
     </div>

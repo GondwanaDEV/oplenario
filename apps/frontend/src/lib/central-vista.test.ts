@@ -157,7 +157,10 @@ describe("derivarCentral — fila de trabalho", () => {
       ["pend-pedido_esic-e1", "vence em 2 dias"],
       ["tce-o1", "vence em 5 dias"],
     ]);
-    expect(v.fila.itens[1]).toMatchObject({ titulo: "Pedido e-SIC 2026/0112", gravidade: "legal", acao: { href: "/paineis/mesa" } });
+    // o prazo do cidadão leva ao balcão de atendimento, onde se responde
+    expect(v.fila.itens[1]).toMatchObject({
+      titulo: "Pedido e-SIC 2026/0112", gravidade: "legal", acao: { rotulo: "Responder", href: "/atendimento/esic/e1" },
+    });
     expect(v.fila.itens[0].prazo?.atrasado).toBe(true);
   });
 

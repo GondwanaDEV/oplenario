@@ -92,6 +92,9 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; t
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
   // compliance). Sem esta entrada a rota existiria órfã, alcançável só por URL digitada.
   { rotulo: "Calendário", href: "/calendario" },
+  // O balcão de atendimento ao cidadão (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD): as filas do que o cidadão pediu pelo
+  // portal, pelo prazo legal que vence primeiro. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Atendimento", href: "/atendimento" },
   // Moderação de comentários (GAP docs/20 → tela de servidor): fila de pendentes + aprovar/rejeitar.
   // Gated "secretario" (GuardSecretaria na página + exige-papel no backend).
   { rotulo: "Moderação", href: "/moderacao" },

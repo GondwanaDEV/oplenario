@@ -79,7 +79,10 @@ presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a de
 com o fornecedor fake** (conferência real, texto de roteiro). **Índice único e busca intra-câmara (A.4/A.5)** entregues — PR #49 e o seguinte: a IA devolve ids, o core decide o que se vê; IA fora cai na busca pela ementa. **Resumo cidadão (A.8)** entregue: a IA redige a cada versão do texto, a secretaria revisa e publica, o portal mostra com o selo de revisão humana — **a Faixa A está completa em código**; a A.1 (qualidade medida) espera o áudio de
 Baturité com 15 min anotados. A **Faixa B** (agente, consulta LOM/RI, copiloto) começou pelo **catálogo de ações (B.1, [ADR-0009](docs/adr/0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md))**: uma ferramenta por ação de domínio, declarada em `diplomat/catalogo.clj` de cada módulo; **rota nova sem entrada no catálogo (ou motivo em `resources/catalogo/fora-do-catalogo.edn`) quebra o CI**. A **identidade delegada (B.2, [ADR-0010](docs/adr/0010-identidade-delegada-do-agente.md))** está feita: o core emite uma credencial opaca por execução do agente (o Keycloak 26.0 não delega), a permissão é recalculada a cada chamada e `ato` por agente só vira proposta (B.6). O **assistente da Casa (B.3)** está no ar em `/assistente`: pergunta em palavras, o agente consulta o core pelo servidor MCP como a pessoa e responde citando o que consultou. As **normas da Casa (B.4, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram por texto, quebradas por dispositivo, conferidas pela secretaria em `/normas` e indexadas na IA ao publicar; na **B.5** o assistente lê a LOM e o Regimento pelo artigo (`buscar_dispositivos`, `ler_dispositivo`) e cita o dispositivo com a data até quando o texto foi conferido. Na **B.6 ([ADR-0012](docs/adr/0012-proposta-de-ato.md))** o agente passa a PROPOR atos: nada executa sozinho — a pessoa lê e confirma em `/propostas/:id` (o vereador já pede o requerimento em palavras em `/vereador/assistente`); voto, presença e condução da sessão nem são propostos. Na **B.7** o copiloto entra no "Novo requerimento": o vereador descreve em palavras e o formulário volta preenchido, com a justificativa citando a norma da Casa — ele revisa e assina pelo fluxo de sempre. Na **B.8 ([ADR-0013](docs/adr/0013-agente-institucional-e-conferencia.md))** estreia o agente institucional da Casa (sem pessoa, ligado pelo `admin_ente`): a cada proposição protocolada ele lê a matéria e a LOM/RI e deixa uma nota técnica em rascunho, com citações, na fila `/conferencias` da secretaria, que aproveita ou descarta. Na **B.9 ([ADR-0014](docs/adr/0014-orcamento-de-ia-e-painel-da-casa.md))** entra a cota de IA por Casa (orçamento do plano definido pelo operador; aviso a 80%, segundo plano pausa primeiro, teto duro → "cota da Casa") e o painel `/paineis/ia` do administrador; **a Faixa B está completa em código** — faltam os valores comerciais do orçamento e o fornecedor real. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
-não-treino, LGPD art. 33) — o fake não espera. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+não-treino, LGPD art. 33) — o fake não espera. **OpenRouter avaliado (03/10/2026, [`docs/30`](docs/30-avaliacao-openrouter.md)):**
+fora do caminho de dado de Casa, porque soma um contrato, não tem região no Brasil e a empresa está em troca de controle.
+Usá-lo só para comparar modelos na avaliação (conjuntos sintéticos) espera o "Confirmo". Produção segue o failover do
+Eixo 13 com contrato direto. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
@@ -145,6 +148,18 @@ resposta ao "servidor de e-mail" do Daouda é uma caixa DENTRO do sistema, sem e
 - **Falta:**
   - e-mail/push (quando houver SMTP);
   - a convocação oficial de sessão (4.15), que espera a resposta jurídica sobre a prova.
+
+**Balcão de atendimento ao cidadão ENTREGUE (04/10/2026):** a secretaria vê e responde em `/atendimento` o que o
+cidadão protocola no portal — antes só havia as rotas de escrita, sem lista nem tela.
+- Filas e-SIC · Ouvidoria · LGPD (`GET /atendimento/{esic,ouvidoria,lgpd}`, papel `secretario`), abertos pelo prazo que
+  vence primeiro; detalhe com histórico e só as ações que cabem no estado (responder, decidir recurso, prorrogar, arquivar).
+- Prorrogação do e-SIC (LAI art. 11 §2º, +10 dias, uma vez) e `GET /lgpd/encarregado` para editar o contato do DPO.
+- Identidade: e-SIC e LGPD mostram nome + CPF mascarado no SQL; a ouvidoria mostra só identificada/anônima (Lei 13.460
+  art. 10 §7). Nenhuma rota do balcão é ferramenta do agente (dado pessoal → `[GAP]` do fornecedor de IA).
+- Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
+  sem texto).
+- **Falta:** indeferir, anexos, ciência da justificativa da prorrogação ao requerente e o botão de reportar nas outras
+  telas de IA (o id da execução não chega a elas).
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi

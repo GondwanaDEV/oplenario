@@ -41,6 +41,7 @@
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.participacao.adapters.in.arquivar-ouvidoria :as adapters-in-arquivar]
+            [oplenario.participacao.adapters.in.atendimento :as adapters-in-atendimento]
             [oplenario.participacao.adapters.in.comentario :as adapters-in-comentario]
             [oplenario.participacao.adapters.in.denunciar-comentario :as adapters-in-denunciar]
             [oplenario.participacao.adapters.in.encarregado :as adapters-in-encarregado]
@@ -55,6 +56,7 @@
             [oplenario.participacao.adapters.in.solicitacao-titular :as adapters-in-titular]
             [oplenario.participacao.adapters.out.acompanhamento :as adapters-out-acomp]
             [oplenario.participacao.adapters.out.acompanhamento-ouvidoria :as adapters-out-acomp-ouvidoria]
+            [oplenario.participacao.adapters.out.atendimento :as adapters-out-atendimento]
             [oplenario.participacao.adapters.out.comentario :as adapters-out-comentario]
             [oplenario.participacao.adapters.out.denuncia-comentario :as adapters-out-denunciar]
             [oplenario.participacao.adapters.out.encarregado :as adapters-out-encarregado]
@@ -338,111 +340,189 @@
       (responder-op #(controllers/moderar-comentario! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-moderacao/recibo->wire 200))))
 
+;; ========================= BALCAO interno de atendimento (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD) =========================
+
+(defn- fila-do-balcao-handler
+  "GET /atendimento/<especie>?situacao=abertos|respondidos|todos (SERVIDOR, exige-papel). A fila da Casa do ator,
+  pelo prazo que vence primeiro (abertos) — ver db/atendimento. situacao invalida -> 400."
+  [repo-participacao relogio especie]
+  (fn [req]
+    (let [situacao (adapters-in-atendimento/situacao (:query-params req))]
+      (http/json-resposta 200 (adapters-out-atendimento/fila->wire
+                               especie situacao
+                               (controllers/fila-do-balcao repo-participacao relogio (:ator req) especie situacao))))))
+
+(defn- detalhe-do-balcao-handler
+  "GET /atendimento/<especie>/:id (SERVIDOR, exige-papel). O item inteiro, com o historico e as acoes cabiveis.
+  Ausente na Casa -> 404. A identidade segue a lei (ver wire/out/atendimento)."
+  [repo-participacao relogio pessoas detalhe ->wire]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [d (detalhe repo-participacao relogio pessoas (:ator req) id)]
+        (http/json-resposta 200 (->wire d))
+        (http/json-resposta 404 {:erro "nao encontrado"})))))
+
+(defn- prorrogar-pedido-handler
+  "POST /esic/pedidos/:id/prorrogar (SERVIDOR, exige-papel; `justificativa` obrigatoria — LAI art. 11 §2º). nil -> 404;
+  ja' prorrogado/prazo nao pendente -> 409. Sucesso -> 200 {prorrogado-ate}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-atendimento/coagir-prorrogar-pedido (:json-params req))]
+      (responder-op #(controllers/prorrogar-pedido! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
+
+(defn- encarregado-da-casa-handler
+  "GET /lgpd/encarregado (SERVIDOR, exige-papel): o contato do Encarregado da Casa do ATOR, para o balcao mostrar e
+  editar sem conhecer o id do ente (a tela interna nao o tem). A mesma projecao publica {nome, rotulo, email} — o
+  contato e' publico por lei (LGPD art. 41 §1º). Sem encarregado definido -> 404."
+  [repo-participacao]
+  (fn [req]
+    (if-let [dpo (controllers/encarregado-publico repo-participacao (get-in req [:ator :ente-id]))]
+      (http/json-resposta 200 (adapters-out-encarregado/publico->wire dpo))
+      (http/json-resposta 404 {:erro "encarregado nao definido"}))))
+
+(defn- rotas-do-balcao
+  "As rotas do balcao (SERVIDOR, exige-papel 'secretario'), FORA de /portal. `/atendimento/<especie>` e
+  `/atendimento/<especie>/:id`: o nivel 2 e' sempre literal (esic|ouvidoria|lgpd) e o :id fica sozinho no nivel 3 —
+  sem literal e wildcard no MESMO nivel (o prefix-tree do Pedestal 0.7 nao admite, ver a docstring do ns)."
+  [{:keys [auth repo-participacao relogio pessoas]}]
+  (let [servidor (fn [& its] (into [auth (it/exige-papel "secretario")] its))]
+    #{["/atendimento/esic" :get (servidor (fila-do-balcao-handler repo-participacao relogio :esic))
+       :route-name :participacao/fila-esic]
+      ["/atendimento/ouvidoria" :get (servidor (fila-do-balcao-handler repo-participacao relogio :ouvidoria))
+       :route-name :participacao/fila-ouvidoria]
+      ["/atendimento/lgpd" :get (servidor (fila-do-balcao-handler repo-participacao relogio :lgpd))
+       :route-name :participacao/fila-lgpd]
+      ["/atendimento/esic/:id" :get
+       (servidor (detalhe-do-balcao-handler repo-participacao relogio pessoas
+                                            controllers/atendimento-esic adapters-out-atendimento/esic->wire))
+       :route-name :participacao/atendimento-esic]
+      ["/atendimento/ouvidoria/:id" :get
+       ;; o controller so' nomeia quem respondeu pela Casa: o manifestante nunca chega ao seam
+       (servidor (detalhe-do-balcao-handler repo-participacao relogio pessoas
+                                            controllers/atendimento-ouvidoria adapters-out-atendimento/ouvidoria->wire))
+       :route-name :participacao/atendimento-ouvidoria]
+      ["/atendimento/lgpd/:id" :get
+       (servidor (detalhe-do-balcao-handler repo-participacao relogio pessoas
+                                            controllers/atendimento-lgpd adapters-out-atendimento/lgpd->wire))
+       :route-name :participacao/atendimento-lgpd]
+      ;; LAI art. 11 §2º: +10 dias, uma vez, com justificativa — irma de /esic/pedidos/:id/resposta (mesmo nivel)
+      ["/lgpd/encarregado" :get (servidor (encarregado-da-casa-handler repo-participacao))
+       :route-name :participacao/encarregado-da-casa]
+      ["/esic/pedidos/:id/prorrogar" :post
+       (servidor it/corpo-json (prorrogar-pedido-handler repo-participacao relogio))
+       :route-name :participacao/prorrogar-pedido]}))
+
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
   (compartilhado), o `repo-participacao` (Repo-Component), o `resolver-ente-publico` (seam do host p/ a rota
   publica) e o `relogio` (kernel/tempo — injetavel em teste). `oplenario.rotas` funde este fragmento ao
   conjunto. POST usa `corpo-json`; as rotas GET nao tem corpo. `acesso-restrito-desde` (opcional, ADR-0018) = seam
-  do host (fn [ente-id] -> Instant|nil): o recibo dos protocolos do cidadao diz que a Casa esta' com o sistema restrito."
-  [{:keys [auth repo-participacao resolver-ente-publico relogio acesso-restrito-desde]}]
-  #{["/portal/esic/pedidos" :post
-     [auth it/corpo-json (protocolar-handler repo-participacao relogio acesso-restrito-desde)]
-     :route-name :participacao/protocolar-esic]
-    ;; CIDADA: o que ela protocolou (formularios do cidadao). Literal no nivel 2 — sem colisao com `casa/:ente`.
-    ["/portal/meus-protocolos" :get
-     [auth (meus-protocolos-handler repo-participacao relogio)]
-     :route-name :participacao/meus-protocolos]
-    ["/portal/esic/pedidos/:id" :get
-     [auth (meu-pedido-handler repo-participacao relogio)]
-     :route-name :participacao/meu-pedido-esic]
-    ;; disambiguador estatico `casa/` (NAO `/portal/:ente/...`): o router prefix-tree do Pedestal 0.7 nao
-    ;; admite um wildcard (`:ente`) e um literal (`esic`) no MESMO nivel de path — o wildcard sombrearia
-    ;; `/portal/esic/pedidos` (404). O segmento `casa/` mantem depth-2 sempre literal; o :ente cai em subarvore
-    ;; propria. (Alternativa: router :linear-search global — descartada, impacto/perf host-wide.)
-    ["/portal/casa/:ente/esic/acompanhar/:protocolo" :get
-     [(acompanhar-handler repo-participacao relogio resolver-ente-publico)]
-     :route-name :participacao/acompanhar-esic]
-    ;; ---- Slice 2: ciclo de resposta + recurso ----
-    ;; CIDADAO: interpor recurso (so-auth, sem papel — LAI: qualquer solicitante recorre; a policy fina [dono]
-    ;; mora no controller). Sob /portal (superficie do cidadao).
-    ["/portal/esic/pedidos/:id/recursos" :post
-     [auth it/corpo-json (interpor-recurso-handler repo-participacao relogio acesso-restrito-desde)]
-     :route-name :participacao/interpor-recurso]
-    ;; SERVIDOR: responder pedido / decidir recurso (exige-papel "secretario"). FORA de /portal (balcao interno).
-    ["/esic/pedidos/:id/resposta" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (responder-pedido-handler repo-participacao relogio)]
-     :route-name :participacao/responder-pedido]
-    ["/esic/recursos/:id/decisao" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (decidir-recurso-handler repo-participacao relogio)]
-     :route-name :participacao/decidir-recurso]
-    ;; ---- Slice 4: LGPD — portal do titular + contato do Encarregado/DPO ----
-    ;; TITULAR: solicitar exercicio de direito (SO-auth, sem papel — qualquer titular pede sobre os PROPRIOS
-    ;; dados). Sob /portal (superficie do cidadao/titular).
-    ["/portal/lgpd/solicitacoes" :post
-     [auth it/corpo-json (solicitar-titular-handler repo-participacao relogio acesso-restrito-desde)]
-     :route-name :participacao/solicitar-titular]
-    ["/portal/lgpd/solicitacoes/:id" :get
-     [auth (minha-solicitacao-handler repo-participacao relogio)]
-     :route-name :participacao/minha-solicitacao]
-    ;; PUBLICA (sem auth): contato do Encarregado/DPO e' legalmente publico (LGPD art. 41 §1º). Reusa o
-    ;; disambiguador estatico `casa/` (o :ente cai na subarvore propria; ver a rota de acompanhar acima).
-    ["/portal/casa/:ente/encarregado" :get
-     [(encarregado-publico-handler repo-participacao resolver-ente-publico)]
-     :route-name :participacao/encarregado-publico]
-    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno): responder a solicitacao + definir
-    ;; o contato do Encarregado (upsert 1-por-ente).
-    ["/lgpd/solicitacoes/:id/resposta" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (responder-solicitacao-handler repo-participacao relogio)]
-     :route-name :participacao/responder-solicitacao]
-    ["/lgpd/encarregado" :put
-     [auth (it/exige-papel "secretario") it/corpo-json (definir-encarregado-handler repo-participacao)]
-     :route-name :participacao/definir-encarregado]
-    ;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
-    ;; CIDADAO: protocolar manifestacao (SO-auth — ANONIMA NAO E' SEM-AUTH, ver docstring do handler).
-    ["/portal/ouvidoria/manifestacoes" :post
-     [auth it/corpo-json (protocolar-manifestacao-handler repo-participacao relogio acesso-restrito-desde)]
-     :route-name :participacao/protocolar-manifestacao]
-    ["/portal/ouvidoria/manifestacoes/:id" :get
-     [auth (minha-manifestacao-handler repo-participacao relogio)]
-     :route-name :participacao/minha-manifestacao]
-    ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional de acompanhar-esic/
-    ;; encarregado-publico — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
-    ["/portal/casa/:ente/ouvidoria/acompanhar/:protocolo" :get
-     [(acompanhar-manifestacao-handler repo-participacao relogio resolver-ente-publico)]
-     :route-name :participacao/acompanhar-manifestacao]
-    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno).
-    ["/ouvidoria/manifestacoes/:id/resposta" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (responder-manifestacao-handler repo-participacao relogio)]
-     :route-name :participacao/responder-manifestacao]
-    ["/ouvidoria/manifestacoes/:id/arquivar" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (arquivar-manifestacao-handler repo-participacao relogio)]
-     :route-name :participacao/arquivar-manifestacao]
-    ["/ouvidoria/manifestacoes/:id/prorrogar" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (prorrogar-manifestacao-handler repo-participacao relogio)]
-     :route-name :participacao/prorrogar-manifestacao]
-    ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
-    ;; CIDADAO: comentar (SO-auth, SEM variante anonima). Sob /portal (superficie do cidadao).
-    ["/portal/materias/:proposicao_id/comentarios" :post
-     [auth it/corpo-json (comentar-handler repo-participacao)]
-     :route-name :participacao/comentar]
-    ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional das demais rotas publicas
-    ;; — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
-    ["/portal/casa/:ente/materias/:proposicao_id/comentarios" :get
-     [(comentarios-da-materia-handler repo-participacao resolver-ente-publico)]
-     :route-name :participacao/comentarios-da-materia]
-    ;; CIDADAO: denunciar (SO-auth, IDEMPOTENTE). Sob /portal.
-    ["/portal/comentarios/:id/denunciar" :post
-     [auth it/corpo-json (denunciar-comentario-handler repo-participacao relogio)]
-     :route-name :participacao/denunciar-comentario]
-    ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno). A fila vive em
-    ;; `/moderacao/comentarios` (NAO `/comentarios/moderacao`) — ver a DECISAO DE ROTEAMENTO na docstring do
-    ;; ns (colisao wildcard/literal do Pedestal 0.7 com POST /comentarios/:id/moderar).
-    ["/moderacao/comentarios" :get
-     [auth (it/exige-papel "secretario") (fila-moderacao-handler repo-participacao)]
-     :route-name :participacao/fila-moderacao]
-    ["/comentarios/:id/moderar" :post
-     [auth (it/exige-papel "secretario") it/corpo-json (moderar-comentario-handler repo-participacao relogio)]
-     :route-name :participacao/moderar-comentario]})
+  do host (fn [ente-id] -> Instant|nil): o recibo dos protocolos do cidadao diz que a Casa esta' com o sistema restrito.
+  `pessoas` (opcional) = seam do host do BALCAO (fn [identidade-ids] -> {id {:nome :cpf-mascarado}}, o CPF ja' mascarado
+  no banco): o nome do requerente do e-SIC/titular LGPD e de quem respondeu. Sem ele, ninguem e' nomeado."
+  [{:keys [auth repo-participacao resolver-ente-publico relogio acesso-restrito-desde] :as deps}]
+  (into
+   (rotas-do-balcao deps)
+   #{["/portal/esic/pedidos" :post
+      [auth it/corpo-json (protocolar-handler repo-participacao relogio acesso-restrito-desde)]
+      :route-name :participacao/protocolar-esic]
+     ;; CIDADA: o que ela protocolou (formularios do cidadao). Literal no nivel 2 — sem colisao com `casa/:ente`.
+     ["/portal/meus-protocolos" :get
+      [auth (meus-protocolos-handler repo-participacao relogio)]
+      :route-name :participacao/meus-protocolos]
+     ["/portal/esic/pedidos/:id" :get
+      [auth (meu-pedido-handler repo-participacao relogio)]
+      :route-name :participacao/meu-pedido-esic]
+     ;; disambiguador estatico `casa/` (NAO `/portal/:ente/...`): o router prefix-tree do Pedestal 0.7 nao
+     ;; admite um wildcard (`:ente`) e um literal (`esic`) no MESMO nivel de path — o wildcard sombrearia
+     ;; `/portal/esic/pedidos` (404). O segmento `casa/` mantem depth-2 sempre literal; o :ente cai em subarvore
+     ;; propria. (Alternativa: router :linear-search global — descartada, impacto/perf host-wide.)
+     ["/portal/casa/:ente/esic/acompanhar/:protocolo" :get
+      [(acompanhar-handler repo-participacao relogio resolver-ente-publico)]
+      :route-name :participacao/acompanhar-esic]
+     ;; ---- Slice 2: ciclo de resposta + recurso ----
+     ;; CIDADAO: interpor recurso (so-auth, sem papel — LAI: qualquer solicitante recorre; a policy fina [dono]
+     ;; mora no controller). Sob /portal (superficie do cidadao).
+     ["/portal/esic/pedidos/:id/recursos" :post
+      [auth it/corpo-json (interpor-recurso-handler repo-participacao relogio acesso-restrito-desde)]
+      :route-name :participacao/interpor-recurso]
+     ;; SERVIDOR: responder pedido / decidir recurso (exige-papel "secretario"). FORA de /portal (balcao interno).
+     ["/esic/pedidos/:id/resposta" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (responder-pedido-handler repo-participacao relogio)]
+      :route-name :participacao/responder-pedido]
+     ["/esic/recursos/:id/decisao" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (decidir-recurso-handler repo-participacao relogio)]
+      :route-name :participacao/decidir-recurso]
+     ;; ---- Slice 4: LGPD — portal do titular + contato do Encarregado/DPO ----
+     ;; TITULAR: solicitar exercicio de direito (SO-auth, sem papel — qualquer titular pede sobre os PROPRIOS
+     ;; dados). Sob /portal (superficie do cidadao/titular).
+     ["/portal/lgpd/solicitacoes" :post
+      [auth it/corpo-json (solicitar-titular-handler repo-participacao relogio acesso-restrito-desde)]
+      :route-name :participacao/solicitar-titular]
+     ["/portal/lgpd/solicitacoes/:id" :get
+      [auth (minha-solicitacao-handler repo-participacao relogio)]
+      :route-name :participacao/minha-solicitacao]
+     ;; PUBLICA (sem auth): contato do Encarregado/DPO e' legalmente publico (LGPD art. 41 §1º). Reusa o
+     ;; disambiguador estatico `casa/` (o :ente cai na subarvore propria; ver a rota de acompanhar acima).
+     ["/portal/casa/:ente/encarregado" :get
+      [(encarregado-publico-handler repo-participacao resolver-ente-publico)]
+      :route-name :participacao/encarregado-publico]
+     ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno): responder a solicitacao + definir
+     ;; o contato do Encarregado (upsert 1-por-ente).
+     ["/lgpd/solicitacoes/:id/resposta" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (responder-solicitacao-handler repo-participacao relogio)]
+      :route-name :participacao/responder-solicitacao]
+     ["/lgpd/encarregado" :put
+      [auth (it/exige-papel "secretario") it/corpo-json (definir-encarregado-handler repo-participacao)]
+      :route-name :participacao/definir-encarregado]
+     ;; ---- FAST-FOLLOW Slice 5: Ouvidoria (Lei 13.460 art. 10) ----
+     ;; CIDADAO: protocolar manifestacao (SO-auth — ANONIMA NAO E' SEM-AUTH, ver docstring do handler).
+     ["/portal/ouvidoria/manifestacoes" :post
+      [auth it/corpo-json (protocolar-manifestacao-handler repo-participacao relogio acesso-restrito-desde)]
+      :route-name :participacao/protocolar-manifestacao]
+     ["/portal/ouvidoria/manifestacoes/:id" :get
+      [auth (minha-manifestacao-handler repo-participacao relogio)]
+      :route-name :participacao/minha-manifestacao]
+     ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional de acompanhar-esic/
+     ;; encarregado-publico — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
+     ["/portal/casa/:ente/ouvidoria/acompanhar/:protocolo" :get
+      [(acompanhar-manifestacao-handler repo-participacao relogio resolver-ente-publico)]
+      :route-name :participacao/acompanhar-manifestacao]
+     ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno).
+     ["/ouvidoria/manifestacoes/:id/resposta" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (responder-manifestacao-handler repo-participacao relogio)]
+      :route-name :participacao/responder-manifestacao]
+     ["/ouvidoria/manifestacoes/:id/arquivar" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (arquivar-manifestacao-handler repo-participacao relogio)]
+      :route-name :participacao/arquivar-manifestacao]
+     ["/ouvidoria/manifestacoes/:id/prorrogar" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (prorrogar-manifestacao-handler repo-participacao relogio)]
+      :route-name :participacao/prorrogar-manifestacao]
+     ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
+     ;; CIDADAO: comentar (SO-auth, SEM variante anonima). Sob /portal (superficie do cidadao).
+     ["/portal/materias/:proposicao_id/comentarios" :post
+      [auth it/corpo-json (comentar-handler repo-participacao)]
+      :route-name :participacao/comentar]
+     ;; PUBLICA (sem auth): reusa o disambiguador estatico `casa/` (mesmo racional das demais rotas publicas
+     ;; — o router prefix-tree do Pedestal 0.7 nao admite wildcard+literal no mesmo nivel).
+     ["/portal/casa/:ente/materias/:proposicao_id/comentarios" :get
+      [(comentarios-da-materia-handler repo-participacao resolver-ente-publico)]
+      :route-name :participacao/comentarios-da-materia]
+     ;; CIDADAO: denunciar (SO-auth, IDEMPOTENTE). Sob /portal.
+     ["/portal/comentarios/:id/denunciar" :post
+      [auth it/corpo-json (denunciar-comentario-handler repo-participacao relogio)]
+      :route-name :participacao/denunciar-comentario]
+     ;; SERVIDOR (exige-papel "secretario"), FORA de /portal (balcao interno). A fila vive em
+     ;; `/moderacao/comentarios` (NAO `/comentarios/moderacao`) — ver a DECISAO DE ROTEAMENTO na docstring do
+     ;; ns (colisao wildcard/literal do Pedestal 0.7 com POST /comentarios/:id/moderar).
+     ["/moderacao/comentarios" :get
+      [auth (it/exige-papel "secretario") (fila-moderacao-handler repo-participacao)]
+      :route-name :participacao/fila-moderacao]
+     ["/comentarios/:id/moderar" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (moderar-comentario-handler repo-participacao relogio)]
+      :route-name :participacao/moderar-comentario]}))
 
 ;; ========================= FE Onda A1: cumprimento de prazo do e-SIC (§16.11) =========================
 
