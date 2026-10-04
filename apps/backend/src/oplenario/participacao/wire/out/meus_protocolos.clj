@@ -50,7 +50,9 @@
    [:origem [:enum "casa" "requerente"]]
    [:enviado-em :string]
    ;; retirado pela Casa (incidente de conteudo): so' QUANDO, nunca o motivo; sem link para baixar (o download e' 404)
-   [:retirado-em {:optional true} :string]])
+   [:retirado-em {:optional true} :string]
+   ;; trocado pela Casa por outro arquivo (o id do novo; a data da troca e' o `retirado-em`): sem motivo, e o novo e' baixavel
+   [:substituido-por {:optional true} :string]])
 
 (def PedidoEsicItem
   (into [:map {:closed true}
