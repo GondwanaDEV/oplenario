@@ -264,8 +264,9 @@ infra + a re-verificação; abrir/mergear é decisão do Daouda. Um plano de tes
 plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 9
 specs de browser autenticadas) cobre boa parte da Onda T1 e **é gate do CI desde 02/10/2026** (`t3-e2e` sem
 `continue-on-error`; voto e presença ao vivo fora da quarentena SSE porque o placar hidrata por snapshot; só as
-3 sondas de cockpit seguem opt-in em `E2E_T3_SSE`). Limite de produto aberto: a presença do próprio vereador
-não hidrata por snapshot (revisita >5 min volta a pedir presença). Detalhe e procedência em `docs/16`, seções
+3 sondas de cockpit seguem opt-in em `E2E_T3_SSE`). A presença do próprio vereador, que não hidratava por
+snapshot (revisita >5 min voltava a pedir presença), foi consertada em 04/10/2026: GET
+`/sessoes/:id/presenca/minha` + hidratação no page-load e na reconexão do cockpit. Detalhe e procedência em `docs/16`, seções
 "Progressão do CI" e "A Trilha 3 vira gate".
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
