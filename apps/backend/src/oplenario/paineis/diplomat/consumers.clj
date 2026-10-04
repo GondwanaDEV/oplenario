@@ -20,6 +20,8 @@
    "participacao.pedido_esic.respondido" "participacao.recurso_esic.decidido"
    "participacao.solicitacao_titular.respondida" "participacao.manifestacao_ouvidoria.respondida"
    "participacao.manifestacao_ouvidoria.arquivada"
+   ;; o indeferimento fundamentado (e-SIC e LGPD) e' desfecho como o respondido: fecha o relogio
+   "participacao.pedido_esic.indeferido" "participacao.solicitacao_titular.indeferida"
    "participacao.prazo.vencido" "participacao.prazo.prorrogado"
    "proposicao.protocolada" "proposicao.transicionou"
    ;; F7 E2: o fan-out de transparencia (`notificacao.requisitada`, 1 por seguidor) -> intent no ledger de entrega.

@@ -67,7 +67,7 @@
 /* formulários (ações e encarregado) */
 .atd-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .atd-form { max-width: 52rem; padding: 1rem 1.1rem; border: 1px solid var(--linha); border-radius: 12px; background: var(--surface); display: grid; gap: 0.7rem; }
-.atd-aviso { margin: 0; padding-left: 0.7rem; border-left: 3px solid var(--aviso-texto); color: var(--texto); font-size: var(--t-13); line-height: 1.5; }
+.atd-aviso { margin: 0; padding-left: 0.7rem; border-left: 3px solid var(--aviso-texto); color: var(--texto); font-size: var(--t-13); line-height: 1.5; overflow-wrap: anywhere; }
 .atd-campo { display: grid; gap: 0.3rem; min-width: 0; }
 .atd-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
 .atd-campo input, .atd-campo textarea {
@@ -83,3 +83,12 @@
 .atd-encarregado h2 { margin: 0; font-size: var(--t-13); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--texto-2); }
 .atd-enc-atual { margin: 0; color: var(--texto); overflow-wrap: anywhere; line-height: 1.5; }
 .atd-encarregado .atd-form { border: 0; padding: 0; background: transparent; }
+
+/* O resultado do ato: o recibo e o envio dos anexos, juntos, para onde o foco e a rolagem vao depois do ato. */
+.atd-resultado { display: grid; gap: 0.8rem; scroll-margin-top: 1rem; }
+.atd-resultado:focus { outline: none; }
+.atd-recibo:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.atd-inativo { opacity: 0.55; cursor: not-allowed; }
+.atd-confirmar-titulo, .atd-form-titulo { margin: 0; font-size: var(--t-16); font-weight: 700; color: var(--texto); }
+.atd-confirmar-titulo:focus, .atd-form-titulo:focus { outline: none; }
+.atd-confirmar-titulo:focus-visible, .atd-form-titulo:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }

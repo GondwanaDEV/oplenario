@@ -130,6 +130,14 @@
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     ;; o balcao de atendimento: a prorrogacao do e-SIC (LAI art. 11 §2º), irma da prorrogacao da ouvidoria
     :participacao/prorrogar-pedido
+    ;; o indeferimento fundamentado (LAI art. 11 §1º II; LGPD art. 18 §4º): negar tambem e' responder, dentro do prazo
+    :participacao/indeferir-pedido :participacao/indeferir-solicitacao
+    ;; o documento que acompanha a resposta (anexar e' parte de responder; baixar e' GET e ja' passa)
+    :participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd
+    ;; o requerente anexa ao proprio protocolo: parte de protocolar (o direito de pedir nao depende do contrato da Casa)
+    :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
+    ;; retirar anexo = contencao de incidente de conteudo (a Casa suspensa pode)
+    :participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia

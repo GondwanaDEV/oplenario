@@ -21,6 +21,23 @@
    [:dias-restantes [:maybe :int]]
    [:prorrogado :boolean]])
 
+(def AnexoOut
+  "Um arquivo anexado a resposta de um protocolo. SO' o que a tela precisa para listar e baixar: nome, tipo, tamanho,
+  de quem veio (`casa` = a secretaria, na resposta; `requerente` = quem pediu) e quando. NUNCA a chave no object
+  storage, o sha256 nem quem enviou (`enviado-por` e' auditoria da Casa). O nome e' conteudo de quem enviou (ja' limpo
+  de caminho e controle na borda): o consumidor escapa antes de renderizar."
+  [:map {:closed true}
+   [:id :string]
+   [:nome :string]
+   [:tipo-midia :string]
+   [:bytes :int]
+   [:origem [:enum "casa" "requerente"]]
+   [:enviado-em :string]
+   ;; RETIRADO (incidente de conteudo): quando, e por que. So' presentes se foi retirado. O arquivo saiu do object storage e
+   ;; o download e' 404; a linha segue na lista como registro. O MOTIVO so' o balcao le (o requerente ve so' que foi retirado).
+   [:retirado-em {:optional true} :string]
+   [:motivo-da-retirada {:optional true} :string]])
+
 (def PessoaOut
   "Quem pediu (e-SIC/LGPD). O CPF ja' sai mascarado do banco: '***.456.789-**'."
   [:map {:closed true}
@@ -63,9 +80,10 @@
 
 (def EventoOut
   "Uma entrada do historico, em ordem cronologica. `por` = o nome de quem agiu pela Casa (nil no recurso, que e' do
-  cidadao, ou se a pessoa nao foi encontrada). `protocolo` so' no recurso; `de-data`/`para-data` so' na prorrogacao."
+  cidadao, ou se a pessoa nao foi encontrada). `protocolo` so' no recurso; `de-data`/`para-data` so' na prorrogacao.
+  `indeferimento` = a recusa fundamentada (o `texto` e' a fundamentacao), distinta da `resposta` de merito."
   [:map {:closed true}
-   [:tipo [:enum "resposta" "recurso" "decisao-recurso" "prorrogacao" "arquivamento"]]
+   [:tipo [:enum "resposta" "indeferimento" "recurso" "decisao-recurso" "prorrogacao" "arquivamento"]]
    [:em :string]
    [:texto :string]
    [:por [:maybe :string]]
@@ -82,18 +100,23 @@
    [:prazo-vigente [:maybe Data]] [:dias-restantes [:maybe :int]] [:prorrogado :boolean]])
 
 (def AcoesEsicOut
-  "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, prorrogar o prazo DO PEDIDO (LAI art. 11
-  §2º, uma vez) e decidir o recurso pendente (o id dele)."
+  "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, indeferi-lo com fundamentacao (LAI art. 11
+  §1º II — mesma condicao do responder), prorrogar o prazo DO PEDIDO (LAI art. 11 §2º, uma vez) e decidir o recurso
+  pendente (o id dele). `pode-anexar` = a Casa pode juntar arquivo a resposta: so' nos 10 minutos depois do ultimo ato de
+  resposta e abaixo de 5 anexos."
   [:map {:closed true}
    [:pode-responder :boolean]
+   [:pode-indeferir :boolean]
    [:pode-prorrogar :boolean]
+   [:pode-anexar :boolean]
    [:recurso-pendente-id [:maybe :string]]])
 
 (def AcoesOuvidoriaOut
-  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean]])
+  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean] [:pode-anexar :boolean]])
 
 (def AcoesLgpdOut
-  [:map {:closed true} [:pode-responder :boolean]])
+  "Responder e indeferir (LGPD art. 18 §4º) a solicitacao aberta: a mesma condicao."
+  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean] [:pode-anexar :boolean]])
 
 (def DetalheEsicOut
   (into [:map {:closed true}
@@ -103,6 +126,7 @@
          [:requerente [:maybe PessoaOut]]
          [:recurso [:maybe RecursoOut]]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesEsicOut]]
         prazo))
 
@@ -114,6 +138,7 @@
          [:identificacao [:enum "anonima" "identificada"]]
          [:estado (km/enum-de logic/estados-manifestacao)]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesOuvidoriaOut]]
         prazo))
 
@@ -125,5 +150,6 @@
          [:estado (km/enum-de logic/estados-solicitacao-titular)]
          [:titular [:maybe PessoaOut]]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesLgpdOut]]
         prazo))

@@ -1,5 +1,16 @@
 // GERADO por oplenario.codegen.malli-ts a partir dos models Malli — NAO editar a mao.
 
+export interface AnexoOut {
+  id: string;
+  nome: string;
+  tipoMidia: string;
+  bytes: number;
+  origem: "casa" | "requerente";
+  enviadoEm: string;
+  retiradoEm?: string;
+  motivoDaRetirada?: string;
+}
+
 export interface PessoaOut {
   nome: string;
   cpfMascarado: string;
@@ -66,7 +77,7 @@ export interface FilaLgpdOut {
 }
 
 export interface EventoOut {
-  tipo: "resposta" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento";
+  tipo: "resposta" | "indeferimento" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento";
   em: string;
   texto: string;
   por: string | null;
@@ -89,7 +100,9 @@ export interface RecursoOut {
 
 export interface AcoesEsicOut {
   podeResponder: boolean;
+  podeIndeferir: boolean;
   podeProrrogar: boolean;
+  podeAnexar: boolean;
   recursoPendenteId: string | null;
 }
 
@@ -97,10 +110,13 @@ export interface AcoesOuvidoriaOut {
   podeResponder: boolean;
   podeArquivar: boolean;
   podeProrrogar: boolean;
+  podeAnexar: boolean;
 }
 
 export interface AcoesLgpdOut {
   podeResponder: boolean;
+  podeIndeferir: boolean;
+  podeAnexar: boolean;
 }
 
 export interface DetalheEsicOut {
@@ -112,6 +128,7 @@ export interface DetalheEsicOut {
   requerente: PessoaOut | null;
   recurso: RecursoOut | null;
   historico: EventoOut[];
+  anexos: AnexoOut[];
   acoes: AcoesEsicOut;
   aberto: boolean;
   recebidoEm: string;
@@ -129,6 +146,7 @@ export interface DetalheOuvidoriaOut {
   identificacao: "anonima" | "identificada";
   estado: "arquivada" | "em_analise" | "protocolada" | "respondida";
   historico: EventoOut[];
+  anexos: AnexoOut[];
   acoes: AcoesOuvidoriaOut;
   aberto: boolean;
   recebidoEm: string;
@@ -145,6 +163,7 @@ export interface DetalheLgpdOut {
   estado: "em_analise" | "indeferida" | "protocolada" | "respondida";
   titular: PessoaOut | null;
   historico: EventoOut[];
+  anexos: AnexoOut[];
   acoes: AcoesLgpdOut;
   aberto: boolean;
   recebidoEm: string;

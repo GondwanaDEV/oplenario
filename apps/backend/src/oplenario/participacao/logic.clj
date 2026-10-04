@@ -195,9 +195,8 @@
 
 (def ^:private transicoes-solicitacao-titular
   "Grafo de transicoes LEGAIS da solicitacao (de -> conjunto de proximos). Terminais nao tem saida.
-  [GAP] DE PRODUTO (espelha o e-SIC 'indeferido' da Slice 2): em V1 o unico desfecho PRODUZIDO por codigo e'
-  `respondida` (o servico so tem `responder!`); `indeferida` fica MODELADA no grafo + no CHECK da mig 0041, mas
-  SEM caminho de controller/db que a alcance ainda (estado terminal reservado p/ um 'indeferir' explicito futuro)."
+  Os dois desfechos tem ato PROPRIO: `responder!` -> `respondida` e `indeferir!` -> `indeferida` (a recusa
+  fundamentada, LGPD art. 18 §4º) — ambos partem so' dos estados abertos (protocolada|em_analise)."
   {"protocolada" #{"em_analise" "respondida" "indeferida"}
    "em_analise"  #{"respondida" "indeferida"}
    "respondida"  #{}
@@ -446,16 +445,22 @@
   (boolean (and aberto? prazo (= "pendente" (:estado prazo)) (nil? (:prorrogado-ate prazo)))))
 
 (defn acoes-do-balcao
-  "As acoes cabiveis no estado atual, por especie. e-SIC: responder o pedido aberto, prorrogar o prazo DO PEDIDO e
-  decidir o recurso pendente (o id vem junto). Ouvidoria: responder, arquivar e prorrogar. LGPD: responder."
+  "As acoes cabiveis no estado atual, por especie. e-SIC: responder o pedido aberto, INDEFERIR o pedido aberto (a recusa
+  fundamentada — LAI art. 11 §1º II), prorrogar o prazo DO PEDIDO e decidir o recurso pendente (o id vem junto).
+  Ouvidoria: responder, arquivar e prorrogar. LGPD: responder e indeferir (LGPD art. 18 §4º).
+
+  `:pode-indeferir` tem a MESMA condicao de `:pode-responder` (o estado ainda sem desfecho): negar e' um jeito de
+  responder. Um recurso pendente de pedido ja' respondido/indeferido NAO reabre nenhum dos dois — o que cabe ali e'
+  decidir o recurso."
   [especie {:keys [estado recurso prazo]}]
   (let [aberto? (aberto-no-balcao? especie {:estado estado :recurso recurso})]
     (case especie
       :esic      {:pode-responder      (pedido-aberto? estado)
+                  :pode-indeferir      (pedido-aberto? estado)
                   :pode-prorrogar      (pode-prorrogar? (pedido-aberto? estado) prazo)
                   :recurso-pendente-id (when (recurso-pendente? recurso) (:id recurso))}
       :ouvidoria {:pode-responder aberto? :pode-arquivar aberto? :pode-prorrogar (pode-prorrogar? aberto? prazo)}
-      :lgpd      {:pode-responder aberto?})))
+      :lgpd      {:pode-responder aberto? :pode-indeferir aberto?})))
 
 (defn identificacao-da-manifestacao
   "Lei 13.460 art. 10 §7º: a identificacao do manifestante e' informacao pessoal com acesso restrito. O balcao so'

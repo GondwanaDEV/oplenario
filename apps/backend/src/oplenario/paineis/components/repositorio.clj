@@ -126,10 +126,18 @@
     "participacao.pedido_esic.respondido"
     (fechar! tx ente-id "pedido_esic" (:pedido-id payload))
 
+    ;; o indeferimento (recusa fundamentada) e' desfecho como o respondido: fecha a MESMA pendencia (negar e' responder
+    ;; dentro do prazo). Sem este branch o indeferido ficaria 'pendente' para sempre (e viraria 'vencido' no sweep).
+    "participacao.pedido_esic.indeferido"
+    (fechar! tx ente-id "pedido_esic" (:pedido-id payload))
+
     "participacao.recurso_esic.decidido"
     (fechar! tx ente-id "recurso_esic" (:recurso-id payload))
 
     "participacao.solicitacao_titular.respondida"
+    (fechar! tx ente-id "solicitacao_titular" (:solicitacao-id payload))
+
+    "participacao.solicitacao_titular.indeferida"
     (fechar! tx ente-id "solicitacao_titular" (:solicitacao-id payload))
 
     "participacao.manifestacao_ouvidoria.respondida"

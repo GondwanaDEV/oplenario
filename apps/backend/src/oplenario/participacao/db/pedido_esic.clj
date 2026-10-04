@@ -79,6 +79,21 @@
                           [:in :estado [[:inline "protocolado"] [:inline "em_analise"]]]]
                   :returning [:*]}))))
 
+(defn indeferir!
+  "CAS de INDEFERIMENTO: transiciona o pedido p/ 'indeferido' SOMENTE se ainda esta ABERTO (protocolado|em_analise) —
+  o gemeo de `responder!`, com o outro desfecho do grafo (`transicoes-pedido` admite os dois a partir dos abertos).
+  Devolve o mapa kebab (incl. :protocolo) se transicionou, ou nil se o pedido ja estava terminal (respondido|
+  indeferido) — a borda desambigua nil-existente p/ 409. A transicao p/ terminal PASSA o trg_pedido_esic_trava_terminal."
+  [tx {:keys [id ente-id]}]
+  {:pre [(some? ente-id) (some? id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.pedido_esic
+                  :set {:estado "indeferido" :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :id id]
+                          [:in :estado [[:inline "protocolado"] [:inline "em_analise"]]]]
+                  :returning [:*]}))))
+
 (defn transicionar-estado!
   "CAS do estado: muda `de`->`para` SOMENTE se ainda esta em `de` (WHERE estado=de). Carimba atualizado_em.
   Devolve o mapa kebab se transicionou, ou nil se a corrida foi perdida (estado ja mudou entre read e write).

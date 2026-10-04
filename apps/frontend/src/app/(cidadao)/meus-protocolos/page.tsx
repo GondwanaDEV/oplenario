@@ -37,10 +37,14 @@ export default function PaginaMeusProtocolos() {
         )}
         {estado === "erro" && (
           <p className="ac-nota ac-erro" role="alert">
-            Não foi possível carregar os seus protocolos agora. Tente novamente em instantes.
+            {dados
+              ? "Não foi possível atualizar os seus protocolos agora: o que está na tela pode estar desatualizado. Tente novamente em instantes."
+              : "Não foi possível carregar os seus protocolos agora. Tente novamente em instantes."}
           </p>
         )}
-        {estado === "pronto" && dados && <ListaProtocolos dados={dados} token={token} aoMudar={recarregar} />}
+        {/* o ÚLTIMO estado bom fica: uma releitura que falha (depois de um envio, por exemplo) não apaga a lista nem o resultado
+            do envio que está nela */}
+        {dados && <ListaProtocolos dados={dados} token={token} aoMudar={recarregar} />}
         <InscricoesAudiencia token={token} />
       </div>
     </>

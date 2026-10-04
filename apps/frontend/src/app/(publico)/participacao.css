@@ -127,3 +127,8 @@
 
 /* ADR-0018 — o recibo numa Casa com o sistema restrito: aviso âmbar (texto AA nos dois temas), não erro */
 .pf-restrito { color: var(--aviso-texto); font-weight: 600; border-left: 3px solid var(--amarelo-traco); padding-left: 0.7rem; }
+
+/* O recibo e, logo abaixo (FORA do cartao role=status), o resultado do envio dos anexos do pedido. */
+.pf-recibo-bloco { display: grid; gap: 0.8rem; align-content: start; min-width: 0; }
+.pf-recibo:focus { outline: none; }
+.pf-recibo:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }

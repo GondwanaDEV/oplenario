@@ -23,6 +23,13 @@
             {:respondida-em (->str (:respondida-em r))}
             "RespostaReciboOut"))
 
+(defn indeferimento-recibo->wire
+  "Recibo do indeferimento {:indeferido-em} -> IndeferimentoReciboOut (resposta 200). So o carimbo do ato."
+  [r]
+  (validar! wire/IndeferimentoReciboOut
+            {:indeferido-em (->str (:indeferido-em r))}
+            "IndeferimentoReciboOut"))
+
 (defn resposta->wire
   "View publica de uma resposta {:corpo :respondida-em} -> RespostaOut. FILTRA respondido-por/ente/ids — so o
   conteudo publico (corpo + quando)."

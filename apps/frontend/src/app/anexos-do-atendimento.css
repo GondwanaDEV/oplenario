@@ -1,0 +1,42 @@
+/* A lista de anexos da resposta (balcao e /meus-protocolos). Mesmo desenho dos anexos de comunicado: uma linha por
+   arquivo, nome (quebra em qualquer ponto), tamanho · formato em mono, e o botao de baixar. */
+.anx { display: grid; gap: 0.5rem; min-width: 0; margin: 0.8rem 0 0; }
+.anx-titulo { margin: 0; font-size: var(--t-16); font-weight: 700; color: var(--texto); }
+.anx ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.anx li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.55rem 0.8rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.anx-nome { font-weight: 600; color: var(--texto); overflow-wrap: anywhere; flex: 1 1 12rem; }
+.anx-info { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.anx-erro { margin: 0; color: var(--acento-texto); font-size: var(--t-13); overflow-wrap: anywhere; }
+
+/* O seletor de arquivos (antes do ato) e o resultado do envio (depois), nas telas do balcao e do portal. */
+.anx-campo { display: grid; gap: 0.3rem; min-width: 0; }
+.anx-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); }
+.anx-campo input[type="file"] {
+  font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2);
+  border: 1px solid var(--campo-borda); border-radius: var(--raio-sm);
+  padding: 0.6rem 0.7rem; width: 100%; min-height: 44px; box-sizing: border-box;
+}
+.anx-campo input[type="file"]:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+.anx-dica { margin: 0; color: var(--texto-2); max-width: 64ch; line-height: 1.5; font-size: var(--t-13); }
+.anx-arquivos, .anx-envio ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.anx-arquivos li, .anx-envio li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.8rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); }
+.anx-arquivo-nome { font-weight: 600; color: var(--texto); overflow-wrap: anywhere; flex: 1 1 12rem; }
+.anx-arquivo-info, .anx-arquivo-fase { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.anx-fase-erro { color: var(--acento-texto); font-family: var(--corpo); font-size: var(--t-13); }
+.anx-fase-ok { color: var(--marca); }
+.anx-envio { display: grid; gap: 0.6rem; max-width: 52rem; }
+.anx-envio > p { margin: 0; font-size: var(--t-13); color: var(--texto); }
+.anx-controle { display: grid; gap: 0.6rem; max-width: 52rem; padding: 0.9rem 1rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); }
+.anx-controle h2, .anx-controle h3 { margin: 0; font-size: var(--t-16); font-weight: 700; color: var(--texto); }
+.anx-controle legend { font-weight: 700; color: var(--texto); padding: 0 0.3rem; }
+fieldset.anx-controle { margin: 0.8rem 0 0; min-width: 0; }
+.pf-anexos .anx-campo { margin: 0; }
+.anx-nao-feche { margin: 0; color: var(--aviso-texto); font-size: var(--t-13); }
+.anx-retirado, .anx-motivo { font-size: var(--t-13); color: var(--texto-2); overflow-wrap: anywhere; }
+.anx-retirado { font-weight: 600; }
+.anx-retirar { flex-basis: 100%; display: grid; gap: 0.5rem; padding-top: 0.4rem; }
+.anx-retirar textarea { font-family: var(--corpo); font-size: var(--t-16); color: var(--texto); background: var(--surface-2); border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; width: 100%; box-sizing: border-box; resize: vertical; }
+.anx-retirar-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.anx-inativo { opacity: 0.55; cursor: not-allowed; }
+.anx-pendentes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.anx-pendentes li { padding: 0.4rem 0.8rem; background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-sm); overflow-wrap: anywhere; }

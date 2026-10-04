@@ -2,16 +2,26 @@
 
 // A lista de "Meus protocolos" (formulários do cidadão, ADR-0015): o que a cidadã protocolou na Casa, em três
 // grupos, cada item com estado, prazo e a resposta da Câmara quando houver. O pedido de e-SIC respondido ou
-// indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem).
+// indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem). O protocolo
+// INDEFERIDO (e-SIC ou LGPD) mostra a fundamentação da Casa — a lei exige que a recusa diga as razões — e um selo
+// neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho. O protocolo PRORROGADO mostra as duas
+// datas e a justificativa da Câmara (LAI art. 11 §2º: o requerente é cientificado) — só aqui, no protocolo do dono. Os
+// ANEXOS da resposta (a resposta a um pedido costuma ser um documento) aparecem sob a resposta, com o download pela rota
+// do próprio requerente (o servidor devolve 404 a quem não é o dono). Os anexos que a PRÓPRIA cidadã juntou ao pedido
+// ("Seus anexos", origem `requerente`) ficam numa lista à parte, e enquanto o servidor diz `podeAnexar` (10 minutos depois
+// do protocolo, até 5 arquivos) o controle "Anexar ao pedido" deixa juntar mais.
 
 import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
-import { formatarData } from "@/lib/formatar-data";
+import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { MeusProtocolos, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import type { Anexo, EspecieDoPortal, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import { ListaDeAnexos } from "../../anexos-do-atendimento";
+import { AnexarAoProtocolo } from "./anexar-ao-protocolo";
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
+const INDEFERIDOS = new Set(["indeferido", "indeferida"]);
 
 function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   if (!ABERTOS.has(estado) || dias === null) return null;
@@ -19,17 +29,46 @@ function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   return <span className="mp-prazo">{dias === 0 ? "Hoje é o último dia do prazo" : `${dias} dias para a resposta`}</span>;
 }
 
-function RespostaDaCasa({ resposta }: { resposta: Resposta | null }) {
+// As datas do prazo são DIA CIVIL (AAAA-MM-DD): formatarDataSimples não passa por Date, então o dia não recua com o fuso.
+// O instante em que foi prorrogado, esse sim, é um instante: formatarData, como o resto da tela.
+function PrazoProrrogado({ prorrogacao }: { prorrogacao: Prorrogacao | null | undefined }) {
+  if (!prorrogacao) return null;
+  return (
+    <div className="mp-prorrogacao">
+      <p className="mp-prorrogacao-cab">
+        Prazo prorrogado de {formatarDataSimples(prorrogacao.deData)} para {formatarDataSimples(prorrogacao.paraData)}, em{" "}
+        {formatarData(prorrogacao.prorrogadoEm)}.
+      </p>
+      <p className="mp-prorrogacao-texto">
+        <span className="mp-prorrogacao-rotulo">Justificativa da Câmara:</span> {prorrogacao.justificativa}
+      </p>
+    </div>
+  );
+}
+
+function RespostaDaCasa({ resposta, indeferido }: { resposta: Resposta | null; indeferido: boolean }) {
   if (!resposta) return null;
   return (
     <div className="mp-resposta">
-      <p className="mp-resposta-cab">Resposta da Câmara · {formatarData(resposta.respondidaEm)}</p>
+      <p className="mp-resposta-cab">
+        {indeferido ? "Fundamentação do indeferimento" : "Resposta da Câmara"} · {formatarData(resposta.respondidaEm)}
+      </p>
       <p>{resposta.corpo}</p>
     </div>
   );
 }
 
-function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string | null; aoMudar: () => void }) {
+function Recurso({
+  pedidoId,
+  token,
+  aoMudar,
+  indeferido,
+}: {
+  pedidoId: string;
+  token: string | null;
+  aoMudar: () => void;
+  indeferido: boolean;
+}) {
   const { enviar, estado, erro } = useEnvioCidadao(token);
   const [aberto, setAberto] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -45,7 +84,7 @@ function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string
   if (!aberto) {
     return (
       <button type="button" className="btn btn-contorno btn-mini" onClick={() => setAberto(true)}>
-        Recorrer da resposta
+        {indeferido ? "Recorrer do indeferimento" : "Recorrer da resposta"}
       </button>
     );
   }
@@ -70,7 +109,9 @@ function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string
         }
       }}
     >
-      <label htmlFor={`motivo-${pedidoId}`}>Por que você não concordou com a resposta?</label>
+      <label htmlFor={`motivo-${pedidoId}`}>
+        {indeferido ? "Por que você não concordou com o indeferimento?" : "Por que você não concordou com a resposta?"}
+      </label>
       <textarea id={`motivo-${pedidoId}`} value={motivo} maxLength={LIMITES.motivo} onChange={(e) => setMotivo(e.target.value)} />
       {erro && (
         <p className="form-erro" role="alert">
@@ -114,6 +155,12 @@ function Item({
   reciboEm,
   dias,
   resposta,
+  prorrogacao,
+  anexos,
+  rotaDoAnexo,
+  token,
+  anexavel,
+  aoMudar,
   children,
 }: {
   protocolo: string;
@@ -122,23 +169,42 @@ function Item({
   reciboEm: string;
   dias: number | null;
   resposta: Resposta | null;
+  prorrogacao?: Prorrogacao | null;
+  anexos?: Anexo[];
+  rotaDoAnexo: (anexoId: string) => string;
+  token: string | null;
+  /** O que o controle de anexar precisa saber: qual protocolo e se o servidor diz que ainda cabe. */
+  anexavel: { especie: EspecieDoPortal; id: string; podeAnexar: boolean };
+  aoMudar: () => void;
   children?: React.ReactNode;
 }) {
+  const doRequerente = (anexos ?? []).filter((a) => a.origem === "requerente");
+  const daCasa = (anexos ?? []).filter((a) => a.origem !== "requerente");
   return (
     <li className="mp-item">
       <div className="mp-item-topo">
         <span className="mp-protocolo">{protocolo}</span>
-        <span className={`chip ${ABERTOS.has(estado) ? "chip-aguarda" : "chip-aprovada"}`}>{rotuloEstado(estado)}</span>
+        <span className={`chip ${ABERTOS.has(estado) ? "chip-aguarda" : INDEFERIDOS.has(estado) ? "chip-neutro" : "chip-aprovada"}`}>
+          {rotuloEstado(estado)}
+        </span>
       </div>
       <p className="mp-titulo">{titulo}</p>
       <p className="mp-meta">
         Recebido em {formatarData(reciboEm)} <Prazo estado={estado} dias={dias} />
       </p>
-      <RespostaDaCasa resposta={resposta} />
+      <PrazoProrrogado prorrogacao={prorrogacao} />
+      <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
+      <ListaDeAnexos anexos={daCasa} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Anexos da resposta" />
+      <ListaDeAnexos anexos={doRequerente} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Seus anexos" />
+      <AnexarAoProtocolo especie={anexavel.especie} id={anexavel.id} podeAnexar={anexavel.podeAnexar} token={token} aoMudar={aoMudar} />
       {children}
     </li>
   );
 }
+
+/** O download do anexo, pela rota do REQUERENTE (so' o dono baixa; qualquer outro recebe 404). */
+const rotaDoAnexo = (especie: "esic" | "ouvidoria" | "lgpd", id: string) => (anexoId: string) =>
+  `/api/portal/meus-protocolos/${especie}/${encodeURIComponent(id)}/anexos/${encodeURIComponent(anexoId)}`;
 
 const rotuloDe = (lista: { valor: string; rotulo: string }[], v: string) => lista.find((o) => o.valor === v)?.rotulo ?? v;
 
@@ -161,11 +227,15 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
-                dias={p.diasRestantes} resposta={p.resposta}>
+                dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao} anexos={p.anexos}
+                rotaDoAnexo={rotaDoAnexo("esic", p.id)} token={token}
+                anexavel={{ especie: "esic", id: p.id, podeAnexar: p.podeAnexar === true }} aoMudar={aoMudar}>
                 {p.recurso ? (
                   <RecursoInterposto recurso={p.recurso} />
                 ) : (
-                  RECORRIVEIS.has(p.estado) && <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} />
+                  RECORRIVEIS.has(p.estado) && (
+                    <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} indeferido={INDEFERIDOS.has(p.estado)} />
+                  )
                 )}
               </Item>
             ))}
@@ -181,7 +251,9 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.solicitacoesLgpd.map((s) => (
               <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDe(DIREITOS_LGPD, s.tipo)} estado={s.estado}
-                reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} />
+                reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} anexos={s.anexos}
+                rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token}
+                anexavel={{ especie: "lgpd", id: s.id, podeAnexar: s.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
           </ul>
         )}
@@ -198,7 +270,9 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.manifestacoes.map((m) => (
               <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
-                estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta} />
+                estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
+                prorrogacao={m.prorrogacao} anexos={m.anexos} rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token}
+                anexavel={{ especie: "ouvidoria", id: m.id, podeAnexar: m.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
           </ul>
         )}
