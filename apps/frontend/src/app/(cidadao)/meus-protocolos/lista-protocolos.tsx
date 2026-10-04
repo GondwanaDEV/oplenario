@@ -4,13 +4,14 @@
 // grupos, cada item com estado, prazo e a resposta da Câmara quando houver. O pedido de e-SIC respondido ou
 // indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem). O protocolo
 // INDEFERIDO (e-SIC ou LGPD) mostra a fundamentação da Casa — a lei exige que a recusa diga as razões — e um selo
-// neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho.
+// neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho. O protocolo PRORROGADO mostra as duas
+// datas e a justificativa da Câmara (LAI art. 11 §2º: o requerente é cientificado) — só aqui, no protocolo do dono.
 
 import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
-import { formatarData } from "@/lib/formatar-data";
+import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { MeusProtocolos, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import type { MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
@@ -20,6 +21,23 @@ function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   if (!ABERTOS.has(estado) || dias === null) return null;
   if (dias < 0) return <span className="mp-prazo mp-vencido">O prazo venceu há {-dias} dias</span>;
   return <span className="mp-prazo">{dias === 0 ? "Hoje é o último dia do prazo" : `${dias} dias para a resposta`}</span>;
+}
+
+// As datas do prazo são DIA CIVIL (AAAA-MM-DD): formatarDataSimples não passa por Date, então o dia não recua com o fuso.
+// O instante em que foi prorrogado, esse sim, é um instante: formatarData, como o resto da tela.
+function PrazoProrrogado({ prorrogacao }: { prorrogacao: Prorrogacao | null | undefined }) {
+  if (!prorrogacao) return null;
+  return (
+    <div className="mp-prorrogacao">
+      <p className="mp-prorrogacao-cab">
+        Prazo prorrogado de {formatarDataSimples(prorrogacao.deData)} para {formatarDataSimples(prorrogacao.paraData)}, em{" "}
+        {formatarData(prorrogacao.prorrogadoEm)}.
+      </p>
+      <p className="mp-prorrogacao-texto">
+        <span className="mp-prorrogacao-rotulo">Justificativa da Câmara:</span> {prorrogacao.justificativa}
+      </p>
+    </div>
+  );
 }
 
 function RespostaDaCasa({ resposta, indeferido }: { resposta: Resposta | null; indeferido: boolean }) {
@@ -131,6 +149,7 @@ function Item({
   reciboEm,
   dias,
   resposta,
+  prorrogacao,
   children,
 }: {
   protocolo: string;
@@ -139,6 +158,7 @@ function Item({
   reciboEm: string;
   dias: number | null;
   resposta: Resposta | null;
+  prorrogacao?: Prorrogacao | null;
   children?: React.ReactNode;
 }) {
   return (
@@ -153,6 +173,7 @@ function Item({
       <p className="mp-meta">
         Recebido em {formatarData(reciboEm)} <Prazo estado={estado} dias={dias} />
       </p>
+      <PrazoProrrogado prorrogacao={prorrogacao} />
       <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
       {children}
     </li>
@@ -180,7 +201,7 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
-                dias={p.diasRestantes} resposta={p.resposta}>
+                dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao}>
                 {p.recurso ? (
                   <RecursoInterposto recurso={p.recurso} />
                 ) : (
@@ -219,7 +240,8 @@ export function ListaProtocolos({
           <ul className="mp-lista">
             {dados.manifestacoes.map((m) => (
               <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
-                estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta} />
+                estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
+                prorrogacao={m.prorrogacao} />
             ))}
           </ul>
         )}

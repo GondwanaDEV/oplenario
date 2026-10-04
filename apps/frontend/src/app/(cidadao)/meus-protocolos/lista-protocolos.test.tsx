@@ -98,6 +98,61 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(JSON.parse(String(init?.body))).toEqual({ motivo: "Peço só os valores agregados." });
   });
 
+  it("o protocolo prorrogado mostra as duas datas, quando foi e a justificativa da Câmara (LAI art. 11 §2º); o não prorrogado, nada", () => {
+    const prorrogacao = {
+      deData: "2026-07-23",
+      paraData: "2026-08-02",
+      justificativa: "Busca no arquivo morto: o acervo de 2019 ainda não foi digitalizado.",
+      prorrogadoEm: "2026-07-08T15:30:00Z",
+    };
+    const comProrrogacao: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [
+        { ...base, id: "p4", protocolo: "ESIC-2026-000004", assunto: "Contratos", estado: "protocolado", diasRestantes: 20, prorrogacao },
+        { ...base, id: "p5", protocolo: "ESIC-2026-000005", assunto: "Diárias", estado: "protocolado", diasRestantes: 12, prorrogacao: null },
+        { ...base, id: "p6", protocolo: "ESIC-2026-000006", assunto: "Folha", estado: "protocolado", diasRestantes: 12 },
+      ],
+      manifestacoes: [
+        { ...base, id: "m1", protocolo: "OUV-2026-000001", tipo: "reclamacao", assunto: "Fila", estado: "protocolada", diasRestantes: 25,
+          prorrogacao: { ...prorrogacao, deData: "2026-08-02", paraData: "2026-09-01", justificativa: "Consulta à secretaria de obras." } },
+      ],
+    };
+    render(<ListaProtocolos dados={comProrrogacao} token="tok" aoMudar={() => {}} />);
+    const p4 = screen.getByText("ESIC-2026-000004").closest("li")!;
+    expect(within(p4).getByText(/Prazo prorrogado de 23\/07\/2026 para 02\/08\/2026, em 08\/07\/2026\./)).toBeTruthy();
+    const texto = within(p4).getByText(/Busca no arquivo morto/);
+    expect(texto.closest("p")!.textContent).toMatch(/^Justificativa da Câmara: Busca no arquivo morto/);
+    // nada de ISO cru nem de chave de contrato na tela
+    expect(within(p4).queryByText(/2026-07-23|2026-08-02|T15:30/)).toBeNull();
+    expect(p4.textContent).not.toMatch(/deData|paraData|prorrogacao|prorrogadoEm/);
+    // a ouvidoria também
+    const m1 = screen.getByText("OUV-2026-000001").closest("li")!;
+    expect(within(m1).getByText(/Prazo prorrogado de 02\/08\/2026 para 01\/09\/2026, em 08\/07\/2026\./)).toBeTruthy();
+    expect(within(m1).getByText(/Consulta à secretaria de obras\./)).toBeTruthy();
+    // sem prorrogação (nil ou ausente): bloco nenhum
+    for (const protocolo of ["ESIC-2026-000005", "ESIC-2026-000006"]) {
+      const li = screen.getByText(protocolo).closest("li")!;
+      expect(within(li).queryByText(/prorrogado/i)).toBeNull();
+      expect(within(li).queryByText(/Justificativa da Câmara/)).toBeNull();
+    }
+    // e a LGPD (que não prorroga) segue sem bloco
+    const s1 = screen.getByText("LGPD-2026-000001").closest("li")!;
+    expect(within(s1).queryByText(/prorrogado/i)).toBeNull();
+  });
+
+  it("a justificativa é texto, nunca HTML (o servidor escreve livremente)", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p7", protocolo: "ESIC-2026-000007", assunto: "x", estado: "protocolado", diasRestantes: 20,
+        prorrogacao: { deData: "2026-07-23", paraData: "2026-08-02", prorrogadoEm: "2026-07-08T15:30:00Z",
+          justificativa: "<b>negrito</b> <img src=x onerror=alert(1)>" } }],
+    };
+    const { container } = render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    expect(screen.getByText(/<b>negrito<\/b> <img src=x/)).toBeTruthy();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("li b")).toBeNull();
+  });
+
   it("pedido que já tem recurso mostra o recurso (e a decisão), sem oferecer recorrer de novo", () => {
     const comRecurso: MeusProtocolos = {
       ...DADOS,

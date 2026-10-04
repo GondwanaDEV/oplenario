@@ -19,9 +19,11 @@ type Base = {
   resposta: Resposta | null;
 };
 export type RecursoEsic = { protocolo: string; estado: string; reciboEm: string; resposta: Resposta | null };
-export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null };
+/** A prorrogação do prazo (LAI art. 11 §2º): as duas datas (AAAA-MM-DD), a justificativa da Câmara e quando foi (ISO). */
+export type Prorrogacao = { deData: string; paraData: string; justificativa: string; prorrogadoEm: string };
+export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null };
 export type SolicitacaoLgpd = Base & { tipo: string };
-export type Manifestacao = Base & { tipo: string; assunto: string };
+export type Manifestacao = Base & { tipo: string; assunto: string; prorrogacao?: Prorrogacao | null };
 export type MeusProtocolos = { pedidosEsic: PedidoEsic[]; solicitacoesLgpd: SolicitacaoLgpd[]; manifestacoes: Manifestacao[] };
 
 type Estado = "carregando" | "pronto" | "erro";
