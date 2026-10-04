@@ -65,7 +65,7 @@ function TopoCidadao() {
   const papel = estado === "pronto" && dados ? rotuloPapel(dados.papeis) : "";
 
   return (
-    <header className="topo">
+    <header className="topo topo-cidadao">
       <div className="envelope topo-grade">
         <div className="marca">
           <Brasao />
