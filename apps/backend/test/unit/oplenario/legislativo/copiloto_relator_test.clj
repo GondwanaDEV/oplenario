@@ -36,6 +36,15 @@
     (is (= [(str "materia:" pid) "norma:n1#art11"] (mapv :fonte-id (:citacoes a))))
     (is (= r (out/copiloto->wire r)) "o contrato de saida aceita o resultado inteiro")))
 
+(deftest conferir-analise-leva-o-id-da-execucao-na-ia-para-o-reporte-de-erro
+  ;; 8.4: o id e' o da execucao NO SATELITE (o que `POST /ia/execucoes/:id/reportes` espera); sem id, sem campo
+  (let [com (controllers/conferir-analise pid true (assoc-in boa [:analise :execucao-id] "exec-ia-7"))
+        sem (controllers/conferir-analise pid true boa)]
+    (is (= "exec-ia-7" (get-in com [:analise :execucao-ia])))
+    (is (= com (out/copiloto->wire com)) "o contrato de saida carrega o id")
+    (is (not (contains? (:analise sem) :execucao-ia)) "sem id da IA, nada e' inventado")
+    (is (= sem (out/copiloto->wire sem)))))
+
 (deftest conferir-analise-descarta-o-que-nao-e-desta-materia-nem-da-casa
   (let [forjadas [{:fonte-id (str "materia:" (random-uuid)) :trecho "outra" :status "conferida"}
                   {:fonte-id "https://exemplo.com" :trecho "x" :status "conferida"}

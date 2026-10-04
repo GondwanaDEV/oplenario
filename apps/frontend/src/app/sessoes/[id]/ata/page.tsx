@@ -20,6 +20,7 @@ import { useTema } from "@/lib/tema";
 import { useAta } from "@/lib/use-ata";
 import { faltaParaPublicar, linhaDaVersao, origemDaRedacao, semAta } from "@/lib/ata-vista";
 import { avisoDoRascunho, paragrafosDoRascunho, rotuloDaCitacao, situacaoDoRascunho } from "@/lib/rascunho-ata-vista";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import { formatarHash } from "@/lib/folha-vista";
 import type { AtaRascunhoConteudoOut, AtaRascunhoOut, AtaSessaoOut, AtaVersaoOut } from "@/lib/contrato-sessoes.gen";
 import "./ata.css";
@@ -80,7 +81,7 @@ export function ConteudoAta({ id }: { id: string }) {
         {r.estado === "erro" && <p role="status">Não foi possível carregar a ata desta sessão.</p>}
         {r.estado === "pronto" && (
           <Ata key={r.ata.atual?.versao.id ?? "sem"} id={id} ata={r.ata} publicar={r.publicar} enviando={r.enviando}
-            aviso={aviso} setAviso={setAviso} pedirRascunho={r.pedirRascunho} lerRascunho={r.lerRascunho} />
+            aviso={aviso} setAviso={setAviso} pedirRascunho={r.pedirRascunho} lerRascunho={r.lerRascunho} token={token} />
         )}
       </main>
     </>
@@ -89,8 +90,9 @@ export function ConteudoAta({ id }: { id: string }) {
 
 type Hook = ReturnType<typeof useAta>;
 
-function Ata({ id, ata, publicar, enviando, aviso, setAviso, pedirRascunho, lerRascunho }: {
+function Ata({ id, ata, publicar, enviando, aviso, setAviso, pedirRascunho, lerRascunho, token }: {
   id: string;
+  token: string | null;
   ata: AtaSessaoOut;
   publicar: Hook["publicar"];
   enviando: boolean;
@@ -134,6 +136,7 @@ function Ata({ id, ata, publicar, enviando, aviso, setAviso, pedirRascunho, lerR
       <RevisaoDoRascunho
         rascunhoId={ata.rascunho.rascunhoId}
         lerRascunho={lerRascunho}
+        token={token}
         voltar={() => setModo("ler")}
         usar={(c) => {
           setTexto(c.textoLimpo);
@@ -312,8 +315,9 @@ function PainelRascunho({ rascunho, pedir, revisar }: {
   );
 }
 
-function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar }: {
+function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar, token }: {
   rascunhoId: string;
+  token: string | null;
   lerRascunho: Hook["lerRascunho"];
   voltar: () => void;
   usar: (c: AtaRascunhoConteudoOut) => void;
@@ -384,6 +388,7 @@ function RevisaoDoRascunho({ rascunhoId, lerRascunho, voltar, usar }: {
           </ol>
         </details>
       )}
+      {conteudo.execucaoIa && <ReportarErroIa execucaoId={conteudo.execucaoIa} token={token} />}
       <div className="ata-acoes">
         <button type="button" className="btn btn-primaria" onClick={() => usar(conteudo)}>Usar este rascunho</button>
         <button type="button" className="btn btn-fantasma" onClick={voltar}>Voltar</button>

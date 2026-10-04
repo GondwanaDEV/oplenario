@@ -127,6 +127,7 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
                       pedir={() => pedirAnalise(token, "legislativo", id)}
                       analiseAtual={analise}
                       aoUsar={aplicar}
+                      token={token}
                     />
                   )
                 : undefined

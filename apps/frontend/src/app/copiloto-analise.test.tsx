@@ -41,6 +41,18 @@ describe("CopilotoAnalise", () => {
     expect(aoUsar).not.toHaveBeenCalled();
   });
 
+  it("com o id da execução na IA oferece 'Reportar erro' junto do rascunho (8.4); sem id, não oferece", async () => {
+    for (const execucaoIa of ["e-ia-rel-1", undefined]) {
+      const comId: ResultadoAnalise =
+        rascunho.tipo === "rascunho" ? { ...rascunho, analise: { ...rascunho.analise, execucaoIa } } : rascunho;
+      render(<CopilotoAnalise pedir={async () => comId} analiseAtual="" aoUsar={vi.fn()} token="tok" />);
+      fireEvent.click(screen.getByRole("button", { name: /Rascunhar análise/ }));
+      await screen.findByLabelText("Texto do rascunho");
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(execucaoIa !== undefined);
+      cleanup();
+    }
+  });
+
   it("campo vazio: 'Usar no campo Análise' entrega o texto ao formulário e recolhe o rascunho", async () => {
     const aoUsar = vi.fn();
     render(<CopilotoAnalise pedir={async () => rascunho} analiseAtual="" aoUsar={aoUsar} />);

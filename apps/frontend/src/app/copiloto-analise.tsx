@@ -18,12 +18,14 @@ import {
   type ModoDeUso,
   type ResultadoAnalise,
 } from "@/lib/copiloto-analise-vista";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import "./copiloto-analise.css";
 
 export function CopilotoAnalise({
   pedir,
   analiseAtual,
   aoUsar,
+  token = null,
 }: {
   /** Pede o rascunho ao core (a borda da secretaria ou a do relator). */
   pedir: () => Promise<ResultadoAnalise>;
@@ -31,6 +33,8 @@ export function CopilotoAnalise({
   analiseAtual: string;
   /** Põe o texto novo no campo Análise (o formulário continua dono do campo). */
   aoUsar: (texto: string) => void;
+  /** A credencial de quem pede (a mesma do `pedir`): vai ao "Reportar erro" (8.4). */
+  token?: string | null;
 }) {
   const [montando, setMontando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoAnalise | null>(null);
@@ -113,6 +117,7 @@ export function CopilotoAnalise({
               </ol>
             </details>
           )}
+          {resultado.analise.execucaoIa && <ReportarErroIa execucaoId={resultado.analise.execucaoIa} token={token} />}
           <div className="cop-analise-acoes">
             {campoVazio ? (
               <button type="button" className="btn btn-primaria btn-mini" onClick={() => usar("substituir")}>

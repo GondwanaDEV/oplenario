@@ -138,6 +138,7 @@ export interface AnaliseCopilotoOut {
   pontosAConfirmar: string[];
   incerteza: "normal" | "revisar_com_atencao";
   modelo: string;
+  execucaoIa?: string | null;
 }
 
 export interface CopilotoAnaliseOut {
@@ -440,6 +441,7 @@ export interface JustificativaCopilotoOut {
   paragrafosSemFonte: number[];
   incerteza: string;
   modelo: string;
+  execucaoIa?: string | null;
 }
 
 export interface CopilotoRequerimentoOut {
@@ -509,6 +511,7 @@ export interface RascunhoResumoOut {
   modeloLlmId: string;
   promptVersao: string;
   desatualizado: boolean;
+  execucaoIa?: string | null;
 }
 
 export interface ResumoReciboOut {

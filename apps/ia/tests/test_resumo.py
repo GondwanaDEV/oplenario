@@ -262,6 +262,8 @@ def test_api_le_o_rascunho_com_texto_limpo_e_so_na_casa() -> None:
     assert r.status_code == 200
     b = r.json()
     assert b["proposicao-id"] == P1 and b["texto-base-sha256"] == "sha256:aa"
+    # 8.4: o core leva este id à tela para o "Reportar erro" (POST .../execucoes/{id}/reportes)
+    assert b["execucao-id"] and b["execucao-id"] == arm.resumo(rid).execucao_id
     assert "[[" not in b["texto-limpo"] and b["texto-limpo"].startswith("Esta proposição trata do seguinte:")
     assert [x["status"] for x in b["citacoes"]] == ["conferida", "conferida"]
     assert b["paragrafos-sem-fonte"] == [2] and b["incerteza"]["nivel"] == "revisar_com_atencao"
