@@ -1,7 +1,7 @@
 # ADR-0022 — Balcão de atendimento: indeferir, ciência da prorrogação e anexos
 
-- **Status:** 🟡 **Proposta, implementada** (04/10/2026). O Daouda confirmou a frente ("Confirmo, abre a frente 1");
-  as decisões de cada eixo abaixo foram tomadas durante a execução e esperam o "Confirmo" dele.
+- **Status:** ✅ **Aceita** (04/10/2026). O Daouda confirmou a frente ("Confirmo, abre a frente 1"); as decisões de
+  cada eixo foram tomadas durante a execução e confirmadas por ele no mesmo dia ("Confirmo a ADR-0022").
 - **Origem:** o que o balcão de atendimento (04/10/2026) deixou em "Falta": indeferir, anexos e a ciência da
   justificativa da prorrogação ao requerente.
 - **Relacionadas:** ADR-0001 (silhueta de módulo), ADR-0009 (catálogo de ações), ADR-0015 (cidadão pelo gov.br),

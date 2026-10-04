@@ -159,7 +159,7 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
 - Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
   sem texto).
 - **Indeferir, ciência da prorrogação e anexos ENTREGUES (04/10/2026,
-  [ADR-0022](docs/adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), proposta à espera do "Confirmo"):**
+  [ADR-0022](docs/adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), aceita):**
   - indeferir e-SIC e LGPD com fundamentação obrigatória: ato próprio, conta como prazo cumprido, e o recurso do e-SIC
     continua cabendo;
   - o requerente lê a prorrogação e a justificativa em `/meus-protocolos`; as rotas públicas por número de protocolo
