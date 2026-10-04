@@ -29,7 +29,8 @@ function mockar(rotas: Record<string, Rota | ((c: Chamada) => Rota)>) {
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     // o upload de anexo e' multipart (FormData): o corpo registrado e' o nome e o tamanho do arquivo do campo `arquivo`
     const corpo = init?.body instanceof FormData
-      ? { arquivo: (init.body.get("arquivo") as File).name, tamanho: (init.body.get("arquivo") as File).size }
+      ? { arquivo: (init.body.get("arquivo") as File).name, tamanho: (init.body.get("arquivo") as File).size,
+          ...(init.body.has("motivo") ? { motivo: String(init.body.get("motivo")) } : {}) }
       : init?.body ? JSON.parse(String(init.body)) : undefined;
     const c: Chamada = { metodo: init?.method ?? "GET", url: String(url), body: corpo };
     chamadas.push(c);
@@ -1007,6 +1008,92 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirmar a retirada" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível|não encontr|Não encontramos/i);
     expect((screen.getByLabelText("Motivo da retirada") as HTMLTextAreaElement).value).toBe("arquivo errado");
+  });
+
+  // ---- SUBSTITUIR um anexo da Casa (ADR-0022): motivo + UM arquivo, a qualquer tempo; o do requerente só se retira
+
+  const substituido = (id: string, nome: string, novoId: string, motivo = "planilha de outro mês") =>
+    ({ ...anexoOut(id, nome, 100, "application/pdf", "casa"), "retirado-em": "2026-07-04T10:00:00Z", "motivo-da-retirada": motivo, "substituido-por": novoId });
+
+  it("substituir: ao lado de Retirar só no anexo da Casa; motivo + arquivo obrigatórios; o fio é multipart; a lista se relê com o novo logo abaixo", async () => {
+    let trocado = false;
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: fechadoComAnexar(false, trocado
+        ? [substituido("a2", "folha-errada.pdf", "a3"), anexoOut("a1", "contrato.pdf", 100, "application/pdf", "requerente"), anexoOut("a3", "folha-certa.pdf", 100)]
+        : [anexoOut("a2", "folha-errada.pdf", 100), anexoOut("a1", "contrato.pdf", 100, "application/pdf", "requerente")]) }),
+      "POST /api/atendimento/esic/p1/anexos/a2/substituir": () => { trocado = true; return { status: 201, corpo: anexoOut("a3", "folha-certa.pdf", 100) }; },
+    });
+    render(<PaginaProtocolo />);
+    const daResposta = await screen.findByRole("region", { name: "Anexos da resposta" });
+    // o do requerente so' se retira: sem "Substituir"
+    const doPedido = screen.getByRole("region", { name: "Anexos do pedido" });
+    expect(within(doPedido).getByRole("button", { name: "Retirar contrato.pdf" })).toBeTruthy();
+    expect(within(doPedido).queryByRole("button", { name: /Substituir/ })).toBeNull();
+    // o da Casa tem os dois, lado a lado
+    expect(within(daResposta).getByRole("button", { name: "Retirar folha-errada.pdf" })).toBeTruthy();
+    fireEvent.click(within(daResposta).getByRole("button", { name: "Substituir folha-errada.pdf" }));
+    const grupo = screen.getByRole("group", { name: "Substituir o anexo folha-errada.pdf" });
+    // o foco entra no motivo e o aviso diz que nao se desfaz
+    expect(document.activeElement).toBe(within(grupo).getByLabelText("Motivo da substituição"));
+    expect(within(grupo).getByText(/não pode ser desfeita/)).toBeTruthy();
+    const confirmar = within(grupo).getByRole("button", { name: "Confirmar a substituição" }) as HTMLButtonElement;
+    expect(confirmar.disabled).toBe(true);   // sem motivo nem arquivo
+    fireEvent.change(within(grupo).getByLabelText("Motivo da substituição"), { target: { value: "  planilha de outro mês  " } });
+    expect(confirmar.disabled).toBe(true);   // falta o arquivo
+    // arquivo de tipo fora da lista: recusado antes de enviar, com a frase
+    fireEvent.change(within(grupo).getByLabelText("Arquivo novo"), { target: { files: [arquivo("programa.exe")] } });
+    expect((await within(grupo).findByRole("alert")).textContent).toMatch(/não é de um tipo aceito/);
+    expect(confirmar.disabled).toBe(true);
+    fireEvent.change(within(grupo).getByLabelText("Arquivo novo"), { target: { files: [arquivo("folha-certa.pdf")] } });
+    expect(within(grupo).queryByRole("alert")).toBeNull();
+    expect(confirmar.disabled).toBe(false);
+    fireEvent.click(confirmar);
+    await waitFor(() => expect(c.some((x) => x.url.endsWith("/a2/substituir"))).toBe(true));
+    expect(c.find((x) => x.url.endsWith("/a2/substituir"))!.body).toEqual({ arquivo: "folha-certa.pdf", tamanho: 100, motivo: "planilha de outro mês" });
+    // o detalhe foi relido: "Substituído em", com o motivo (so' o balcao o ve), e o novo logo abaixo, com download
+    const depois = await screen.findByRole("region", { name: "Anexos da resposta" });
+    await waitFor(() => expect(within(depois).getByText(/Substituído em/)).toBeTruthy());
+    expect(within(depois).queryByText(/Retirado em/)).toBeNull();
+    expect(within(depois).getByText(/planilha de outro mês/)).toBeTruthy();
+    expect(within(depois).queryByRole("button", { name: /Baixar folha-errada\.pdf/ })).toBeNull();
+    expect(within(depois).getByRole("button", { name: "Baixar folha-certa.pdf" })).toBeTruthy();
+    expect(within(depois).getByRole("button", { name: "Substituir folha-certa.pdf" })).toBeTruthy();   // o novo tambem pode ser trocado
+    expect(within(depois).queryByRole("group", { name: /Substituir o anexo/ })).toBeNull();
+    const nomes = within(depois).getAllByRole("listitem").map((li) => li.querySelector(".anx-nome")!.textContent);
+    expect(nomes).toEqual(["folha-errada.pdf", "folha-certa.pdf"]);
+  });
+
+  it("substituir: cancelar não envia nada; a falha do servidor aparece em palavras e o que foi digitado fica", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [anexoOut("a2", "folha-errada.pdf", 100)]) },
+      "POST /api/atendimento/esic/p1/anexos/a2/substituir": { status: 409, corpo: { erro: "Este arquivo já foi substituído por outro." } },
+    });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexos da resposta" });
+    fireEvent.click(within(secao).getByRole("button", { name: "Substituir folha-errada.pdf" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar a substituição" }));
+    expect(screen.queryByRole("group", { name: /Substituir o anexo/ })).toBeNull();
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    fireEvent.click(within(secao).getByRole("button", { name: "Substituir folha-errada.pdf" }));
+    fireEvent.change(screen.getByLabelText("Motivo da substituição"), { target: { value: "errei" } });
+    fireEvent.change(screen.getByLabelText("Arquivo novo"), { target: { files: [arquivo("certa.pdf")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar a substituição" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Este arquivo já foi substituído por outro.");
+    expect((screen.getByLabelText("Motivo da substituição") as HTMLTextAreaElement).value).toBe("errei");
+  });
+
+  it("substituir e retirar não abrem juntos: um formulário por vez", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [anexoOut("a2", "folha.pdf", 100)]) } });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexos da resposta" });
+    fireEvent.click(within(secao).getByRole("button", { name: "Substituir folha.pdf" }));
+    expect(screen.queryByRole("group", { name: /Retirar o anexo/ })).toBeNull();
+    expect(screen.getByRole("group", { name: "Substituir o anexo folha.pdf" })).toBeTruthy();
+    expect(within(secao).queryByRole("button", { name: "Retirar folha.pdf" })).toBeNull();   // some enquanto o formulario esta aberto
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar a substituição" }));
+    fireEvent.click(within(secao).getByRole("button", { name: "Retirar folha.pdf" }));
+    expect(screen.getByRole("group", { name: "Retirar o anexo folha.pdf" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: /Substituir o anexo/ })).toBeNull();
   });
 
   // ---------------------------------------------------------------- o complemento da resposta (ADR-0022)
