@@ -3,6 +3,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { ListaProtocolos } from "./lista-protocolos";
 import type { MeusProtocolos } from "@/lib/use-meus-protocolos";
 
+// o mesmo `ListaProtocolos`, com atalho para os testes de download (modo real = sem token = link direto)
+function ListaDeProtocolosComToken({ dados, token }: { dados: MeusProtocolos; token: string | null }) {
+  return <ListaProtocolos dados={dados} token={token} aoMudar={() => {}} />;
+}
+
 const base = { reciboEm: "2026-07-03T12:00:00Z", venceEm: "2026-07-23", resposta: null };
 const DADOS: MeusProtocolos = {
   pedidosEsic: [
@@ -153,8 +158,8 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(container.querySelector("li b")).toBeNull();
   });
 
-  const anexo = (id: string, nome: string, bytes: number, tipoMidia = "application/pdf") =>
-    ({ id, nome, tipoMidia, bytes, origem: "casa", enviadoEm: "2026-07-10T15:00:00Z" });
+  const anexo = (id: string, nome: string, bytes: number, tipoMidia = "application/pdf", origem = "casa") =>
+    ({ id, nome, tipoMidia, bytes, origem, enviadoEm: "2026-07-10T15:00:00Z" });
 
   it("os anexos da resposta: nome, tamanho legível e formato (nunca o tipo cru), com link para baixar como arquivo", () => {
     const dados: MeusProtocolos = {
@@ -185,6 +190,109 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     const m9 = screen.getByText("OUV-2026-000009").closest("li")!;
     expect(within(m9).getByRole("link", { name: "Baixar relatorio.odt" }).getAttribute("href")).toBe("/api/portal/meus-protocolos/ouvidoria/m9/anexos/a4");
     expect(within(m9).getByText(/Texto \(ODT\)/)).toBeTruthy();
+  });
+
+  it("os anexos do próprio pedido ficam em 'Seus anexos', separados dos da resposta, ambos com download", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p5", protocolo: "ESIC-2026-000005", assunto: "Folha", estado: "respondido", diasRestantes: 5,
+        resposta: { corpo: "Segue.", respondidaEm: "2026-07-10T15:00:00Z" },
+        anexos: [anexo("a1", "meu contrato.pdf", 2048, "application/pdf", "requerente"), anexo("a2", "resposta.pdf", 1024, "application/pdf", "casa")] }],
+    };
+    render(<ListaDeProtocolosComToken dados={dados} token={null} />);
+    const p5 = screen.getByText("ESIC-2026-000005").closest("li")!;
+    const seus = within(p5).getByRole("list", { name: "Seus anexos" });
+    expect(within(seus).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(seus).getByRole("link", { name: "Baixar meu contrato.pdf" }).getAttribute("href"))
+      .toBe("/api/portal/meus-protocolos/esic/p5/anexos/a1");
+    const daResposta = within(p5).getByRole("list", { name: "Anexos da resposta" });
+    expect(within(daResposta).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(daResposta).getByText("resposta.pdf")).toBeTruthy();
+    expect(within(seus).queryByText("resposta.pdf")).toBeNull();
+  });
+
+  it("enquanto `pode-anexar`: o controle de anexar ao PRÓPRIO pedido, com o limite de 10 minutos dito em palavras; envia um a um à rota do dono", async () => {
+    const chamadas: { url: string; metodo: string; arquivo?: string }[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push({ url: String(url), metodo: init?.method ?? "GET",
+        arquivo: init?.body instanceof FormData ? (init.body.get("arquivo") as File).name : undefined });
+      return { ok: true, status: 201, json: async () => ({ id: "n", nome: "x", "tipo-midia": "application/pdf", bytes: 1, origem: "requerente", "enviado-em": "2026-07-10T15:00:00Z" }) } as Response;
+    }) as unknown as typeof fetch;
+    const aoMudar = vi.fn();
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p6", protocolo: "ESIC-2026-000006", assunto: "Folha", estado: "protocolado", diasRestantes: 20,
+        anexos: [], podeAnexar: true }],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={aoMudar} />);
+    const p6 = screen.getByText("ESIC-2026-000006").closest("li")!;
+    const controle = within(p6).getByRole("group", { name: "Anexar ao pedido" });
+    expect(within(controle).getByText(/até 10 minutos depois de enviar o pedido/)).toBeTruthy();
+    expect(within(controle).getByText(/Até 5 arquivos de até 10 MB: PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS/)).toBeTruthy();
+    const enviar = within(controle).getByRole("button", { name: "Enviar os arquivos" }) as HTMLButtonElement;
+    expect(enviar.disabled).toBe(true);
+    fireEvent.change(within(controle).getByLabelText(/Anexar arquivos ao pedido/),
+      { target: { files: [new File(["x"], "contrato.pdf"), new File(["y"], "foto.png"), new File(["z"], "programa.exe")] } });
+    expect(within(controle).getByRole("alert").textContent).toMatch(/“programa.exe” não é de um tipo aceito/);
+    fireEvent.click(enviar);
+    await waitFor(() => expect(within(p6).getByText("2 arquivos anexados.")).toBeTruthy());
+    expect(chamadas.map((c) => [c.metodo, c.url, c.arquivo])).toEqual([
+      ["POST", "/api/portal/meus-protocolos/esic/p6/anexos", "contrato.pdf"],
+      ["POST", "/api/portal/meus-protocolos/esic/p6/anexos", "foto.png"],
+    ]);
+    expect(aoMudar).toHaveBeenCalled();   // a lista se relê: os anexos novos aparecem
+  });
+
+  it("o controle de anexar: a falha diz qual arquivo e por quê (409 da janela), e deixa tentar de novo", async () => {
+    let n = 0;
+    global.fetch = vi.fn(async () => (++n === 1
+      ? ({ ok: false, status: 409, json: async () => ({ erro: "Os anexos vão junto com o pedido: os 10 minutos depois do protocolo já passaram." }) })
+      : ({ ok: true, status: 201, json: async () => ({}) })) as Response) as unknown as typeof fetch;
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p6", protocolo: "ESIC-2026-000006", assunto: "Folha", estado: "protocolado", diasRestantes: 20, anexos: [], podeAnexar: true }],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    const p6 = screen.getByText("ESIC-2026-000006").closest("li")!;
+    fireEvent.change(within(p6).getByLabelText(/Anexar arquivos ao pedido/), { target: { files: [new File(["x"], "contrato.pdf")] } });
+    fireEvent.click(within(p6).getByRole("button", { name: "Enviar os arquivos" }));
+    const falha = await within(p6).findByText(/não foi anexado: Os anexos vão junto com o pedido: os 10 minutos depois do protocolo já passaram\./);
+    expect(falha.closest("li")!.textContent).toMatch(/contrato\.pdf/);   // diz QUAL arquivo e por quê
+    fireEvent.click(within(p6).getByRole("button", { name: "Tentar de novo o anexo contrato.pdf" }));
+    await waitFor(() => expect(within(p6).getByText("1 arquivo anexado.")).toBeTruthy());
+    expect(vi.mocked(global.fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it("sem `pode-anexar` (a janela passou ou já são 5): nenhum controle de anexar", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [
+        { ...base, id: "p1", protocolo: "ESIC-2026-000001", assunto: "a", estado: "protocolado", diasRestantes: 20, anexos: [], podeAnexar: false },
+        { ...base, id: "p2", protocolo: "ESIC-2026-000002", assunto: "b", estado: "protocolado", diasRestantes: 20 },
+      ],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    expect(screen.queryByRole("group", { name: "Anexar ao pedido" })).toBeNull();
+    expect(screen.queryByLabelText(/Anexar arquivos ao pedido/)).toBeNull();
+  });
+
+  it("LGPD e ouvidoria identificada também anexam, cada uma pela rota da sua espécie", async () => {
+    const urls: string[] = [];
+    global.fetch = vi.fn(async (url: string) => { urls.push(String(url)); return { ok: true, status: 201, json: async () => ({}) } as Response; }) as unknown as typeof fetch;
+    const dados: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [],
+      solicitacoesLgpd: [{ ...base, id: "s7", protocolo: "LGPD-2026-000007", tipo: "acessar", estado: "protocolada", diasRestantes: 14, anexos: [], podeAnexar: true }],
+      manifestacoes: [{ ...base, id: "m7", protocolo: "OUV-2026-000007", tipo: "reclamacao", assunto: "Fila", estado: "protocolada", diasRestantes: 29, anexos: [], podeAnexar: true }],
+    };
+    render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+    for (const protocolo of ["LGPD-2026-000007", "OUV-2026-000007"]) {
+      const li = screen.getByText(protocolo).closest("li")!;
+      fireEvent.change(within(li).getByLabelText(/Anexar arquivos ao pedido/), { target: { files: [new File(["x"], "doc.pdf")] } });
+      fireEvent.click(within(li).getByRole("button", { name: "Enviar os arquivos" }));
+      await waitFor(() => expect(within(li).getByText("1 arquivo anexado.")).toBeTruthy());
+    }
+    expect(urls).toEqual(["/api/portal/meus-protocolos/lgpd/s7/anexos", "/api/portal/meus-protocolos/ouvidoria/m7/anexos"]);
   });
 
   it("o nome do arquivo é texto, nunca HTML", () => {

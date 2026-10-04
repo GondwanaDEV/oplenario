@@ -40,15 +40,16 @@ import {
   useDetalheAtendimento,
   type DetalheOut,
 } from "@/lib/use-atendimento";
-import type { ItemDeEnvio } from "@/lib/anexos-do-atendimento";
+import { useEnvioDeAnexos } from "@/lib/use-envio-de-anexos";
 import { tamanhoLegivel } from "@/lib/comunicacao-vista";
 import { ListaDeAnexos } from "@/app/anexos-do-atendimento";
 import type { DetalheEsicOut, DetalheLgpdOut, DetalheOuvidoriaOut, PessoaOut } from "@/lib/contrato-atendimento.gen";
 import { GuardSecretaria } from "../../../guard-secretaria";
 import { TopoInterno } from "../../../topo";
 import { SeloPrazo } from "../../fila-atendimento";
-import { PainelDeEnvio } from "../../envio-de-anexos";
-import { SeletorDeAnexos } from "../../seletor-de-anexos";
+import { PainelDeEnvio } from "@/app/envio-de-anexos";
+import { SeletorDeAnexos } from "@/app/seletor-de-anexos";
+import { AnexarAvulso } from "../../anexar-avulso";
 import "../../atendimento.css";
 
 export default function PaginaProtocolo() {
@@ -67,28 +68,20 @@ function Conteudo() {
   const especie = especieValida(tipo) ? tipo : null;
   const { estado, recarregar } = useDetalheAtendimento(token, especie, id ?? null);
   const [recibo, setRecibo] = useState<string | null>(null);
-  // os anexos da resposta sobem DEPOIS do ato (a rota de anexo pede a resposta ja' gravada), um a um
-  const [envio, setEnvio] = useState<ItemDeEnvio[]>([]);
   const voltar = comToken(`/atendimento${especie ? `?aba=${especie}` : ""}`, token);
   const podeAnexar = estado.fase === "pronto" && Boolean((estado.dado.acoes as { podeAnexar?: boolean }).podeAnexar);
-
-  async function enviarAnexos(lista: ItemDeEnvio[], indices: number[]) {
-    if (!especie || !id) return;
-    for (const i of indices) {
-      setEnvio((xs) => xs.map((x, j) => (j === i ? { ...x, fase: "enviando", mensagem: undefined } : x)));
-      const r = await anexar(token, especie, id, lista[i].arquivo);
-      setEnvio((xs) => xs.map((x, j) => (j === i ? (r.ok ? { ...x, fase: "ok" } : { ...x, fase: "erro", mensagem: r.mensagem }) : x)));
-    }
-    recarregar(); // a lista de anexos e o `pode-anexar` do detalhe passam a valer o que o servidor tem agora
-  }
+  // os anexos da resposta sobem DEPOIS do ato (a rota de anexo pede a resposta ja' gravada), um a um; no fim, o detalhe é
+  // relido: a lista de anexos e o `pode-anexar` passam a valer o que o servidor tem agora
+  const { itens: envio, enviar: enviarAnexos, tentarDeNovo, enviando } = useEnvioDeAnexos(async (arquivo) => {
+    if (!especie || !id) return { ok: false, mensagem: "Endereço inválido: este protocolo não existe." };
+    const r = await anexar(token, especie, id, arquivo);
+    return r.ok ? { ok: true } : { ok: false, mensagem: r.mensagem };
+  }, recarregar);
 
   async function concluir(texto: string, arquivos: File[]) {
     setRecibo(texto);
     recarregar();
-    if (arquivos.length === 0) return;
-    const lista: ItemDeEnvio[] = arquivos.map((arquivo) => ({ arquivo, fase: "esperando" }));
-    setEnvio(lista);
-    await enviarAnexos(lista, lista.map((_, i) => i));
+    await enviarAnexos(arquivos);
   }
 
   return (
@@ -105,9 +98,9 @@ function Conteudo() {
             <Link className="btn btn-primaria" href={voltar}>Voltar à fila</Link>
           </div>
         )}
-        <PainelDeEnvio itens={envio} podeTentarDeNovo={podeAnexar} aoTentarDeNovo={(i) => void enviarAnexos(envio, [i])} />
+        <PainelDeEnvio itens={envio} podeTentarDeNovo={podeAnexar} aoTentarDeNovo={(i) => void tentarDeNovo(i)} />
         {especie && estado.fase === "pronto" && (
-          <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} />
+          <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} aoAnexar={enviarAnexos} enviandoAnexos={enviando} />
         )}
       </main>
     </>
@@ -123,12 +116,15 @@ function Pessoa({ rotulo, p }: { rotulo: string; p: PessoaOut | null }) {
   );
 }
 
-function Protocolo({ especie, id, d, token, aoConcluir }: {
+function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos }: {
   especie: Especie;
   id: string;
   d: DetalheOut;
   token: string | null;
   aoConcluir: (recibo: string, arquivos: File[]) => void;
+  /** O controle avulso "Anexar arquivo" (enquanto `pode-anexar`): o mesmo envio um a um do formulário. */
+  aoAnexar: (arquivos: File[]) => void;
+  enviandoAnexos: boolean;
 }) {
   const info = ESPECIES.find((e) => e.especie === especie)!;
   const prazo = linhaDoPrazo(d);
@@ -136,6 +132,10 @@ function Protocolo({ especie, id, d, token, aoConcluir }: {
   const ouv = especie === "ouvidoria" ? (d as DetalheOuvidoriaOut) : null;
   const lgpd = especie === "lgpd" ? (d as DetalheLgpdOut) : null;
   const texto = esic?.descricao ?? ouv?.descricao ?? lgpd?.detalhe ?? null;
+  const anexos = d.anexos ?? [];
+  const doPedido = anexos.filter((a) => a.origem === "requerente");
+  const daResposta = anexos.filter((a) => a.origem !== "requerente");
+  const podeAnexar = Boolean((d.acoes as { podeAnexar?: boolean }).podeAnexar);
 
   return (
     <>
@@ -202,7 +202,11 @@ function Protocolo({ especie, id, d, token, aoConcluir }: {
         )}
       </section>
 
-      <ListaDeAnexos anexos={d.anexos} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
+      {/* duas listas, duas origens: o que o requerente juntou ao pedido e o que a Casa juntou à resposta (nunca misturadas) */}
+      <ListaDeAnexos titulo="Anexos do pedido" anexos={doPedido} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
+      <ListaDeAnexos titulo="Anexos da resposta" anexos={daResposta} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)} token={token} />
+
+      {podeAnexar && <AnexarAvulso aoEnviar={(arquivos) => void aoAnexar(arquivos)} enviando={enviandoAnexos} />}
 
       <Acoes especie={especie} d={d} token={token} aoConcluir={aoConcluir} />
     </>

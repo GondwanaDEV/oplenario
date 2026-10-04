@@ -463,8 +463,8 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     detalheEsic({ estado: "respondido", aberto: false, "dias-restantes": null, anexos,
       historico: [{ tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" }],
       acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": false, "pode-anexar": podeAnexar, "recurso-pendente-id": null } });
-  const anexoOut = (id: string, nome: string, tamanho: number, tipo = "application/pdf") =>
-    ({ id, nome, "tipo-midia": tipo, bytes: tamanho, origem: "casa", "enviado-em": "2026-07-03T15:00:00Z" });
+  const anexoOut = (id: string, nome: string, tamanho: number, tipo = "application/pdf", origem = "casa") =>
+    ({ id, nome, "tipo-midia": tipo, bytes: tamanho, origem, "enviado-em": "2026-07-03T15:00:00Z" });
   const posts = (c: Chamada[], sufixo: string) => c.filter((x) => x.metodo === "POST" && x.url.endsWith(sufixo));
 
   it("responder com anexos: o seletor barra o que não pode ir; depois do ato, os arquivos sobem um a um", async () => {
@@ -669,6 +669,85 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     const link = await screen.findByRole("link", { name: "Baixar folha.pdf" });
     expect(link.getAttribute("href")).toBe("/api/atendimento/esic/p1/anexos/a1");
     expect(link.hasAttribute("download")).toBe(true);
+  });
+
+  it("as duas origens ficam em listas separadas: 'Anexos do pedido' (o requerente) e 'Anexos da resposta' (a Casa), cada uma com download", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false, [
+      anexoOut("a1", "contrato.pdf", 2048, "application/pdf", "requerente"),
+      anexoOut("a2", "resposta.pdf", 1024, "application/pdf", "casa"),
+      anexoOut("a3", "foto.png", 10, "image/png", "requerente"),
+    ]) } });
+    render(<PaginaProtocolo />);
+    const doPedido = await screen.findByRole("region", { name: "Anexos do pedido" });
+    expect(within(doPedido).getAllByRole("listitem").map((l) => l.textContent)).toEqual([
+      expect.stringContaining("contrato.pdf"), expect.stringContaining("foto.png"),
+    ]);
+    expect(within(doPedido).getByRole("button", { name: "Baixar contrato.pdf" })).toBeTruthy();
+    const daResposta = screen.getByRole("region", { name: "Anexos da resposta" });
+    expect(within(daResposta).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(daResposta).getByText("resposta.pdf")).toBeTruthy();
+    expect(within(doPedido).queryByText("resposta.pdf")).toBeNull();
+  });
+
+  it("só anexos do requerente: aparece 'Anexos do pedido' e nenhuma lista da resposta", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: abertoComAnexar(false) } });
+    const { unmount } = render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Contratos de 2025" });
+    expect(screen.queryByRole("region", { name: /Anexos d/ })).toBeNull();
+    unmount();
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic({ anexos: [anexoOut("a1", "contrato.pdf", 10, "application/pdf", "requerente")] }) } });
+    render(<PaginaProtocolo />);
+    expect(await screen.findByRole("region", { name: "Anexos do pedido" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Anexos da resposta" })).toBeNull();
+  });
+
+  it("anexar depois de recarregar: enquanto `pode-anexar`, um controle avulso envia arquivos à resposta, um a um", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(true) },
+      "POST /api/atendimento/esic/p1/anexos": (ch) => ({ status: 201, corpo: anexoOut(`n-${(ch.body as { arquivo: string }).arquivo}`, (ch.body as { arquivo: string }).arquivo, 100) }),
+    });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexar arquivo" });
+    expect(within(secao).getByText(/10 minutos depois da resposta/)).toBeTruthy();
+    const enviar = within(secao).getByRole("button", { name: "Anexar os arquivos escolhidos" }) as HTMLButtonElement;
+    expect(enviar.disabled).toBe(true);
+    // o MESMO seletor: barra o que nao pode ir, antes de enviar
+    escolher(/Escolher arquivos para anexar/, [arquivo("a.pdf"), arquivo("b.csv"), arquivo("programa.exe")]);
+    expect(within(secao).getByRole("alert").textContent).toMatch(/“programa.exe” não é de um tipo aceito/);
+    expect(enviar.disabled).toBe(false);
+    fireEvent.click(enviar);
+    expect(await screen.findByText("2 arquivos anexados.")).toBeTruthy();
+    expect(posts(c, "/anexos").map((x) => (x.body as { arquivo: string }).arquivo)).toEqual(["a.pdf", "b.csv"]);
+    // depois de enviar, a selecao some (o controle fica pronto para a proxima) e o detalhe foi relido
+    expect(within(secao).queryByRole("list", { name: "Arquivos escolhidos" })).toBeNull();
+    expect(c.filter((x) => x.metodo === "GET").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("o controle avulso: a falha diz qual arquivo e por quê, e deixa tentar de novo", async () => {
+    let tentativas = 0;
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(true) },
+      "POST /api/atendimento/esic/p1/anexos": () => ++tentativas === 1
+        ? { status: 415, corpo: { erro: "Tipo de arquivo não aceito. Aceitamos PDF." } }
+        : { status: 201, corpo: anexoOut("n1", "a.pdf", 100) },
+    });
+    render(<PaginaProtocolo />);
+    const secao = await screen.findByRole("region", { name: "Anexar arquivo" });
+    escolher(/Escolher arquivos para anexar/, [arquivo("a.pdf")]);
+    fireEvent.click(within(secao).getByRole("button", { name: "Anexar os arquivos escolhidos" }));
+    const falha = await screen.findByText(/não foi anexado: Tipo de arquivo não aceito\. Aceitamos PDF\./);
+    expect(falha.closest("li")!.textContent).toMatch(/a\.pdf/);   // diz QUAL arquivo e por quê
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo o anexo a.pdf" }));
+    expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+    expect(posts(c, "/anexos")).toHaveLength(2);
+  });
+
+  it("sem `pode-anexar`, o controle avulso nem aparece", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: fechadoComAnexar(false) } });
+    render(<PaginaProtocolo />);
+    await screen.findByText("Este protocolo está encerrado: não há o que responder.");
+    expect(screen.queryByRole("region", { name: "Anexar arquivo" })).toBeNull();
+    expect(screen.queryByLabelText(/Escolher arquivos para anexar/)).toBeNull();
   });
 
   it("sem anexo, a seção nem aparece", async () => {

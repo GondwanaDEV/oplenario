@@ -1,9 +1,10 @@
 "use client";
 
-// O seletor de arquivos que acompanham a RESPOSTA (responder, indeferir, decidir o recurso): até 5 arquivos de até 10 MB,
-// nove formatos, ditos em texto. Barra ANTES de enviar o que não pode ir (tipo fora da lista, vazio, grande demais, o
-// sexto), com o motivo; o servidor confere tudo de novo. Os arquivos só SOBEM depois que o ato dá certo (a rota de anexo
-// pede a resposta já gravada): aqui só se escolhe.
+// O seletor de arquivos que acompanham um ATO: a resposta da Casa (responder, indeferir, decidir o recurso, ou anexar
+// depois) e o pedido do cidadão (formulários do portal e "Meus protocolos"). Até 5 arquivos de até 10 MB, nove formatos,
+// ditos em texto. Barra ANTES de enviar o que não pode ir (tipo fora da lista, vazio, grande demais, o sexto), com o
+// motivo; o servidor confere tudo de novo. Os arquivos só SOBEM depois que o ato dá certo (a rota de anexo pede o
+// protocolo já gravado): aqui só se escolhe. O rótulo e a dica mudam de tela; a regra não.
 
 import { useState } from "react";
 import {
@@ -13,23 +14,32 @@ import {
   adicionarArquivos,
 } from "@/lib/anexos-do-atendimento";
 import { tamanhoLegivel } from "@/lib/comunicacao-vista";
+import "./anexos-do-atendimento.css";
 
 export function SeletorDeAnexos({
   arquivos,
   aoMudar,
   desabilitado,
+  id = "anx-arquivos",
+  rotulo = "Anexar arquivos à resposta (opcional)",
+  dica = "Eles sobem depois que você enviar, e quem pediu os baixa no protocolo dele.",
 }: {
   arquivos: File[];
   aoMudar: (arquivos: File[]) => void;
   desabilitado?: boolean;
+  /** O `id` do campo (uma tela pode ter mais de um seletor). */
+  id?: string;
+  rotulo?: string;
+  /** Depois do limite e dos formatos: quando e para quem os arquivos aparecem. */
+  dica?: string;
 }) {
   const [recusados, setRecusados] = useState<string[]>([]);
 
   return (
-    <div className="atd-campo atd-anexos">
-      <label htmlFor="atd-anexos">Anexar arquivos à resposta (opcional)</label>
+    <div className="anx-campo">
+      <label htmlFor={id}>{rotulo}</label>
       <input
-        id="atd-anexos"
+        id={id}
         type="file"
         multiple
         accept={ACCEPT_DO_SELETOR}
@@ -41,23 +51,22 @@ export function SeletorDeAnexos({
           e.target.value = ""; // o mesmo arquivo pode ser escolhido de novo depois de removido
         }}
       />
-      <p className="atd-dica">
-        Até {LIMITE_DE_ANEXOS} arquivos de até 10 MB: {TIPOS_ACEITOS_EM_TEXTO}. Eles sobem depois que você enviar, e quem pediu
-        os baixa no protocolo dele.
+      <p className="anx-dica">
+        Até {LIMITE_DE_ANEXOS} arquivos de até 10 MB: {TIPOS_ACEITOS_EM_TEXTO}. {dica}
       </p>
       {recusados.length > 0 && (
-        <div className="atd-erro" role="alert">
+        <div className="anx-erro" role="alert">
           {recusados.map((m) => (
             <p key={m}>{m}</p>
           ))}
         </div>
       )}
       {arquivos.length > 0 && (
-        <ul className="atd-arquivos" aria-label="Arquivos escolhidos">
+        <ul className="anx-arquivos" aria-label="Arquivos escolhidos">
           {arquivos.map((a) => (
             <li key={`${a.name}:${a.size}`}>
-              <span className="atd-arquivo-nome">{a.name}</span>
-              <span className="atd-arquivo-info">{tamanhoLegivel(a.size)}</span>
+              <span className="anx-arquivo-nome">{a.name}</span>
+              <span className="anx-arquivo-info">{tamanhoLegivel(a.size)}</span>
               <button
                 type="button"
                 className="btn btn-fantasma btn-mini"

@@ -7,14 +7,17 @@
 // neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho. O protocolo PRORROGADO mostra as duas
 // datas e a justificativa da Câmara (LAI art. 11 §2º: o requerente é cientificado) — só aqui, no protocolo do dono. Os
 // ANEXOS da resposta (a resposta a um pedido costuma ser um documento) aparecem sob a resposta, com o download pela rota
-// do próprio requerente (o servidor devolve 404 a quem não é o dono).
+// do próprio requerente (o servidor devolve 404 a quem não é o dono). Os anexos que a PRÓPRIA cidadã juntou ao pedido
+// ("Seus anexos", origem `requerente`) ficam numa lista à parte, e enquanto o servidor diz `podeAnexar` (10 minutos depois
+// do protocolo, até 5 arquivos) o controle "Anexar ao pedido" deixa juntar mais.
 
 import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
 import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { Anexo, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import type { Anexo, EspecieDoPortal, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
 import { ListaDeAnexos } from "../../anexos-do-atendimento";
+import { AnexarAoProtocolo } from "./anexar-ao-protocolo";
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
@@ -156,6 +159,8 @@ function Item({
   anexos,
   rotaDoAnexo,
   token,
+  anexavel,
+  aoMudar,
   children,
 }: {
   protocolo: string;
@@ -168,8 +173,13 @@ function Item({
   anexos?: Anexo[];
   rotaDoAnexo: (anexoId: string) => string;
   token: string | null;
+  /** O que o controle de anexar precisa saber: qual protocolo e se o servidor diz que ainda cabe. */
+  anexavel: { especie: EspecieDoPortal; id: string; podeAnexar: boolean };
+  aoMudar: () => void;
   children?: React.ReactNode;
 }) {
+  const doRequerente = (anexos ?? []).filter((a) => a.origem === "requerente");
+  const daCasa = (anexos ?? []).filter((a) => a.origem !== "requerente");
   return (
     <li className="mp-item">
       <div className="mp-item-topo">
@@ -184,7 +194,9 @@ function Item({
       </p>
       <PrazoProrrogado prorrogacao={prorrogacao} />
       <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
-      <ListaDeAnexos anexos={anexos} rotaDe={rotaDoAnexo} token={token} Titulo="h3" />
+      <ListaDeAnexos anexos={daCasa} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Anexos da resposta" />
+      <ListaDeAnexos anexos={doRequerente} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Seus anexos" />
+      <AnexarAoProtocolo especie={anexavel.especie} id={anexavel.id} podeAnexar={anexavel.podeAnexar} token={token} aoMudar={aoMudar} />
       {children}
     </li>
   );
@@ -216,7 +228,8 @@ export function ListaProtocolos({
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
                 dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao} anexos={p.anexos}
-                rotaDoAnexo={rotaDoAnexo("esic", p.id)} token={token}>
+                rotaDoAnexo={rotaDoAnexo("esic", p.id)} token={token}
+                anexavel={{ especie: "esic", id: p.id, podeAnexar: p.podeAnexar === true }} aoMudar={aoMudar}>
                 {p.recurso ? (
                   <RecursoInterposto recurso={p.recurso} />
                 ) : (
@@ -239,7 +252,8 @@ export function ListaProtocolos({
             {dados.solicitacoesLgpd.map((s) => (
               <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDe(DIREITOS_LGPD, s.tipo)} estado={s.estado}
                 reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} anexos={s.anexos}
-                rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token} />
+                rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token}
+                anexavel={{ especie: "lgpd", id: s.id, podeAnexar: s.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
           </ul>
         )}
@@ -257,7 +271,8 @@ export function ListaProtocolos({
             {dados.manifestacoes.map((m) => (
               <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
                 estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
-                prorrogacao={m.prorrogacao} anexos={m.anexos} rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token} />
+                prorrogacao={m.prorrogacao} anexos={m.anexos} rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token}
+                anexavel={{ especie: "ouvidoria", id: m.id, podeAnexar: m.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
           </ul>
         )}

@@ -79,3 +79,16 @@ export function resumoDoEnvio(itens: ItemDeEnvio[]): string {
   if (ok === 0) return itens.length === 1 ? "O arquivo não foi anexado." : "Nenhum arquivo foi anexado.";
   return `${ok === 1 ? "1 arquivo anexado" : `${ok} arquivos anexados`}; ${erro === 1 ? "1 não foi anexado" : `${erro} não foram anexados`}.`;
 }
+
+/** O que a cidadã lê quando o anexo ao PRÓPRIO pedido não vai. A frase do servidor explica o 409 e o 415. */
+export function mensagemDeErroDoAnexoDoRequerente(status: number, erroDoServidor?: string): string {
+  if (status === 0) return "Sem conexão com o servidor. Verifique a rede e tente de novo.";
+  if (status === 401) return "Sua sessão terminou. Entre de novo com o gov.br para anexar.";
+  if (status === 404) return "Não encontramos este protocolo para receber o anexo.";
+  if (status === 413) return "O arquivo passa de 10 MB, o limite por anexo.";
+  if (status === 415) return erroDoServidor || `Tipo de arquivo não aceito. Aceitamos ${TIPOS_ACEITOS_EM_TEXTO}.`;
+  if (status === 409) return erroDoServidor || "Já não dá para anexar: só vale até 10 minutos depois de enviar o pedido, e até 5 arquivos.";
+  if (status === 400) return "O arquivo está vazio ou veio malformado. Escolha-o de novo.";
+  if (status === 423) return "A Câmara está com acesso restrito por enquanto. Tente de novo mais tarde.";
+  return "Não foi possível anexar agora. Tente de novo em instantes.";
+}

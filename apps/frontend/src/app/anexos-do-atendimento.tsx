@@ -20,12 +20,15 @@ export function ListaDeAnexos({
   rotaDe,
   token,
   Titulo = "h2",
+  titulo = "Anexos da resposta",
 }: {
   anexos: AnexoDaLista[] | null | undefined;
   /** O endereço do download de um anexo (a rota da secretaria ou a do requerente). */
   rotaDe: (anexoId: string) => string;
   token: string | null;
   Titulo?: "h2" | "h3";
+  /** "Anexos da resposta" (a Casa) | "Anexos do pedido" (o requerente, no balcão) | "Seus anexos" (o requerente, no portal). */
+  titulo?: string;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const idTitulo = useId(); // varios protocolos na mesma pagina: um id por lista
@@ -33,9 +36,9 @@ export function ListaDeAnexos({
   return (
     <section className="anx" aria-labelledby={idTitulo}>
       <Titulo id={idTitulo} className="anx-titulo">
-        Anexos da resposta
+        {titulo}
       </Titulo>
-      <ul aria-label="Anexos da resposta">
+      <ul aria-label={titulo}>
         {anexos.map((a) => (
           <li key={a.id}>
             <span className="anx-nome">{a.nome}</span>

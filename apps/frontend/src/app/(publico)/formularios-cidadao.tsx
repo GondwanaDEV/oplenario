@@ -5,9 +5,14 @@
 // e-SIC e LGPD seguem o mesmo arquétipo (hero + faixa da lei + form-card + trilho). Sem sessão, o form-card vira o
 // convite do gov.br, que volta a ESTE formulário. Enviado, vira o recibo: o protocolo é a prova e o marco do prazo.
 //
-// Fora, por não existir no backend: o anexo da ouvidoria e o cartão "Ouvidor responsável" do design.
+// Anexos do pedido (e-SIC, LGPD e ouvidoria IDENTIFICADA): o seletor está no formulário, mas os arquivos só sobem depois que
+// o protocolo existe (a rota de anexo pede o protocolo gravado, e só o dono anexa). Com o recibo na mão, a tela acha o id
+// do protocolo em "Meus protocolos" (o recibo traz só o número) e envia os arquivos um a um, mostrando cada resultado junto
+// do recibo, com o motivo da falha e o "tentar de novo". Manifestação ANÔNIMA não tem anexo: não há dono para a rota.
+//
+// Fora, por não existir no backend: o cartão "Ouvidor responsável" do design.
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { buscarPublico } from "@/lib/portal-api";
 import { hrefEntrarComGovbr } from "@/lib/participar-vista";
 import {
@@ -24,8 +29,12 @@ import {
 import { formatarData, formatarHora } from "@/lib/formatar-data";
 import { avisoNoRecibo } from "@/lib/faixa-acesso-restrito";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
+import { useEnvioDeAnexos } from "@/lib/use-envio-de-anexos";
+import { acharIdDoProtocolo, anexarAoMeuProtocolo, type EspecieDoPortal } from "@/lib/use-meus-protocolos";
 import type { EstadoSessaoCidada } from "@/lib/use-sessao-cidada";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
+import { PainelDeEnvio } from "../envio-de-anexos";
+import { SeletorDeAnexos } from "../seletor-de-anexos";
 import "./participacao.css";
 import "./participar.css";
 
@@ -109,11 +118,14 @@ function ReciboProtocolo({
   recibo,
   ente,
   anonima = false,
+  children,
 }: {
   titulo: string;
   recibo: Recibo;
   ente: string;
   anonima?: boolean;
+  /** Logo abaixo do recibo: o resultado do envio dos anexos. */
+  children?: ReactNode;
 }) {
   return (
     <div className="pf-card pf-recibo" role="status">
@@ -139,6 +151,7 @@ function ReciboProtocolo({
           </a>
         </p>
       )}
+      {children}
     </div>
   );
 }
@@ -172,24 +185,58 @@ export function Campo({
   );
 }
 
-// Validação local + envio + recibo — o mesmo ciclo nos três formulários.
-function useFormulario(token: string | null) {
+// Validação local + envio + recibo + anexos do pedido — o mesmo ciclo nos três formulários.
+function useFormulario(token: string | null, especie: EspecieDoPortal) {
   const { enviar, estado, erro } = useEnvioCidadao(token);
   const [falta, setFalta] = useState<string | null>(null);
   const [recibo, setRecibo] = useState<Recibo | null>(null);
-  async function submeter<T>(montado: Resultado<T>, caminho: string) {
+  const [anexosPerdidos, setAnexosPerdidos] = useState(false);
+  const idDoProtocolo = useRef<string | null>(null);
+  const anexos = useEnvioDeAnexos(async (arquivo) => {
+    if (!idDoProtocolo.current) return { ok: false, mensagem: "Não achamos o protocolo para receber o anexo." };
+    const r = await anexarAoMeuProtocolo(token, especie, idDoProtocolo.current, arquivo);
+    return r.ok ? { ok: true } : { ok: false, mensagem: r.mensagem };
+  });
+  async function submeter<T>(montado: Resultado<T>, caminho: string, arquivos: File[] = []) {
     if (!montado.ok) {
       setFalta(MENSAGEM_CAMPO[montado.campo] ?? "Confira os campos.");
       return;
     }
     setFalta(null);
+    let r: Recibo;
     try {
-      setRecibo(await enviar<Recibo>(caminho, montado.corpo));
+      r = await enviar<Recibo>(caminho, montado.corpo);
+      setRecibo(r);
     } catch {
-      // `erro` já traz a mensagem
+      return; // `erro` já traz a mensagem
     }
+    if (arquivos.length === 0) return;
+    // o recibo traz o número, não o id: o id do protocolo vem de "Meus protocolos" (só o dono o lê)
+    const id = await acharIdDoProtocolo(token, especie, r.protocolo);
+    if (!id) {
+      setAnexosPerdidos(true);
+      return;
+    }
+    idDoProtocolo.current = id;
+    await anexos.enviar(arquivos);
   }
-  return { submeter, recibo, enviando: estado === "enviando", mensagem: falta ?? erro };
+  // o que mostrar junto do recibo: o resultado de cada arquivo (ou a explicação de onde anexar, se não deu para enviar)
+  const resultadoDosAnexos = (
+    <>
+      {anexosPerdidos && (
+        <p className="pf-ajuda" role="status">
+          O pedido foi registrado, mas não conseguimos enviar os arquivos agora. Anexe em Meus protocolos: vale até 10
+          minutos depois de enviar o pedido.
+        </p>
+      )}
+      <PainelDeEnvio
+        itens={anexos.itens}
+        podeTentarDeNovo
+        aoTentarDeNovo={(i) => void anexos.tentarDeNovo(i)}
+      />
+    </>
+  );
+  return { submeter, recibo, enviando: estado === "enviando", mensagem: falta ?? erro, resultadoDosAnexos };
 }
 
 export function Alerta({ mensagem }: { mensagem: string | null }) {
@@ -198,6 +245,34 @@ export function Alerta({ mensagem }: { mensagem: string | null }) {
       {mensagem}
     </p>
   ) : null;
+}
+
+/** O seletor dos anexos do pedido: o mesmo dos balcões, com a regra dita em palavras. */
+function AnexosDoPedido({
+  id,
+  rotulo,
+  arquivos,
+  aoMudar,
+  desabilitado,
+}: {
+  id: string;
+  rotulo: string;
+  arquivos: File[];
+  aoMudar: (a: File[]) => void;
+  desabilitado: boolean;
+}) {
+  return (
+    <div className="pf-campo pf-anexos">
+      <SeletorDeAnexos
+        id={id}
+        rotulo={rotulo}
+        arquivos={arquivos}
+        aoMudar={aoMudar}
+        desabilitado={desabilitado}
+        dica="Eles sobem logo depois que você enviar o pedido; depois de 10 minutos não dá mais para anexar."
+      />
+    </div>
+  );
 }
 
 function Enviar({ rotulo, enviando }: { rotulo: string; enviando: boolean }) {
@@ -238,9 +313,10 @@ function PrazoLista({ itens }: { itens: ReactNode[] }) {
 // ---------------------------------------------------------------- e-SIC
 
 export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "esic");
   const [assunto, setAssunto] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
 
   let card: ReactNode;
   if (sessao.estado !== "cidada") {
@@ -253,7 +329,7 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
       />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} />;
+    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente}>{f.resultadoDosAnexos}</ReciboProtocolo>;
   } else {
     card = (
       <form
@@ -261,7 +337,7 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void f.submeter(corpoEsic({ assunto, descricao }), "/portal/esic/pedidos");
+          void f.submeter(corpoEsic({ assunto, descricao }), "/portal/esic/pedidos", arquivos);
         }}
       >
         <h2>Novo pedido de informação</h2>
@@ -276,6 +352,8 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
             placeholder="Ex.: a lista dos contratos de limpeza assinados em 2025, com valores e empresas."
             onChange={(e) => setDescricao(e.target.value)} />
         </Campo>
+        <AnexosDoPedido id="esic-anexos" rotulo="Anexar documentos ao pedido (opcional)" arquivos={arquivos}
+          aoMudar={setArquivos} desabilitado={f.enviando} />
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar pedido" enviando={f.enviando} />
       </form>
@@ -301,9 +379,10 @@ export function FormEsic({ ente, sessao }: { ente: string; sessao: Sessao }) {
 // ---------------------------------------------------------------- LGPD
 
 export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: Sessao; tipoInicial: string }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "lgpd");
   const [tipo, setTipo] = useState(tipoInicial);
   const [detalhe, setDetalhe] = useState("");
+  const [arquivos, setArquivos] = useState<File[]>([]);
   const voltar = `/portal/casa/${ente}/lgpd/novo${tipoInicial ? `?tipo=${tipoInicial}` : ""}`;
 
   let card: ReactNode;
@@ -313,7 +392,7 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         porque="Os pedidos sobre os seus dados exigem identificação formal: a Câmara só responde ao próprio titular." />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente} />;
+    card = <ReciboProtocolo titulo="Pedido registrado" recibo={f.recibo} ente={ente}>{f.resultadoDosAnexos}</ReciboProtocolo>;
   } else {
     card = (
       <form
@@ -321,7 +400,7 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         noValidate
         onSubmit={(e) => {
           e.preventDefault();
-          void f.submeter(corpoLgpd({ tipo, detalhe }), "/portal/lgpd/solicitacoes");
+          void f.submeter(corpoLgpd({ tipo, detalhe }), "/portal/lgpd/solicitacoes", arquivos);
         }}
       >
         <h2>O que você quer pedir</h2>
@@ -346,6 +425,8 @@ export function FormLgpd({ ente, sessao, tipoInicial }: { ente: string; sessao: 
         <Campo id="lgpd-detalhe" rotulo="Detalhe (opcional)" dica="Ex.: qual dado corrigir e o valor certo.">
           <textarea id="lgpd-detalhe" value={detalhe} maxLength={LIMITES.detalhe} onChange={(e) => setDetalhe(e.target.value)} />
         </Campo>
+        <AnexosDoPedido id="lgpd-anexos" rotulo="Anexar documentos ao pedido (opcional)" arquivos={arquivos}
+          aoMudar={setArquivos} desabilitado={f.enviando} />
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar pedido" enviando={f.enviando} />
       </form>
@@ -414,12 +495,13 @@ function AcompanharManifestacao({ ente }: { ente: string }) {
 }
 
 export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }) {
-  const f = useFormulario(sessao.token);
+  const f = useFormulario(sessao.token, "ouvidoria");
   const [tipo, setTipo] = useState("reclamacao");
   const [assunto, setAssunto] = useState("");
   const [descricao, setDescricao] = useState("");
   const [anonima, setAnonima] = useState(false);
   const [enviadaAnonima, setEnviadaAnonima] = useState(false);
+  const [arquivos, setArquivos] = useState<File[]>([]);
 
   let card: ReactNode;
   if (sessao.estado !== "cidada") {
@@ -428,7 +510,11 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
         porque="Mesmo para manifestar sem se identificar, entre com o gov.br: se escolher o anonimato, seu nome não fica registrado na manifestação." />
     );
   } else if (f.recibo) {
-    card = <ReciboProtocolo titulo="Manifestação registrada" recibo={f.recibo} ente={ente} anonima={enviadaAnonima} />;
+    card = (
+      <ReciboProtocolo titulo="Manifestação registrada" recibo={f.recibo} ente={ente} anonima={enviadaAnonima}>
+        {f.resultadoDosAnexos}
+      </ReciboProtocolo>
+    );
   } else {
     card = (
       <form
@@ -437,7 +523,8 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
         onSubmit={(e) => {
           e.preventDefault();
           setEnviadaAnonima(anonima);
-          void f.submeter(corpoManifestacao({ tipo, assunto, descricao, anonima }), "/portal/ouvidoria/manifestacoes");
+          // anônima não tem dono, então não tem anexo: nada além da manifestação é enviado
+          void f.submeter(corpoManifestacao({ tipo, assunto, descricao, anonima }), "/portal/ouvidoria/manifestacoes", anonima ? [] : arquivos);
         }}
       >
         <h2>Nova manifestação</h2>
@@ -479,7 +566,11 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
             </span>
           </label>
           <label className="pf-op">
-            <input type="radio" name="ident" checked={anonima} onChange={() => setAnonima(true)} />
+            <input type="radio" name="ident" checked={anonima}
+              onChange={() => {
+                setAnonima(true);
+                setArquivos([]); // sem identificação não há anexo: o que foi escolhido não vai
+              }} />
             <span className="t">
               <b>Manifestar sem me identificar</b>
               <span>
@@ -489,6 +580,14 @@ export function FormOuvidoria({ ente, sessao }: { ente: string; sessao: Sessao }
             </span>
           </label>
         </fieldset>
+        {anonima ? (
+          <p className="pf-ajuda">
+            Manifestação anônima não leva anexo: sem identificação, ninguém é dono do protocolo para juntar arquivos a ele.
+          </p>
+        ) : (
+          <AnexosDoPedido id="ouv-anexos" rotulo="Anexar documentos à manifestação (opcional)" arquivos={arquivos}
+            aoMudar={setArquivos} desabilitado={f.enviando} />
+        )}
         <Alerta mensagem={f.mensagem} />
         <Enviar rotulo="Enviar manifestação" enviando={f.enviando} />
       </form>

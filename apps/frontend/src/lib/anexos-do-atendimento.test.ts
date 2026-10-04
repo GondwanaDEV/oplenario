@@ -6,6 +6,7 @@ import {
   TIPOS_ACEITOS_EM_TEXTO,
   adicionarArquivos,
   extensaoDe,
+  mensagemDeErroDoAnexoDoRequerente,
   motivoDeRecusa,
   resumoDoEnvio,
   rotuloDoTipo,
@@ -83,5 +84,21 @@ describe("resumoDoEnvio", () => {
     expect(resumoDoEnvio([item("ok"), item("erro"), item("erro")])).toBe("1 arquivo anexado; 2 não foram anexados.");
     expect(resumoDoEnvio([item("erro")])).toBe("O arquivo não foi anexado.");
     expect(resumoDoEnvio([item("ok"), item("enviando"), item("esperando")])).toBe("Enviando os arquivos…");
+  });
+});
+
+describe("mensagemDeErroDoAnexoDoRequerente — o que a cidadã lê quando o anexo não vai", () => {
+  it("a frase do servidor explica o 409 e o 415; o resto em palavras de gente", () => {
+    expect(mensagemDeErroDoAnexoDoRequerente(409, "Os anexos vão junto com o pedido: os 10 minutos depois do protocolo já passaram."))
+      .toMatch(/10 minutos depois do protocolo/);
+    expect(mensagemDeErroDoAnexoDoRequerente(409)).toMatch(/até 10 minutos depois de enviar o pedido|já tem 5/);
+    expect(mensagemDeErroDoAnexoDoRequerente(415, "Tipo de arquivo não aceito. Aceitamos PDF.")).toBe("Tipo de arquivo não aceito. Aceitamos PDF.");
+    expect(mensagemDeErroDoAnexoDoRequerente(415)).toMatch(/Aceitamos PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS/);
+    expect(mensagemDeErroDoAnexoDoRequerente(413)).toBe("O arquivo passa de 10 MB, o limite por anexo.");
+    expect(mensagemDeErroDoAnexoDoRequerente(404)).toMatch(/Não encontramos este protocolo/);
+    expect(mensagemDeErroDoAnexoDoRequerente(401)).toMatch(/Entre de novo com o gov\.br/);
+    expect(mensagemDeErroDoAnexoDoRequerente(400)).toMatch(/vazio ou veio malformado/);
+    expect(mensagemDeErroDoAnexoDoRequerente(0)).toMatch(/Sem conexão/);
+    expect(mensagemDeErroDoAnexoDoRequerente(500)).toMatch(/Tente de novo/);
   });
 });
