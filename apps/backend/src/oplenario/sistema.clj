@@ -184,11 +184,13 @@
 
 ;; ADR-0017: a trilha de auditoria entra entre os interceptors globais (ve a resposta final e o ator). O selo do dia que
 ;; fecha e' ancorado na corrente da Operacao (outra esfera, outro papel de banco) — o host cruza os dois modulos.
-(defn- globais-do-host [{repo-op :repo-admin-sistema :keys [repo-auditoria]}]
+(defn- globais-do-host [{repo-op :repo-admin-sistema :keys [repo-auditoria config]}]
   (if repo-auditoria
     [(auditoria-http/interceptor
       repo-auditoria
-      {:ancorar! (fn [ente-id {:keys [dia seq selo]}]
+      {;; adendo de 04/10/2026: so' com AUDITORIA_EXIGIR_TENTATIVA=true a escrita e' recusada quando a tentativa nao grava
+       :exigir-tentativa? (true? (get-in config [:auditoria :exigir-tentativa]))
+       :ancorar! (fn [ente-id {:keys [dia seq selo]}]
                    (when repo-op
                      (repo-admin-sistema/registrar-atuacao! repo-op
                                                             {:operador-id nil :ente-id ente-id

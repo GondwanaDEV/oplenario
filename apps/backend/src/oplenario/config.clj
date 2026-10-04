@@ -55,6 +55,9 @@
      ;; ADR-0008: segredo de servico core<->satelite de IA (vem do cofre). Ausente = rotas /integracao/ia desligadas.
      (get env "OPLENARIO_IA_SEGREDO") (assoc-in [:integracao-ia :segredo] (get env "OPLENARIO_IA_SEGREDO"))
      (get env "OPLENARIO_IA_URL")     (assoc-in [:integracao-ia :url]     (get env "OPLENARIO_IA_URL"))
+     ;; ADR-0017 (adendo): so' o valor exato "true" liga o modo que RECUSA a escrita quando a tentativa da trilha nao
+     ;; grava. Ausente ou qualquer outro valor = nao bloqueia (a trilha fora nao para a Casa).
+     (= "true" (get env "AUDITORIA_EXIGIR_TENTATIVA")) (assoc-in [:auditoria :exigir-tentativa] true)
      (get env "KEYCLOAK_BASE_URL")        (assoc-in [:keycloak :base-url]        (get env "KEYCLOAK_BASE_URL"))
      (get env "KEYCLOAK_REALM_PREFIXO")   (assoc-in [:keycloak :realm-prefixo]   (get env "KEYCLOAK_REALM_PREFIXO"))
      (get env "KEYCLOAK_AUDIENCIA")       (assoc-in [:keycloak :audiencia]       (get env "KEYCLOAK_AUDIENCIA"))

@@ -27,7 +27,9 @@
   [repo-auditoria seams]
   {:name  ::trilha
    :enter (fn [ctx]
-            (assoc ctx ::registrar-tentativa!
+            (assoc ctx
+                   ::exigir-tentativa? (true? (:exigir-tentativa? seams))
+                   ::registrar-tentativa!
                    (fn [req acao] (controllers/registrar-tentativa! repo-auditoria seams req acao))))
    :leave (fn [ctx]
             (let [acao (get-in ctx [:route :route-name])]
@@ -41,8 +43,12 @@
   propria ja' commitada. Se o processo cair ou o desfecho nao for gravado, a tentativa fica na corrente sem desfecho, e
   a leitura e a conferencia a acusam: o ato nao some.
 
-  Se a tentativa nao puder ser gravada, o pedido e' recusado com 503 e o handler NAO roda: sem o rastro, o ato nao
-  comeca. Sem o interceptor global da trilha (testes de borda de um modulo so'), nao faz nada."
+  Se a tentativa NAO puder ser gravada (a trilha esta' fora):
+  - PADRAO: `log/error` com a rota e a Casa, e o handler RODA — a trilha fora nao para a Casa (a sessao ao vivo nao
+    pode cair porque a auditoria caiu). O ato so' fica fora da trilha se a propria trilha estiver fora, e isso fica no
+    log.
+  - com `:exigir-tentativa?` (AUDITORIA_EXIGIR_TENTATIVA=true): o pedido e' recusado com 503 e o handler nao roda.
+  Sem o interceptor global da trilha (testes de borda de um modulo so'), nao faz nada."
   {:name  ::tentativa
    :enter (fn [ctx]
             (if-let [registrar! (::registrar-tentativa! ctx)]
@@ -51,11 +57,16 @@
                   (assoc ctx ::tentativa n)
                   ctx)
                 (catch Exception e
-                  (log/error e "auditoria: tentativa NAO gravada; o pedido foi recusado"
-                             {:acao (get-in ctx [:route :route-name])})
-                  (chain/terminate
-                   (assoc ctx :response
-                          (http/json-resposta 503 {:erro "o registro de auditoria esta indisponivel; nada foi feito"})))))
+                  (let [onde {:acao (get-in ctx [:route :route-name])
+                              :ente-id (get-in ctx [:request :ator :ente-id])}]
+                    (if (::exigir-tentativa? ctx)
+                      (do (log/error e "auditoria: tentativa NAO gravada; o pedido foi RECUSADO" onde)
+                          (chain/terminate
+                           (assoc ctx :response
+                                  (http/json-resposta
+                                   503 {:erro "o registro de auditoria esta indisponivel; nada foi feito"}))))
+                      (do (log/error e "auditoria: tentativa NAO gravada; o ato SEGUE sem rastro previo na trilha" onde)
+                          ctx)))))
               ctx))})
 
 (defn com-tentativa

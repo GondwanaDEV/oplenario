@@ -21,8 +21,8 @@
 
 (defn registrar-tentativa!
   "ANTES do handler de uma escrita: grava a tentativa na corrente, em transacao propria ja' commitada, e devolve o seq
-  dela (nil quando a requisicao nao tem tentativa). LANCA se nao gravar — quem chama recusa o pedido: sem o rastro da
-  tentativa o ato nao comeca (ADR-0017, adendo de 04/10/2026)."
+  dela (nil quando a requisicao nao tem tentativa). LANCA se nao gravar — quem chama decide: por padrao loga e deixa o
+  ato seguir; com AUDITORIA_EXIGIR_TENTATIVA recusa o pedido (ADR-0017, adendo de 04/10/2026)."
   [repo-auditoria seams req acao]
   (when-let [r (logic/registro-da-tentativa req acao)]
     (:seq (gravar! repo-auditoria seams r))))

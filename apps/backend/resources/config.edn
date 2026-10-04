@@ -51,6 +51,9 @@
             :sessao {:absoluta-h 8 :ociosa-min 15}}
  ;; ADR-0008: fronteira com o satelite de IA. Segredo SO' por ambiente (OPLENARIO_IA_SEGREDO); nil = desligada.
  :integracao-ia {:segredo nil :url nil}
+ ;; ADR-0017 (adendo de 04/10/2026): se a TENTATIVA da trilha nao gravar antes de uma escrita, o padrao e' logar e
+ ;; deixar o ato acontecer (a trilha fora nao para a sessao). AUDITORIA_EXIGIR_TENTATIVA=true troca para recusar com 503.
+ :auditoria {:exigir-tentativa false}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
            :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}

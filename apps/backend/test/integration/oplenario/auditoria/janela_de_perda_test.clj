@@ -15,6 +15,7 @@
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
             [oplenario.auditoria.components.repositorio :as repo]
+            [oplenario.auditoria.db.registro :as db]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.auditoria.logic :as logic]
             [oplenario.config :as config]
@@ -31,6 +32,8 @@
            (java.time.temporal ChronoUnit)))
 
 (def ^:dynamic *ds* nil)
+
+(declare registro-antigo!)
 
 (use-fixtures :once
   (fn [t]
@@ -75,10 +78,18 @@
 (defn- servico
   "`atos` = o \"banco do dominio\": o handler acrescenta nele quando o ato acontece. `rp-escrita` = o repositorio que o
   interceptor usa para GRAVAR; a leitura (`/auditoria`) usa sempre o de verdade."
-  [{:keys [atos rp-escrita rp-leitura] :or {atos (atom [])}}]
+  [{:keys [atos rp-escrita rp-leitura exigir? sem-tentativa?] :or {atos (atom [])}}]
   (let [auth  (it/autenticacao (idp-dev/idp-dev) (fake-identidade))
         leitura (or rp-leitura (rp))
-        rotas (into #{["/materias/:proposicao-id/despachar" :post
+        rotas (into #{;; "um voto": o handler abre a propria transacao de tenant no MESMO pool e trabalha ~5 ms nela
+                      ["/votos" :post
+                       [auth (fn [req]
+                               (tenancy/com-tenant* *ds* (get-in req [:ator :ente-id])
+                                 #(jdbc/execute-one! % ["SELECT pg_sleep(0.005)"]))
+                               (swap! atos conj :voto)
+                               (http/json-resposta 201 {:ok true}))]
+                       :route-name :legislativo/registrar-voto]
+                      ["/materias/:proposicao-id/despachar" :post
                        [auth (fn [_] (swap! atos conj :despacho)
                                (assoc (http/json-resposta 201 {:ok true}) :auditoria {:rotulo "PL 7/2026"}))]
                        :route-name :legislativo/despachar]
@@ -94,8 +105,8 @@
                                            :seams {:nome-de {maria "Maria Secretária" rui "Rui Vereador" ana "Ana Auditora"}}}))]
     (-> (http/servico (config/carregar)
                       ;; como o host: a tabela inteira passa por `com-tentativa` (rotas/montar)
-                      (auditoria-http/com-tentativa rotas)
-                      (it/globais-com [(auditoria-http/interceptor (or rp-escrita (rp)) {})]))
+                      (if sem-tentativa? rotas (auditoria-http/com-tentativa rotas))
+                      (it/globais-com [(auditoria-http/interceptor (or rp-escrita (rp)) {:exigir-tentativa? exigir?})]))
         ph/create-server ::ph/service-fn)))
 
 (defn- como [ente iid]
@@ -173,9 +184,96 @@
         "a tentativa atravessa o caminho de erro: o desfecho a encontra")
     (is (zero? (:sem-desfecho (integridade svc ente))))))
 
-(deftest sem-o-rastro-da-tentativa-o-ato-nao-comeca
+(deftest a-trilha-fora-nao-para-a-casa
+  ;; O PADRAO: a tentativa nao grava (a trilha esta' fora) -> fica no log e o ato ACONTECE. A sessao ao vivo nao pode
+  ;; cair porque a auditoria caiu.
+  (testing "so' a tentativa falha: o ato segue e o desfecho entra como antes do adendo (sem apontamento)"
+    (let [ente (random-uuid) atos (atom [])
+          svc (servico {:atos atos :rp-escrita (rp-que-falha tentativa?)})
+          r (despachar! svc ente maria)]
+      (is (= 201 (:status r)))
+      (is (= [:despacho] @atos) "o handler RODOU")
+      (is (= {:ok true} (ler r)))
+      (is (= [["permitido" 201 nil]] (mapv (juxt :decisao :status_http (comp :tentativa :detalhe)) (corrente ente))))))
+  (testing "a trilha inteira fora: o ato segue, nada entra na corrente (so' o log acusa)"
+    (let [ente (random-uuid) atos (atom [])
+          svc (servico {:atos atos :rp-escrita (rp-que-falha (constantly true))})]
+      (is (= 201 (:status (despachar! svc ente maria))))
+      (is (= [:despacho] @atos))
+      (is (= [] (corrente ente)))))
+  (testing "sem a chave nos seams (nil) tambem nao bloqueia: o bloqueio e' opt-in explicito"
+    (let [ente (random-uuid) atos (atom [])
+          svc (servico {:atos atos :exigir? nil :rp-escrita (rp-que-falha tentativa?)})]
+      (is (= 201 (:status (despachar! svc ente maria)))))))
+
+(deftest a-faxina-do-dia-novo-nao-derruba-o-registro-nem-o-pedido
+  ;; o primeiro registro do dia (agora, a tentativa) fecha o dia anterior; anular IPs e criar particoes roda depois,
+  ;; em tx propria: se falhar, o registro, o selo do dia e o pedido seguem
+  (let [ente (random-uuid) atos (atom []) svc (servico {:atos atos})]
+    (registro-antigo! ente)
+    (with-redefs [db/anular-ips-antigos! (fn [& _] (throw (ex-info "faxina quebrou" {})))]
+      (is (= 201 (:status (despachar! svc ente maria)))))
+    (is (= [:despacho] @atos))
+    (is (= ["permitido" "iniciado" "permitido"] (mapv :decisao (corrente ente))) "a tentativa e o desfecho foram gravados")
+    (is (= [1] (mapv :seq (repo/selos-do-dia (rp) ente 30))) "e o selo do dia que fechou tambem")
+    (is (:integra (repo/verificar (rp) ente)))))
+
+(defn- rodada!
+  "21 escritas SIMULTANEAS da mesma Casa (um voto por vereador, todas soltas no mesmo instante). Devolve os status, o
+  tempo total e o maior tempo individual, em ms."
+  [svc ente]
+  (let [largada (java.util.concurrent.CountDownLatch. 1)
+        t0 (atom nil)
+        fs (mapv (fn [_]
+                   (future
+                     (.await largada)
+                     (let [i (System/nanoTime)
+                           r (pt/response-for svc :post "/votos" :body "{}" :headers (como ente maria))]
+                       {:status (:status r) :ms (/ (- (System/nanoTime) i) 1e6)})))
+                 (range 21))]
+    (Thread/sleep 200)                      ; todas as threads paradas na largada
+    (reset! t0 (System/nanoTime))
+    (.countDown largada)
+    (let [rs (mapv #(deref % 30000 {:status :timeout :ms 30000.0}) fs)]
+      {:status (mapv :status rs)
+       :total-ms (/ (- (System/nanoTime) @t0) 1e6)
+       :maior-ms (apply max (map :ms rs))})))
+
+(deftest vinte-e-uma-escritas-simultaneas-da-mesma-casa
+  ;; A CONTENCAO medida: a corrente serializa as gravacoes por Casa (advisory lock), e a tentativa dobrou as gravacoes
+  ;; por escrita. 21 votos de uma vez, pool de 10 conexoes, handler com transacao de tenant propria.
+  (let [com (servico {}) sem (servico {:sem-tentativa? true})]
+    (rodada! com (random-uuid)) (rodada! sem (random-uuid))        ; aquecimento (JIT, pool), fora da medida
+    (let [medidas (vec (for [_ (range 3)]
+                         (let [e-sem (random-uuid) e-com (random-uuid)
+                               s (rodada! sem e-sem) c (rodada! com e-com)]
+                           (testing "todas concluem — nenhuma por deadlock ou timeout de lock"
+                             (is (= (repeat 21 201) (:status c)))
+                             (is (= (repeat 21 201) (:status s))))
+                           (testing "com a tentativa: 21 tentativas, cada uma com o SEU desfecho, e a corrente integra"
+                             (let [c* (corrente e-com)
+                                   tentativas (set (map :seq (filter #(= "iniciado" (:decisao %)) c*)))
+                                   apontadas (keep (comp :tentativa :detalhe) c*)]
+                               (is (= 42 (count c*)))
+                               (is (= 21 (count tentativas)))
+                               (is (= tentativas (set apontadas)) "cada desfecho aponta uma tentativa que existe")
+                               (is (= 21 (count apontadas) (count (distinct apontadas))) "e nenhuma e' apontada duas vezes")
+                               (is (= {:total 0 :primeiro nil} (repo/sem-desfecho (rp) e-com)))
+                               (is (= {:integra true :total 42 :quebra-em nil}
+                                      (select-keys (repo/verificar (rp) e-com) [:integra :total :quebra-em])))))
+                           (testing "sem a tentativa (como era): 21 registros, corrente integra"
+                             (is (= {:integra true :total 21 :quebra-em nil}
+                                    (select-keys (repo/verificar (rp) e-sem) [:integra :total :quebra-em]))))
+                           {:sem (dissoc s :status) :com (dissoc c :status)})))]
+      (doseq [[i m] (map-indexed vector medidas)]
+        (println (format "CONTENCAO rodada %d | sem tentativa: total %.0f ms, maior %.0f ms | com tentativa: total %.0f ms, maior %.0f ms"
+                         (inc i) (:total-ms (:sem m)) (:maior-ms (:sem m)) (:total-ms (:com m)) (:maior-ms (:com m)))))
+      (is (every? #(< (:maior-ms (:com %)) 5000) medidas) "nenhum voto espera segundos pela fila da trilha"))))
+
+(deftest com-a-exigencia-ligada-sem-o-rastro-da-tentativa-o-ato-nao-comeca
+  ;; AUDITORIA_EXIGIR_TENTATIVA=true: o modo que recusa
   (let [ente (random-uuid) atos (atom [])
-        svc (servico {:atos atos :rp-escrita (rp-que-falha tentativa?)})
+        svc (servico {:atos atos :exigir? true :rp-escrita (rp-que-falha tentativa?)})
         r (despachar! svc ente maria)]
     (is (= 503 (:status r)))
     (is (= [] @atos) "o handler NAO rodou")
