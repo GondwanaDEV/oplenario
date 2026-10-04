@@ -10,6 +10,7 @@ import {
   mensagemDeErroAtendimento,
   rotuloEstado,
   seloDoPrazo,
+  avisoDoComplemento,
   textoDoRecibo,
   tituloDoEvento,
   tituloDoItem,
@@ -170,5 +171,24 @@ describe("navegação", () => {
     expect(tituloQueRecebeOFoco("editor", true)).toBeNull();
     expect(tituloQueRecebeOFoco(null, true)).toBeNull();
     expect(tituloQueRecebeOFoco(null, false)).toBeNull();
+  });
+
+  it("o complemento da resposta: título no histórico, recibo e erros em palavras", () => {
+    expect(tituloDoEvento({ tipo: "complemento", em: "2026-07-03T15:00:00Z", texto: "x", por: "Ana" })).toBe("Complemento da resposta");
+    expect(textoDoRecibo("complementar", "2026-07-03T15:00:00Z", "ESIC-2026-000007")).toMatch(
+      /^Complemento à resposta do ESIC-2026-000007 registrado em .*histórico/,
+    );
+    expect(mensagemDeErroAtendimento(409, "complementar")).toMatch(/Responda o pedido antes de complementar/);
+    expect(mensagemDeErroAtendimento(400, "complementar")).toBe("Confira o texto e tente de novo.");
+    expect(mensagemDeErroAtendimento(403, "complementar")).toMatch(/secretaria/);
+  });
+
+  it("o aviso do complemento: imutável e sem mexer em prazo; a manifestação anônima não tem a quem mostrar", () => {
+    expect(avisoDoComplemento("identificada")).toMatch(/definitivo.*não muda o estado nem o prazo/);
+    expect(avisoDoComplemento("identificada")).toMatch(/Meus protocolos/);
+    expect(avisoDoComplemento(undefined)).toMatch(/Meus protocolos/);
+    const anonima = avisoDoComplemento("anonima");
+    expect(anonima).toMatch(/anônima: o complemento fica só no registro da Casa/);
+    expect(anonima).not.toMatch(/Meus protocolos/);
   });
 });

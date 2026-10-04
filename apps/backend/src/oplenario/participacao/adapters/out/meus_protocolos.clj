@@ -24,6 +24,11 @@
                   (:retirado-em a) (assoc :retirado-em (->str (:retirado-em a)))))
         xs))
 
+(defn- complementos
+  "Os complementos da resposta por ALLOWLIST (id, texto, instante): nada de quem escreveu nem do tenant."
+  [xs]
+  (mapv (fn [c] {:id (->str (:id c)) :corpo (:corpo c) :complementado-em (->str (:complementado-em c))}) xs))
+
 (defn- prorrogacao
   "A prorrogacao por ALLOWLIST (as 4 chaves do contrato): nada de quem prorrogou, id ou tenant, mesmo que o dominio os traga."
   [p]
@@ -38,13 +43,16 @@
                                               {:corpo (:corpo x) :respondida-em (->str (:respondida-em x))})}))
         out {:pedidos-esic      (mapv #(assoc (base %) :assunto (:assunto %) :recurso (recurso (:recurso %))
                                               :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %))
+                                              :complementos (complementos (:complementos %))
                                               :pode-anexar (boolean (:pode-anexar %)))
                                       pedidos-esic)
              :solicitacoes-lgpd (mapv #(assoc (base %) :tipo (:tipo %) :anexos (anexos (:anexos %))
+                                              :complementos (complementos (:complementos %))
                                               :pode-anexar (boolean (:pode-anexar %)))
                                       solicitacoes-lgpd)
              :manifestacoes     (mapv #(assoc (base %) :tipo (:tipo %) :assunto (:assunto %)
                                               :prorrogacao (prorrogacao (:prorrogacao %)) :anexos (anexos (:anexos %))
+                                              :complementos (complementos (:complementos %))
                                               :pode-anexar (boolean (:pode-anexar %)))
                                       manifestacoes)}]
     (when-not (m/validate wire/MeusProtocolosOut out)

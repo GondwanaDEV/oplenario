@@ -16,6 +16,7 @@
             [oplenario.participacao.db.anexo :as db-anexo]
             [oplenario.participacao.db.atendimento :as db-atendimento]
             [oplenario.participacao.db.comentario :as db-comentario]
+            [oplenario.participacao.db.complemento :as db-complemento]
             [oplenario.participacao.db.denuncia-comentario :as db-denuncia]
             [oplenario.participacao.db.encarregado :as db-encarregado]
             [oplenario.participacao.db.manifestacao-ouvidoria :as db-manifestacao]
@@ -178,7 +179,8 @@
     "O que a pessoa protocolou nesta Casa, cada item com o seu prazo, numa UNICA tx: {:pedidos-esic
     :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora. e-SIC e ouvidoria
     levam tambem `:prorrogacao` (a mais recente do objeto, ou nil) e as tres especies levam `:anexos` (os da resposta,
-    [] se nao ha) — lidos em lote, uma consulta por especie, nao por item.")
+    [] se nao ha) e `:complementos` (o complemento da resposta, [] se nao ha, na ordem de chegada) — lidos em lote, uma
+    consulta por especie, nao por item.")
   ;; ---- BALCAO interno de atendimento (6.1/6.2/5.10): o que a secretaria le para responder ----
   (fila-do-balcao [this ente-id especie situacao]
     "A fila da `especie` (:esic|:ouvidoria|:lgpd) na `situacao` (abertos|respondidos|todos), numa tx: [{:item :prazo
@@ -207,6 +209,11 @@
     storage e' do controller.")
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     "O anexo do protocolo (objeto-tipo + objeto-id), ou nil.")
+  (complementar! [this ente-id m]
+    "SERVIDOR — UMA tx: grava o COMPLEMENTO DA RESPOSTA (append-only, ADR-0022) de um protocolo ja' respondido. Sem CAS e sem
+    prazo: nao muda estado nem prazo, e ter resposta e' monotono (uma resposta nunca some), entao a conferencia previa do
+    controller nao envelhece. `m` = {:id :objeto-tipo :objeto-id :corpo :complementado-em :complementado-por}. Devolve o
+    complemento (kebab).")
   (prorrogar-pedido! [this ente-id m]
     "SERVIDOR — a prorrogacao do pedido e-SIC (LAI art. 11 §2º), pelo MESMO mecanismo generico de
     `prorrogar-manifestacao!` (CAS 1x + registro append-only + emit), com objeto_tipo 'pedido_esic'. Devolve
@@ -546,11 +553,16 @@
                                     (mapv #(assoc % :prorrogacao (get por-objeto (get-in % [:item :id]))) linhas)))
                 com-anexos (fn [objeto-tipo linhas]
                              (let [por-objeto (group-by :objeto-id (db-anexo/listar-por-objetos tx ente-id objeto-tipo (ids linhas)))]
-                               (mapv #(assoc % :anexos (get por-objeto (get-in % [:item :id]) [])) linhas)))]
+                               (mapv #(assoc % :anexos (get por-objeto (get-in % [:item :id]) [])) linhas)))
+                ;; o COMPLEMENTO DA RESPOSTA (ADR-0022): todos, na ordem em que chegaram, em UMA consulta por especie
+                com-complementos (fn [objeto-tipo linhas]
+                                   (let [por-objeto (group-by :objeto-id (db-complemento/listar-por-objetos tx ente-id objeto-tipo (ids linhas)))]
+                                     (mapv #(assoc % :complementos (get por-objeto (get-in % [:item :id]) [])) linhas)))]
             {:pedidos-esic      (->> (com-prazo "pedido_esic" db-resposta/listar-do-pedido
                                                 (db-pedido/listar-por-solicitante tx ente-id identidade-id))
                                      (com-prorrogacao "pedido_esic")
                                      (com-anexos "pedido_esic")
+                                     (com-complementos "pedido_esic")
                                      (mapv (fn [{:keys [item] :as linha}]
                                              ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
                                              (assoc linha :recurso
@@ -558,11 +570,13 @@
                                                       (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))))
              :solicitacoes-lgpd (->> (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
                                                 (db-solicitacao/listar-por-titular tx ente-id identidade-id))
-                                     (com-anexos "solicitacao_titular"))
+                                     (com-anexos "solicitacao_titular")
+                                     (com-complementos "solicitacao_titular"))
              :manifestacoes     (->> (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
                                                 (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))
                                      (com-prorrogacao "manifestacao_ouvidoria")
-                                     (com-anexos "manifestacao_ouvidoria"))})))))
+                                     (com-anexos "manifestacao_ouvidoria")
+                                     (com-complementos "manifestacao_ouvidoria"))})))))
   ;; ---- BALCAO interno de atendimento ----
   (fila-do-balcao [this ente-id especie situacao]
     (transacao this ente-id
@@ -580,6 +594,7 @@
            :respostas    (db-resposta/listar-do-pedido tx ente-id id)
            :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "pedido_esic" id)
            :anexos       (db-anexo/listar-do-objeto tx ente-id "pedido_esic" id)
+           :complementos (db-complemento/listar-do-objeto tx ente-id "pedido_esic" id)
            ;; V1: uma instancia de recurso por pedido (UNIQUE (pedido, instancia))
            :recurso      (when-let [r (db-recurso/ultimo-do-pedido tx ente-id id)]
                            (assoc r :prazo (db-prazo/buscar-do-objeto tx ente-id "recurso_esic" (:id r))
@@ -592,6 +607,7 @@
            :prazo        (db-prazo/buscar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
            :respostas    (db-resposta-ouvidoria/listar-da-manifestacao tx ente-id id)
            :anexos       (db-anexo/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
+           :complementos (db-complemento/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
            :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)}))))
   (atendimento-lgpd [this ente-id id]
     (transacao this ente-id
@@ -600,7 +616,8 @@
           {:solicitacao solic
            :prazo       (db-prazo/buscar-do-objeto tx ente-id "solicitacao_titular" id)
            :respostas   (db-resposta-titular/listar-da-solicitacao tx ente-id id)
-           :anexos      (db-anexo/listar-do-objeto tx ente-id "solicitacao_titular" id)}))))
+           :anexos      (db-anexo/listar-do-objeto tx ente-id "solicitacao_titular" id)
+           :complementos (db-complemento/listar-do-objeto tx ente-id "solicitacao_titular" id)}))))
   (anexar-ao-atendimento! [this ente-id {:keys [objeto-tipo objeto-id origem sha256 cota] :as m} limite]
     (transacao this ente-id
       (fn [tx]
@@ -627,6 +644,8 @@
           (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)))))
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))
+  (complementar! [this ente-id m]
+    (transacao this ente-id #(db-complemento/inserir! % (assoc m :ente-id ente-id))))
   (prorrogar-pedido! [this ente-id m]
     (prorrogar-prazo-impl this ente-id (assoc m :objeto-tipo "pedido_esic"))))
 

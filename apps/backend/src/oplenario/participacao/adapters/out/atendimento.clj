@@ -31,6 +31,13 @@
               (:motivo-da-retirada a) (assoc :motivo-da-retirada (:motivo-da-retirada a)))
             "AnexoOut"))
 
+(defn complemento->wire
+  "UM complemento (kebab) -> ComplementoOut, por allowlist (nada de quem escreveu nem do tenant). Serve o 201 da rota."
+  [c]
+  (validar! wire/ComplementoOut
+            {:id (->str (:id c)) :corpo (:corpo c) :complementado-em (->str (:complementado-em c))}
+            "ComplementoOut"))
+
 (defn- anexos [xs] (mapv anexo->wire xs))
 
 (defn- pessoa [p] (when p {:nome (:nome p) :cpf-mascarado (:cpf-mascarado p)}))
@@ -80,6 +87,7 @@
                     :acoes (let [a (:acoes d)]
                              {:pode-responder (boolean (:pode-responder a)) :pode-indeferir (boolean (:pode-indeferir a))
                               :pode-prorrogar (boolean (:pode-prorrogar a)) :pode-anexar (boolean (:pode-anexar a))
+                              :pode-complementar (boolean (:pode-complementar a))
                               :recurso-pendente-id (->str (:recurso-pendente-id a))})}
                    (prazo d))
             "DetalheEsicOut"))
@@ -93,7 +101,8 @@
                     :anexos (anexos (:anexos d))
                     :acoes (let [a (:acoes d)]
                              {:pode-responder (boolean (:pode-responder a)) :pode-arquivar (boolean (:pode-arquivar a))
-                              :pode-prorrogar (boolean (:pode-prorrogar a)) :pode-anexar (boolean (:pode-anexar a))})}
+                              :pode-prorrogar (boolean (:pode-prorrogar a)) :pode-anexar (boolean (:pode-anexar a))
+                              :pode-complementar (boolean (:pode-complementar a))})}
                    (prazo d))
             "DetalheOuvidoriaOut"))
 
@@ -106,6 +115,7 @@
                     :anexos (anexos (:anexos d))
                     :acoes {:pode-responder (boolean (get-in d [:acoes :pode-responder]))
                             :pode-indeferir (boolean (get-in d [:acoes :pode-indeferir]))
-                            :pode-anexar (boolean (get-in d [:acoes :pode-anexar]))}}
+                            :pode-anexar (boolean (get-in d [:acoes :pode-anexar]))
+                            :pode-complementar (boolean (get-in d [:acoes :pode-complementar]))}}
                    (prazo d))
             "DetalheLgpdOut"))

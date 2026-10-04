@@ -38,6 +38,15 @@
    [:retirado-em {:optional true} :string]
    [:motivo-da-retirada {:optional true} :string]])
 
+(def ComplementoOut
+  "O COMPLEMENTO DA RESPOSTA recem-gravado (o 201 de POST /atendimento/<especie>/:id/complementos): so' o id, o texto e o
+  instante. NUNCA quem escreveu (identidade de servidor: o historico do balcao a mostra pelo NOME). O texto e' conteudo da
+  Casa, mas o consumidor escapa antes de renderizar."
+  [:map {:closed true}
+   [:id :string]
+   [:corpo :string]
+   [:complementado-em :string]])
+
 (def PessoaOut
   "Quem pediu (e-SIC/LGPD). O CPF ja' sai mascarado do banco: '***.456.789-**'."
   [:map {:closed true}
@@ -81,9 +90,10 @@
 (def EventoOut
   "Uma entrada do historico, em ordem cronologica. `por` = o nome de quem agiu pela Casa (nil no recurso, que e' do
   cidadao, ou se a pessoa nao foi encontrada). `protocolo` so' no recurso; `de-data`/`para-data` so' na prorrogacao.
-  `indeferimento` = a recusa fundamentada (o `texto` e' a fundamentacao), distinta da `resposta` de merito."
+  `indeferimento` = a recusa fundamentada (o `texto` e' a fundamentacao), distinta da `resposta` de merito.
+  `complemento` = o texto que a Casa acrescentou depois de responder (ADR-0022)."
   [:map {:closed true}
-   [:tipo [:enum "resposta" "indeferimento" "recurso" "decisao-recurso" "prorrogacao" "arquivamento"]]
+   [:tipo [:enum "resposta" "indeferimento" "recurso" "decisao-recurso" "prorrogacao" "arquivamento" "complemento"]]
    [:em :string]
    [:texto :string]
    [:por [:maybe :string]]
@@ -103,20 +113,24 @@
   "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, indeferi-lo com fundamentacao (LAI art. 11
   §1º II — mesma condicao do responder), prorrogar o prazo DO PEDIDO (LAI art. 11 §2º, uma vez) e decidir o recurso
   pendente (o id dele). `pode-anexar` = a Casa pode juntar arquivo a resposta: so' nos 10 minutos depois do ultimo ato de
-  resposta e abaixo de 5 anexos."
+  resposta (o complemento da resposta tambem conta) e abaixo de 5 anexos. `pode-complementar` = a Casa pode acrescentar um
+  texto a resposta: so' depois de responder (resposta, indeferimento ou recurso decidido), a qualquer tempo."
   [:map {:closed true}
    [:pode-responder :boolean]
    [:pode-indeferir :boolean]
    [:pode-prorrogar :boolean]
    [:pode-anexar :boolean]
+   [:pode-complementar :boolean]
    [:recurso-pendente-id [:maybe :string]]])
 
 (def AcoesOuvidoriaOut
-  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean] [:pode-anexar :boolean]])
+  "Na ouvidoria, `pode-complementar` e' so' depois da RESPOSTA: a manifestacao apenas arquivada nao aceita."
+  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean] [:pode-anexar :boolean]
+   [:pode-complementar :boolean]])
 
 (def AcoesLgpdOut
   "Responder e indeferir (LGPD art. 18 §4º) a solicitacao aberta: a mesma condicao."
-  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean] [:pode-anexar :boolean]])
+  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean] [:pode-anexar :boolean] [:pode-complementar :boolean]])
 
 (def DetalheEsicOut
   (into [:map {:closed true}

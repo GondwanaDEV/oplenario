@@ -130,6 +130,8 @@
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     ;; o balcao de atendimento: a prorrogacao do e-SIC (LAI art. 11 §2º), irma da prorrogacao da ouvidoria
     :participacao/prorrogar-pedido
+    ;; o complemento da resposta (ADR-0022): a Casa terminando de responder, com o prazo legal ja' cumprido pela resposta
+    :participacao/complementar-esic :participacao/complementar-ouvidoria :participacao/complementar-lgpd
     ;; o indeferimento fundamentado (LAI art. 11 §1º II; LGPD art. 18 §4º): negar tambem e' responder, dentro do prazo
     :participacao/indeferir-pedido :participacao/indeferir-solicitacao
     ;; o documento que acompanha a resposta (anexar e' parte de responder; baixar e' GET e ja' passa)

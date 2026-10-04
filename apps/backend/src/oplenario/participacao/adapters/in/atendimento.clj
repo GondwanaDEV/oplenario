@@ -31,6 +31,18 @@
     (when (str/blank? (:justificativa mp)) (invalido! "justificativa obrigatoria nao pode ser vazia" {:campo :justificativa}))
     {:justificativa (:justificativa mp)}))
 
+(defn coagir-complemento
+  "Corpo JSON {corpo} (chaves STRING) -> {:corpo}. Texto obrigatorio (ausente, nulo, vazio ou so' espacos -> 400), com o
+  teto do texto da resposta. ALLOWLIST: autor e instante nunca vem do cliente (campo a mais e' descartado/recusado)."
+  [json-params]
+  (when-not (map? json-params)
+    (invalido! "corpo deve ser objeto JSON {corpo}" {:campo :corpo}))
+  (let [mp (cond-> {} (contains? json-params "corpo") (assoc :corpo (get json-params "corpo")))]
+    (when-let [erros (m/explain wire/ComplementoIn mp)]
+      (invalido! "corpo do complemento invalido" {:campos (keys (me/humanize erros))}))
+    (when (str/blank? (:corpo mp)) (invalido! "o texto do complemento e obrigatorio" {:campo :corpo}))
+    {:corpo (:corpo mp)}))
+
 (defn coagir-retirar-anexo
   "Corpo JSON {motivo} (chaves STRING) -> {:motivo}, aparado. Motivo obrigatorio (ausente, nulo, vazio ou so' espacos -> 400)."
   [json-params]

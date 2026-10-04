@@ -2,7 +2,8 @@
   "Representacao EXTERNA de ENTRADA do BALCAO interno de atendimento (§22.10 wire/in, ADR-0001): a query das filas
   (GET /atendimento/esic|ouvidoria|lgpd?situacao=...) e o corpo da prorrogacao do e-SIC
   (POST /esic/pedidos/:id/prorrogar — so' `justificativa`; a data e' CALCULADA, LAI art. 11 §2º) e o corpo da RETIRADA de
-  um anexo (POST /atendimento/<especie>/:id/anexos/:anexo/retirar — so' o `motivo`, obrigatorio)."
+  um anexo (POST /atendimento/<especie>/:id/anexos/:anexo/retirar — so' o `motivo`, obrigatorio) e o corpo do COMPLEMENTO DA
+  RESPOSTA (POST /atendimento/<especie>/:id/complementos — so' o `corpo`, o texto, obrigatorio)."
   (:require [oplenario.kernel.malli :as km]
             [oplenario.participacao.logic :as logic]))
 
@@ -15,6 +16,12 @@
   espelha a CHECK de tamanho de participacao.prorrogacao (mig 0042)."
   [:map {:closed true}
    [:justificativa [:string {:min 1 :max 5000}]]])
+
+(def ComplementoIn
+  "Corpo do complemento da resposta. Closed: so' `corpo` (o texto). O teto (50000) e' o MESMO do texto da resposta e espelha a
+  CHECK de participacao.complemento. Quem escreve e quando sao INJETADOS do ator e do relogio, nunca do corpo."
+  [:map {:closed true}
+   [:corpo [:string {:min 1 :max 50000}]]])
 
 (def RetirarAnexoIn
   "Corpo da retirada de um anexo. Closed: so' `motivo` (obrigatorio: retirar e' um ato de incidente, e o motivo fica na
