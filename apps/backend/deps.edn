@@ -4,7 +4,8 @@
         io.pedestal/pedestal.service            {:mvn/version "0.7.2"}
         io.pedestal/pedestal.jetty              {:mvn/version "0.7.2"}
         ;; O PARSER DE UPLOAD multipart (anexos dos comunicados e do balcao, documentos das contas) e' o
-        ;; commons-fileupload2-core — usado DIRETO em `oplenario.interceptors/anexo-multipart` e pelo multipart do Ring.
+        ;; commons-fileupload2-core — usado DIRETO em `oplenario.interceptors/anexo-multipart`, por onde passa TODO
+        ;; upload da aplicacao. O multipart do Ring usa a mesma biblioteca, mas nenhuma rota nossa o chama mais.
         ;; Ele chegava TRANSITIVO, pelo ring-core 1.12.0 do Pedestal 0.7.2, na 2.0.0-M1 — dentro da faixa do
         ;; CVE-2025-48976 / GHSA-vv7r-c36w-3prj (>= 2.0.0-M1, < 2.0.0-M4: cabecalho de parte do multipart sem teto
         ;; suficiente = DoS), conferido em osv.dev e no GitHub Advisory em 04/10/2026. As duas linhas abaixo sao
@@ -14,9 +15,9 @@
         ;; a correcao (M4); do 1.15.4 em diante vem a M5. Trocar uma sem a outra, so' depois de rodar
         ;; `oplenario.multipart-limite-test` (a trava) e os testes de upload.
         ;; EFEITO da correcao: o cabecalho de cada parte passa a ter teto de 512 bytes (eram 10 KB) — nome de arquivo
-        ;; acima de ~410 bytes em UTF-8 volta 400. O parser proprio (`anexo-multipart`) sobe o teto para 2048
-        ;; (`max-bytes-do-cabecalho-da-parte`); o Ring nao expoe o teto, e a rota que ainda usa o multipart dele
-        ;; (documentos das contas) segue em 512.
+        ;; acima de ~410 bytes em UTF-8 voltava 400. O parser proprio (`anexo-multipart`) sobe o teto para 2048
+        ;; (`max-bytes-do-cabecalho-da-parte`). O Ring nao expoe o teto: rota nova de upload usa a fabrica, nunca o
+        ;; `multipart-params` dele (os documentos das contas usavam, e ficavam em 512).
         ;; Pedestal 0.8.x ja' declara ring-core 1.15.x, mas e' troca de linha (Jetty 12): frente propria.
         ring/ring-core                          {:mvn/version "1.15.5"}
         org.apache.commons/commons-fileupload2-core {:mvn/version "2.0.0-M5"}

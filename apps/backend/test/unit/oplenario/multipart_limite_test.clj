@@ -34,7 +34,9 @@
        :body (ByteArrayInputStream. corpo)})))
 
 (defn- ler
-  "O que o parser entrega para a parte `arquivo` (o mesmo `multipart-params-request` que os interceptors de upload usam)."
+  "O que o parser entrega para a parte `arquivo`, pelo `multipart-params-request` do Ring: a biblioteca com o teto PADRAO
+  (512 bytes). Nenhuma rota nossa le upload por aqui (todas usam `it/anexo-multipart`, que fixa 2048 — `upload-test`); o
+  Ring e' so' o jeito mais curto de medir qual versao do parser esta' no classpath."
   [req]
   (get-in (multipart/multipart-params-request
            req {:store (fn [{:keys [filename content-type stream]}]
