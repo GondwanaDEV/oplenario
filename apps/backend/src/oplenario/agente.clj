@@ -10,10 +10,16 @@
   SSE (§22.3.2): `passo` (cada ferramenta chamada, com o desfecho), `proposta` (cada proposta de ato criada na execucao,
   para a tela levar a pessoa a confirmar), depois `resposta` (texto, citacoes conferidas,
   incerteza) ou `indisponivel` (R-IA-1: 'siga pela tela'), e `fim`. Hoje o satelite responde de uma vez e o core
-  emite os eventos em sequencia; quando o fornecedor real transmitir aos poucos, a mesma forma carrega o fluxo."
+  emite os eventos em sequencia; quando o fornecedor real transmitir aos poucos, a mesma forma carrega o fluxo.
+
+  Feature 8.4 — 'reportar erro': a `resposta` leva `execucao-ia` (o id da execucao NO satelite, que o registro da
+  Camada de Confianca conhece; o `execucao-id` do `fim` e' o da credencial delegada, outra coisa). A tela devolve esse
+  id em POST /ia/execucoes/:execucao-id/reportes com uma categoria do vocabulario fixo; o core repassa ao satelite com
+  a Casa e a pessoa da sessao. A rota e' generica (qualquer resposta de IA cujo id chegue a tela), so' de tela."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [jsonista.core :as json]
+            [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
@@ -63,8 +69,9 @@
                                   (repo-ia/propostas-da-execucao repo-integracao-ia (:ente-id ator) execucao-id))]
                           (evento "proposta" {:id (str (:id p)) :titulo (:titulo p) :ritual (:ritual p)})))
              (if-let [resp (:resposta r)]
-               (evento "resposta" (select-keys resp [:texto :citacoes :paragrafos-sem-fonte :incerteza :modelo
-                                                     :contaminado]))
+               (evento "resposta" (cond-> (select-keys resp [:texto :citacoes :paragrafos-sem-fonte :incerteza :modelo
+                                                             :contaminado])
+                                    (:execucao-id resp) (assoc :execucao-ia (str (:execucao-id resp)))))
                (evento "indisponivel" {:mensagem (or (get-in r [:indisponivel :mensagem]) mensagem-indisponivel)}))
              (evento "fim" {:execucao-id (str execucao-id)})))
       (catch clojure.lang.ExceptionInfo e
@@ -84,9 +91,46 @@
        :headers {"Content-Type" "text/event-stream; charset=utf-8" "Cache-Control" "no-store"}
        :body (conversa deps ator p)})))
 
+;; ---------- feature 8.4: reportar erro da IA ----------
+
+(def categorias-reporte
+  "O vocabulario do registro da Camada de Confianca (`CategoriaReporte` no satelite). Sem texto livre: o registro e'
+  SEM conteudo (B4)."
+  #{"fato_errado" "citacao_errada" "omissao" "linguagem" "outro"})
+
+(def mensagem-reporte-indisponivel "Não foi possível registrar o erro agora. Tente de novo em instantes.")
+
+(defn pedido-reporte
+  "Corpo {categoria} (chave string, allowlist estrita) -> a categoria, ou `:validacao/invalido`."
+  [corpo]
+  (let [categoria (get corpo "categoria")]
+    (when-not (and (map? corpo) (= #{"categoria"} (set (keys corpo))) (contains? categorias-reporte categoria))
+      (invalido! (str "categoria deve ser uma de " (str/join ", " (sort categorias-reporte)))))
+    categoria))
+
+(defn- reportar-handler [{:keys [ia]}]
+  (fn [req]
+    (let [ator (:ator req)
+          eid (or (parse-uuid (str (get-in req [:path-params :execucao-id])))
+                  (invalido! "execucao-id invalido"))
+          categoria (pedido-reporte (or (:json-params req) {}))]
+      (try
+        (if (plataforma-ia/reportar-erro ia (:ente-id ator) (str eid) {:quem (str (:identidade-id ator))
+                                                                       :categoria categoria})
+          (http/json-resposta 200 {:reportado true})
+          (http/json-resposta 404 {:erro "execucao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :ia/indisponivel (:tipo (ex-data e)))
+            (do (log/warn "reportar erro: IA indisponivel" (:motivo (ex-data e)))
+                (http/json-resposta 503 {:erro mensagem-reporte-indisponivel}))
+            (throw e)))))))
+
 (defn rotas
-  "POST /agente/perguntas — a secretaria ou o vereador perguntam ao assistente da Casa."
+  "POST /agente/perguntas — a secretaria ou o vereador perguntam ao assistente da Casa. POST
+  /ia/execucoes/:execucao-id/reportes — quem recebeu uma resposta de IA diz que ela esta' errada (feature 8.4)."
   [{:keys [auth] :as deps}]
   #{["/agente/perguntas" :post [auth (it/exige-algum-papel ["secretario" "vereador"]) it/corpo-json
                                  (perguntar-handler deps)]
-     :route-name :agente/perguntar]})
+     :route-name :agente/perguntar]
+    ["/ia/execucoes/:execucao-id/reportes" :post [auth it/corpo-json (reportar-handler deps)]
+     :route-name :agente/reportar-erro-ia]})

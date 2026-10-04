@@ -7,6 +7,8 @@
 //   - sessão de outra Casa: um aviso — o backend gravaria na Casa da sessão, não nesta.
 // O comentário NÃO aparece na hora: entra pendente e só sai na lista depois da moderação da Câmara (é o que a
 // tela diz). O design mostra nome do autor, "Útil" e "Responder" — o backend não tem nada disso, então não aparece.
+// "Denunciar" (feature 6.3) segue as mesmas três caras, por comentário; a denúncia não esconde nada do lado de quem
+// lê — quem decide é a moderação da Câmara (/moderacao).
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-fetch";
@@ -194,5 +196,101 @@ export function AcompanharMateria({ ente, proposicaoId, sessao }: { ente: string
         </button>
       )}
     </div>
+  );
+}
+
+// O backend aceita `motivo` livre e OPCIONAL (wire/in denunciar_comentario: teto de 2000, em branco = ausente).
+const MAX_MOTIVO_DENUNCIA = 2000;
+const CONFIRMA_DENUNCIA = "Recebemos sua denúncia; a Câmara vai analisar.";
+
+export function DenunciarComentario({
+  ente,
+  proposicaoId,
+  comentarioId,
+  sessao,
+}: {
+  ente: string;
+  proposicaoId: string;
+  comentarioId: string;
+  sessao: Sessao;
+}) {
+  const { enviar, estado, erro } = useEnvioCidadao(sessao.token);
+  const [aberto, setAberto] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [feito, setFeito] = useState(false);
+
+  if (sessao.estado === "carregando") return null;
+  if (sessao.estado === "outra-casa") {
+    return (
+      <a className="cmt-denunciar" href={`/portal/casa/${ente}/participar`}>
+        Denunciar
+      </a>
+    );
+  }
+  if (sessao.estado !== "cidada") {
+    return (
+      <a className="cmt-denunciar" href={voltaParaMateria(ente, proposicaoId)}>
+        Denunciar
+      </a>
+    );
+  }
+
+  if (feito) {
+    return (
+      <p className="cmt-denuncia-ok" role="status">
+        {CONFIRMA_DENUNCIA}
+      </p>
+    );
+  }
+
+  if (!aberto) {
+    return (
+      <button type="button" className="cmt-denunciar" onClick={() => setAberto(true)}>
+        Denunciar
+      </button>
+    );
+  }
+
+  const campo = `denuncia-${comentarioId}`;
+  const limpo = motivo.trim();
+  return (
+    <form
+      className="cmt-denuncia"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        try {
+          // Idempotente no backend: denunciar de novo devolve o mesmo 200 — e a tela, a mesma confirmação.
+          await enviar(`/portal/comentarios/${encodeURIComponent(comentarioId)}/denunciar`, limpo ? { motivo: limpo } : {}, "POST", {
+            404: "Este comentário não está mais disponível.",
+          });
+          setFeito(true);
+        } catch {
+          // a mensagem já está em `erro`
+        }
+      }}
+    >
+      <label htmlFor={campo}>O que há de errado neste comentário? (opcional)</label>
+      <textarea
+        id={campo}
+        value={motivo}
+        maxLength={MAX_MOTIVO_DENUNCIA}
+        placeholder="Ex.: ofensa, mentira, dado pessoal de alguém…"
+        onChange={(e) => setMotivo(e.target.value)}
+      />
+      {erro && (
+        <p className="form-erro" role="alert">
+          {erro}
+        </p>
+      )}
+      <div className="compor-rod">
+        <span className="ident">A Câmara analisa antes de decidir. O comentário continua visível até lá.</span>
+        <button type="button" className="link-simples" onClick={() => setAberto(false)}>
+          Cancelar
+        </button>
+        <button className="btn btn-primaria btn-mini" type="submit" disabled={estado === "enviando"}>
+          {estado === "enviando" ? "Enviando…" : "Enviar denúncia"}
+        </button>
+      </div>
+    </form>
   );
 }

@@ -182,6 +182,10 @@ MIGRACOES: list[str] = [
     ALTER TABLE ia.orcamento DROP CONSTRAINT IF EXISTS orcamento_valores_juntos;
     ALTER TABLE ia.orcamento ADD CONSTRAINT orcamento_valores_juntos CHECK ((mensal IS NULL) = (teto_duro IS NULL));
     """,
+    # Feature 8.4 — o "reportar erro" acha os eventos de UMA execução da Casa (a execução e os reportes dela)
+    """
+    CREATE INDEX IF NOT EXISTS idx_registro_evento_execucao ON ia.registro_evento (ente_id, (corpo->>'execucao_id'));
+    """,
 ]
 
 

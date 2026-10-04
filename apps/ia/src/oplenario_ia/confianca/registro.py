@@ -98,6 +98,13 @@ class ApagaPorEnte(Protocol):
     def apagar_ente(self, ente_id: str) -> int: ...
 
 
+class ConsultaExecucao(Protocol):
+    """Os eventos de UMA execução, só na Casa dela (feature 8.4: o "reportar erro" confere que a execução existe, é da
+    Casa e produziu um artefato, e não conta duas vezes o reporte da mesma pessoa)."""
+
+    def eventos_da_execucao(self, ente_id: str, execucao_id: str) -> list[Evento]: ...
+
+
 class ConsultaConsumo(Protocol):
     """O que a cota e o painel da Casa leem do registro (B.9)."""
 
@@ -137,6 +144,9 @@ class RegistroMemoria:
     def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
         return [e.model_copy(deep=True) for e in self._eventos if desde <= e.instante < ate]
 
+    def eventos_da_execucao(self, ente_id: str, execucao_id: str) -> list[Evento]:
+        return [e.model_copy(deep=True) for e in self._eventos if e.ente_id == ente_id and e.execucao_id == execucao_id]
+
     def apagar_ente(self, ente_id: str) -> int:
         antes = len(self._eventos)
         self._eventos = [e for e in self._eventos if e.ente_id != ente_id]
@@ -169,6 +179,9 @@ class RegistroJsonl:
 
     def eventos_de_todas_entre(self, desde: datetime, ate: datetime) -> list[Evento]:
         return [e for e in self.eventos() if desde <= e.instante < ate]
+
+    def eventos_da_execucao(self, ente_id: str, execucao_id: str) -> list[Evento]:
+        return [e for e in self.eventos() if e.ente_id == ente_id and e.execucao_id == execucao_id]
 
     def apagar_ente(self, ente_id: str) -> int:
         """Reescreve o arquivo sem as linhas da Casa (temporário + rename: nunca um arquivo pela metade)."""
