@@ -9,9 +9,9 @@ import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
-import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, MinhaPresencaOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarQuorum, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -111,10 +111,22 @@ const espera = (ms: number, signal: AbortSignal) =>
  * Daouda 12/09/2026) tinha o MESMO buraco de recuperação, por outro ângulo — a borda de
  * `/sessoes/:id/votacao-aberta` exigia papel 'vereador' estrito, então nem ligar `comVotacao` ali
  * adiantaria antes de a política migrar para a camada fina (`sessoes.logic/pode-ver-quorum-da-sessao?`,
- * backend) — e agora também passa `comVotacao: true`. */
-export function usePlenario(sessaoId: string, token: string | null, opcoes?: { comQuorum?: boolean; comVotacao?: boolean }) {
+ * backend) — e agora também passa `comVotacao: true`.
+ *
+ * `comMinhaPresenca` liga `GET /sessoes/:id/presenca/minha` — a PRÓPRIA presença de quem está logado, para o
+ * cockpit do vereador (docs/16, "A Trilha 3 vira gate": o replay do canal guarda ~5 min, e o vereador já
+ * presente que abria o cockpit depois disso voltava a ver "Confirme sua presença"). Opção INDEPENDENTE e
+ * DESLIGADA por default: a rota exige o papel 'vereador', e o telão/TV/Mesa não o têm — ligar ali seria um
+ * 403 por carga. Só na carga inicial e em toda reconexão (onde o replay pode ter perdido algo); a presença
+ * nova do próprio vereador chega pelo SSE como sempre. */
+export function usePlenario(
+  sessaoId: string,
+  token: string | null,
+  opcoes?: { comQuorum?: boolean; comVotacao?: boolean; comMinhaPresenca?: boolean },
+) {
   const comQuorum = opcoes?.comQuorum === true;
   const comVotacao = opcoes?.comVotacao === true;
+  const comMinhaPresenca = opcoes?.comMinhaPresenca === true;
   const [sessao, setSessao] = useState<SessaoOut | null>(null);
   const [estado, setEstado] = useState<EstadoPlenario | null>(null);
   const [conexao, setConexao] = useState<EstadoConexao>("carregando");
@@ -130,6 +142,9 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
   const falaEventoSeqRef = useRef(0);
   const inscricaoEventoSeqRef = useRef(0);
   const votacaoEventoSeqRef = useRef(0);
+  // O mesmo espelho síncrono para a precedência de `hidratarMinhaPresenca` — um MAPA por vereador (ver a
+  // docstring de `presencaEventoSeq` em `EstadoPlenario`); imutável no reducer, então guardar a referência basta.
+  const presencaEventoSeqRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
@@ -146,6 +161,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
     let quorumEmVoo = false;
     let tribunaEmVoo = false;
     let votacaoEmVoo = false;
+    let minhaPresencaEmVoo = false;
 
     const buscarQuorum = async () => {
       if (quorumEmVoo) return;
@@ -280,6 +296,52 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       }
     };
 
+    /** Busca o snapshot de `GET /sessoes/:id/presenca/minha` (ver a docstring de `comMinhaPresenca`).
+     * `seqNoDisparo` capturado ANTES do fetch — MESMO ruling de `buscarVotacaoAberta`: se um evento de
+     * presença DESTE vereador chegar pelo canal com a resposta em voo, `hidratarMinhaPresenca` descarta o
+     * snapshot inteiro — e pede UMA retentativa pelo relógio (`pedidoDeRebuscaMinhaPresenca`), decidida no
+     * MESMO updater, contra o MESMO `prev` (Fix round 2 A4a da tribuna). A retentativa não é luxo: o evento
+     * que causou o descarte pode ser RETROATIVO (a Mesa registra uma saída das 10h às 10h30, depois de uma
+     * entrada das 10h15) e deixar o SSE dizendo "ausente" onde o servidor diz "presente"; o snapshot novo,
+     * montado depois do evento, é o que reconcilia. Não laça: só um NOVO evento do próprio vereador em voo
+     * descarta de novo. Qualquer falha
+     * (rede/403/404/500/parse) DEGRADA SEM MENTIR: não muda nada — o cockpit fica com o que o SSE mostrou,
+     * que é exatamente o comportamento de antes desta rota existir. */
+    const buscarMinhaPresenca = async () => {
+      if (minhaPresencaEmVoo) return;
+      minhaPresencaEmVoo = true;
+      const seqNoDisparo = presencaEventoSeqRef.current;
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
+      try {
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}/presenca/minha`, {
+          token: token ?? undefined,
+          signal,
+          cache: "no-store",
+        });
+        if (!vivo || !resp.ok) return;
+        const p = camelizarChaves(await resp.json()) as MinhaPresencaOut;
+        if (!vivo) return;
+        setEstado((prev) => {
+          if (!prev) return prev;
+          const v = p && typeof p === "object" ? p.vereadorId : undefined;
+          if (typeof v === "string" && (prev.presencaEventoSeq[v] ?? 0) !== (seqNoDisparo[v] ?? 0)) {
+            pedidoDeRebuscaMinhaPresenca = true;
+          }
+          return hidratarMinhaPresenca(prev, p, seqNoDisparo);
+        });
+      } catch {
+        // degrada: mantém o que o SSE mostrou (ver a docstring acima)
+      } finally {
+        limpar();
+        minhaPresencaEmVoo = false;
+      }
+    };
+
+    const rehidratarMinhaPresenca = () => {
+      if (!comMinhaPresenca || !vivo) return;
+      void buscarMinhaPresenca();
+    };
+
     /** Dispara o par quórum+tribuna que o TELÃO precisa para se reconstruir sozinho (ver a docstring de
      * `comQuorum`). As duas rotas são independentes (guarda de in-flight e timeout próprios — I3): uma
      * pendurada não atrasa nem bloqueia a outra. `ultimaRebusca` só marca QUANDO esta função foi
@@ -325,6 +387,10 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
      * granularidade — de ~30s (a periódica) pra' quase instantâneo. */
     let pedidoDeRebuscaVotacao = false;
 
+    /** Retentativa da presença do próprio vereador quando o snapshot foi descartado por precedência — ver a
+     * docstring de `buscarMinhaPresenca`. Escrita só pelo updater daquela busca, nunca por `aoFrame`. */
+    let pedidoDeRebuscaMinhaPresenca = false;
+
     const aoFrame = (f: { event?: string; data: string; id?: string }) => {
       if (!vivo) return;
       if (f.id) lastIdRef.current = f.id;
@@ -342,6 +408,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
           falaEventoSeqRef.current = proximo.falaEventoSeq;
           inscricaoEventoSeqRef.current = proximo.inscricaoEventoSeq;
           votacaoEventoSeqRef.current = proximo.votacaoEventoSeq;
+          presencaEventoSeqRef.current = proximo.presencaEventoSeq;
           return proximo;
         });
       } catch {
@@ -373,6 +440,10 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
           void rehidratarVotacao();
         }
       }
+      if (comMinhaPresenca && pedidoDeRebuscaMinhaPresenca) {
+        pedidoDeRebuscaMinhaPresenca = false;
+        rehidratarMinhaPresenca();
+      }
     }, 500);
 
     (async () => {
@@ -392,6 +463,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         falaEventoSeqRef.current = 0;
         inscricaoEventoSeqRef.current = 0;
         votacaoEventoSeqRef.current = 0;
+        presencaEventoSeqRef.current = {};
       } catch (e) {
         if (!vivo || controller.signal.aborted) return;
         setConexao("erro");
@@ -416,6 +488,9 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       // (ou reconectar) sem NENHUM evento SSE visto ainda descobre uma votação já aberta no servidor.
       // Gated por `comVotacao`, independente de `comQuorum` — ver a docstring de `comVotacao` acima.
       void rehidratarVotacao();
+      // 1b-ter) a PRÓPRIA presença do vereador (cockpit) — o mesmo caso da recuperação de votação, para
+      // `presentes`: abrir o cockpit depois da janela de replay sem nenhum `presenca.registrada` seu no canal.
+      rehidratarMinhaPresenca();
 
       // 1c) COMPOSIÇÃO — disparo ÚNICO, ao contrário do quórum e da tribuna. O quórum é re-buscado porque o NÚMERO
       // muda a cada evento de presença; a composição é "quem são os membros da Casa NA DATA desta
@@ -478,6 +553,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
         if (tentativa > 0) {
           void rehidratar();
           void rehidratarVotacao();
+          rehidratarMinhaPresenca();
         }
         try {
           await espera(Math.min(1000 * 2 ** tentativa, 15000), controller.signal);
@@ -492,7 +568,7 @@ export function usePlenario(sessaoId: string, token: string | null, opcoes?: { c
       clearInterval(relogio);
       controller.abort();
     };
-  }, [sessaoId, token, idValido, comQuorum, comVotacao]);
+  }, [sessaoId, token, idValido, comQuorum, comVotacao, comMinhaPresenca]);
 
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
   if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };

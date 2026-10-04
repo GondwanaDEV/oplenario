@@ -5,7 +5,7 @@
 // a partir de `iniciouEm` + marcos (decisão de §22.6 eixo G — ticks por segundo são descartados no fio).
 
 import type { EventoPlenario, SessaoOut } from "./contrato";
-import type { ComposicaoSessaoOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
+import type { ComposicaoSessaoOut, MinhaPresencaOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 
 /** Tipos de evento de presença que marcam PRESENTE (logic/tipos-presenca-positiva); "saida" remove. */
 const PRESENCA_POSITIVA = new Set(["entrada", "retorno", "mudanca_modalidade"]);
@@ -145,12 +145,21 @@ export interface EstadoPlenario {
    * decidir se o cockpit do vereador oferece o botão de votar. A Etapa 4b redefiniu-o como "delta posterior
    * ao snapshot" e podava dele quem tivesse evento anterior ao `instante` — o botão de votar sumia no
    * celular do vereador, com votação nominal aberta. A semântica aqui é, e continua sendo, "quem o SSE
-   * mostrou presente desde que esta página abriu". O numerador do telão NÃO sai daqui (sai de `quorum`). */
+   * mostrou presente desde que esta página abriu" — MAIS, só para o próprio vereador do cockpit, o snapshot
+   * de `GET /sessoes/:id/presenca/minha` (`hidratarMinhaPresenca`): o replay do canal guarda ~5 min, e sem
+   * o snapshot quem já estava presente e abria o cockpit depois disso voltava a ver "Confirme sua presença".
+   * O numerador do telão NÃO sai daqui (sai de `quorum`). */
   presentes: string[];
   /** vereadorId -> epoch ms do `ocorrido-em` do último evento APLICADO a `presentes` para aquele vereador.
    * Serve só à ORDENAÇÃO nominal (um frame reentregue fora de ordem no resume por Last-Event-ID não pode
    * ressuscitar um estado já superado) — nunca ao quórum. Comparação NUMÉRICA, jamais textual: ver `instanteMs`. */
   presencaEm: Record<string, number>;
+  /** vereadorId -> quantos `presenca.registrada` DAQUELE vereador já passaram pelo reducer (aplicados ou
+   * descartados pela guarda de ordem). É a PRECEDÊNCIA de `hidratarMinhaPresenca`, no molde de
+   * `votacaoEventoSeq`, mas POR VEREADOR: durante a chamada chegam ~21 eventos em minutos, e um contador
+   * único descartaria o snapshot do vereador por causa da presença dos OUTROS — justo na hora em que ele
+   * abre o cockpit. Só um evento do PRÓPRIO vereador chegado com o GET em voo torna o snapshot velho. */
+  presencaEventoSeq: Record<string, number>;
   quorum: QuorumDaSessao | null; // o snapshot do servidor; null = ainda não chegou (ou nunca chegou)
   quorumStatus: QuorumStatus;
   /** pedido de RE-HIDRATAÇÃO: houve movimento de presença, então o número do servidor pode ter mudado. O
@@ -223,6 +232,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     estado: sessao.estado,
     presentes: [],
     presencaEm: {},
+    presencaEventoSeq: {},
     quorum: null,
     quorumStatus: "carregando",
     precisaRehidratar: false,
@@ -587,6 +597,46 @@ export function falharVotacao(estado: EstadoPlenario): EstadoPlenario {
   return estado;
 }
 
+/** Hidrata a PRÓPRIA presença do vereador do cockpit a partir de `GET /sessoes/:id/presenca/minha` — a irmã
+ * de `hidratarVotacao` para `presentes`. Existe porque o replay do canal guarda ~5 min: um vereador já
+ * presente que abria o cockpit depois disso não via nenhum `presenca.registrada` seu, e `meu-voto-vista`
+ * voltava a pedir "Confirme sua presença" com a votação aberta (docs/16, "A Trilha 3 vira gate").
+ * PURA e TOTAL: nunca lança; corpo de forma inesperada devolve o estado inalterado.
+ *
+ * Mexe SÓ no vereador do snapshot (`cru.vereadorId`, que o servidor resolve do ator — nunca do cliente), e
+ * só em `presentes`/`presencaEm`: não pede re-hidratação de quórum (o cockpit nem a faz) e não toca o
+ * numerador do telão. Duas guardas, as MESMAS disciplinas do resto deste reducer, e o SSE vence as duas:
+ *   1. PRECEDÊNCIA (`seqNoDisparo` = `estado.presencaEventoSeq` capturado pelo hook ANTES do fetch): se um
+ *      evento de presença DESTE vereador chegou com o GET em voo, o snapshot é descartado inteiro — o SSE já
+ *      trouxe algo que o snapshot pode não ter visto (a alternativa ressuscitaria um "presente" que a Mesa
+ *      acabou de tirar). O hook pede UMA retentativa nesse caso: o evento pode ser retroativo, ou empatar
+ *      no instante e perder pela precedência de fonte, e só um snapshot montado DEPOIS dele reconcilia.
+ *   2. ORDEM (`presencaEm`, numérica — ver `instanteMs`): um snapshot cujo `ocorridoEm` é MAIS VELHO que o
+ *      último evento já aplicado não ressuscita estado superado; um snapshot SEM evento (nunca registrou
+ *      presença) não desfaz o que o SSE já mostrou. No empate aplica — é o mesmo evento, e o servidor já
+ *      desempatou pela precedência de fonte. */
+export function hidratarMinhaPresenca(
+  estado: EstadoPlenario,
+  cru: MinhaPresencaOut | null,
+  seqNoDisparo: Record<string, number>,
+): EstadoPlenario {
+  if (!cru || typeof cru !== "object" || typeof cru.vereadorId !== "string" || typeof cru.presente !== "boolean") {
+    return estado;
+  }
+  const v = cru.vereadorId;
+  if ((estado.presencaEventoSeq[v] ?? 0) !== (seqNoDisparo[v] ?? 0)) return estado;
+
+  const snapMs = instanteMs(cru.ocorridoEm);
+  const aplicadoEm = estado.presencaEm[v];
+  if (aplicadoEm !== undefined && !(Number.isFinite(snapMs) && snapMs >= aplicadoEm)) return estado;
+
+  const presentes = cru.presente
+    ? estado.presentes.includes(v) ? estado.presentes : [...estado.presentes, v]
+    : estado.presentes.filter((x) => x !== v);
+  const presencaEm = Number.isFinite(snapMs) ? { ...estado.presencaEm, [v]: snapMs } : estado.presencaEm;
+  return { ...estado, presentes, presencaEm };
+}
+
 export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): EstadoPlenario {
   // Os contadores de precedência avançam aqui, na construção de `base`, e não em cada `case`: um `case`
   // que devolve `base` cedo (ex.: `fala.cronometro` para uma fala que não é a corrente) precisa do avanço
@@ -612,7 +662,11 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
       // O quórum EXIBIDO nunca se move aqui — quem conta é o SERVIDOR. Todo movimento de presença (inclusive
       // um retroativo, que o domínio permite de propósito) apenas PEDE uma re-busca; o hook coalesce a
       // rajada da chamada num punhado de requests. Nenhum evento é descartado em silêncio, que era o defeito.
-      const pedeRebusca = { ...base, precisaRehidratar: true };
+      // A precedência de `hidratarMinhaPresenca` avança aqui, ANTES da guarda de ordem: o evento chegou e o
+      // snapshot em voo desse vereador já é mais velho, ainda que este frame não mude nada visível (mesma
+      // disciplina dos contadores em `base`).
+      const presencaEventoSeq = { ...base.presencaEventoSeq, [v]: (base.presencaEventoSeq[v] ?? 0) + 1 };
+      const pedeRebusca = { ...base, presencaEventoSeq, precisaRehidratar: true };
 
       // Guarda de ORDEM (numérica, nunca textual): um frame reentregue fora de ordem no resume por
       // Last-Event-ID não pode ressuscitar um estado já superado por um evento MAIS NOVO do mesmo vereador.
