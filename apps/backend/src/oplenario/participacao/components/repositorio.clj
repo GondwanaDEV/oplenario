@@ -175,7 +175,8 @@
   (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11).")
   (meus-protocolos [this ente-id identidade-id]
     "O que a pessoa protocolou nesta Casa, cada item com o seu prazo, numa UNICA tx: {:pedidos-esic
-    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora.")
+    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora. e-SIC e ouvidoria
+    levam tambem `:prorrogacao` (a mais recente do objeto, ou nil) — lida em lote, uma consulta por especie, nao por item.")
   ;; ---- BALCAO interno de atendimento (6.1/6.2/5.10): o que a secretaria le para responder ----
   (fila-do-balcao [this ente-id especie situacao]
     "A fila da `especie` (:esic|:ouvidoria|:lgpd) na `situacao` (abertos|respondidos|todos), numa tx: [{:item :prazo
@@ -517,17 +518,26 @@
                                          :prazo (db-prazo/buscar-do-objeto tx ente-id objeto-tipo (:id i))
                                          :resposta (last (respostas tx ente-id (:id i)))})
                                 itens))]
-          {:pedidos-esic      (mapv (fn [{:keys [item] :as linha}]
-                                      ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
-                                      (assoc linha :recurso
-                                             (when-let [r (db-recurso/ultimo-do-pedido tx ente-id (:id item))]
-                                               (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))
-                                    (com-prazo "pedido_esic" db-resposta/listar-do-pedido
-                                               (db-pedido/listar-por-solicitante tx ente-id identidade-id)))
-           :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
-                                         (db-solicitacao/listar-por-titular tx ente-id identidade-id))
-           :manifestacoes     (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
-                                         (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))}))))
+          ;; a PRORROGACAO (LAI art. 11 §2º — o requerente e' cientificado da justificativa): UMA consulta por especie,
+          ;; para todos os itens da lista; fica a mais recente por objeto (a CAS de prorrogar admite so' uma por prazo)
+          (let [com-prorrogacao (fn [objeto-tipo linhas]
+                                  (let [por-objeto (->> (db-prorrogacao/listar-por-objetos
+                                                         tx ente-id objeto-tipo (mapv #(get-in % [:item :id]) linhas))
+                                                        (reduce (fn [m p] (assoc m (:objeto-id p) p)) {}))]
+                                    (mapv #(assoc % :prorrogacao (get por-objeto (get-in % [:item :id]))) linhas)))]
+            {:pedidos-esic      (->> (com-prazo "pedido_esic" db-resposta/listar-do-pedido
+                                                (db-pedido/listar-por-solicitante tx ente-id identidade-id))
+                                     (com-prorrogacao "pedido_esic")
+                                     (mapv (fn [{:keys [item] :as linha}]
+                                             ;; o recurso ja' interposto (V1: um por pedido) + a decisao, se houver
+                                             (assoc linha :recurso
+                                                    (when-let [r (db-recurso/ultimo-do-pedido tx ente-id (:id item))]
+                                                      (assoc r :resposta (last (db-resposta/listar-do-recurso tx ente-id (:id r)))))))))
+             :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
+                                           (db-solicitacao/listar-por-titular tx ente-id identidade-id))
+             :manifestacoes     (->> (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
+                                                (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))
+                                     (com-prorrogacao "manifestacao_ouvidoria"))})))))
   ;; ---- BALCAO interno de atendimento ----
   (fila-do-balcao [this ente-id especie situacao]
     (transacao this ente-id

@@ -106,14 +106,18 @@
   "GET /portal/meus-protocolos — o que o `ator` protocolou NESTA Casa (a da sessao), cada item com vence-em
   EFETIVO e dias-restantes, pela mesma derivacao dos detalhes (meu-pedido/minha-solicitacao/minha-manifestacao).
   So' do proprio ator por construcao (a consulta filtra pelo dono). Cada item traz a resposta MAIS RECENTE (corpo +
-  quando), que a cidada precisa ler para decidir se recorre. Linhas CRUAS: a borda projeta pelo adapters/out (sem
-  tenant, sem PII, sem o corpo do pedido)."
+  quando), que a cidada precisa ler para decidir se recorre. e-SIC e ouvidoria levam tambem a `:prorrogacao` (a data
+  original, a nova, a justificativa e quando) — a LAI (art. 11 §2º) quer o requerente cientificado da justificativa;
+  SO' estas 4 chaves (nunca quem prorrogou). Linhas CRUAS: a borda projeta pelo adapters/out (sem tenant, sem PII, sem o
+  corpo do pedido)."
   [repo-participacao ator relogio]
   (let [com-prazo (fn [linhas]
-                    (mapv (fn [{:keys [item prazo resposta recurso]}]
+                    (mapv (fn [{:keys [item prazo resposta recurso prorrogacao]}]
                             (cond-> (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
                                            :dias-restantes (dias-restantes-do-prazo relogio prazo)
-                                           :resposta (some-> resposta (select-keys [:corpo :respondida-em])))
+                                           :resposta (some-> resposta (select-keys [:corpo :respondida-em]))
+                                           :prorrogacao (some-> prorrogacao
+                                                                (select-keys [:de-data :para-data :justificativa :prorrogado-em])))
                               recurso (assoc :recurso {:protocolo (:protocolo recurso) :estado (:estado recurso)
                                                        :recibo-em (:recibo-em recurso)
                                                        :resposta (some-> (:resposta recurso)
