@@ -372,6 +372,32 @@ jobs:
                   `painel=${pn.status} em-aberto=${ab.length} metas-fiscais=${metas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'} contas=${contas.map(x => `${x['vence-em']}:${x.estado}`).join(',') || '-'}`);
             } catch (e) { rec('obrigacoes legais (motor)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
+            // 13) BALCAO DE ATENDIMENTO (e-SIC, ouvidoria, LGPD) — a demo deixa um protocolo aberto em cada fila; a
+            //     secretaria le as tres e o detalhe; a ouvidoria nunca expoe quem se manifestou (Lei 13.460 art. 10 §7);
+            //     a vereadora nao entra no balcao.
+            try {
+              const fe = await api(cSec, '/api/atendimento/esic');
+              const fo = await api(cSec, '/api/atendimento/ouvidoria');
+              const fl = await api(cSec, '/api/atendimento/lgpd');
+              const ie = fe.body?.itens ?? [], io = fo.body?.itens ?? [], il = fl.body?.itens ?? [];
+              const de = ie[0] ? await api(cSec, `/api/atendimento/esic/${ie[0].id}`) : { status: 0, body: null };
+              const dout = io[0] ? await api(cSec, `/api/atendimento/ouvidoria/${io[0].id}`) : { status: 0, body: null };
+              const sigilo = dout.body && !('manifestante' in dout.body) && !('requerente' in dout.body)
+                && !/\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(JSON.stringify(dout.body));
+              const ver = await api(cVer, '/api/atendimento/esic');
+              const p = await cSec.newPage();
+              await p.goto(`${B}/atendimento`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              await p.waitForTimeout(3000);
+              const t = (await p.evaluate(() => document.body?.innerText || '')).replace(/\s+/g,' ').trim();
+              await p.close();
+              const ok = fe.status === 200 && fo.status === 200 && fl.status === 200
+                && ie.length >= 1 && io.length >= 1 && il.length >= 1
+                && de.status === 200 && Array.isArray(de.body?.historico) && dout.status === 200 && sigilo
+                && ver.status === 403 && /Atendimento ao cidad/i.test(t) && !/Application error|Internal Server/i.test(t);
+              rec('balcao de atendimento', ok ? 'OK' : 'ERRO',
+                  `esic=${fe.status}:${ie.length} ouvidoria=${fo.status}:${io.length} lgpd=${fl.status}:${il.length} detalhe-esic=${de.status} detalhe-ouv=${dout.status} sigilo=${sigilo} vereadora=${ver.status} tela=${/Atendimento ao cidad/i.test(t)}`);
+            } catch (e) { rec('balcao de atendimento', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
             console.log('== fumaca concluida ==');
