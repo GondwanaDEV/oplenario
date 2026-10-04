@@ -24,7 +24,8 @@ export type RegistroTrilha = {
   ator: AtorTrilha;
   acao: string;
   classe: "escrita" | "negacao" | "entrada" | "leitura_sensivel";
-  decisao: "permitido" | "negado" | "falhou";
+  // "sem_desfecho": a escrita foi iniciada e o desfecho dela não foi registrado — o ato pode ter acontecido (ADR-0017)
+  decisao: "permitido" | "negado" | "falhou" | "sem_desfecho";
   recurso: { tipo: string | null; id: string | null; rotulo: string | null } | null;
   campos: string[];
   canal: string;
@@ -51,6 +52,9 @@ export type Integridade = {
   cabeca: string | null;
   quebraEm: number | null;
   selosDoDia: SeloDoDia[];
+  /** Escritas iniciadas sem desfecho registrado, e o nº da mais antiga. */
+  semDesfecho?: number;
+  primeiroSemDesfecho?: number | null;
 };
 
 // ---- filtros (o vocabulário é o do servidor: adapters/in/filtro.clj) ----
@@ -80,6 +84,7 @@ export const CLASSES: { valor: string; rotulo: string }[] = [
   { valor: "negacao", rotulo: "Acessos negados" },
   { valor: "entrada", rotulo: "Entradas no sistema" },
   { valor: "leitura_sensivel", rotulo: "Consultas à trilha" },
+  { valor: "sem_desfecho", rotulo: "Sem desfecho registrado" },
 ];
 
 export const OBJETOS: { valor: string; rotulo: string }[] = [
@@ -133,6 +138,7 @@ export function verbo(r: RegistroTrilha): Verbo {
   if (r.classe === "entrada") return { rotulo: "Entrou", tom: "entrou" };
   if (r.acao === "auditoria/exportar" || r.acao === "exportacao-da-casa/baixar") return { rotulo: "Exportou", tom: "exportou" };
   if (r.classe === "leitura_sensivel") return { rotulo: "Consultou", tom: "entrou" };
+  if (r.decisao === "sem_desfecho") return { rotulo: "Sem desfecho", tom: "negado" };
   if (r.decisao === "falhou") return { rotulo: "Não concluiu", tom: "negado" };
   const nome = r.acao.split("/")[1] ?? r.acao;
   const achado = VERBOS.find(([re]) => re.test(nome));
@@ -161,8 +167,20 @@ export function objeto(r: RegistroTrilha): { titulo: string; detalhe: string } {
   const titulo = rec?.rotulo ?? (tipo ? `${tipo}${rec?.id ? ` ${rec.id.slice(0, 8)}` : ""}` : acaoEmPalavras(r.acao));
   const detalhe = [rec?.rotulo || tipo ? acaoEmPalavras(r.acao) : null,
     r.decisao === "negado" ? "barrado pela política de acesso" : null,
-    r.decisao === "falhou" ? "o sistema recusou o pedido" : null].filter(Boolean).join(" · ");
+    r.decisao === "falhou" ? "o sistema recusou o pedido" : null,
+    r.decisao === "sem_desfecho" ? "ação iniciada, desfecho não registrado" : null].filter(Boolean).join(" · ");
   return { titulo, detalhe };
+}
+
+/** A decisão do registro em palavras. O que o servidor mandar de novo aparece como está, nunca como "Não concluído". */
+export function decisaoEmPalavras(d: RegistroTrilha["decisao"] | string): string {
+  switch (d) {
+    case "permitido": return "Permitido";
+    case "negado": return "Negado pela política";
+    case "falhou": return "Não concluído";
+    case "sem_desfecho": return "Ação iniciada, desfecho não registrado — confira se o ato aconteceu";
+    default: return `Não reconhecida (${d})`;
+  }
 }
 
 const PAPEIS: Record<string, string> = {
@@ -225,6 +243,16 @@ export function lacre(i: Integridade | null, estado: "carregando" | "pronto" | "
   if (estado === "carregando") return { titulo: "Conferindo a cadeia…", texto: "Cada selo é recalculado a partir do anterior.", quebrada: false };
   if (estado === "erro" || !i)
     return { titulo: "Não foi possível conferir agora", texto: "A cadeia não foi verificada nesta visita. Tente de novo em instantes.", quebrada: false };
+  if (i.integra && (i.semDesfecho ?? 0) > 0) {
+    const n = i.semDesfecho ?? 0;
+    return {
+      titulo: "Cadeia íntegra, com desfecho faltando",
+      texto: `${n === 1 ? "Uma ação foi iniciada" : `${numero(n)} ações foram iniciadas`} e o desfecho não foi registrado`
+        + `${i.primeiroSemDesfecho ? ` (a mais antiga é o registro nº ${numero(i.primeiroSemDesfecho)})` : ""}.`
+        + " Filtre por “Sem desfecho registrado” e confira se o ato aconteceu.",
+      quebrada: false,
+    };
+  }
   if (i.integra)
     return {
       titulo: "Cadeia íntegra",

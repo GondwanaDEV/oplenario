@@ -13,9 +13,13 @@
   (trilha [this ente-id filtro limite] "{:registros :total} — uma pagina, mais recente primeiro.")
   (total [this ente-id] "Quantos registros a corrente da Casa tem.")
   (verificar [this ente-id] "{:integra :total :cabeca :quebra-em} — a corrente inteira conferida.")
+  (sem-desfecho [this ente-id]
+    "{:total :primeiro} — as tentativas de escrita sem desfecho registrado (o ato pode ter acontecido sem registro).")
   (selos-do-dia [this ente-id n] "Os ultimos `n` selos do dia da Casa."))
 
-(defrecord RepoAuditoriaPg [datasource]
+;; `tolerancia-s` (opcional): quanto tempo uma tentativa espera o desfecho antes de ser acusada (padrao em db/registro;
+;; os testes passam 0 para ver a orfa na hora).
+(defrecord RepoAuditoriaPg [datasource tolerancia-s]
   RepoAuditoria
   (registrar! [_ registro]
     (tenancy/com-tenant* (:ds datasource) (:ente-id registro)
@@ -27,7 +31,10 @@
             (db/garantir-particoes! tx))
           res))))
   (trilha [_ ente-id filtro limite]
-    (tenancy/com-tenant* (:ds datasource) ente-id #(db/listar % ente-id filtro limite)))
+    (tenancy/com-tenant* (:ds datasource) ente-id
+      #(db/listar % ente-id (assoc filtro :tolerancia-s tolerancia-s) limite)))
+  (sem-desfecho [_ ente-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(db/sem-desfecho % ente-id tolerancia-s)))
   (total [_ ente-id]
     (tenancy/com-tenant* (:ds datasource) ente-id #(db/total-da-casa % ente-id)))
   (verificar [_ ente-id]

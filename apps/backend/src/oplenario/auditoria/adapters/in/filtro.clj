@@ -10,6 +10,9 @@
 
 (def atores #{"pessoa" "cidadao" "agente"})
 (def classes #{"escrita" "negacao" "entrada" "leitura_sensivel"})
+(def sem-desfecho
+  "No filtro \"Registro\" da tela, ao lado das classes: so' as escritas iniciadas cujo desfecho nao foi registrado."
+  "sem_desfecho")
 (def objetos
   "O modulo da acao (o prefixo do route-name): o \"Objeto\" do filtro da tela."
   #{"legislativo" "sessoes" "cadastros" "identidade" "participacao" "transparencia" "compliance" "normas"
@@ -40,6 +43,7 @@
       desde (assoc :desde (inicio-do-dia desde))
       ate   (assoc :ate (inicio-do-dia (.plusDays ^LocalDate ate 1)))
       (g :ator) (assoc :ator-tipo (do-vocabulario :ator atores (g :ator)))
-      (g :classe) (assoc :classe (do-vocabulario :classe classes (g :classe)))
+      (= sem-desfecho (g :classe)) (assoc :sem-desfecho true)
+      (and (g :classe) (not= sem-desfecho (g :classe))) (assoc :classe (do-vocabulario :classe classes (g :classe)))
       (g :objeto) (assoc :objeto (do-vocabulario :objeto objetos (g :objeto)))
       antes (assoc :antes-de antes))))
