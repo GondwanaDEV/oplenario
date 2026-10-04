@@ -16,6 +16,8 @@
   (is (r/escrita-permitida? :head :qualquer/rota))
   (is (r/escrita-permitida? :post :participacao/protocolar-esic) "o protocolo do cidadao segue")
   (is (r/escrita-permitida? :post :participacao/responder-pedido) "o servidor responde o e-SIC")
+  (is (r/escrita-permitida? :post :participacao/indeferir-pedido) "e indefere, com fundamentacao: negar tambem e' responder")
+  (is (r/escrita-permitida? :post :participacao/indeferir-solicitacao) "o encarregado indefere a solicitacao LGPD")
   (is (r/escrita-permitida? :post :exportacao-da-casa/gerar) "a Casa suspensa exporta (portabilidade, 9.6)")
   (is (r/escrita-permitida? :post :exportacao-da-casa/confirmar-recebimento))
   (is (not (r/escrita-permitida? :post :legislativo/criar-proposicao)) "o legislativo nao opera")

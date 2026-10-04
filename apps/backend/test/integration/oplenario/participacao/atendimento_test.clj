@@ -110,7 +110,7 @@
         (is (= "Maria das Dores" (get-in d [:requerente :nome])))
         (is (= (str "***." (subs cpf 3 6) "." (subs cpf 6 9) "-**") (get-in d [:requerente :cpf-mascarado])))
         (is (not (str/includes? (json/write-value-as-string d) cpf)) "o CPF inteiro nunca sai")
-        (is (= {:pode-responder true :pode-prorrogar true :recurso-pendente-id nil} (:acoes d)))
+        (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar true :recurso-pendente-id nil} (:acoes d)))
         (is (= 12 (:dias-restantes d)))
         (is (= [] (:historico d)))))
     (testing "prorrogar (LAI art. 11 §2º): +10 sobre o vencimento original, uma vez so'"
@@ -132,7 +132,7 @@
       (let [rec (controllers/interpor-recurso! *repo* (relogio "2026-07-03T17:00:00Z") (cidadao ente eu) (:id p)
                                                {:motivo "Faltou o valor."})
             d (ver)]
-        (is (= {:pode-responder false :pode-prorrogar false :recurso-pendente-id (str (:id rec))} (:acoes d)))
+        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :recurso-pendente-id (str (:id rec))} (:acoes d)))
         (is (:aberto d) "o recurso pendente mantem o item aberto")
         (is (= {:protocolo (:protocolo rec) :motivo "Faltou o valor." :estado "protocolado"}
                (select-keys (:recurso d) [:protocolo :motivo :estado])))
@@ -201,7 +201,7 @@
       (is (not (str/includes? (json/write-value-as-string d) cpf)))
       (is (= "Quero ver o que a Camara guarda." (:detalhe d)))
       (is (= [["resposta" "Encarregada"]] (map (juxt :tipo :por) (:historico d))))
-      (is (= {:pode-responder false} (:acoes d)))
+      (is (= {:pode-responder false :pode-indeferir false} (:acoes d)))
       (is (empty? (:itens (fila sec :lgpd "abertos")))))))
 
 ;; ---------------------------------------------------------------- a borda HTTP

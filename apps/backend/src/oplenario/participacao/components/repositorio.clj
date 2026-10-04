@@ -49,6 +49,12 @@
      + INSERT resposta_esic(pedido_id) (append-only) + cumpre o prazo do PEDIDO (prazo_ativo -> cumprida) + emit
      `pedido_esic.respondido` (outbox, mesma tx). `m` = {:pedido-id :resposta-id :corpo :respondido-por
      :respondida-em}. Devolve {:respondida-em :protocolo} ou nil (pedido ja terminal/inexistente).")
+  (indeferir-pedido! [this ente-id m]
+    "SERVIDOR — UMA tx: CAS pedido protocolado|em_analise -> indeferido (nil = ja terminal, aborta sem escrever) +
+     INSERT resposta_esic(pedido_id) (append-only — a FUNDAMENTACAO e' a resposta, na mesma tabela do responder) +
+     cumpre o prazo do PEDIDO (negar e' responder dentro do prazo) + emit `pedido_esic.indeferido` (outbox, mesma
+     tx). `m` = {:pedido-id :resposta-id :fundamentacao :indeferido-por :indeferido-em}. Devolve {:indeferido-em
+     :protocolo} ou nil (pedido ja terminal/inexistente).")
   (interpor-recurso! [this ente-id m]
     "CIDADAO — UMA tx: sequencial gapless 'recurso_esic:<ano>' + INSERT recurso_esic (instancia) + INSERT
      prazo_ativo(objeto_tipo=recurso_esic) pendente com vence_em PROPRIO (relogio independente do pedido) + emit
@@ -99,6 +105,11 @@
      aborta) + INSERT resposta_titular (append-only) + cumpre o prazo do TITULAR (prazo_ativo -> cumprida) +
      emit `solicitacao_titular.respondida`. `m` = {:solicitacao-id :resposta-id :corpo :respondido-por
      :respondida-em}. Devolve {:respondida-em} ou nil (solicitacao ja terminal/inexistente).")
+  (indeferir-solicitacao! [this ente-id m]
+    "SERVIDOR/Encarregado — UMA tx: CAS solicitacao protocolada|em_analise -> indeferida (nil = ja terminal, aborta) +
+     INSERT resposta_titular (append-only — a FUNDAMENTACAO, LGPD art. 18 §4º) + cumpre o prazo do TITULAR + emit
+     `solicitacao_titular.indeferida`. `m` = {:solicitacao-id :resposta-id :fundamentacao :indeferido-por
+     :indeferida-em}. Devolve {:indeferida-em :protocolo} ou nil (solicitacao ja terminal/inexistente).")
   (definir-encarregado! [this ente-id m]
     "SERVIDOR — UPSERT do contato do Encarregado/DPO (1 por ente; ON CONFLICT ente_id). `m` = {:id :nome :rotulo
      :email :atualizado-por}. Devolve o mapa kebab da linha.")
@@ -225,6 +236,25 @@
           (producers/emitir-pedido-respondido! bus tx ente-id
             {:pedido-id pedido-id :protocolo (:protocolo pedido) :respondida-em (str respondida-em)})
           {:respondida-em respondida-em :protocolo (:protocolo pedido)}))))
+  (indeferir-pedido! [this ente-id {:keys [pedido-id resposta-id fundamentacao indeferido-por indeferido-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit), como o responder: so grava a fundamentacao/cumpre o prazo se o pedido AINDA
+        ;; esta aberto. nil = ja terminal (respondido/indeferido) -> aborta sem inserir nada (a borda desambigua 409).
+        (when-let [pedido (db-pedido/indeferir! tx {:id pedido-id :ente-id ente-id})]
+          ;; a fundamentacao E' a resposta: mesma tabela append-only, mesmo `corpo` (a leitura do cidadao e o historico
+          ;; do balcao a distinguem pelo ESTADO do pedido, que so' tem um desfecho).
+          (db-resposta/inserir! tx {:id resposta-id :ente-id ente-id :pedido-id pedido-id :recurso-id nil
+                                    :corpo fundamentacao :respondido-por indeferido-por :respondida-em indeferido-em})
+          ;; INVARIANTE (Inv.10, a mesma do responder): o pedido so vira terminal ATOMICO com o fechamento do seu
+          ;; prazo. Sem prazo aberto = prazo orfao -> aborta a tx (500 auditavel, tipo != :conflito -> nao 409).
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "pedido_esic" :objeto-id pedido-id
+                                           :cumprida-em indeferido-em})
+            (throw (ex-info "prazo do pedido nao estava aberto ao indeferir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "pedido_esic" :objeto-id pedido-id})))
+          (producers/emitir-pedido-indeferido! bus tx ente-id
+            {:pedido-id pedido-id :protocolo (:protocolo pedido) :indeferido-em (str indeferido-em)})
+          {:indeferido-em indeferido-em :protocolo (:protocolo pedido)}))))
   (interpor-recurso! [this ente-id {:keys [recurso-id pedido-id ano instancia motivo recibo-em vence-em
                                            prazo-id base-dias prazo-fonte-ref created-by]}]
     ;; IDEMPOTENCIA: a UNIQUE(ente, pedido, instancia) da mig 0040 barra o double-click/retry do cidadao (o
@@ -343,6 +373,23 @@
           (producers/emitir-solicitacao-titular-respondida! bus tx ente-id
             {:solicitacao-id solicitacao-id :respondida-em (str respondida-em)})
           {:respondida-em respondida-em :protocolo (:protocolo solic)}))))
+  (indeferir-solicitacao! [this ente-id {:keys [solicitacao-id resposta-id fundamentacao indeferido-por indeferida-em]}]
+    (transacao this ente-id
+      (fn [tx]
+        ;; CAS PRIMEIRO (short-circuit), como o responder: nil = ja terminal -> aborta sem escrever (409 na borda).
+        (when-let [solic (db-solicitacao/indeferir! tx {:id solicitacao-id :ente-id ente-id})]
+          (db-resposta-titular/inserir! tx {:id resposta-id :ente-id ente-id :solicitacao-id solicitacao-id
+                                            :corpo fundamentacao :respondido-por indeferido-por
+                                            :respondida-em indeferida-em})
+          ;; INVARIANTE (Inv.10): so vira terminal ATOMICO com o fechamento do prazo (CONTADOR SEPARADO do e-SIC).
+          (when-not (db-prazo/cumprir! tx {:ente-id ente-id :objeto-tipo "solicitacao_titular"
+                                           :objeto-id solicitacao-id :cumprida-em indeferida-em})
+            (throw (ex-info "prazo da solicitacao do titular nao estava aberto ao indeferir (invariante de compliance)"
+                            {:tipo :invariante/prazo-orfao :objeto-tipo "solicitacao_titular"
+                             :objeto-id solicitacao-id})))
+          (producers/emitir-solicitacao-titular-indeferida! bus tx ente-id
+            {:solicitacao-id solicitacao-id :indeferida-em (str indeferida-em)})
+          {:indeferida-em indeferida-em :protocolo (:protocolo solic)}))))
   (definir-encarregado! [this ente-id {:keys [id nome rotulo email atualizado-por]}]
     (transacao this ente-id
       (fn [tx]

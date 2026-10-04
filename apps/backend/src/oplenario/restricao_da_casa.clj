@@ -34,6 +34,8 @@
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     :participacao/prorrogar-pedido
+    ;; o indeferimento fundamentado e' o outro jeito de responder (LAI art. 11 §1º II; LGPD art. 18 §4º): o prazo corre igual
+    :participacao/indeferir-pedido :participacao/indeferir-solicitacao
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
     :paineis/marcar-notificacao-lida

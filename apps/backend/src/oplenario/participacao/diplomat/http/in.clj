@@ -13,7 +13,7 @@
 
   As rotas LGPD (Slice 4) REPLICAM os MESMOS tres perfis: (1) POST /portal/lgpd/solicitacoes = titular SO-`auth`
   (qualquer titular pede sobre os PROPRIOS dados, sem papel); GET .../solicitacoes/:id = auth + policy fina (ator
-  == titular). (2) POST /lgpd/solicitacoes/:id/resposta e PUT /lgpd/encarregado = SERVIDOR (auth + exige-papel
+  == titular). (2) POST /lgpd/solicitacoes/:id/resposta|indeferir e PUT /lgpd/encarregado = SERVIDOR (auth + exige-papel
   'secretario'). (3) GET /portal/casa/:ente/encarregado = PUBLICA sem `auth` — o contato do DPO e' legalmente
   publico (LGPD art. 41 §1º); mesmo mecanismo resolver-ente-publico + RLS + filtro de saida no adapters/out.
 
@@ -45,6 +45,7 @@
             [oplenario.participacao.adapters.in.comentario :as adapters-in-comentario]
             [oplenario.participacao.adapters.in.denunciar-comentario :as adapters-in-denunciar]
             [oplenario.participacao.adapters.in.encarregado :as adapters-in-encarregado]
+            [oplenario.participacao.adapters.in.indeferimento :as adapters-in-indeferimento]
             [oplenario.participacao.adapters.in.manifestacao-ouvidoria :as adapters-in-manifestacao]
             [oplenario.participacao.adapters.in.moderar-comentario :as adapters-in-moderar]
             [oplenario.participacao.adapters.in.pedido-esic :as adapters-in]
@@ -160,6 +161,17 @@
       (responder-op #(controllers/responder-pedido! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-resposta/recibo->wire 200))))
 
+(defn- indeferir-pedido-handler
+  "POST /esic/pedidos/:id/indeferir (SERVIDOR, exige-papel). Coage o :id + o corpo {fundamentacao} (obrigatoria — LAI
+  art. 11 §1º II). nil -> 404 (inexistente ou de outra Casa); ja respondido/indeferido -> 409. Sucesso -> 200
+  {indeferido-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-indeferimento/coagir-indeferimento (:json-params req))]
+      (responder-op #(controllers/indeferir-pedido! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-resposta/indeferimento-recibo->wire 200))))
+
 (defn- decidir-recurso-handler
   "POST /esic/recursos/:id/decisao (SERVIDOR, exige-papel). Coage o :id do recurso + o corpo {corpo}. nil -> 404;
   ja decidido -> 409. Sucesso -> 200 {decidido-em}."
@@ -213,6 +225,16 @@
           entrada (adapters-in-resposta-titular/coagir-resposta (:json-params req))]
       (responder-op #(controllers/responder-solicitacao! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-titular/resposta-recibo->wire 200))))
+
+(defn- indeferir-solicitacao-handler
+  "POST /lgpd/solicitacoes/:id/indeferir (SERVIDOR, exige-papel). Coage o :id + o corpo {fundamentacao} (obrigatoria —
+  LGPD art. 18 §4º). nil -> 404; ja respondida/indeferida -> 409. Sucesso -> 200 {indeferida-em}."
+  [repo-participacao relogio]
+  (fn [req]
+    (let [id      (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          entrada (adapters-in-indeferimento/coagir-indeferimento (:json-params req))]
+      (responder-op #(controllers/indeferir-solicitacao! repo-participacao relogio (:ator req) id entrada)
+                    adapters-out-titular/indeferimento-recibo->wire 200))))
 
 (defn- definir-encarregado-handler
   "PUT /lgpd/encarregado (SERVIDOR, exige-papel). Coage o corpo {nome, rotulo, email}; o controller injeta o
@@ -452,6 +474,10 @@
      ["/esic/pedidos/:id/resposta" :post
       [auth (it/exige-papel "secretario") it/corpo-json (responder-pedido-handler repo-participacao relogio)]
       :route-name :participacao/responder-pedido]
+     ;; a recusa fundamentada (LAI art. 11 §1º II): irma de /resposta (mesmo nivel, mesmo papel)
+     ["/esic/pedidos/:id/indeferir" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (indeferir-pedido-handler repo-participacao relogio)]
+      :route-name :participacao/indeferir-pedido]
      ["/esic/recursos/:id/decisao" :post
       [auth (it/exige-papel "secretario") it/corpo-json (decidir-recurso-handler repo-participacao relogio)]
       :route-name :participacao/decidir-recurso]
@@ -474,6 +500,10 @@
      ["/lgpd/solicitacoes/:id/resposta" :post
       [auth (it/exige-papel "secretario") it/corpo-json (responder-solicitacao-handler repo-participacao relogio)]
       :route-name :participacao/responder-solicitacao]
+     ;; a recusa fundamentada (LGPD art. 18 §4º): irma de /resposta (mesmo nivel, mesmo papel)
+     ["/lgpd/solicitacoes/:id/indeferir" :post
+      [auth (it/exige-papel "secretario") it/corpo-json (indeferir-solicitacao-handler repo-participacao relogio)]
+      :route-name :participacao/indeferir-solicitacao]
      ["/lgpd/encarregado" :put
       [auth (it/exige-papel "secretario") it/corpo-json (definir-encarregado-handler repo-participacao)]
       :route-name :participacao/definir-encarregado]

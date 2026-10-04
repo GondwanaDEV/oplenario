@@ -107,6 +107,10 @@
                                     :motivo "o balcao le o contato do encarregado da propria Casa para editar; o contato publico ja' esta' no portal"}
  :participacao/prorrogar-pedido {:categoria :so-tela
                                  :motivo "prorrogar o prazo da LAI e' ato do servidor que le o pedido na tela, como responder; o agente nao le o pedido"}
+ :participacao/indeferir-pedido {:categoria :so-tela
+                                 :motivo "indeferir com fundamentacao (LAI art. 11 §1º II) e' ato do servidor que le o pedido na tela, como responder; o agente nao le o pedido"}
+ :participacao/indeferir-solicitacao {:categoria :so-tela
+                                      :motivo "indeferir com fundamentacao (LGPD art. 18 §4º) e' ato do encarregado que le a solicitacao na tela, como responder; o agente nao le dado pessoal do titular antes do [GAP] juridico"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------
  :admin-sistema/descoberta {:categoria :supratenant
                             :motivo "descoberta publica do realm do operador para o login do console"}

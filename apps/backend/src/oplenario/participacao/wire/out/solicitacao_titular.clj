@@ -22,6 +22,12 @@
   [:map {:closed true}
    [:respondida-em :string]])
 
+(def IndeferimentoTitularReciboOut
+  "Recibo do indeferimento de uma solicitacao (resposta 200 de POST /lgpd/solicitacoes/:id/indeferir): so o instante do
+  ato. (Contrato proprio, como o da resposta — nao reusa o do e-SIC.)"
+  [:map {:closed true}
+   [:indeferida-em :string]])
+
 (def SolicitacaoTitularOut
   "Detalhe da solicitacao para o proprio TITULAR autenticado (GET /portal/lgpd/solicitacoes/:id). Inclui o que
   o titular submeteu (tipo/detalhe = SEUS proprios dados, ok devolver ao dono) + o estado + o prazo. NAO expoe o

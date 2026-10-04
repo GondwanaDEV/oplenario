@@ -130,6 +130,8 @@
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
     ;; o balcao de atendimento: a prorrogacao do e-SIC (LAI art. 11 §2º), irma da prorrogacao da ouvidoria
     :participacao/prorrogar-pedido
+    ;; o indeferimento fundamentado (LAI art. 11 §1º II; LGPD art. 18 §4º): negar tambem e' responder, dentro do prazo
+    :participacao/indeferir-pedido :participacao/indeferir-solicitacao
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia

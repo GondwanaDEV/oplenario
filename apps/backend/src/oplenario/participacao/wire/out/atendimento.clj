@@ -63,9 +63,10 @@
 
 (def EventoOut
   "Uma entrada do historico, em ordem cronologica. `por` = o nome de quem agiu pela Casa (nil no recurso, que e' do
-  cidadao, ou se a pessoa nao foi encontrada). `protocolo` so' no recurso; `de-data`/`para-data` so' na prorrogacao."
+  cidadao, ou se a pessoa nao foi encontrada). `protocolo` so' no recurso; `de-data`/`para-data` so' na prorrogacao.
+  `indeferimento` = a recusa fundamentada (o `texto` e' a fundamentacao), distinta da `resposta` de merito."
   [:map {:closed true}
-   [:tipo [:enum "resposta" "recurso" "decisao-recurso" "prorrogacao" "arquivamento"]]
+   [:tipo [:enum "resposta" "indeferimento" "recurso" "decisao-recurso" "prorrogacao" "arquivamento"]]
    [:em :string]
    [:texto :string]
    [:por [:maybe :string]]
@@ -82,10 +83,12 @@
    [:prazo-vigente [:maybe Data]] [:dias-restantes [:maybe :int]] [:prorrogado :boolean]])
 
 (def AcoesEsicOut
-  "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, prorrogar o prazo DO PEDIDO (LAI art. 11
-  §2º, uma vez) e decidir o recurso pendente (o id dele)."
+  "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, indeferi-lo com fundamentacao (LAI art. 11
+  §1º II — mesma condicao do responder), prorrogar o prazo DO PEDIDO (LAI art. 11 §2º, uma vez) e decidir o recurso
+  pendente (o id dele)."
   [:map {:closed true}
    [:pode-responder :boolean]
+   [:pode-indeferir :boolean]
    [:pode-prorrogar :boolean]
    [:recurso-pendente-id [:maybe :string]]])
 
@@ -93,7 +96,8 @@
   [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean]])
 
 (def AcoesLgpdOut
-  [:map {:closed true} [:pode-responder :boolean]])
+  "Responder e indeferir (LGPD art. 18 §4º) a solicitacao aberta: a mesma condicao."
+  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean]])
 
 (def DetalheEsicOut
   (into [:map {:closed true}

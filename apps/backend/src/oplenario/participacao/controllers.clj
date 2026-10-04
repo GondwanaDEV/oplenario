@@ -137,6 +137,23 @@
         (when (repo/buscar-pedido repo-participacao ente-id id)
           (em-conflito! "pedido ja respondido/indeferido (nao ha o que responder)" {:pedido-id id})))))
 
+(defn indeferir-pedido!
+  "SERVIDOR indefere (recusa com FUNDAMENTACAO — LAI art. 11 §1º II) o pedido `id` (papel exigido na rota). Ato PROPRIO,
+  gemeo do `responder-pedido!`: UMA tx no Repo — CAS pedido->indeferido (so' dos abertos) + a fundamentacao como a
+  resposta append-only + cumpre o prazo do PEDIDO (negar e' responder dentro do prazo) + emit do evento proprio.
+  indeferido-por INJETADO do ator (nunca do corpo). A fundamentacao e' texto livre e obrigatoria (o gate de borda a
+  garante) — sem taxonomia de hipoteses legais (depende de regulamento local). Devolve {:indeferido-em :protocolo}, ou
+  nil (pedido inexistente/de outra Casa -> 404); se o pedido AINDA existe mas ja e' terminal (CAS falhou),
+  :conflito/participacao (-> 409). O pedido indeferido segue recorrivel (`logic/pedido-admite-recurso?`)."
+  [repo-participacao relogio ator id {:keys [fundamentacao]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/indeferir-pedido! repo-participacao ente-id
+          {:pedido-id id :resposta-id (ids/novo-id) :fundamentacao fundamentacao
+           :indeferido-por (:identidade-id ator) :indeferido-em agora})
+        (when (repo/buscar-pedido repo-participacao ente-id id)
+          (em-conflito! "pedido ja respondido/indeferido (nao ha o que indeferir)" {:pedido-id id})))))
+
 (defn interpor-recurso!
   "CIDADAO interpoe recurso ao pedido `id` (rota SO-auth, sem papel — LAI: qualquer solicitante recorre). Policy
   FINA (in-domain, §22.5 eixo E): (a) pedido inexistente no tenant -> nil (404); (b) ator != solicitante do
@@ -220,6 +237,22 @@
            :respondido-por (:identidade-id ator) :respondida-em agora})
         (when (repo/buscar-solicitacao-titular repo-participacao ente-id id)
           (em-conflito! "solicitacao do titular ja respondida/indeferida (nao ha o que responder)"
+                        {:solicitacao-id id})))))
+
+(defn indeferir-solicitacao!
+  "SERVIDOR/Encarregado indefere (recusa com FUNDAMENTACAO — LGPD art. 18 §4º) a solicitacao `id` (papel exigido na
+  rota). Gemeo do `responder-solicitacao!`: UMA tx no Repo — CAS solicitacao->indeferida (so' das abertas) + a
+  fundamentacao como a resposta append-only + cumpre o prazo do TITULAR + emit do evento proprio. indeferido-por
+  INJETADO do ator (nunca do corpo). Devolve {:indeferida-em :protocolo}, ou nil (solicitacao inexistente/de outra Casa
+  -> 404); se ainda existe mas ja e' terminal (CAS falhou), :conflito/participacao (-> 409)."
+  [repo-participacao relogio ator id {:keys [fundamentacao]}]
+  (let [ente-id (:ente-id ator)
+        agora   (tempo/agora relogio)]
+    (or (repo/indeferir-solicitacao! repo-participacao ente-id
+          {:solicitacao-id id :resposta-id (ids/novo-id) :fundamentacao fundamentacao
+           :indeferido-por (:identidade-id ator) :indeferida-em agora})
+        (when (repo/buscar-solicitacao-titular repo-participacao ente-id id)
+          (em-conflito! "solicitacao do titular ja respondida/indeferida (nao ha o que indeferir)"
                         {:solicitacao-id id})))))
 
 (defn definir-encarregado!
@@ -460,7 +493,9 @@
              (repo/atendimento-esic repo-participacao (:ente-id ator) id)]
     (let [hoje        (hoje-civil relogio)
           aberto?     (logic/aberto-no-balcao? :esic {:estado (:estado pedido) :recurso recurso})
-          historico   (cronologico (respostas->historico "resposta" respostas)
+          ;; a mesma tabela guarda a resposta e a fundamentacao do indeferimento (o pedido so' tem um desfecho)
+          tipo        (if (= "indeferido" (:estado pedido)) "indeferimento" "resposta")
+          historico   (cronologico (respostas->historico tipo respostas)
                                    (when recurso
                                      [{:tipo "recurso" :em (:recibo-em recurso) :texto (:motivo recurso)
                                        :protocolo (:protocolo recurso)}])
@@ -503,7 +538,9 @@
   [repo-participacao relogio pessoas ator id]
   (when-let [{:keys [solicitacao prazo respostas]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
     (let [aberto?   (logic/aberto-no-balcao? :lgpd solicitacao)
-          historico (cronologico (respostas->historico "resposta" respostas))
+          ;; a mesma tabela guarda a resposta e a fundamentacao do indeferimento (a solicitacao so' tem um desfecho)
+          tipo      (if (= "indeferida" (:estado solicitacao)) "indeferimento" "resposta")
+          historico (cronologico (respostas->historico tipo respostas))
           titular   (:titular-identidade-id solicitacao)
           por-id    (pessoas-por-id pessoas (cons titular (map :por-id historico)))]
       (merge (select-keys solicitacao [:id :protocolo :tipo :detalhe :estado :recibo-em])

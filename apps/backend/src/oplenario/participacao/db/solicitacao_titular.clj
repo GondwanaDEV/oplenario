@@ -58,6 +58,21 @@
                           [:in :estado [[:inline "protocolada"] [:inline "em_analise"]]]]
                   :returning [:*]}))))
 
+(defn indeferir!
+  "CAS de INDEFERIMENTO: transiciona a solicitacao p/ 'indeferida' SOMENTE se ainda esta ABERTA (protocolada|em_analise)
+  — o gemeo de `responder!`, com o outro desfecho do grafo. Devolve o mapa kebab (incl. :protocolo) se transicionou, ou
+  nil se ja estava terminal (respondida|indeferida) — a borda desambigua nil-existente p/ 409. A transicao P/ terminal
+  PASSA o trg_solicitacao_titular_trava_terminal."
+  [tx {:keys [id ente-id]}]
+  {:pre [(some? ente-id) (some? id)]}
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:update :participacao.solicitacao_titular
+                  :set {:estado "indeferida" :atualizado_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :id id]
+                          [:in :estado [[:inline "protocolada"] [:inline "em_analise"]]]]
+                  :returning [:*]}))))
+
 (defn listar-por-titular
   "'Minhas solicitacoes' do titular autenticado (ente, titular_identidade_id), mais recentes primeiro, com teto."
   [tx ente-id titular-id]

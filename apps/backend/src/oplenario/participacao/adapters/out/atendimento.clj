@@ -64,7 +64,8 @@
                                 :prorrogado (boolean (:prorrogado r))})
                     :historico (mapv evento (:historico d))
                     :acoes (let [a (:acoes d)]
-                             {:pode-responder (boolean (:pode-responder a)) :pode-prorrogar (boolean (:pode-prorrogar a))
+                             {:pode-responder (boolean (:pode-responder a)) :pode-indeferir (boolean (:pode-indeferir a))
+                              :pode-prorrogar (boolean (:pode-prorrogar a))
                               :recurso-pendente-id (->str (:recurso-pendente-id a))})}
                    (prazo d))
             "DetalheEsicOut"))
@@ -87,6 +88,7 @@
             (merge {:id (->str (:id d)) :protocolo (:protocolo d) :tipo (:tipo d) :detalhe (:detalhe d)
                     :estado (:estado d) :titular (pessoa (:titular d))
                     :historico (mapv evento (:historico d))
-                    :acoes {:pode-responder (boolean (get-in d [:acoes :pode-responder]))}}
+                    :acoes {:pode-responder (boolean (get-in d [:acoes :pode-responder]))
+                            :pode-indeferir (boolean (get-in d [:acoes :pode-indeferir]))}}
                    (prazo d))
             "DetalheLgpdOut"))

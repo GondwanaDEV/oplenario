@@ -66,7 +66,7 @@ export interface FilaLgpdOut {
 }
 
 export interface EventoOut {
-  tipo: "resposta" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento";
+  tipo: "resposta" | "indeferimento" | "recurso" | "decisao-recurso" | "prorrogacao" | "arquivamento";
   em: string;
   texto: string;
   por: string | null;
@@ -89,6 +89,7 @@ export interface RecursoOut {
 
 export interface AcoesEsicOut {
   podeResponder: boolean;
+  podeIndeferir: boolean;
   podeProrrogar: boolean;
   recursoPendenteId: string | null;
 }
@@ -101,6 +102,7 @@ export interface AcoesOuvidoriaOut {
 
 export interface AcoesLgpdOut {
   podeResponder: boolean;
+  podeIndeferir: boolean;
 }
 
 export interface DetalheEsicOut {

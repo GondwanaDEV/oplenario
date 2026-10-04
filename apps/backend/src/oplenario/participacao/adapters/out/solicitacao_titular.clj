@@ -35,6 +35,13 @@
             {:respondida-em (->str (:respondida-em r))}
             "RespostaTitularReciboOut"))
 
+(defn indeferimento-recibo->wire
+  "Recibo do indeferimento {:indeferida-em} -> IndeferimentoTitularReciboOut (resposta 200). So o carimbo do ato."
+  [r]
+  (validar! wire/IndeferimentoTitularReciboOut
+            {:indeferida-em (->str (:indeferida-em r))}
+            "IndeferimentoTitularReciboOut"))
+
 (defn solicitacao->wire
   "Detalhe da solicitacao do proprio titular {:id :protocolo :tipo :detalhe :estado :recibo-em :vence-em
   :dias-restantes} -> SolicitacaoTitularOut. FILTRA tenant (ente-id) + titular (id de PII). detalhe/vence-em/

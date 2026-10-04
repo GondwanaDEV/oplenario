@@ -9,6 +9,12 @@
   [:map {:closed true}
    [:respondida-em :string]])
 
+(def IndeferimentoReciboOut
+  "Recibo do indeferimento do pedido (resposta 200 de POST /esic/pedidos/:id/indeferir): so o instante do ato. Nao
+  repete a fundamentacao (quem a escreveu ja a tem) nem o protocolo."
+  [:map {:closed true}
+   [:indeferido-em :string]])
+
 (def RespostaOut
   "View publica de UMA resposta e-SIC (o conteudo que o cidadao le). Filtra `respondido-por`/ente/ids: so o
   corpo da resposta + quando foi respondida. (Consumidor do texto = conteudo do usuario: escapar antes de
