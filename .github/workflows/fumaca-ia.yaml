@@ -178,10 +178,31 @@ jobs:
                   data: JSON.stringify({}),
                 });
                 let j = null; try { j = await r.json(); } catch {}
-                const okC = r.status() === 200 && typeof j?.analise?.texto === 'string' && j.analise.texto.length > 0;
-                rec('POST /legislativo/pareceres/:id/copiloto', okC ? 'OK' : 'ERRO', `status=${r.status()} texto=${j?.analise?.texto?.length ?? '-'} normas=${j?.normas ?? '-'}`);
+                // 8.4: a analise traz o id da execucao NA IA; sem ele a tela nao oferece o "Reportar erro".
+                const eia = j?.analise?.['execucao-ia'];
+                const okC = r.status() === 200 && typeof j?.analise?.texto === 'string' && j.analise.texto.length > 0
+                  && typeof eia === 'string' && eia.length > 0;
+                rec('POST /legislativo/pareceres/:id/copiloto', okC ? 'OK' : 'ERRO', `status=${r.status()} texto=${j?.analise?.texto?.length ?? '-'} normas=${j?.normas ?? '-'} execucao-ia=${eia ? 'presente' : 'AUSENTE'}`);
               }
             } catch (e) { rec('POST /legislativo/pareceres/:id/copiloto', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
+
+            // ---------- reportar erro (8.4) — SEM gravar nada: o core valida, pergunta ao satelite e recusa ----------
+            // Execucao que nao existe -> 404 "nao encontrada": o pedido passou pela validacao, foi ao satelite e voltou
+            // (IA fora daria 503). O controle: categoria fora do vocabulario -> 400, sem ir ao satelite.
+            try {
+              const reportar = async (categoria) => {
+                const r = await ctx.request.post(`${B}/api/ia/execucoes/${crypto.randomUUID()}/reportes`, {
+                  headers: { 'content-type': 'application/json', accept: 'application/json' },
+                  data: JSON.stringify({ categoria }), timeout: 25000 });
+                let j = null; try { j = await r.json(); } catch {}
+                return { status: r.status(), erro: j?.erro ?? '' };
+              };
+              const inexistente = await reportar('outro');
+              const invalida = await reportar('categoria-que-nao-existe');
+              const okR = inexistente.status === 404 && /n[aã]o encontrada/i.test(inexistente.erro) && invalida.status === 400;
+              rec('POST /ia/execucoes/:id/reportes', okR ? 'OK' : 'ERRO',
+                  `inexistente=${inexistente.status} "${inexistente.erro}" categoria-invalida=${invalida.status}`);
+            } catch (e) { rec('POST /ia/execucoes/:id/reportes', 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
 
             console.log('\n===== RESUMO FUMACA (IA / producao) =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
