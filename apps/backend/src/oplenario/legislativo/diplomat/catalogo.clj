@@ -156,7 +156,11 @@
    [:incerteza [:enum "normal" "revisar_com_atencao"]]
    [:motivos-incerteza {:optional true}
     [:vector {:max 10} [:enum "truncado" "sem_fonte" "citacao_nao_conferida" "conteudo_de_terceiro"]]]
-   [:modelo {:description "fornecedor:modelo que redigiu."} [:string {:min 1 :max 200}]]])
+   [:modelo {:description "fornecedor:modelo que redigiu."} [:string {:min 1 :max 200}]]
+   [:execucao-ia {:optional true
+                  :description (str "O id desta execucao no satelite de IA (UUID). Opcional: so' serve para o 'Reportar "
+                                    "erro' achar a execucao; nao e' identidade nem da credencial.")}
+    [:maybe :uuid]]])
 
 (def NotaRegistradaOut
   [:map {:closed true} [:nota-id :string] [:estado :string] [:mensagem :string]])

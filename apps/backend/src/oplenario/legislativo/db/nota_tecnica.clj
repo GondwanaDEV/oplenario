@@ -10,7 +10,7 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private colunas
-  [:n.id :n.proposicao_id :n.agente :n.execucao_id :n.texto :n.citacoes :n.paragrafos_sem_fonte :n.incerteza
+  [:n.id :n.proposicao_id :n.agente :n.execucao_id :n.execucao_ia :n.texto :n.citacoes :n.paragrafos_sem_fonte :n.incerteza
    :n.motivos_incerteza :n.modelo_llm_id :n.estado :n.texto_final :n.decidida_por :n.decidida_em :n.criada_em
    :p.tipo :p.sequencial :p.ano :p.ementa])
 
@@ -52,7 +52,8 @@
     (let [inserida (jdbc/execute-one! tx
                      (sql/format {:insert-into :legislativo.nota_tecnica
                                   :values [{:ente_id ente-id :proposicao_id proposicao-id :agente agente
-                                            :execucao_id (:execucao-id m) :texto (:texto m)
+                                            :execucao_id (:execucao-id m) :execucao_ia (:execucao-ia m)
+                                            :texto (:texto m)
                                             :citacoes (comum/->jsonb (vec (:citacoes m)))
                                             :paragrafos_sem_fonte (comum/->jsonb (vec (:paragrafos-sem-fonte m)))
                                             :incerteza (:incerteza m)

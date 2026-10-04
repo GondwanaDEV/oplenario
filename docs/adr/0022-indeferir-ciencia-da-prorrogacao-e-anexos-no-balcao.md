@@ -171,11 +171,22 @@ A secretaria troca o arquivo errado pelo certo num só ato, mesmo depois da jane
    allowlist da Casa suspensa, junto de retirar e anexar (`restricao_da_casa.clj`; a cópia de propósito em
    `vazamento_estado_test`).
 
+## Reconciliação entre o banco e o object storage
+
+O upload grava o blob antes da linha, então uma falha no meio deixa blob sem linha; o contrário (linha sem blob) é perda do arquivo.
+Existe o comando `reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]` (host: `oplenario.reconciliar-anexos`; sem agendador):
+
+- Cobre `participacao.anexo` (`atendimento/<ente>/…`) e `comunicacao.anexo` (`comunicados/<ente>/…`), uma Casa por vez na tx do tenant.
+  `participacao` e `comunicacao` expõem `chaves-de-anexos` pela própria porta; o host compõe.
+- Por padrão só relata: linhas, blobs, blob sem linha e linha sem blob (200 itens por lista, com o total ao lado). Sai com 1 se há
+  divergência. Anexo retirado sem blob é o estado correto.
+- `--apagar-orfaos` tira do storage só o blob sem linha com mais de 24 h; nunca toca em linha. Casa encerrada não é tocada.
+- Uso e códigos de saída: [`docs/27`](../27-runbook-ia-producao.md), seção 8.
+
 ## Fora, de propósito
 
 - Antivírus.
 - Pré-visualização do arquivo no navegador.
-- Rotina de reconciliação entre o banco e o object storage (blob sem linha, linha sem blob).
 - Confirmação antes de responder, arquivar e prorrogar. Só o indeferimento tem.
 - Prova de ciência da prorrogação e qualquer aviso por e-mail.
 - "Reportar erro" nas outras telas de IA: é outra frente.

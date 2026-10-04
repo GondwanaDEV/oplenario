@@ -31,7 +31,10 @@
   (listar [this prefixo recursivo?]
     "As chaves sob `prefixo`, em ordem lexicografica (o S3 pagina por dentro, 1000 por pagina). `recursivo?` true =
      todos os blobs abaixo do prefixo; false = so' o nivel imediato, com as subpastas como chaves terminadas em `/`
-     (ADR-0018: descobrir as pastas `<pasta>/<ente-id>/...` de uma Casa sem varrer o bucket inteiro)."))
+     (ADR-0018: descobrir as pastas `<pasta>/<ente-id>/...` de uma Casa sem varrer o bucket inteiro).")
+  (listar-objetos [this prefixo]
+    "Os blobs sob `prefixo` (recursivo), cada um {:chave :modificado-em (Instant, ou nil se o store nao informa)}, em
+     ordem de chave. Existe para a reconciliacao dos anexos: so' o blob com mais de 24 h pode ser tido como orfao."))
 
 (defrecord ObjetoStoreS3 [config client bucket]
   component/Lifecycle
@@ -96,6 +99,17 @@
                                   (.recursive (boolean recursivo?)) (.build)))
          (mapv (fn [^Result r] (.objectName ^Item (.get r))))
          sort
+         vec))
+  (listar-objetos [_ prefixo]
+    (->> (.listObjects client (-> (ListObjectsArgs/builder) (.bucket bucket)
+                                  (cond-> (seq prefixo) (.prefix prefixo))
+                                  (.recursive true) (.build)))
+         (keep (fn [^Result r]
+                 (let [^Item i (.get r)]
+                   (when-not (.isDir i)
+                     {:chave (.objectName i)
+                      :modificado-em (some-> (.lastModified i) .toInstant)}))))
+         (sort-by :chave)
          vec)))
 
 (defn objeto-store

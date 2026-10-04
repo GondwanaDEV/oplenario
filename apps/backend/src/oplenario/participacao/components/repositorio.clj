@@ -220,6 +220,9 @@
     (o `:origem` do novo e' sempre `casa`). Devolve {:antigo (lido de volta, com a retirada e `:substituido-por`) :novo}.")
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     "O anexo do protocolo (objeto-tipo + objeto-id), ou nil.")
+  (chaves-de-anexos [this ente-id]
+    "Toda chave de blob que a Casa tem em `participacao.anexo`: [{:chave :retirado?}]. O retirado nao tem blob
+    de proposito. Para a reconciliacao banco x object storage (`oplenario.reconciliar-anexos`); so' leitura.")
   (complementar! [this ente-id m]
     "SERVIDOR — UMA tx: grava o COMPLEMENTO DA RESPOSTA (append-only, ADR-0022) de um protocolo ja' respondido. Sem CAS e sem
     prazo: nao muda estado nem prazo, e ter resposta e' monotono (uma resposta nunca some), entao a conferencia previa do
@@ -669,6 +672,8 @@
              :novo (db-anexo/buscar tx ente-id objeto-tipo objeto-id (:id inserido))})))))
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))
+  (chaves-de-anexos [this ente-id]
+    (transacao this ente-id #(db-anexo/chaves-da-casa % ente-id)))
   (complementar! [this ente-id m]
     (transacao this ente-id #(db-complemento/inserir! % (assoc m :ente-id ente-id))))
   (prorrogar-pedido! [this ente-id m]

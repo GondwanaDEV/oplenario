@@ -199,6 +199,10 @@ export interface EstadoPlenario {
    * chega, um evento de votação ao vivo já é mais novo que o snapshot em voo, e `hidratarVotacao`
    * descarta em vez de sobrescrever um placar que o próprio SSE já atualizou/encerrou nesse meio-tempo. */
   votacaoEventoSeq: number;
+  /** Contador monotônico dos `sessao.transicionou` já aplicados — a mesma PRECEDÊNCIA de `votacaoEventoSeq`,
+   * agora para `estado` (o estado da sessão), que `hidratarSessao` só sobrescreve se nenhuma transição ao
+   * vivo chegou com o `GET /sessoes/:id` em voo. */
+  sessaoEventoSeq: number;
   /** `true` desde o primeiro `tempo-real.lacuna` visto nesta conexão (frente 'truncamento-familia',
    * sítio d): o backplane encontrou uma entrada corrompida no replay e não tem como dizer QUAL campo
    * ela afetava. STICKY de propósito — nunca volta a `false` sozinho: para quórum/tribuna o próprio
@@ -247,6 +251,7 @@ export function estadoInicial(sessao: SessaoOut): EstadoPlenario {
     ultimoSeq: 0,
     falaEventoSeq: 0,
     votacaoEventoSeq: 0,
+    sessaoEventoSeq: 0,
     inscricaoEventoSeq: 0,
     avisoLacuna: false,
   };
@@ -558,7 +563,13 @@ export function hidratarVotacao(
   seqNoDisparo: number,
 ): EstadoPlenario {
   if (estado.votacaoEventoSeq !== seqNoDisparo) return estado;
-  if (cru === null) return estado;
+  if (cru === null) {
+    // O servidor diz "nenhuma votação aberta". Se o estado ainda mostra uma votação EM CURSO, o
+    // `votacao.encerrada` dela se perdeu (queda maior que a retenção do canal) e o telão diria "em curso"
+    // para sempre. Sem snapshot do resultado (a rota só lê votação aberta), a verdade que se sabe é "não há
+    // votação aberta": o placar sai. Um placar já ENCERRADO fica — 404 é o esperado depois do encerramento.
+    return estado.placar !== null && !estado.placar.encerrada ? { ...estado, placar: null } : estado;
+  }
   if (typeof cru !== "object" || typeof cru.votacaoId !== "string" || typeof cru.modalidade !== "string") {
     return estado;
   }
@@ -595,6 +606,22 @@ export function hidratarVotacao(
  * o SSE segue sendo a única fonte até a próxima tentativa. */
 export function falharVotacao(estado: EstadoPlenario): EstadoPlenario {
   return estado;
+}
+
+/** Hidrata o ESTADO DA SESSÃO a partir de `GET /sessoes/:id` — a irmã de `hidratarVotacao` para o campo
+ * `estado`. Existe porque `sessao.transicionou` só chega pelo canal (retenção ~5 min) e a carga inicial lê a
+ * sessão uma vez: numa queda longa o telão seguiria dizendo "aberta" sobre uma sessão suspensa/encerrada.
+ * PURA e TOTAL (roda dentro de updater do React): corpo de forma inesperada devolve o MESMO estado. A
+ * precedência é a do resto do reducer — uma transição ao vivo chegada com o GET em voo (`sessaoEventoSeq`
+ * avançou desde o disparo) vence o snapshot, que pode ter sido montado antes dela. */
+export function hidratarSessao(
+  estado: EstadoPlenario,
+  cru: Pick<SessaoOut, "estado"> | null,
+  seqNoDisparo: number,
+): EstadoPlenario {
+  if (estado.sessaoEventoSeq !== seqNoDisparo) return estado;
+  if (!cru || typeof cru !== "object" || typeof cru.estado !== "string" || cru.estado === "") return estado;
+  return cru.estado === estado.estado ? estado : { ...estado, estado: cru.estado };
 }
 
 /** Hidrata a PRÓPRIA presença do vereador do cockpit a partir de `GET /sessoes/:id/presenca/minha` — a irmã
@@ -649,6 +676,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
     falaEventoSeq: estado.falaEventoSeq + (TIPOS_EVENTO_FALA.has(evento.tipo) ? 1 : 0),
     inscricaoEventoSeq: estado.inscricaoEventoSeq + (TIPOS_EVENTO_INSCRICAO.has(evento.tipo) ? 1 : 0),
     votacaoEventoSeq: estado.votacaoEventoSeq + (TIPOS_EVENTO_VOTACAO.has(evento.tipo) ? 1 : 0),
+    sessaoEventoSeq: estado.sessaoEventoSeq + (evento.tipo === "sessao.transicionou" ? 1 : 0),
   };
 
   switch (evento.tipo) {
