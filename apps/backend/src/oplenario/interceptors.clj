@@ -204,6 +204,15 @@
   arquivo de verdade chega perto, e o limite poupa o scanner de uma linha de megabytes."
   8192)
 
+(def max-bytes-do-cabecalho-da-parte
+  "Teto, em BYTES, do bloco de cabecalhos de UMA parte do multipart (Content-Disposition, Content-Type e as quebras de
+  linha), conferido pelo parser antes de qualquer outra coisa. O padrao da commons-fileupload2 2.0.0-M5 e' 512, a
+  correcao do CVE-2025-48976 (a faixa vulneravel aceitava 10 KB). Com 512, um nome de arquivo acima de ~410 bytes em
+  UTF-8 voltava 400 \"malformado\": o Windows aceita nome de ate' 255 caracteres, e com acento (2 bytes) ou travessao
+  (3 bytes) ele passa disso. 2048 cabe o pior nome real (255 x 3 = 765 bytes) com o tipo de midia mais longo, e fica 5x
+  abaixo da faixa do CVE. Vale so' para `anexo-multipart`: o multipart do Ring (documentos das contas) nao expoe o teto."
+  2048)
+
 (defn- separar-parametros
   "Parte o cabecalho em parametros no `;` que esta FORA de aspas (`\\\"` e `\\\\` escapam dentro das aspas). Laco linear: sem
   regex recursiva, sem recursao de pilha. Os escapes ficam no texto (quem desembrulha os resolve)."
@@ -293,7 +302,9 @@
                    (getCharacterEncoding [_] "UTF-8")
                    (getInputStream [_] corpo)
                    (isMultipartRelated [_] false))   ; exigido pela API a partir da 2.0.0-M2 (form-data, nao multipart/related)
-        it (.getItemIterator ^AbstractFileUpload (proxy [AbstractFileUpload] []) contexto)]
+        parser (doto ^AbstractFileUpload (proxy [AbstractFileUpload] [])
+                 (.setMaxPartHeaderSize (int max-bytes-do-cabecalho-da-parte)))
+        it (.getItemIterator parser contexto)]
     (loop [arquivos [] partes 0]
       (if (.hasNext it)
         (let [^FileItemInput item (.next it)
