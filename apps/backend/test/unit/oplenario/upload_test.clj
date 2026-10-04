@@ -32,11 +32,14 @@
 
 (deftest o-parser-do-upload-e-dependencia-declarada
   ;; o interceptor usa commons-fileupload2-core DIRETO; ela chegava so' como transitiva do ring-core. Declarada, uma
-  ;; troca de ring-core nao a tira do classpath sem aviso.
+  ;; troca de ring-core nao a tira do classpath sem aviso. A versao e' a que saiu da faixa do CVE-2025-48976 (< 2.0.0-M4)
+  ;; e anda EM PAR com o ring-core (a API mudou entre milestones) — ver o comentario em deps.edn e a trava de
+  ;; comportamento em `oplenario.multipart-limite-test`.
   (let [deps (edn/read-string (slurp "deps.edn"))
         v (get-in deps [:deps 'org.apache.commons/commons-fileupload2-core :mvn/version])]
     (is (string? v) "commons-fileupload2-core declarada em deps.edn")
-    (is (= "2.0.0-M1" v) "na versao que ja' resolvia (a subida de versao e' outra tarefa)")))
+    (is (= "2.0.0-M5" v) "trocar esta versao e' decisao: rodar a trava e os testes de upload antes")
+    (is (= "1.15.5" (get-in deps [:deps 'ring/ring-core :mvn/version])) "o par do parser: ring-core declarado junto")))
 
 (deftest teto-de-envios-simultaneos
   (is (= 4 it/max-envios-simultaneos))
