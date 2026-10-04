@@ -117,9 +117,12 @@ def _rotulo(c: Citacao) -> str | None:
 
 
 def pedido_de_registro(proposicao_id: str, a: Artefato) -> dict[str, Any]:
-    """O que vai ao core pela ferramenta `registrar_nota_tecnica` (classe `rascunho`)."""
+    """O que vai ao core pela ferramenta `registrar_nota_tecnica` (classe `rascunho`). `execucao-ia` é o id da execução
+    NO SATÉLITE (a do núcleo, a mesma do registro da Camada de Confiança): o core o guarda só para o "Reportar erro"
+    (8.4) achar a execução — não é a credencial delegada, e o core não decide nada por ele (ADR-0013)."""
     return {
         "proposicao-id": proposicao_id,
+        "execucao-ia": a.execucao_id,
         "texto": a.texto[:TETO_TEXTO],
         "citacoes": [
             {"fonte-id": c.fonte_id, "trecho": c.trecho, "status": c.status, "rotulo": _rotulo(c)}
