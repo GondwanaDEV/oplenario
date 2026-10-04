@@ -133,8 +133,12 @@ describe("conferências", () => {
     expect(campo.value).toBe("A proposição trata da praça.\n\nNão há dispositivo sobre prazo.");
     fireEvent.change(campo, { target: { value: "Texto da secretaria." } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar a nota" }));
-    expect(await screen.findByText("Texto da secretaria.")).toBeTruthy();
-    expect(screen.getByText(/Aproveitada em 27\/09\/2026/)).toBeTruthy();
+    // "Texto da secretaria." já está na tela dentro do campo que acabou de ser editado: `findByText` devolvia o
+    // campo na hora, antes da resposta. O que só existe depois dela é a linha "Aproveitada em…"; com ela na tela
+    // o editor sumiu e o texto que sobra é o da nota guardada.
+    expect(await screen.findByText(/Aproveitada em 27\/09\/2026/)).toBeTruthy();
+    expect(screen.queryByLabelText("Texto da nota técnica")).toBeNull();
+    expect(screen.getByText("Texto da secretaria.")).toBeTruthy();
     const [, init] = f.mock.calls.find(([u]) => String(u).endsWith("/decisao")) as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ desfecho: "aproveitada", texto: "Texto da secretaria." });
   });
