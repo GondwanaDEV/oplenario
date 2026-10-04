@@ -81,7 +81,7 @@
 .form-apreciacao .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
 .form-apreciacao .campo input[type="text"] {
   width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--linha); border-radius: 8px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .form-apreciacao .campo input[type="text"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
 .form-erro { color: var(--acento-texto); font-size: var(--t-13); font-weight: 600; margin: 0 0 0.8rem; }
@@ -89,7 +89,7 @@
 .fr-opcao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto); min-height: 32px; }
 .fr-veto { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed var(--linha); display: flex; flex-direction: column; gap: 0.7rem; }
 .fr-veto .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
-.fr-veto textarea { font-family: var(--corpo); font-size: var(--t-14); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; width: 100%; min-height: 80px; resize: vertical; }
+.fr-veto textarea { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: var(--raio-sm); padding: 0.6rem 0.7rem; width: 100%; min-height: 80px; resize: vertical; }
 .acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
 
 @media (max-width: 900px) { .grade { grid-template-columns: 1fr; } }

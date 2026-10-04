@@ -68,10 +68,10 @@
 .pi-retirar { grid-column: 1 / -1; display: grid; gap: 0.7rem; padding: 0.8rem 0.9rem; margin-top: 0.2rem; background: var(--surface); border: 1px solid color-mix(in srgb, var(--telha) 35%, var(--linha)); border-radius: var(--raio-sm); }
 .pi-retirar fieldset { border: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
 .pi-retirar legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); padding: 0; margin-bottom: 0.4rem; }
-.pi-retirar fieldset label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; min-height: 32px; }
+.pi-retirar fieldset label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); color: var(--texto); cursor: pointer; min-height: 32px; }
 .pi-retirar .campo { display: flex; flex-direction: column; gap: 0.3rem; }
 .pi-retirar .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
-.pi-retirar textarea { font-family: var(--corpo); font-size: var(--t-14); color: var(--texto); background: var(--surface); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: 8px; padding: 0.55rem 0.7rem; width: 100%; resize: vertical; }
+.pi-retirar textarea { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface); border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha)); border-radius: 8px; padding: 0.55rem 0.7rem; width: 100%; resize: vertical; }
 .pi-retirar-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 
 .add-linha { margin-top: 1.2rem; }

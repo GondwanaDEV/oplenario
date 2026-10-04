@@ -38,7 +38,7 @@
   color: var(--texto-2); margin: 0 0 0.2rem;
 }
 .estado-atual h1 {
-  font-family: var(--display); font-weight: 600; font-size: var(--t-22);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-21);
   letter-spacing: -0.01em; color: var(--texto); margin: 0;
 }
 
@@ -48,14 +48,14 @@
 }
 .marcos li { display: flex; flex-direction: column; gap: 0.15rem; }
 .marcos .rot { font-size: var(--t-12); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.06em; }
-.marcos b { font-family: var(--mono); font-size: var(--t-14); color: var(--texto); }
+.marcos b { font-family: var(--mono); font-size: var(--t-13); color: var(--texto); }
 
 /* ---- lista de atos de condução ---- */
 .aviso-ok {
   margin: 0 0 0.9rem; padding: 0.6rem 0.85rem; border-radius: var(--raio-2, 10px);
   background: color-mix(in srgb, var(--marca) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--marca) 40%, transparent);
-  color: var(--marca); font-size: var(--t-14);
+  color: var(--marca); font-size: var(--t-13);
 }
 
 .lista-atos { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
@@ -69,7 +69,7 @@
   padding: 0.85rem 1rem;
 }
 .ato-texto { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.ato-texto b { font-family: var(--display); font-weight: 600; font-size: var(--t-15); color: var(--texto); }
+.ato-texto b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
 .ato-texto span { font-size: var(--t-13); color: var(--texto-2); }
 
 .ato-detalhe {
@@ -81,10 +81,10 @@
 .ato-detalhe textarea {
   width: 100%; resize: vertical; padding: 0.6rem 0.7rem;
   border: 1px solid var(--linha); border-radius: 8px; background: var(--surface);
-  color: var(--texto); font: inherit; font-size: var(--t-14);
+  color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .ato-detalhe textarea:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
-.confirmar-txt { margin: 0; font-size: var(--t-14); color: var(--texto); }
+.confirmar-txt { margin: 0; font-size: var(--t-13); color: var(--texto); }
 .ato-acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 
 .erro-inline {
@@ -97,7 +97,7 @@
 .nota-terminal {
   margin: 0; padding: 0.9rem 1rem; border-radius: var(--raio-2, 10px);
   background: var(--surface-2); border: 1px solid var(--linha);
-  font-size: var(--t-14); color: var(--texto-2);
+  font-size: var(--t-13); color: var(--texto-2);
 }
 
 .rodape-atos {
@@ -113,7 +113,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
   padding: 0.45rem 0.7rem; border-radius: 8px; background: var(--surface-2);
 }
-.fases .fase-nome { font-size: var(--t-14); color: var(--texto); }
+.fases .fase-nome { font-size: var(--t-13); color: var(--texto); }
 .fases .fase-qtd {
   font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2);
   min-width: 1.6rem; text-align: right;
@@ -126,7 +126,7 @@
 .votacao .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
 .votacao select {
   padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .votacao select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
 
@@ -135,21 +135,21 @@
   display: flex; flex-wrap: wrap; gap: 0.75rem 1.2rem; margin: 0;
 }
 .campo-radio legend { font-size: var(--t-13); font-weight: 600; color: var(--texto); padding: 0 0.3rem; }
-.campo-radio label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; }
+.campo-radio label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--t-13); color: var(--texto); cursor: pointer; }
 
 .votacao-resumo {
   margin: 0; display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 .votacao-resumo dt { font-size: var(--t-12); color: var(--texto-2); text-transform: uppercase; letter-spacing: 0.06em; }
-.votacao-resumo dd { margin: 0.1rem 0 0; font-family: var(--mono); font-size: var(--t-15); color: var(--texto); }
+.votacao-resumo dd { margin: 0.1rem 0 0; font-family: var(--mono); font-size: var(--t-16); color: var(--texto); }
 .votacao-ementa {
   margin: 0; padding: 0.6rem 0.75rem; border-left: 3px solid var(--linha);
-  font-size: var(--t-14); color: var(--texto-2);
+  font-size: var(--t-13); color: var(--texto-2);
 }
 
 /* ---- painel de tribuna ---- */
 .tribuna .bloco-corpo { display: grid; gap: 0.8rem; }
-.tribuna-sub { font-family: var(--display); font-weight: 600; font-size: var(--t-14); color: var(--texto); margin: 0.3rem 0 0; }
+.tribuna-sub { font-family: var(--display); font-weight: 600; font-size: var(--t-13); color: var(--texto); margin: 0.3rem 0 0; }
 .fila { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; counter-reset: none; }
 .fila-item {
   display: flex; align-items: center; gap: 0.75rem;
@@ -162,7 +162,7 @@
   border: 1px solid var(--linha); border-radius: 50%;
 }
 .fila-quem { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
-.fila-quem b { font-size: var(--t-14); color: var(--texto); }
+.fila-quem b { font-size: var(--t-13); color: var(--texto); }
 .fila-fase { font-size: var(--t-12); color: var(--texto-2); }
 
 /* cronômetro da fala (execução da tribuna) */
@@ -172,9 +172,9 @@
   border-radius: var(--raio-2, 10px); padding: 0.85rem 1rem; display: grid; gap: 0.6rem;
 }
 .crono-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; }
-.crono-orador { font-family: var(--display); font-weight: 600; font-size: var(--t-15); color: var(--texto); }
+.crono-orador { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
 .crono-tempo {
-  font-family: var(--mono); font-size: var(--t-24); font-weight: 600; color: var(--texto);
+  font-family: var(--mono); font-size: var(--t-21); font-weight: 600; color: var(--texto);
   font-variant-numeric: tabular-nums; display: inline-flex; align-items: baseline; gap: 0.5rem;
 }
 .crono-tempo.pausado { color: var(--texto-2); }
@@ -210,7 +210,7 @@
 .tribuna-form .campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
 .tribuna-form select {
   padding: 0.55rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .tribuna-form select:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
 
@@ -218,7 +218,7 @@
 .tela-estado {
   max-width: 40rem; margin: 4rem auto; padding: 0 1rem; text-align: center;
 }
-.tela-estado h1 { font-family: var(--display); font-weight: 600; font-size: var(--t-22); color: var(--texto); }
+.tela-estado h1 { font-family: var(--display); font-weight: 600; font-size: var(--t-21); color: var(--texto); }
 .tela-estado p { color: var(--texto-2); }
 
 /* item extrapauta (docs/23 Fatia 1) — o formulário vem de ../form-item-pauta.css */
@@ -243,10 +243,10 @@
 .am-form input[type="text"],
 .am-form textarea {
   width: 100%; padding: 0.55rem 0.7rem; border: 1px solid color-mix(in srgb, var(--texto-2) 55%, var(--linha));
-  border-radius: 8px; background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+  border-radius: 8px; background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .am-form textarea { resize: vertical; line-height: 1.45; }
-.am-check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-14); color: var(--texto); cursor: pointer; min-height: 32px; }
+.am-check { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-13); color: var(--texto); cursor: pointer; min-height: 32px; }
 .am-acoes { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 
 .am-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
@@ -256,9 +256,9 @@
 }
 .am-topo { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .am-hora { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); font-variant-numeric: tabular-nums; }
-.am-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-14); color: var(--texto); }
-.am-texto { margin: 0; font-size: var(--t-14); color: var(--texto); line-height: 1.4; }
-.am-desfecho { margin: 0; font-size: var(--t-14); color: var(--texto); }
+.am-titulo { font-family: var(--display); font-weight: 600; font-size: var(--t-13); color: var(--texto); }
+.am-texto { margin: 0; font-size: var(--t-13); color: var(--texto); line-height: 1.4; }
+.am-desfecho { margin: 0; font-size: var(--t-13); color: var(--texto); }
 .am-desfecho span { font-weight: 600; }
 .am-nota { margin: 0; font-size: var(--t-13); color: var(--texto-2); }
 .am-pessoa { margin: 0; font-size: var(--t-12); color: var(--texto-2); }
