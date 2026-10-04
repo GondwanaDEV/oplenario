@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PrazosDasContas, lerDias } from "./prazos-das-contas";
 
 // ADR-0021 B3/B4: o bloco "Prazos das contas" do admin_ente — os padrões ditos como padrões a conferir na LOM, os
@@ -58,7 +58,11 @@ describe("PrazosDasContas", () => {
     expect(c.filter((x) => x.metodo === "PUT")).toHaveLength(0);
     fireEvent.change(screen.getByLabelText(/Prazo para julgar/), { target: { value: "60" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar prazos das contas" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("Só o administrador da Casa muda os prazos das contas.");
+    // a recusa do servidor chega depois: `findByRole("alert")` devolvia na hora o alerta ANTERIOR (o da validação
+    // local, ainda na tela) e o teste falhava sob carga no CI. Espera-se o texto, não a existência de um alerta.
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toBe("Só o administrador da Casa muda os prazos das contas."),
+    );
   });
 
   it("lerDias: inteiro dentro dos limites", () => {
