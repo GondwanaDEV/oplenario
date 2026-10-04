@@ -1,6 +1,6 @@
 (ns oplenario.participacao.events.solicitacao-titular
   "Eventos de dominio da SOLICITACAO do titular LGPD (§22.10 events/, ADR-0001). `.protocolada` marca o inicio do
-  relogio LGPD (CONTADOR SEPARADO do e-SIC); `.respondida` o desfecho. Datas/instantes viajam como STRING ISO
+  relogio LGPD (CONTADOR SEPARADO do e-SIC); `.respondida` e `.indeferida` os desfechos. Datas/instantes viajam como STRING ISO
   (jsonista nao serializa java.time). O `ente-id` mora no envelope. Sem PII de CONTEUDO: `detalhe`/corpo ficam no
   banco; o `tipo` (categoria do direito exercido) viaja p/ o rastreamento — nao e' conteudo do titular."
   (:require [oplenario.kernel.eventos :as eventos]))
@@ -30,3 +30,16 @@
 
 (defn respondida [ente-id payload]
   (eventos/evento-validado RespondidaPayload respondida-tipo ente-id payload))
+
+(def indeferida-tipo "participacao.solicitacao_titular.indeferida")
+
+(def IndeferidaPayload
+  "Payload do indeferimento (recusa fundamentada, LGPD art. 18 §4º) de uma solicitacao do titular. Tipo PROPRIO. So' o
+  rastreamento — a solicitacao + quando foi indeferida (fecha o relogio LGPD). Sem PII e SEM a fundamentacao (o texto
+  fica no banco)."
+  [:map {:closed true}
+   [:solicitacao-id :uuid]
+   [:indeferida-em :string]])  ; ISO-8601 (instante do indeferimento)
+
+(defn indeferida [ente-id payload]
+  (eventos/evento-validado IndeferidaPayload indeferida-tipo ente-id payload))

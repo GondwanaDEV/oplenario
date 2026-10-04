@@ -31,3 +31,18 @@
 
 (defn respondido [ente-id payload]
   (eventos/evento-validado RespondidoPayload respondido-tipo ente-id payload))
+
+(def indeferido-tipo "participacao.pedido_esic.indeferido")
+
+(def IndeferidoPayload
+  "Payload do indeferimento (recusa fundamentada) de um pedido e-SIC. Tipo PROPRIO — nao e' o `respondido` com um flag:
+  quem consome distingue o desfecho. Sem PII e SEM a fundamentacao (o texto fica no banco, como o corpo da resposta);
+  so' as chaves de rastreamento — pedido, protocolo e quando foi indeferido (fecha o relogio LAI do pedido, como o
+  respondido: negar tambem e' responder dentro do prazo)."
+  [:map {:closed true}
+   [:pedido-id :uuid]
+   [:protocolo :string]
+   [:indeferido-em :string]])  ; ISO-8601 (instante do indeferimento)
+
+(defn indeferido [ente-id payload]
+  (eventos/evento-validado IndeferidoPayload indeferido-tipo ente-id payload))

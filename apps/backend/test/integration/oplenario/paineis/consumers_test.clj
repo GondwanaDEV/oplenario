@@ -15,7 +15,11 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
             [oplenario.paineis.components.repositorio :as repo]
-            [oplenario.paineis.diplomat.consumers :as consumers]))
+            [oplenario.paineis.diplomat.consumers :as consumers]
+            [oplenario.participacao.events.manifestacao-ouvidoria :as ev-manifestacao]
+            [oplenario.participacao.events.pedido-esic :as ev-pedido]
+            [oplenario.participacao.events.recurso-esic :as ev-recurso]
+            [oplenario.participacao.events.solicitacao-titular :as ev-titular]))
 
 (def ^:dynamic *ds* nil)
 
@@ -36,3 +40,15 @@
             (catch Throwable e
               (is (not (re-find #"No matching clause" (str (ex-message e))))
                   (str "tipo consumido sem branch de projecao (drift bus<->case): " tipo)))))))))
+
+(deftest todo-desfecho-de-participacao-fecha-a-pendencia
+  ;; um relogio so' fecha se o evento do desfecho e' CONSUMIDO: sem isto o protocolo encerrado fica 'pendente' para
+  ;; sempre no painel (e vira 'vencido' por fantasma). Cada desfecho que `participacao` PRODUZ tem de estar aqui —
+  ;; o indeferimento (e-SIC e LGPD) entrou junto com o ato, e o proximo desfecho que alguem criar cai neste teste.
+  (let [desfechos [ev-pedido/respondido-tipo ev-pedido/indeferido-tipo
+                   ev-recurso/decidido-tipo
+                   ev-titular/respondida-tipo ev-titular/indeferida-tipo
+                   ev-manifestacao/respondida-tipo ev-manifestacao/arquivada-tipo]]
+    (is (= 7 (count (distinct desfechos))) "sete desfechos, todos de tipo proprio")
+    (doseq [tipo desfechos]
+      (is (some #{tipo} consumers/tipos-consumidos) (str "desfecho nao consumido pelo painel: " tipo)))))

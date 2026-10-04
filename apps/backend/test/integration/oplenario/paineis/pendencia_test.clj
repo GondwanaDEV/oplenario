@@ -97,6 +97,43 @@
     (drenar!)
     (is (empty? (:pendencias (repo/o-que-vence *repo* ente {}))) "concluido nao aparece mais em 'o que vence'")))
 
+(deftest pedido-esic-indeferido-fecha-a-pendencia
+  ;; negar tambem e' responder: o indeferimento fecha o relogio do pedido, como o respondido (sem isto o indeferido
+  ;; ficaria 'pendente' para sempre em "o que vence" e no painel da Mesa — e viraria 'vencido' por fantasma)
+  (let [ente (random-uuid) pid (random-uuid)]
+    (emitir! ente "participacao.pedido_esic.protocolado"
+             {:pedido-id (str pid) :protocolo "ESIC-2026-000004"
+              :recibo-em "2026-07-04T12:00:00Z" :vence-em "2026-07-24"})
+    (drenar!)
+    (is (= 1 (count (:pendencias (repo/o-que-vence *repo* ente {})))) "ponto de partida: a pendencia esta aberta")
+    (emitir! ente "participacao.pedido_esic.indeferido"
+             {:pedido-id (str pid) :protocolo "ESIC-2026-000004" :indeferido-em "2026-07-10T09:00:00Z"})
+    (drenar!)
+    (is (empty? (:pendencias (repo/o-que-vence *repo* ente {}))) "concluido nao aparece mais em 'o que vence'")
+    (is (zero? (:pendencias-total (repo/o-que-vence *repo* ente {}))) "e o total tambem o conta como fechado")))
+
+(deftest solicitacao-titular-indeferida-fecha-a-pendencia
+  (let [ente (random-uuid) sid (random-uuid)]
+    (emitir! ente "participacao.solicitacao_titular.protocolada"
+             {:solicitacao-id (str sid) :protocolo "LGPD-2026-000004" :tipo "eliminar"
+              :recibo-em "2026-07-04T12:00:00Z" :vence-em "2026-07-19"})
+    (drenar!)
+    (is (= 1 (count (:pendencias (repo/o-que-vence *repo* ente {})))))
+    (emitir! ente "participacao.solicitacao_titular.indeferida"
+             {:solicitacao-id (str sid) :indeferida-em "2026-07-06T09:00:00Z"})
+    (drenar!)
+    (is (empty? (:pendencias (repo/o-que-vence *repo* ente {}))))))
+
+(deftest indeferimento-sem-pendencia-projetada-nao-lanca
+  ;; o mesmo guard do respondido: um fechamento cujo protocolo ainda nao foi drenado NUNCA lanca no relay compartilhado
+  (let [ente (random-uuid)]
+    (emitir! ente "participacao.pedido_esic.indeferido"
+             {:pedido-id (str (random-uuid)) :protocolo "ESIC-FANTASMA" :indeferido-em "2026-07-06T09:00:00Z"})
+    (emitir! ente "participacao.solicitacao_titular.indeferida"
+             {:solicitacao-id (str (random-uuid)) :indeferida-em "2026-07-06T09:00:00Z"})
+    (drenar!)
+    (is (empty? (:pendencias (repo/o-que-vence *repo* ente {}))) "nenhuma pendencia fantasma foi criada")))
+
 (deftest recurso-esic-decidido-fecha-a-pendencia
   (let [ente (random-uuid) rid (random-uuid)]
     (emitir! ente "participacao.recurso_esic.protocolado"
