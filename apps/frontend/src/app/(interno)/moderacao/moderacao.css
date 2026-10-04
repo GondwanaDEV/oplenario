@@ -1,6 +1,6 @@
 /* Fila de moderação de comentários (conteudo-moderacao.tsx). */
 .mod-cabeca { padding: 1.4rem 0 0.4rem; }
-.mod-cabeca h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 3vw, var(--t-32)); letter-spacing: -0.02em; color: var(--texto); margin: 0; }
+.mod-cabeca h1 { font-family: var(--display); font-weight: 800; font-size: clamp(1.5rem, 3vw, var(--t-28)); letter-spacing: -0.02em; color: var(--texto); margin: 0; }
 .mod-resumo { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; }
 
 .mod-lista { list-style: none; margin: 1rem 0 2rem; padding: 0; display: flex; flex-direction: column; gap: 0.9rem; }
@@ -9,7 +9,7 @@
 .mod-denunciado { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); border: 1px solid color-mix(in srgb, var(--amarelo) 60%, transparent); background: color-mix(in srgb, var(--amarelo) 16%, transparent); border-radius: 999px; padding: 0.15rem 0.6rem; }
 [data-tema="escuro"] .mod-denunciado { color: var(--amarelo); }
 .mod-data { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
-.mod-corpo { color: var(--texto); font-size: var(--t-15); line-height: 1.5; margin: 0 0 0.5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mod-corpo { color: var(--texto); font-size: var(--t-16); line-height: 1.5; margin: 0 0 0.5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .mod-origem { font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.8rem; }
 .mod-origem code { font-family: var(--mono); }
 .mod-acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; }

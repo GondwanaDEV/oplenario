@@ -9,10 +9,10 @@
   color: var(--texto-2); margin: 0 0 0.2rem;
 }
 .agendar-sessao h1 {
-  font-family: var(--display); font-weight: 600; font-size: var(--t-24);
+  font-family: var(--display); font-weight: 600; font-size: var(--t-21);
   letter-spacing: -0.01em; color: var(--texto); margin: 0;
 }
-.agendar-sessao .subtitulo { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-14); max-width: 60ch; }
+.agendar-sessao .subtitulo { margin: 0.35rem 0 0; color: var(--texto-2); font-size: var(--t-13); max-width: 60ch; }
 
 .form-agendar { padding: 1.2rem; display: grid; gap: 1rem; max-width: 40rem; }
 .form-agendar .campo { display: flex; flex-direction: column; gap: 0.35rem; }
@@ -20,7 +20,7 @@
 .form-agendar select,
 .form-agendar input {
   padding: 0.6rem 0.7rem; border: 1px solid var(--linha); border-radius: 8px;
-  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-14);
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .form-agendar select:focus-visible,
 .form-agendar input:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
@@ -44,7 +44,7 @@
 .nota-terminal {
   margin: 0; padding: 0.9rem 1rem; border-radius: var(--raio-2, 10px);
   background: var(--surface-2); border: 1px solid var(--linha);
-  font-size: var(--t-14); color: var(--texto-2);
+  font-size: var(--t-13); color: var(--texto-2);
 }
 
 /* ---- o bloco da audiência pública (ADR-0021 A1): só com o tipo `audiencia_publica` ---- */
