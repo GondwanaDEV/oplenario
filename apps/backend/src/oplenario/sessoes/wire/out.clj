@@ -86,6 +86,22 @@
   [:map {:closed true}
    [:recibos [:sequential PresencaReciboOut]]])
 
+(def MinhaPresencaOut
+  "Resposta 200 de GET /sessoes/:id/presenca/minha (papel 'vereador') — a PROPRIA presenca de quem pergunta,
+  para o cockpit do celular hidratar por snapshot o que o replay do SSE (~5 min) ja' nao traz. `vereador-id`
+  e' o do ATOR (resolvido no servidor), ecoado para o cliente saber de quem e' o snapshot.
+
+  `presente` = a MESMA regra da chamada e do quorum (o tipo do ultimo evento ate' o instante de avaliacao).
+  `ocorrido-em`/`modalidade` vem do ultimo evento e so' existem quando ha' evento — inclusive quando ele e'
+  uma SAIDA (`presente` false com `ocorrido-em`): o cliente usa o instante para nao deixar um snapshot mais
+  velho que o SSE ressuscitar estado superado. Sem nenhum evento: so' `vereador-id` e `presente` false.
+  Nao carrega `fonte` nem `registrado-em`: o cockpit decide 'posso votar?', nao audita a chamada."
+  [:map {:closed true}
+   [:vereador-id :string]
+   [:presente :boolean]
+   [:ocorrido-em {:optional true} :string]
+   [:modalidade {:optional true} (km/enum-de logic/modalidades-presenca)]])
+
 ;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
 ;; Estes tres contratos EXPOEM `lock-version`, e sao a excecao consciente a regra do cabecalho deste ns. A
 ;; razao: aqui o token de CAS nao e' interno — e' PARTE DO PROTOCOLO da decisao (PATCH .../decisao exige o

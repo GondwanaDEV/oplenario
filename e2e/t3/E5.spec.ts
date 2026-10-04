@@ -563,8 +563,8 @@ test.describe.serial("E5 - Confirmar a própria presença (vereador)", () => {
   test("confirmar a própria presença — vereador Fernanda Rocha Pinto", async ({ page }) => {
     // Fora da quarentena SSE desde 02/10/2026: o placar da votação que o beforeAll acabou de abrir vem por
     // snapshot no page-load, e a presença sob prova é escrita AQUI — o evento é novo, não depende do replay.
-    // LIMITE CONHECIDO (produto, docs/16): a presença do PRÓPRIO vereador ainda não é hidratada por snapshot —
-    // quem já estava presente e abre o cockpit mais de 5 min depois volta a ver "Confirme sua presença".
+    // A revisita fora da janela de replay (o antigo LIMITE de produto de docs/16) é provada no teste seguinte:
+    // a presença do PRÓPRIO vereador agora também hidrata por snapshot (GET /sessoes/:id/presenca/minha).
     test.setTimeout(120_000);
     const urlVotar = ids.e5.confirmarPresenca.url as string;
     const sessaoVotar = ids.e5.confirmarPresenca.sessaoQueOVotarAbre as string;
@@ -610,11 +610,29 @@ test.describe.serial("E5 - Confirmar a própria presença (vereador)", () => {
   // acima, o vereador já está presente, então revisitar a página não deveria voltar a oferecer o
   // botão. É a mesma prova de "não regride", sem precisar forjar um segundo cenário.
   test("[ACHADO] confirmar já presente — CTA não reaparece numa segunda visita", async ({ page }) => {
-    // Par do teste acima, logo depois dele (dentro do replay): prova que a confirmação não é pedida de novo.
-    // Não cobre a revisita depois de 5 min — esse é o limite de produto registrado em docs/16.
+    // Par do teste acima: prova que a confirmação não é pedida de novo. Antes esta visita só passava por
+    // cair DENTRO do replay de 5 min do canal (o evento de presença ainda estava lá); a revisita depois da
+    // janela voltava a pedir presença (limite de produto de docs/16, consertado em 04/10/2026). Agora a prova
+    // é a forma FORTE e determinística da revisita fora da janela: o SSE desta página é BLOQUEADO — nenhum
+    // evento, nem de replay —, então o "já presente" só pode vir do snapshot (GET .../presenca/minha) e o
+    // placar só do snapshot da votação (GET .../votacao-aberta). Sem esperar 5 min de relógio.
     test.setTimeout(60_000);
-    await page.goto(ids.e5.confirmarPresenca.url, { waitUntil: "domcontentloaded", timeout: 60_000 });
-    await expect(page.getByText("Confirme sua presença para poder votar.")).toHaveCount(0, { timeout: 30_000 });
+    const sessaoVotar = ids.e5.confirmarPresenca.sessaoQueOVotarAbre as string;
+    await page.route("**/api/sessoes/*/plenario", (r) => r.abort("connectionrefused"));
+
+    const [respMinha] = await Promise.all([
+      page.waitForResponse((r) => r.url().endsWith(`/api/sessoes/${sessaoVotar}/presenca/minha`), { timeout: 60_000 }),
+      page.goto(ids.e5.confirmarPresenca.url, { waitUntil: "domcontentloaded", timeout: 60_000 }),
+    ]);
+    expect(respMinha.status(), "o cockpit hidrata a própria presença por snapshot").toBe(200);
+    expect((await respMinha.json()).presente, "o servidor já tem a entrada autoatendida do teste acima").toBe(true);
+
+    // Sinal POSITIVO de que o placar carregou (sem ele, a CTA estaria ausente só porque não há votação na
+    // tela): o grupo de voto — ou "Você votou", se outra spec já tiver votado com esta vereadora.
+    await expect(
+      page.getByRole("group", { name: "Seu voto na votação corrente" }).or(page.getByText("Você votou")),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Confirme sua presença para poder votar.")).toHaveCount(0);
   });
 });
 

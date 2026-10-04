@@ -214,6 +214,20 @@
             (http/json-resposta 409 {:erro "sessao sem data marcada: informe a data da sessao antes de confirmar presenca"})
             (throw e)))))))
 
+(defn- minha-presenca-handler
+  "GET /sessoes/:id/presenca/minha (papel 'vereador') — a leitura irma de `/presenca/confirmar`: o cockpit do
+  celular pergunta 'EU estou presente?' no page-load e a cada reconexao, porque o replay do SSE guarda so'
+  ~5 min. `vereador-id` resolvido do ator (anti-forja), nunca do request; `agora` = o relogio do servidor
+  (a sessao fechada avalia em `encerrada-em`, ver `logic/instante-de-avaliacao`). nil (sessao inexistente
+  OU ator sem cadastro de vereador) -> 404, mesma semantica da confirmacao; outra Casa -> 403 (politica)."
+  [repo-sessoes resolver-vereador relogio]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (if-let [p (controllers/minha-presenca repo-sessoes resolver-vereador ator sid (tempo/agora relogio))]
+        (http/json-resposta 200 (adapters-out-presenca/minha-presenca->wire p))
+        (http/json-resposta 404 {:erro "sessao nao encontrada, ou vereador sem cadastro vinculado neste ente"})))))
+
 ;; ---------- §22.6 eixo C — justificativa de ausencia (Etapa 2 da chamada) ----------
 
 (defn- resposta-conflito-justificativa
@@ -1337,6 +1351,12 @@
     ["/sessoes/:id/presenca/confirmar" :post
      [auth papel-vereador (confirmar-presenca-handler repo-sessoes roster-da-casa resolver-vereador relogio)]
      :route-name :sessoes/confirmar-minha-presenca]
+    ;; `/minha` e' o 3o literal-sibling de `presenca` (com `confirmar` e `lote`) — ainda sem filho `:param` sob
+    ;; `/presenca`, entao o prefix-tree do Pedestal nao o sombreia. GET no lugar de POST: e' a LEITURA irma da
+    ;; confirmacao (mesmo papel, mesmo `resolver-vereador`), para o cockpit hidratar por snapshot.
+    ["/sessoes/:id/presenca/minha" :get
+     [auth papel-vereador (minha-presenca-handler repo-sessoes resolver-vereador relogio)]
+     :route-name :sessoes/minha-presenca]
     ;; `/lote` e' outro literal-sibling de `presenca` (junto de `confirmar`) — sem filho `:param` sob
     ;; `/presenca`, nao ha' o risco de sombreamento literal-vs-param ja documentado em `/gravacoes` e em
     ;; `/minha-justificativa` (prefix-tree do Pedestal so' sombreia quando um `:param` irmao existe).

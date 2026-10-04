@@ -33,6 +33,20 @@
                       {:erros (me/humanize (m/explain wire/PresencaLoteReciboOut out))})))
     out))
 
+(defn minha-presenca->wire
+  "A propria presenca de dominio (`controllers/minha-presenca`) {:vereador-id :presente :ocorrido-em? :modalidade?}
+  -> MinhaPresencaOut (validado, resposta 200). CAMPO A CAMPO (mesmo racional de `quorum-sessao->wire`):
+  `ocorrido-em`/`modalidade` so' entram quando ha' ultimo evento — nunca como `null`, que o contrato fechado
+  recusaria."
+  [{:keys [vereador-id presente ocorrido-em modalidade]}]
+  (let [out (cond-> {:vereador-id (some-> vereador-id str) :presente (boolean presente)}
+              ocorrido-em (assoc :ocorrido-em (str ocorrido-em))
+              modalidade (assoc :modalidade modalidade))]
+    (when-not (m/validate wire/MinhaPresencaOut out)
+      (throw (ex-info "presenca do vereador viola o contrato MinhaPresencaOut (bug de servidor)"
+                      {:campos (keys (me/humanize (m/explain wire/MinhaPresencaOut out)))})))
+    out))
+
 (defn resumo-presenca->wire
   "Resumo cru (kebab, do db) -> PresencaResumoOut (validado)."
   [{:keys [media-percentual sessoes-consideradas membros-da-casa]}]

@@ -41,6 +41,13 @@ export interface PresencaLoteReciboOut {
   recibos: PresencaReciboOut[];
 }
 
+export interface MinhaPresencaOut {
+  vereadorId: string;
+  presente: boolean;
+  ocorridoEm?: string;
+  modalidade?: "plenario" | "remoto";
+}
+
 export interface JustificativaAbertaOut {
   id: string;
   sessaoId: string;

@@ -73,6 +73,12 @@
   (presenca-corrente [this ente-id sessao-id instante]
     "Ultimo evento de CADA vereador da sessao ate' `instante` (uma linha por vereador) — insumo cru da CHAMADA.")
   (listar-justificativas [this ente-id sessao-id] "Justificativas de ausencia da sessao (3o insumo da chamada).")
+  (minha-presenca [this ente-id sessao-id vereador-id agora]
+    "O ULTIMO evento de presenca de UM vereador na sessao, avaliado no MESMO instante da chamada — sessao lida
+     e `logic/instante-de-avaliacao` resolvido DENTRO da mesma tx (molde de `chamada-da-sessao`: com a sessao
+     lida antes, uma sessao encerrada no meio do request seria avaliada em 'agora'). Devolve {:sessao
+     :instante :ultimo-evento} (`:ultimo-evento` nil = nenhum evento ate' o instante), ou nil se a sessao nao
+     existe neste ente. Insumo de `GET /sessoes/:id/presenca/minha` (o cockpit do vereador).")
   (chamada-da-sessao [this ente-id sessao-id agora]
     "As QUATRO leituras da chamada (sessao + presenca corrente + justificativas + atos de chamada conduzida)
      numa UNICA tx do tenant, com o INSTANTE de avaliacao resolvido DENTRO dela a partir da sessao fresca
@@ -371,6 +377,14 @@
     (transacao this ente-id #(presenca/presenca-corrente % ente-id sessao-id instante)))
   (listar-justificativas [this ente-id sessao-id]
     (transacao this ente-id #(presenca/listar-justificativas-da-sessao % ente-id sessao-id)))
+  (minha-presenca [this ente-id sessao-id vereador-id agora]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [s (sessao/buscar tx ente-id sessao-id)]
+          (let [instante (logic/instante-de-avaliacao s agora)]
+            {:sessao s
+             :instante instante
+             :ultimo-evento (presenca/presenca-corrente-do-vereador tx ente-id sessao-id vereador-id instante)})))))
   ;; UMA tx por request (molde de `adicionar-item-na-sessao!`, e o oposto do que `controllers/pauta-da-sessao`
   ;; faz com tres tx separadas). Aqui a atomicidade nao e' luxo: em tres tx, um vereador pode entrar no
   ;; plenario entre a leitura dos eventos e a das justificativas e sair na tela PRESENTE *e* com ausencia
