@@ -3,6 +3,8 @@ name: Fumaca das telas novas (homolog)
 # Smoke test SÓ-LEITURA das 3 telas novas deployadas (tramitar / moderacao / assinatura de parecer).
 # Loga de verdade via Keycloak, navega e confirma que a UI RENDERIZA (nao 404, nao erro, elementos novos
 # presentes). Nao faz nenhuma escrita. Cada checagem e independente (flag [OK]/[ERRO]).
+# A unica requisicao de escrita (caso 14, envio de arquivo) vai a uma prestacao de contas que nao existe: o
+# parser le o arquivo e a rota responde 404 sem gravar nada (so' a trilha de auditoria registra a tentativa).
 
 on:
   workflow_dispatch:
@@ -401,6 +403,35 @@ jobs:
               rec('balcao de atendimento', ok ? 'OK' : 'ERRO',
                   `esic=${fe.status}:${ie.length} ouvidoria=${fo.status}:${io.length} lgpd=${fl.status}:${il.length} detalhe-esic=${de.status} detalhe-ouv=${dout.status} sigilo=${sigilo} vereadora=${ver.status} tela=${/Atendimento ao cidad/i.test(t)}`);
             } catch (e) { rec('balcao de atendimento', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 14) ENVIO DE ARQUIVO (parser comum de upload) — SEM gravar nada: a secretaria envia um documento de contas a uma
+            //     prestacao que NAO existe. O parser le o arquivo inteiro ANTES de alguem procurar a prestacao, entao:
+            //     404 "nao encontrada" = o parser aceitou (nada sobe ao storage nem ao banco); 400 "malformado" = o parser
+            //     recusou. Nome de 254 caracteres acentuados (477 bytes): o bloco de cabecalhos da parte passa de 512 bytes, o
+            //     teto padrao da commons-fileupload2 que derrubava esse envio com 400.
+            //     O controle: um cabecalho de parte de 4 KB TEM de voltar 400 — prova que o pedido chegou ao parser (se a rota
+            //     respondesse 404 antes de ler o corpo, os dois dariam 404 e o caso reprovaria). O corpo e' montado a mao com
+            //     o nome em UTF-8 cru, como o navegador manda.
+            try {
+              const fronteira = '----fumacaOplenario';
+              const corpo = (nome, extra = []) => Buffer.from(
+                `--${fronteira}\r\nContent-Disposition: form-data; name="arquivo"; filename="${nome}"\r\n`
+                + ['Content-Type: application/pdf', ...extra].map(h => h + '\r\n').join('')
+                + `\r\n%PDF-1.7 fumaca\r\n--${fronteira}--\r\n`, 'utf8');
+              const enviar = async (buf) => {
+                const r = await cSec.request.post(`${B}/api/contas/${crypto.randomUUID()}/documentos?tipo=outro`, {
+                  headers: { 'content-type': `multipart/form-data; boundary=${fronteira}`, accept: 'application/json' },
+                  data: buf, timeout: 25000 });
+                let j = null; try { j = await r.json(); } catch {}
+                return { status: r.status(), erro: j?.erro ?? '' };
+              };
+              const nomeLongo = 'Ofício de prestação de contas ' + 'çã'.repeat(110) + '.pdf';
+              const longo = await enviar(corpo(nomeLongo));
+              const grande = await enviar(corpo('oficio.pdf', ['X-Preenchimento: ' + 'a'.repeat(4096)]));
+              const ok = longo.status === 404 && /n[aã]o encontrada/i.test(longo.erro) && grande.status === 400;
+              rec('envio de arquivo (parser)', ok ? 'OK' : 'ERRO',
+                  `nome-longo(${[...nomeLongo].length} car, ${Buffer.byteLength(nomeLongo)} bytes)=${longo.status} "${longo.erro}" cabecalho-4KB=${grande.status} "${grande.erro}"`);
+            } catch (e) { rec('envio de arquivo (parser)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);
