@@ -141,7 +141,8 @@
                              (:citacoes r))
              :paragrafos-sem-fonte (vec (:paragrafos-sem-fonte r))
              :pontos-a-confirmar (vec (:pontos-a-confirmar r))
-             :modelo-llm-id (:modelo-llm-id ponteiro) :prompt-versao (:prompt-versao ponteiro)}
+             :modelo-llm-id (:modelo-llm-id ponteiro) :prompt-versao (:prompt-versao ponteiro)
+             :execucao-ia (not-empty (some-> (:execucao-id r) str))}
             "rascunho da IA viola o contrato AtaRascunhoConteudoOut"))
 
 (defn solicitacao-rascunho->wire [r]

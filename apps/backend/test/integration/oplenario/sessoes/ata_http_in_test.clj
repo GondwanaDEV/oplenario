@@ -154,7 +154,8 @@
    :incerteza {:nivel "revisar_com_atencao" :motivos ["conteudo_de_terceiro"]}
    :citacoes [{:fonte-id "transcricao:t#1" :trecho "Senhor presidente" :inicio 11 :fim 51 :status "conferida"
                :rotulo "Ana, 0:10–0:40" :extra "nao passa"}]
-   :paragrafos-sem-fonte [] :pontos-a-confirmar [] :vendor "fake" :segredo-interno "x"})
+   :paragrafos-sem-fonte [] :pontos-a-confirmar [] :vendor "fake" :segredo-interno "x"
+   :execucao-id "exec-ia-ata-1"})
 
 (deftest le-o-rascunho-da-ia
   (let [pedidos (atom [])
@@ -166,6 +167,7 @@
     (is (= ["Ana falou." "conferida" "fake:fake-1" "ata-v1"]
            [(:texto-limpo b) (get-in b [:citacoes 0 :status]) (:modelo-llm-id b) (:prompt-versao b)]))
     (is (nil? (:vendor b)) "so' o contrato atravessa")
+    (is (= "exec-ia-ata-1" (:execucao-ia b)) "8.4: o id da execucao NA IA chega a tela, para o reporte de erro")
     (testing "rascunho que o core nao registrou para a sessao: 404 sem perguntar a IA"
       (reset! pedidos [])
       (is (= 404 (:status (pt/response-for (servico :ler-rascunho ler-fn) :get

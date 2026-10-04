@@ -235,6 +235,8 @@ def test_core_le_o_rascunho_com_citacoes_texto_limpo_e_pontos_a_confirmar() -> N
     assert {x["status"] for x in b["citacoes"]} == {"conferida"} and b["citacoes"][0]["rotulo"]
     assert b["pontos-a-confirmar"] == ["horário de encerramento"] and "[[" not in b["texto-limpo"]
     assert "[[" in b["texto"]
+    # 8.4: o core leva este id à tela para o "Reportar erro" (POST .../execucoes/{id}/reportes)
+    assert b["execucao-id"] and b["execucao-id"] == arm.rascunho(rid).execucao_id
     assert c.get(f"/v1/entes/outro/atas/rascunhos/{rid}", headers=h).status_code == 404
     assert c.get(f"/v1/entes/{ENTE}/atas/rascunhos/nao-existe", headers=h).status_code == 404
     assert c.get(f"/v1/entes/{ENTE}/atas/rascunhos/{rid}").status_code == 401

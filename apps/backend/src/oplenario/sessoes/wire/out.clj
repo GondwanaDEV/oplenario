@@ -471,7 +471,8 @@
 
 (def AtaRascunhoConteudoOut
   "Faixa A / A.6b: o rascunho para a tela de revisao — lido da IA sob demanda. `texto` traz as marcas de citacao
-  (`[[fonte | trecho]]`); `texto-limpo` e' o que vai para o editor (sem marcas, com os pontos a confirmar)."
+  (`[[fonte | trecho]]`); `texto-limpo` e' o que vai para o editor (sem marcas, com os pontos a confirmar). `execucao-ia` = o id da
+  execucao NA IA (feature 8.4): so' ele permite o 'Reportar erro'; ausente, a tela nao oferece."
   [:map {:closed true}
    [:rascunho-id :string]
    [:texto :string]
@@ -481,7 +482,8 @@
    [:paragrafos-sem-fonte [:sequential :int]]
    [:pontos-a-confirmar [:sequential :string]]
    [:modelo-llm-id :string]
-   [:prompt-versao :string]])
+   [:prompt-versao :string]
+   [:execucao-ia {:optional true} [:maybe :string]]])
 
 (def SolicitacaoRascunhoOut
   [:map {:closed true}

@@ -78,7 +78,7 @@
   [{:keys [analise normas indisponivel]}]
   (validado wire/CopilotoAnaliseOut
             {:analise (some-> analise
-                              (select-keys [:texto :citacoes :paragrafos-sem-fonte :pontos-a-confirmar :incerteza :modelo])
+                              (select-keys [:texto :citacoes :paragrafos-sem-fonte :pontos-a-confirmar :incerteza :modelo :execucao-ia])
                               (update :citacoes #(mapv (fn [c] (select-keys c [:fonte-id :rotulo :trecho :status])) %)))
              :normas normas
              :indisponivel indisponivel}

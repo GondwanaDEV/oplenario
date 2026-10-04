@@ -78,13 +78,14 @@
                         :incerteza {:nivel "revisar_com_atencao" :motivos ["conteudo_de_terceiro"]}
                         :citacoes [{:fonte-id "proposicao:x#ementa" :trecho "Resumo" :inicio 8 :fim 40 :status "conferida"
                                     :rotulo "PL 7/2026 — ementa"}]
-                        :paragrafos-sem-fonte [] :texto-base-sha256 "sha256:v1"}))
+                        :paragrafos-sem-fonte [] :texto-base-sha256 "sha256:v1" :execucao-id "exec-ia-res-1"}))
         svc (servico (fake-repo {}) :ler ia)
         r (pt/response-for svc :get (str base-url "/rascunhos/" rid) :headers (cab))
         b (ler r)]
     (is (= 200 (:status r)))
     (is (= ["Resumo." "fake:fake-1" false] [(:texto-limpo b) (:modelo-llm-id b) (:desatualizado b)]))
     (is (= ["conferida"] (mapv :status (:citacoes b))))
+    (is (= "exec-ia-res-1" (:execucao-ia b)) "8.4: o id da execucao NA IA chega a tela, para o reporte de erro")
     (is (= 404 (:status (pt/response-for svc :get (str base-url "/rascunhos/" (random-uuid)) :headers (cab))))
         "id que o core nao registrou para esta proposicao: nunca vai a IA")
     (let [r (pt/response-for (servico (fake-repo {})) :get (str base-url "/rascunhos/" rid) :headers (cab))]
