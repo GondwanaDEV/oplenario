@@ -11,6 +11,7 @@
 //   · arquivar   — POST /api/ouvidoria/manifestacoes/{id}/arquivar {motivo}
 //   · anexar     — POST /api/atendimento/{especie}/{id}/anexos (multipart, campo `arquivo`, UM por chamada, DEPOIS do ato)
 //   · baixar     — GET  /api/atendimento/{especie}/{id}/anexos/{anexo} (a secretaria; o cidadão tem a rota dele)
+//   · retirar    — POST /api/atendimento/{especie}/{id}/anexos/{anexo}/retirar ({motivo}; incidente de conteúdo)
 //   · encarregado — GET/PUT /api/lgpd/encarregado {nome, rotulo, email}
 // A authz real é o backend (papel `secretario`); aqui só se traduz cada resposta em frase honesta. Uma rota que falha
 // vira erro na tela, nunca uma lista vazia fingindo.
@@ -80,16 +81,21 @@ function useCarregar<T>(token: string | null, caminho: string | null, acao: Acao
     estado: { fase: "carregando" },
   });
   const [rev, setRev] = useState(0);
+  // `atualizando`: uma RELEITURA pedida por `recarregar` esta' em voo. O dado na tela e' o de antes dela: quem decide algo a
+  // partir do dado (ex.: "ainda cabe anexar?") trata esse intervalo como "nao sei", nunca como o valor velho.
+  const [atualizando, setAtualizando] = useState(false);
   useEffect(() => {
     if (!caminho || semCredencial(token)) return;
     let vivo = true;
     (async () => {
       const r = await pedir<T>(token, caminho, acao);
-      if (vivo)
+      if (vivo) {
         setCarga({
           caminho,
           estado: r.ok ? { fase: "pronto", dado: r.dado } : { fase: "erro", status: r.status, mensagem: r.mensagem },
         });
+        setAtualizando(false);
+      }
     })();
     return () => {
       vivo = false;
@@ -104,8 +110,11 @@ function useCarregar<T>(token: string | null, caminho: string | null, acao: Acao
       : carga.caminho === caminho
         ? carga.estado
         : { fase: "carregando" };
-  const recarregar = useCallback(() => setRev((n) => n + 1), []);
-  return { estado, recarregar };
+  const recarregar = useCallback(() => {
+    setAtualizando(true);
+    setRev((n) => n + 1);
+  }, []);
+  return { estado, recarregar, atualizando };
 }
 
 const enc = encodeURIComponent;
@@ -180,6 +189,15 @@ export const rotaDoAnexoNoBalcao = (especie: Especie, id: string, anexoId: strin
 /** Um anexo por chamada, DEPOIS do ato (a rota pede a resposta já gravada). Devolve o anexo criado. */
 export function anexar(token: string | null, especie: Especie, id: string, arquivo: File) {
   return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos`, "anexar", { method: "POST", arquivo });
+}
+
+/** RETIRAR um anexo (incidente de conteúdo): o arquivo sai do armazenamento, o download vira 404 para todos e a vaga do limite
+ *  volta. Motivo obrigatório. Idempotente: retirar de novo devolve a mesma retirada. Devolve o anexo, com `retiradoEm`. */
+export function retirarAnexo(token: string | null, especie: Especie, id: string, anexoId: string, motivo: string) {
+  return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos/${enc(anexoId)}/retirar`, "retirar-anexo", {
+    method: "POST",
+    corpo: { motivo },
+  });
 }
 
 /** Modo DEV (token no header): o link cru não leva o `Authorization`, então baixa pelos bytes e dispara o download aqui

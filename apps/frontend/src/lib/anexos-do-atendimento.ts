@@ -31,11 +31,18 @@ export function motivoDeRecusa(a: { name: string; size: number }): string | null
 }
 
 /** Junta os arquivos escolhidos aos que já estavam, recusando — com o motivo — o que não pode ir. */
-export function adicionarArquivos(atuais: File[], novos: File[]): { arquivos: File[]; recusados: string[] } {
+export function adicionarArquivos(
+  atuais: File[],
+  novos: File[],
+): { arquivos: File[]; recusados: string[]; repetidos: string[] } {
   const arquivos = [...atuais];
   const recusados: string[] = [];
+  const repetidos: string[] = [];   // o mesmo nome e tamanho que ja' estava na lista: ignorado, mas a pessoa e' avisada
   for (const a of novos) {
-    if (arquivos.some((x) => x.name === a.name && x.size === a.size)) continue;
+    if (arquivos.some((x) => x.name === a.name && x.size === a.size)) {
+      repetidos.push(a.name);
+      continue;
+    }
     const motivo = motivoDeRecusa(a);
     if (motivo) {
       recusados.push(motivo);
@@ -47,7 +54,7 @@ export function adicionarArquivos(atuais: File[], novos: File[]): { arquivos: Fi
     }
     arquivos.push(a);
   }
-  return { arquivos, recusados };
+  return { arquivos, recusados, repetidos };
 }
 
 const ROTULO_DO_TIPO: Record<string, string> = {
@@ -80,9 +87,22 @@ export function resumoDoEnvio(itens: ItemDeEnvio[]): string {
   return `${ok === 1 ? "1 arquivo anexado" : `${ok} arquivos anexados`}; ${erro === 1 ? "1 não foi anexado" : `${erro} não foram anexados`}.`;
 }
 
+/** Falha de REDE ao anexar: o servidor pode ter recebido o arquivo e a resposta se perdeu. Não diz "nada foi gravado" (seria
+ *  chute): diz que não deu para confirmar e que tentar de novo é seguro, porque o servidor não duplica o mesmo arquivo. */
+export const MENSAGEM_DE_REDE_NO_ANEXO =
+  "Sem conexão: não deu para confirmar se o arquivo foi anexado. Tente de novo: enviar o mesmo arquivo outra vez é seguro, ele não é anexado em duplicata.";
+
+/** A dica do seletor de anexos da RESPOSTA da Casa: quem baixa o arquivo depende de haver dono do protocolo. A manifestação
+ *  ANÔNIMA não tem dono: o arquivo fica só no registro da Casa (mesmo tom do aviso da prorrogação). */
+export function dicaDosAnexosDaResposta(anonima: boolean): string {
+  return anonima
+    ? "Esta manifestação é anônima: o arquivo fica só no registro da Casa, porque não há quem o baixe."
+    : "Eles sobem depois que você enviar, e quem pediu os baixa no protocolo dele.";
+}
+
 /** O que a cidadã lê quando o anexo ao PRÓPRIO pedido não vai. A frase do servidor explica o 409 e o 415. */
 export function mensagemDeErroDoAnexoDoRequerente(status: number, erroDoServidor?: string): string {
-  if (status === 0) return "Sem conexão com o servidor. Verifique a rede e tente de novo.";
+  if (status === 0) return MENSAGEM_DE_REDE_NO_ANEXO;
   if (status === 401) return "Sua sessão terminou. Entre de novo com o gov.br para anexar.";
   if (status === 404) return "Não encontramos este protocolo para receber o anexo.";
   if (status === 413) return "O arquivo passa de 10 MB, o limite por anexo.";

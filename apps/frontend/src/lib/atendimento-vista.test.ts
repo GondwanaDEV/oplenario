@@ -79,6 +79,11 @@ describe("textos", () => {
 describe("os erros de anexar (a resposta do servidor explica o que a pessoa pode corrigir)", () => {
   it("413, 415 e os 409 de anexar usam a frase do servidor; sem ela, uma frase honesta", () => {
     expect(mensagemDeErroAtendimento(413, "anexar")).toBe("O arquivo passa de 10 MB, o limite por anexo.");
+    // F10: falha de rede ao anexar: nao deu para confirmar, e reenviar e' seguro (o servidor nao duplica o mesmo arquivo)
+    expect(mensagemDeErroAtendimento(0, "anexar")).toMatch(/não deu para confirmar/);
+    expect(mensagemDeErroAtendimento(0, "anexar")).toMatch(/seguro/);
+    expect(mensagemDeErroAtendimento(0, "anexar")).not.toMatch(/Nada foi gravado/);
+    expect(mensagemDeErroAtendimento(0, "responder")).toMatch(/Nada foi gravado/);   // nos atos de texto, segue valendo
     expect(mensagemDeErroAtendimento(415, "anexar", "Tipo de arquivo não aceito. Aceitamos PDF.")).toBe("Tipo de arquivo não aceito. Aceitamos PDF.");
     expect(mensagemDeErroAtendimento(415, "anexar")).toMatch(/Tipo de arquivo não aceito\. Aceitamos PDF, PNG, JPEG, TXT, CSV, DOCX, XLSX, ODT e ODS/);
     expect(mensagemDeErroAtendimento(409, "anexar", "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram."))
@@ -87,7 +92,9 @@ describe("os erros de anexar (a resposta do servidor explica o que a pessoa pode
     expect(mensagemDeErroAtendimento(403, "anexar")).toMatch(/só a secretaria/i);
     expect(mensagemDeErroAtendimento(404, "anexar")).toMatch(/não encontramos/i);
     expect(mensagemDeErroAtendimento(400, "anexar")).toMatch(/vazio ou veio malformado/);
-    expect(mensagemDeErroAtendimento(0, "anexar")).toMatch(/Falha de rede/);
+    // F10 (contrato mudou, de proposito): a falha de rede ao anexar nao diz mais "Falha de rede. Nada foi gravado" (o servidor pode
+    // ter recebido o arquivo): diz que nao deu para confirmar e que reenviar e' seguro
+    expect(mensagemDeErroAtendimento(0, "anexar")).toMatch(/Sem conexão: não deu para confirmar/);
   });
 
   it("a frase do servidor só vale em anexar: nas outras ações o 409 segue o texto de sempre", () => {

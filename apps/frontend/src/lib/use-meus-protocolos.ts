@@ -22,8 +22,10 @@ type Base = {
 export type RecursoEsic = { protocolo: string; estado: string; reciboEm: string; resposta: Resposta | null };
 /** A prorrogação do prazo (LAI art. 11 §2º): as duas datas (AAAA-MM-DD), a justificativa da Câmara e quando foi (ISO). */
 export type Prorrogacao = { deData: string; paraData: string; justificativa: string; prorrogadoEm: string };
-/** Um arquivo que a Casa juntou à resposta (o servidor não manda a chave do object storage nem quem enviou). */
-export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string };
+/** Um arquivo do protocolo — da Casa (na resposta) ou do requerente (no pedido), pela `origem`. O servidor não manda a chave do
+ *  object storage, nem quem enviou, nem o MOTIVO de uma retirada. `retiradoEm`: a Casa retirou o arquivo (incidente de
+ *  conteúdo) — sem link para baixar, o download é 404. */
+export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string; retiradoEm?: string | null };
 /** `podeAnexar`: o requerente ainda pode juntar arquivo ao PRÓPRIO pedido (10 minutos do protocolo, até 5 seus). */
 export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; podeAnexar?: boolean };
 export type SolicitacaoLgpd = Base & { tipo: string; anexos?: Anexo[]; podeAnexar?: boolean };

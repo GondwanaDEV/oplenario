@@ -12,18 +12,24 @@ export function PainelDeEnvio({
   itens,
   podeTentarDeNovo,
   aoTentarDeNovo,
+  incerto = false,
   semJanela = "Já não cabe anexar: passaram os 10 minutos depois da resposta, ou a Casa já tem 5 anexos.",
 }: {
   itens: ItemDeEnvio[];
   podeTentarDeNovo: boolean;
   aoTentarDeNovo: (indice: number) => void;
-  /** O que dizer quando houve falha e já não dá para tentar de novo. */
+  /** NÃO SEI se ainda cabe anexar (a página não conseguiu reler o protocolo): "não sei" não é "não pode". Mostra a falha de
+   *  rede, e quem manda em `podeTentarDeNovo` deve deixá-lo ligado. */
+  incerto?: boolean;
+  /** O que dizer quando houve falha e já não dá para tentar de novo (só quando SE SABE que não cabe). */
   semJanela?: string;
 }) {
   if (itens.length === 0) return null;
   const falhou = itens.some((i) => i.fase === "erro");
+  const subindo = itens.some((i) => i.fase === "esperando" || i.fase === "enviando");
   return (
     <section className="anx-envio" aria-label="Envio dos anexos">
+      {subindo && <p className="anx-nao-feche"><b>Enviando anexos, não feche esta página.</b></p>}
       <p role="status">{resumoDoEnvio(itens)}</p>
       <ul aria-label="Envio dos anexos">
         {itens.map((i, n) => (
@@ -49,7 +55,12 @@ export function PainelDeEnvio({
           </li>
         ))}
       </ul>
-      {falhou && !podeTentarDeNovo && <p className="anx-dica">{semJanela}</p>}
+      {falhou && incerto && (
+        <p className="anx-dica">
+          Não deu para confirmar se ainda cabe anexar: a página está relendo o protocolo ou não conseguiu (rede ou servidor). Tente de novo.
+        </p>
+      )}
+      {falhou && !incerto && !podeTentarDeNovo && <p className="anx-dica">{semJanela}</p>}
     </section>
   );
 }

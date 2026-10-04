@@ -5,6 +5,7 @@ import {
   TAMANHO_MAXIMO_DO_ANEXO,
   TIPOS_ACEITOS_EM_TEXTO,
   adicionarArquivos,
+  dicaDosAnexosDaResposta,
   extensaoDe,
   mensagemDeErroDoAnexoDoRequerente,
   motivoDeRecusa,
@@ -50,6 +51,14 @@ describe("adicionarArquivos", () => {
     expect(r.arquivos.map((f) => f.name)).toEqual(["a.pdf", "b.csv"]);
     expect(r.recusados).toHaveLength(1);
     expect(r.recusados[0]).toMatch(/c.exe/);
+  });
+
+  it("F12: o arquivo repetido é ignorado E avisado (em `repetidos`, à parte das recusas)", () => {
+    const r = adicionarArquivos([arquivo("a.pdf")], [arquivo("a.pdf"), arquivo("b.csv")]);
+    expect(r.arquivos.map((f) => f.name)).toEqual(["a.pdf", "b.csv"]);
+    expect(r.recusados).toEqual([]);
+    expect(r.repetidos).toEqual(["a.pdf"]);
+    expect(adicionarArquivos([], [arquivo("x.pdf")]).repetidos).toEqual([]);
   });
 
   it(`para em ${LIMITE_DE_ANEXOS}: o excedente é recusado com o motivo`, () => {
@@ -99,6 +108,21 @@ describe("mensagemDeErroDoAnexoDoRequerente — o que a cidadã lê quando o ane
     expect(mensagemDeErroDoAnexoDoRequerente(401)).toMatch(/Entre de novo com o gov\.br/);
     expect(mensagemDeErroDoAnexoDoRequerente(400)).toMatch(/vazio ou veio malformado/);
     expect(mensagemDeErroDoAnexoDoRequerente(0)).toMatch(/Sem conexão/);
+    // F10: falha de rede NAO e' "nada foi gravado" (o servidor pode ter recebido): diz que nao deu para confirmar e que reenviar e' seguro
+    expect(mensagemDeErroDoAnexoDoRequerente(0)).toMatch(/não deu para confirmar/);
+    expect(mensagemDeErroDoAnexoDoRequerente(0)).toMatch(/seguro/);
+    expect(mensagemDeErroDoAnexoDoRequerente(0)).not.toMatch(/Nada foi gravado/);
     expect(mensagemDeErroDoAnexoDoRequerente(500)).toMatch(/Tente de novo/);
+  });
+});
+
+describe("dicaDosAnexosDaResposta — quem baixa o arquivo depende de a manifestação ter dono", () => {
+  it("com dono (e-SIC, LGPD, ouvidoria identificada): quem pediu o baixa no protocolo dele", () => {
+    expect(dicaDosAnexosDaResposta(false)).toMatch(/quem pediu os baixa no protocolo dele/);
+  });
+  it("manifestação ANÔNIMA: ninguém baixa — o arquivo fica só no registro da Casa (mesmo tom do aviso da prorrogação)", () => {
+    const d = dicaDosAnexosDaResposta(true);
+    expect(d).toMatch(/só no registro da Casa/);
+    expect(d).not.toMatch(/quem pediu os baixa|baixa no protocolo/);
   });
 });

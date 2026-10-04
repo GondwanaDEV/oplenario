@@ -4,7 +4,7 @@
 // prazo que vale, o que cabe fazer) vem pronta do servidor — a tela não deduz nada.
 
 import { formatarData, formatarDataSimples, formatarHora } from "./formatar-data";
-import { TIPOS_ACEITOS_EM_TEXTO } from "./anexos-do-atendimento";
+import { MENSAGEM_DE_REDE_NO_ANEXO, TIPOS_ACEITOS_EM_TEXTO } from "./anexos-do-atendimento";
 import type { EventoOut } from "./contrato-atendimento.gen";
 
 export type Especie = "esic" | "ouvidoria" | "lgpd";
@@ -176,6 +176,7 @@ export type AcaoAtendimento =
   | "arquivar"
   | "anexar"
   | "baixar-anexo"
+  | "retirar-anexo"
   | "encarregado"
   | "salvar-encarregado";
 
@@ -189,14 +190,26 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   arquivar: "Esta manifestação já foi respondida ou arquivada. Recarregue para ver o que mudou.",
   anexar: "A Casa não pode anexar agora: o protocolo ainda não tem resposta, passaram os 10 minutos depois dela ou já são 5 anexos.",
   "baixar-anexo": "",
+  "retirar-anexo": "",
   encarregado: "",
   "salvar-encarregado": "",
 };
 
 /** `erroDoServidor` só vale ao ANEXAR: ali o servidor explica o que a pessoa pode corrigir (qual regra, em português). */
 export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento, erroDoServidor?: string): string {
-  if (status === 0) return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
+  if (status === 0) {
+    if (acao === "anexar") return MENSAGEM_DE_REDE_NO_ANEXO;
+    if (acao === "retirar-anexo") return "Falha de rede: não deu para confirmar a retirada. Tente de novo; retirar duas vezes tem o mesmo efeito de uma.";
+    return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
+  }
   if (status === 401) return "Sua sessão expirou. Entre de novo.";
+  if (acao === "retirar-anexo") {
+    if (status === 403) return "Só a secretaria retira anexos.";
+    if (status === 404) return "Não encontramos este anexo — ele pode não existir neste protocolo.";
+    if (status === 400) return "Escreva o motivo da retirada.";
+    if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
+    return "Não foi possível retirar agora. Tente de novo em instantes.";
+  }
   if (acao === "anexar" || acao === "baixar-anexo") return mensagemDeErroDeAnexo(status, acao, erroDoServidor);
   if (status === 403) return "Esta área é da secretaria. Seu acesso não permite ver ou responder estes protocolos.";
   if (status === 404) return "Não encontramos este protocolo — ele pode não existir nesta Casa.";
