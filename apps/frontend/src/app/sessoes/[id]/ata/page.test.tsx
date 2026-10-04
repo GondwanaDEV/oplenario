@@ -154,6 +154,28 @@ describe("PaginaAta", () => {
     expect(screen.getByRole("button", { name: "Redigir a ata" })).toBeTruthy();
   });
 
+  it("revisão do rascunho: com o id da execução na IA oferece 'Reportar erro' (8.4); sem id, não oferece", async () => {
+    for (const [execucaoIa, oferece] of [["e-ia-ata-1", true], [undefined, false]] as const) {
+      const chamadas: string[] = [];
+      rede((url) => {
+        chamadas.push(url);
+        return url.endsWith("/rascunhos/r1")
+          ? { status: 200, body: {
+              "rascunho-id": "r1", texto: "Ana falou.", "texto-limpo": "Ana falou.",
+              incerteza: { nivel: "normal", motivos: [] }, citacoes: [], "paragrafos-sem-fonte": [],
+              "pontos-a-confirmar": [], "modelo-llm-id": "fake:fake-1", "prompt-versao": "ata-v1",
+              ...(execucaoIa ? { "execucao-ia": execucaoIa } : {}) } }
+          : { status: 200, body: { "sessao-id": "s1", "pode-ter-ata": true, atual: null, versoes: [],
+              rascunho: { "solicitacao-id": "q", situacao: "pronto", "rascunho-id": "r1", "solicitado-em": "2026-09-26T21:00:00Z", "ocorrido-em": "2026-09-26T21:01:00Z" } } };
+      });
+      render(<PaginaAta />);
+      fireEvent.click(await screen.findByRole("button", { name: "Revisar o rascunho" }));
+      await screen.findByRole("button", { name: "Usar este rascunho" });
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(oferece);
+      cleanup();
+    }
+  });
+
   it("pedido recusado mostra a razão do servidor", async () => {
     rede(
       () => ({ status: 200, body: { "sessao-id": "s1", "pode-ter-ata": true, atual: null, versoes: [] } }),

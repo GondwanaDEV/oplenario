@@ -342,6 +342,7 @@ export interface AtaRascunhoConteudoOut {
   pontosAConfirmar: string[];
   modeloLlmId: string;
   promptVersao: string;
+  execucaoIa?: string | null;
 }
 
 export interface SolicitacaoRascunhoOut {

@@ -130,13 +130,15 @@
 
 (def JustificativaCopilotoOut
   "A justificativa redigida pela IA (ja' no campo de `campo` do preenchimento, sem as marcas): as citacoes conferidas
-  contra os dispositivos lidos, os paragrafos sem fonte e o nivel de incerteza — para a tela mostrar 'de onde veio'."
+  contra os dispositivos lidos, os paragrafos sem fonte e o nivel de incerteza — para a tela mostrar 'de onde veio'.
+  `execucao-ia` = o id da execucao NA IA (feature 8.4): so' ele permite o 'Reportar erro'; ausente, a tela nao oferece."
   [:map {:closed true}
    [:campo :string]
    [:citacoes [:sequential CitacaoCopilotoOut]]
    [:paragrafos-sem-fonte [:sequential :int]]
    [:incerteza :string]
-   [:modelo :string]])
+   [:modelo :string]
+   [:execucao-ia {:optional true} [:maybe :string]]])
 
 (def CopilotoRequerimentoOut
   [:map {:closed true}

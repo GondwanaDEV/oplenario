@@ -24,6 +24,7 @@ import { useNovoRequerimento } from "@/lib/use-novo-requerimento";
 import { useColegas } from "@/lib/use-subscricao";
 import { useCopilotoRequerimento } from "@/lib/use-copiloto-requerimento";
 import { avisoDaJustificativa } from "@/lib/copiloto-requerimento-vista";
+import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import type { JustificativaCopilotoOut } from "@/lib/contrato-legislativo.gen";
 import { Coautores } from "../coautores";
 import { campoLongo, faltando, podeVerPrevia, rotuloCampo, seloDaAssinatura } from "@/lib/requerimento-vista";
@@ -244,7 +245,7 @@ export default function PaginaNovoRequerimento() {
                         onChange={(e) => setValores((v) => ({ ...v, [c]: e.target.value }))}
                       />
                     )}
-                    {sugestao && sugestao.campo === c && <SugestaoDoAssistente j={sugestao} />}
+                    {sugestao && sugestao.campo === c && <SugestaoDoAssistente j={sugestao} token={token} />}
                   </div>
                 ))}
                 <p className="req-ajuda">Seu nome e a data de hoje entram no texto automaticamente.</p>
@@ -361,7 +362,7 @@ export default function PaginaNovoRequerimento() {
 
 /** B.7: a justificativa que o assistente redigiu — rascunho com selo, o aviso quando a base não foi conferida e de
  *  onde veio cada citação (o dispositivo da norma da Casa, com a data até quando o texto foi conferido). */
-function SugestaoDoAssistente({ j }: { j: JustificativaCopilotoOut }) {
+function SugestaoDoAssistente({ j, token }: { j: JustificativaCopilotoOut; token: string | null }) {
   const aviso = avisoDaJustificativa(j);
   return (
     <div className="req-sugestao">
@@ -385,6 +386,7 @@ function SugestaoDoAssistente({ j }: { j: JustificativaCopilotoOut }) {
           </ol>
         </details>
       )}
+      {j.execucaoIa && <ReportarErroIa execucaoId={j.execucaoIa} token={token} />}
     </div>
   );
 }

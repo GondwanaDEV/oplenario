@@ -10,6 +10,7 @@
             [oplenario.config :as config]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.outbox :as outbox]
+            [oplenario.legislativo.adapters.out.requerimento :as adapters-out]
             [oplenario.legislativo.components.assinador-icp :as assinador-icp]
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.controllers :as controllers]
@@ -198,6 +199,13 @@
            (:preenchimento r))
         "so' os campos que o modelo pede: o 'vereador' forjado cai")
     (is (= "justificativa" (get-in r [:justificativa :campo])))
+    (testing "8.4: o id da execucao NA IA da justificativa chega a tela (para o reporte); sem id, sem campo"
+      (is (not (contains? (:justificativa r) :execucao-ia)))
+      (let [r3 (controllers/copiloto-requerimento
+                *repo* resolver-autor (ia (assoc-in boa [:justificativa :execucao-id] "exec-ia-9")) ator
+                {:descricao "pedir informações da praça"})]
+        (is (= "exec-ia-9" (get-in r3 [:justificativa :execucao-ia])))
+        (is (= (:justificativa r3) (:justificativa (adapters-out/copiloto->wire r3))) "o contrato de saida carrega o id")))
     (testing "modelo que nao e' da Casa nao chega a tela (nem a justificativa)"
       (let [r2 (controllers/copiloto-requerimento *repo* resolver-autor
                                                   (ia (assoc-in boa [:preenchimento :modelo-id] (str (random-uuid))))

@@ -179,6 +179,7 @@ def criar_app(
             raise HTTPException(404, "rascunho não encontrado")
         return {
             "id": g.id,
+            "execucao-id": g.execucao_id,  # 8.4: o id do "Reportar erro" (POST .../execucoes/{id}/reportes)
             "sessao-id": g.sessao_id,
             "solicitacao-id": g.solicitacao_id,
             "texto": g.texto,
@@ -214,6 +215,7 @@ def criar_app(
             raise HTTPException(404, "rascunho não encontrado")
         return {
             "id": g.id,
+            "execucao-id": g.execucao_id,  # 8.4: o id do "Reportar erro" (POST .../execucoes/{id}/reportes)
             "proposicao-id": g.proposicao_id,
             "texto-base-sha256": g.texto_base_sha256,
             "texto": g.texto,

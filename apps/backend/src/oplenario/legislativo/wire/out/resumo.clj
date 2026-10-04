@@ -61,7 +61,8 @@
 
 (def RascunhoResumoOut
   "O rascunho para a revisao, lido da IA sob demanda. `texto` traz as marcas de citacao; `texto-limpo` vai para o
-  editor."
+  editor. `execucao-ia` = o id da execucao NA IA (feature 8.4): so' ele permite o 'Reportar erro'; ausente, a tela
+  nao oferece."
   [:map {:closed true}
    [:rascunho-id :string]
    [:texto :string]
@@ -71,7 +72,8 @@
    [:paragrafos-sem-fonte [:sequential :int]]
    [:modelo-llm-id :string]
    [:prompt-versao :string]
-   [:desatualizado :boolean]])
+   [:desatualizado :boolean]
+   [:execucao-ia {:optional true} [:maybe :string]]])
 
 (def ResumoReciboOut
   [:map {:closed true}
