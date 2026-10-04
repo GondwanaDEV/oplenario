@@ -15,7 +15,7 @@ import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
 import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
-import type { Anexo, EspecieDoPortal, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
+import type { Anexo, Complemento, EspecieDoPortal, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
 import { ListaDeAnexos } from "../../anexos-do-atendimento";
 import { AnexarAoProtocolo } from "./anexar-ao-protocolo";
 
@@ -55,6 +55,22 @@ function RespostaDaCasa({ resposta, indeferido }: { resposta: Resposta | null; i
       </p>
       <p>{resposta.corpo}</p>
     </div>
+  );
+}
+
+// O que a Casa acrescentou DEPOIS de responder (ADR-0022), em ordem de chegada, logo abaixo da resposta. Só o texto e quando:
+// quem escreveu nunca chega aqui. Não aparece nas rotas públicas por número de protocolo.
+function ComplementosDaResposta({ complementos }: { complementos: Complemento[] | undefined }) {
+  if (!complementos || complementos.length === 0) return null;
+  return (
+    <>
+      {complementos.map((c) => (
+        <div key={c.id} className="mp-resposta mp-complemento">
+          <p className="mp-resposta-cab">Complemento da resposta · {formatarData(c.complementadoEm)}</p>
+          <p>{c.corpo}</p>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -157,6 +173,7 @@ function Item({
   resposta,
   prorrogacao,
   anexos,
+  complementos,
   rotaDoAnexo,
   token,
   anexavel,
@@ -171,6 +188,7 @@ function Item({
   resposta: Resposta | null;
   prorrogacao?: Prorrogacao | null;
   anexos?: Anexo[];
+  complementos?: Complemento[];
   rotaDoAnexo: (anexoId: string) => string;
   token: string | null;
   /** O que o controle de anexar precisa saber: qual protocolo e se o servidor diz que ainda cabe. */
@@ -194,6 +212,7 @@ function Item({
       </p>
       <PrazoProrrogado prorrogacao={prorrogacao} />
       <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
+      <ComplementosDaResposta complementos={complementos} />
       <ListaDeAnexos anexos={daCasa} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Anexos da resposta" />
       <ListaDeAnexos anexos={doRequerente} rotaDe={rotaDoAnexo} token={token} Titulo="h3" titulo="Seus anexos" />
       <AnexarAoProtocolo especie={anexavel.especie} id={anexavel.id} podeAnexar={anexavel.podeAnexar} token={token} aoMudar={aoMudar} />
@@ -228,6 +247,7 @@ export function ListaProtocolos({
             {dados.pedidosEsic.map((p) => (
               <Item key={p.id} protocolo={p.protocolo} titulo={p.assunto} estado={p.estado} reciboEm={p.reciboEm}
                 dias={p.diasRestantes} resposta={p.resposta} prorrogacao={p.prorrogacao} anexos={p.anexos}
+                complementos={p.complementos}
                 rotaDoAnexo={rotaDoAnexo("esic", p.id)} token={token}
                 anexavel={{ especie: "esic", id: p.id, podeAnexar: p.podeAnexar === true }} aoMudar={aoMudar}>
                 {p.recurso ? (
@@ -252,6 +272,7 @@ export function ListaProtocolos({
             {dados.solicitacoesLgpd.map((s) => (
               <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDe(DIREITOS_LGPD, s.tipo)} estado={s.estado}
                 reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} anexos={s.anexos}
+                complementos={s.complementos}
                 rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token}
                 anexavel={{ especie: "lgpd", id: s.id, podeAnexar: s.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
@@ -271,7 +292,8 @@ export function ListaProtocolos({
             {dados.manifestacoes.map((m) => (
               <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
                 estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
-                prorrogacao={m.prorrogacao} anexos={m.anexos} rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token}
+                prorrogacao={m.prorrogacao} anexos={m.anexos} complementos={m.complementos}
+                rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token}
                 anexavel={{ especie: "ouvidoria", id: m.id, podeAnexar: m.podeAnexar === true }} aoMudar={aoMudar} />
             ))}
           </ul>

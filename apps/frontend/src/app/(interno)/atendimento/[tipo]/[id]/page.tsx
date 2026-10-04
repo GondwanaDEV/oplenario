@@ -15,6 +15,7 @@ import { comToken } from "@/lib/nav";
 import {
   AVISO_IDENTIDADE_OUVIDORIA,
   ESPECIES,
+  avisoDoComplemento,
   TETO_JUSTIFICATIVA,
   avisoDaProrrogacao,
   TETO_RESPOSTA,
@@ -34,6 +35,7 @@ import {
 import {
   anexar,
   arquivar,
+  complementar,
   decidirRecurso,
   indeferir,
   prorrogar,
@@ -64,7 +66,7 @@ export default function PaginaProtocolo() {
   );
 }
 
-type Acao = "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar";
+type Acao = "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar" | "complementar";
 
 function Conteudo() {
   const { token } = useAuth();
@@ -282,10 +284,17 @@ const FORM: Record<Acao, { botao: string; titulo: string; rotulo: string; enviar
     oQue: "o motivo", teto: TETO_RESPOSTA,
     aviso: "Arquivar encerra a manifestação sem resposta de mérito — use quando ela não é da competência da Câmara ou não tem como ser apurada.",
   },
+  complementar: {
+    botao: "Complementar resposta", titulo: "Complementar a resposta", rotulo: "Complemento da resposta", enviar: "Enviar o complemento", enviando: "Enviando…",
+    oQue: "o complemento", teto: TETO_RESPOSTA,
+    // o aviso depende de a quem o complemento é mostrado (ouvidoria anônima: a ninguém); ver `avisoDoComplemento`
+    aviso: avisoDoComplemento(),
+  },
 };
 
-// o que acompanha-se de arquivo: a resposta, o indeferimento e a decisao do recurso (prorrogar e arquivar nao tem documento)
-const COM_ANEXOS: Acao[] = ["responder", "indeferir", "decidir-recurso"];
+// o que acompanha-se de arquivo: a resposta, o indeferimento, a decisao do recurso e o complemento (prorrogar e arquivar nao
+// tem documento). Os arquivos sobem DEPOIS do ato; o complemento reabre a janela de 10 minutos para isso.
+const COM_ANEXOS: Acao[] = ["responder", "indeferir", "decidir-recurso", "complementar"];
 
 function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = false }: {
   especie: Especie;
@@ -323,6 +332,7 @@ function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = 
     podeIndeferir?: boolean;
     podeProrrogar?: boolean;
     podeArquivar?: boolean;
+    podeComplementar?: boolean;
     recursoPendenteId?: string | null;
   };
   const cabem: Acao[] = [
@@ -331,18 +341,24 @@ function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = 
     ...(a.recursoPendenteId ? (["decidir-recurso"] as const) : []),
     ...(a.podeProrrogar ? (["prorrogar"] as const) : []),
     ...(a.podeArquivar ? (["arquivar"] as const) : []),
+    ...(a.podeComplementar ? (["complementar"] as const) : []),
   ];
+  // "encerrado" = nada a responder; o complemento da resposta (a qualquer tempo, depois de responder) não reabre o protocolo
+  const soComplementar = cabem.length === 1 && cabem[0] === "complementar";
   if (cabem.length === 0) {
     return <p className="atd-dica atd-encerrado">Este protocolo está encerrado: não há o que responder.</p>;
   }
 
   const dias = especie === "esic" ? 10 : 30;
   const f = acao ? FORM[acao] : null;
-  // o aviso do prorrogar depende de a quem a justificativa é mostrada (ouvidoria anônima: a ninguém)
+  // o aviso do prorrogar e o do complemento dependem de a quem o texto é mostrado (ouvidoria anônima: a ninguém)
+  const identificacao = "identificacao" in d ? d.identificacao : undefined;
   const aviso =
     acao === "prorrogar" && especie !== "lgpd"
-      ? avisoDaProrrogacao(especie, "identificacao" in d ? d.identificacao : undefined)
-      : f?.aviso;
+      ? avisoDaProrrogacao(especie, identificacao)
+      : acao === "complementar"
+        ? avisoDoComplemento(identificacao)
+        : f?.aviso;
   const falta = f ? faltaNoTexto(texto, f.teto, f.oQue) : null;
 
   function abrir(x: Acao) {
@@ -367,7 +383,9 @@ function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = 
             ? await decidirRecurso(token, a.recursoPendenteId!, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.decididoEm } : x))
             : acao === "prorrogar"
               ? await prorrogar(token, especie as "esic" | "ouvidoria", d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.prorrogadoAte } : x))
-              : await arquivar(token, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.arquivadaEm } : x));
+              : acao === "complementar"
+                ? await complementar(token, especie, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.complementadoEm } : x))
+                : await arquivar(token, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.arquivadaEm } : x));
     setEnviando(false);
     if (r.ok) {
       setAcao(null);
@@ -382,10 +400,13 @@ function Acoes({ especie, d, token, aoConcluir, desabilitado = false, anonima = 
 
   return (
     <section className="atd-bloco atd-acoes-bloco" aria-label="O que fazer">
+      {!acao && soComplementar && (
+        <p className="atd-dica atd-encerrado">Este protocolo está encerrado: não há o que responder. Se algo faltou na resposta, complemente-a.</p>
+      )}
       {!acao && (
         <div className="atd-acoes">
           {cabem.map((x, i) => (
-            <button key={x} type="button" className={i === 0 ? "btn btn-primaria" : "btn btn-contorno"} disabled={desabilitado}
+            <button key={x} type="button" className={i === 0 && !soComplementar ? "btn btn-primaria" : "btn btn-contorno"} disabled={desabilitado}
               onClick={() => abrir(x)}>
               {x === "prorrogar" ? `${FORM.prorrogar.botao} (+${dias} dias)` : FORM[x].botao}
             </button>

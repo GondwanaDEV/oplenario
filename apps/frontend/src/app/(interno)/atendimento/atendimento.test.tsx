@@ -1009,6 +1009,135 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     expect((screen.getByLabelText("Motivo da retirada") as HTMLTextAreaElement).value).toBe("arquivo errado");
   });
 
+  // ---------------------------------------------------------------- o complemento da resposta (ADR-0022)
+
+  const respondidoComComplemento = (podeComplementar: boolean, podeAnexar = false, extra: Record<string, unknown> = {}) =>
+    detalheEsic({ estado: "respondido", aberto: false, "dias-restantes": null,
+      historico: [{ tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" }],
+      acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": false, "pode-anexar": podeAnexar,
+        "pode-complementar": podeComplementar, "recurso-pendente-id": null }, ...extra });
+
+  it("complementar: só aparece quando o servidor diz que cabe; protocolo aberto não oferece", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic({
+      acoes: { "pode-responder": true, "pode-indeferir": true, "pode-prorrogar": true, "pode-anexar": false, "pode-complementar": false, "recurso-pendente-id": null } }) } });
+    const { unmount } = render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Contratos de 2025" });
+    expect(screen.queryByRole("button", { name: "Complementar resposta" })).toBeNull();
+    unmount();
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: respondidoComComplemento(true) } });
+    render(<PaginaProtocolo />);
+    expect(await screen.findByRole("button", { name: "Complementar resposta" })).toBeTruthy();
+    // encerrado continua dito; o complemento nao reabre o protocolo (nem Responder nem Indeferir)
+    expect(screen.getByText(/Este protocolo está encerrado: não há o que responder\. Se algo faltou/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+  });
+
+  it("complementar: o texto é obrigatório, o aviso diz que é definitivo, manda {corpo} e o recibo recebe o foco", async () => {
+    let complementado = false;
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: complementado
+        ? respondidoComComplemento(true, true, { historico: [
+            { tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" },
+            { tipo: "complemento", em: "2026-07-03T19:00:00Z", texto: "Segue o anexo II.", por: "Joana" }] })
+        : respondidoComComplemento(true) }),
+      "POST /api/atendimento/esic/p1/complementos": () => {
+        complementado = true;
+        return { status: 201, corpo: { id: "c1", corpo: "Segue o anexo II.", "complementado-em": "2026-07-03T19:00:00Z" } };
+      },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar resposta" }));
+    const grupo = screen.getByRole("group", { name: "Complementar resposta" });
+    expect(within(grupo).getByRole("heading", { name: "Complementar a resposta" })).toBeTruthy();
+    expect(within(grupo).getByText(/O complemento é definitivo.*não muda o estado nem o prazo/)).toBeTruthy();
+    const enviar = within(grupo).getByRole("button", { name: "Enviar o complemento" }) as HTMLButtonElement;
+    expect(enviar.disabled).toBe(true);
+    expect(within(grupo).getByText("Escreva o complemento.")).toBeTruthy();
+    fireEvent.change(within(grupo).getByLabelText("Complemento da resposta"), { target: { value: "  Segue o anexo II.  " } });
+    expect(enviar.disabled).toBe(false);
+    fireEvent.click(enviar);
+    const recibo = await screen.findByRole("status");
+    expect(recibo.textContent).toMatch(/Complemento à resposta do ESIC-2026-000007 registrado em/);
+    await waitFor(() => expect(document.activeElement).toBe(recibo));
+    expect(c.find((x) => x.metodo === "POST")!.body).toEqual({ corpo: "Segue o anexo II." });
+    // o detalhe e' relido: o complemento entra no historico, e como a janela reabriu o bloco de anexos volta a aceitar envio
+    expect(await screen.findByText("Complemento da resposta")).toBeTruthy();
+    expect(await screen.findByRole("region", { name: "Anexar arquivo" })).toBeTruthy();
+  });
+
+  it("complementar com arquivos: o ato vai primeiro, os arquivos sobem depois, pela rota de anexos", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: respondidoComComplemento(true) },
+      "POST /api/atendimento/esic/p1/complementos": { status: 201, corpo: { id: "c1", corpo: "Segue.", "complementado-em": "2026-07-03T19:00:00Z" } },
+      "POST /api/atendimento/esic/p1/anexos": (ch) => ({ status: 201, corpo: anexoOut("n1", (ch.body as { arquivo: string }).arquivo, 100) }),
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar resposta" }));
+    escolher(/Anexar arquivos à resposta/, [arquivo("anexo-ii.pdf")]);
+    fireEvent.change(screen.getByLabelText("Complemento da resposta"), { target: { value: "Segue o anexo II." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar o complemento" }));
+    expect(await screen.findByText("1 arquivo anexado.")).toBeTruthy();
+    expect(c.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual([
+      "/api/atendimento/esic/p1/complementos", "/api/atendimento/esic/p1/anexos"]);
+  });
+
+  it("complementar: o 409 vira a frase em palavras, o texto digitado fica e não há recibo; cancelar não envia nada", async () => {
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": { corpo: respondidoComComplemento(true) },
+      "POST /api/atendimento/esic/p1/complementos": { status: 409, corpo: { erro: "Responda o pedido antes de complementar." } },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Complementar resposta" }));
+    fireEvent.change(screen.getByLabelText("Complemento da resposta"), { target: { value: "Um complemento." } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar o complemento" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Responda o pedido antes de complementar/);
+    expect((screen.getByLabelText("Complemento da resposta") as HTMLTextAreaElement).value).toBe("Um complemento.");
+    expect(screen.queryByRole("status")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByLabelText("Complemento da resposta")).toBeNull();
+    expect(c.filter((x) => x.metodo === "POST")).toHaveLength(1);
+  });
+
+  it("complementar: ouvidoria e LGPD vão para a rota da sua espécie; a ouvidoria anônima é avisada de que fica só no registro", async () => {
+    const casos = [
+      ["ouvidoria", "m1", {
+        id: "m1", protocolo: "OUV-2026-000004", tipo: "denuncia", assunto: "Obra parada", descricao: "Na rua A.",
+        identificacao: "anonima", estado: "respondida", historico: [],
+        acoes: { "pode-responder": false, "pode-arquivar": false, "pode-prorrogar": false, "pode-anexar": false, "pode-complementar": true }, ...prazo(null) }],
+      ["lgpd", "s1", {
+        id: "s1", protocolo: "LGPD-2026-000002", tipo: "acessar", detalhe: null, estado: "respondida", titular: null, historico: [],
+        acoes: { "pode-responder": false, "pode-indeferir": false, "pode-anexar": false, "pode-complementar": true }, ...prazo(null) }],
+    ] as const;
+    for (const [tipo, id, corpo] of casos) {
+      estado.params = { tipo, id };
+      const c = mockar({
+        [`GET /api/atendimento/${tipo}/${id}`]: { corpo },
+        [`POST /api/atendimento/${tipo}/${id}/complementos`]: { status: 201, corpo: { id: "c1", corpo: "X", "complementado-em": "2026-07-03T19:00:00Z" } },
+      });
+      const { unmount } = render(<PaginaProtocolo />);
+      fireEvent.click(await screen.findByRole("button", { name: "Complementar resposta" }));
+      if (tipo === "ouvidoria") expect(screen.getByText(/anônima: o complemento fica só no registro da Casa/)).toBeTruthy();
+      else expect(screen.getByText(/Meus protocolos/)).toBeTruthy();
+      fireEvent.change(screen.getByLabelText("Complemento da resposta"), { target: { value: "Texto." } });
+      fireEvent.click(screen.getByRole("button", { name: "Enviar o complemento" }));
+      await screen.findByRole("status");
+      expect(c.filter((x) => x.metodo === "POST").map((x) => x.url)).toEqual([`/api/atendimento/${tipo}/${id}/complementos`]);
+      unmount();
+      cleanup();
+    }
+  });
+
+  it("o histórico mostra o complemento, em ordem, com o título certo e quem escreveu", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: respondidoComComplemento(true, false, { historico: [
+      { tipo: "resposta", em: "2026-07-03T15:00:00Z", texto: "Segue.", por: "Joana" },
+      { tipo: "complemento", em: "2026-07-04T15:00:00Z", texto: "Faltou o anexo II.", por: "Marta" }] }) } });
+    render(<PaginaProtocolo />);
+    const historico = (await screen.findByRole("heading", { name: "Histórico" })).closest("section")!;
+    const titulos = within(historico).getAllByRole("listitem").map((l) => l.textContent ?? "");
+    expect(titulos[0]).toMatch(/Resposta da Casa.*Joana.*Segue\./);
+    expect(titulos[1]).toMatch(/Complemento da resposta.*Marta.*Faltou o anexo II\./);
+  });
+
   it("fila que não existe no endereço: frase, sem buscar", () => {
     estado.params = { tipo: "moderacao", id: "x" };
     const c = mockar({});

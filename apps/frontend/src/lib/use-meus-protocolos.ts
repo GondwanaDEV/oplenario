@@ -22,14 +22,16 @@ type Base = {
 export type RecursoEsic = { protocolo: string; estado: string; reciboEm: string; resposta: Resposta | null };
 /** A prorrogação do prazo (LAI art. 11 §2º): as duas datas (AAAA-MM-DD), a justificativa da Câmara e quando foi (ISO). */
 export type Prorrogacao = { deData: string; paraData: string; justificativa: string; prorrogadoEm: string };
+/** O complemento da resposta (ADR-0022): o texto que a Casa acrescentou depois de responder, e quando. Sem quem escreveu. */
+export type Complemento = { id: string; corpo: string; complementadoEm: string };
 /** Um arquivo do protocolo — da Casa (na resposta) ou do requerente (no pedido), pela `origem`. O servidor não manda a chave do
  *  object storage, nem quem enviou, nem o MOTIVO de uma retirada. `retiradoEm`: a Casa retirou o arquivo (incidente de
  *  conteúdo) — sem link para baixar, o download é 404. */
 export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string; retiradoEm?: string | null };
 /** `podeAnexar`: o requerente ainda pode juntar arquivo ao PRÓPRIO pedido (10 minutos do protocolo, até 5 seus). */
-export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; podeAnexar?: boolean };
-export type SolicitacaoLgpd = Base & { tipo: string; anexos?: Anexo[]; podeAnexar?: boolean };
-export type Manifestacao = Base & { tipo: string; assunto: string; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; podeAnexar?: boolean };
+export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; complementos?: Complemento[]; podeAnexar?: boolean };
+export type SolicitacaoLgpd = Base & { tipo: string; anexos?: Anexo[]; complementos?: Complemento[]; podeAnexar?: boolean };
+export type Manifestacao = Base & { tipo: string; assunto: string; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; complementos?: Complemento[]; podeAnexar?: boolean };
 export type EspecieDoPortal = "esic" | "ouvidoria" | "lgpd";
 export type MeusProtocolos = { pedidosEsic: PedidoEsic[]; solicitacoesLgpd: SolicitacaoLgpd[]; manifestacoes: Manifestacao[] };
 
