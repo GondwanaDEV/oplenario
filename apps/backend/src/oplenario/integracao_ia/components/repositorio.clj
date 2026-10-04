@@ -2,7 +2,8 @@
   "Repo-Component da fronteira core <-> IA (ADR-0008). O FEED e' supratenant (tx sem tenant, como o relay do
   outbox); a CAIXA DE ENTRADA roda na tx do tenant do evento (`com-tenant*`), com o efeito injetado pelo host
   aplicado na MESMA tx do registro — dedup e efeito atomicos."
-  (:require [next.jdbc :as jdbc]
+  (:require [clojure.tools.logging :as log]
+            [next.jdbc :as jdbc]
             [oplenario.integracao-ia.db.chamada-agente :as chamada-agente]
             [oplenario.integracao-ia.db.eventos :as eventos]
             [oplenario.integracao-ia.db.orcamento :as orcamento]
@@ -78,11 +79,34 @@
 
 (defn repositorio [] (map->RepoIntegracaoIAPg {}))
 
+(defn- promover-ou-descartar
+  "A parte PURA da promocao, na fronteira de despacho do consumidor: devolve o evento de integracao, ou nil se o
+  tipo nao e' promovido, o sigilo barra, OU o evento e' malformado (log :warn nomeando a linha do outbox).
+
+  `shared.outbox.ente_id` e' NULLABLE e o feed (`evento_saida.ente_id`) e' NOT NULL: sem a checagem, um evento
+  supratenant/malformado virava `PSQLException` DENTRO da tx do relay COMPARTILHADO — poison + head-of-line de todo
+  evento de id maior, de qualquer Casa. A checagem e' ANTES do INSERT (nunca um catch em volta dele): capturar
+  uma SQLException dentro da tx a deixa abortada, e a falha de INFRA deve propagar (retry/dead-letter e' o carry
+  'relay-observavel' de docs/16, nao esta frente). O catch Throwable cobre so' `logic/promover` (puro): qualquer
+  excecao ali e' forma do dado, nao infra."
+  [{:keys [id tipo ente-id payload]}]
+  (if (nil? ente-id)
+    (do (log/warn "integracao-ia: evento com ente-id ausente — descartado, nao promovido (dado malformado, rotina)"
+                  {:id id :tipo tipo})
+        nil)
+    (try
+      (logic/promover tipo ente-id payload)
+      (catch Throwable e
+        (log/warn e "integracao-ia: payload malformado — evento descartado, nao promovido (dado externo, rotina)"
+                  {:id id :tipo tipo :ente-id ente-id})
+        nil))))
+
 (defn promover-em-tx!
   "Handler do relay (tx do outbox, supratenant): promove o evento de dominio a evento de integracao, se a lista
-  de `logic/promocoes` o prever e o sigilo deixar. Idempotente pela chave."
-  [tx {:keys [tipo ente-id payload]}]
-  (when-let [ev (logic/promover tipo ente-id payload)]
+  de `logic/promocoes` o prever e o sigilo deixar. Idempotente pela chave. Evento malformado e' descartado com log
+  (ver `promover-ou-descartar`), nunca relancado: o relay e' UM SO' para todas as Casas."
+  [tx evento]
+  (when-let [ev (promover-ou-descartar evento)]
     (eventos/inserir-saida! tx ev)))
 
 ;; ---------------------------------------------------------------------------------------------

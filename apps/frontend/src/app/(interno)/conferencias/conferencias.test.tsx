@@ -143,6 +143,19 @@ describe("conferências", () => {
     expect(JSON.parse(init.body as string)).toEqual({ desfecho: "aproveitada", texto: "Texto da secretaria." });
   });
 
+  it("com o id da execução na IA a nota oferece 'Reportar erro' (8.4); sem id (nota anterior), não oferece", async () => {
+    for (const execucaoIa of ["e-ia-nota-1", undefined]) {
+      mockar({
+        "GET /api/legislativo/notas-tecnicas/n1": { corpo: { ...nota(), ...(execucaoIa ? { "execucao-ia": execucaoIa } : {}) } },
+        "GET /api/meu/identidade": { corpo: { nome: "Rita", papeis: ["secretario"] } },
+      });
+      montar(<PaginaNota />, SECRETARIA);
+      await screen.findByText(/Rascunho produzido por IA/);
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(execucaoIa !== undefined);
+      cleanup();
+    }
+  });
+
   it("aproveitar sem editar não manda texto (vale o da IA, limpo); descartar pede confirmação", async () => {
     const f = mockar({
       "GET /api/legislativo/notas-tecnicas/n1": { corpo: nota() },

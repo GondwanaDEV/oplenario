@@ -108,7 +108,7 @@ function Nota({ n, token, modo, texto, enviando, erro, setTexto, aproveitar, des
       )}
       {n.estado === "pendente" && aviso && <p className="conf-aviso" role="note">{aviso}</p>}
 
-      {n.estado === "pendente" && modo !== "editar" && <LeituraDaNota n={n} />}
+      {n.estado === "pendente" && modo !== "editar" && <LeituraDaNota n={n} token={token} />}
 
       {n.estado !== "pendente" && (
         <section aria-label={n.estado === "aproveitada" ? "Nota aproveitada" : "Nota descartada"}>

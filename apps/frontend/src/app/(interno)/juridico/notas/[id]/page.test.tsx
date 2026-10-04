@@ -72,6 +72,16 @@ describe("/juridico/notas/:id", () => {
     expect(screen.getByRole("link", { name: /Parecer jurídico/ }).getAttribute("href")).toBe("/juridico?token=tk");
   });
 
+  it("com o id da execução na IA a nota oferece 'Reportar erro' (8.4); sem id (nota anterior), não oferece", async () => {
+    for (const execucaoIa of ["e-ia-nota-1", undefined]) {
+      mockar({ "GET /api/legislativo/notas-tecnicas/n1": { corpo: { ...nota(), ...(execucaoIa ? { "execucao-ia": execucaoIa } : {}) } } });
+      render(<PaginaNotaDoJuridico />);
+      await screen.findByText(/Rascunho produzido por IA/);
+      expect(screen.queryByRole("button", { name: "Reportar erro" }) !== null).toBe(execucaoIa !== undefined);
+      cleanup();
+    }
+  });
+
   it("'Usar como rascunho': explica o que acontece, faz o POST e leva ao pedido já com o rascunho", async () => {
     const c = mockar({ "GET /api/legislativo/notas-tecnicas/n1": { corpo: nota() }, [U]: { status: 201, corpo: pedidoNovo } });
     render(<PaginaNotaDoJuridico />);

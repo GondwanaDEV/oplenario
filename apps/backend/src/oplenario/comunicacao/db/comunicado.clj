@@ -116,6 +116,14 @@
              :from [:comunicacao.anexo]
              :where [:and [:= :ente_id ente-id] [:= :comunicado_id comunicado-id] [:= :id anexo-id]]}))
 
+(defn chaves-de-anexos
+  "Toda chave de blob que a Casa tem em `comunicacao.anexo`: [{:chave :retirado?}]. O comunicado nao tem
+  retirada de anexo: `retirado?` e' sempre false. Para a reconciliacao com o object storage."
+  [tx ente-id]
+  (mapv (fn [r] {:chave (:chave-objeto r) :retirado? false})
+        (linhas tx {:select [:chave_objeto] :from [:comunicacao.anexo]
+                    :where [:= :ente_id ente-id] :order-by [[:chave_objeto :asc]]})))
+
 (defn destinatario
   "A linha da pessoa na lista congelada do comunicado, ou nil (ela nao e' destinataria)."
   [tx ente-id comunicado-id identidade-id]

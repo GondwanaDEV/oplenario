@@ -157,7 +157,9 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
 - Identidade: e-SIC e LGPD mostram nome + CPF mascarado no SQL; a ouvidoria mostra só identificada/anônima (Lei 13.460
   art. 10 §7). Nenhuma rota do balcão é ferramenta do agente (dado pessoal → `[GAP]` do fornecedor de IA).
 - Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
-  sem texto).
+  sem texto). O botão também está no copiloto do relator, no do requerimento, no rascunho da ata, no do resumo cidadão
+  e na nota técnica do agente institucional (`/conferencias`, `/juridico/notas`; o satélite manda `execucao-ia` em
+  `registrar_nota_tecnica`, ADR-0013; nota anterior fica sem botão) (04/10/2026).
 - **Indeferir, ciência da prorrogação e anexos ENTREGUES (04/10/2026,
   [ADR-0022](docs/adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), aceita):**
   - indeferir e-SIC e LGPD com fundamentação obrigatória: ato próprio, conta como prazo cumprido, e o recurso do e-SIC
@@ -183,9 +185,6 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
   todas as páginas autenticadas; `middleware.test.ts` mede a lista contra as páginas em disco, então página nova sem
   entrada no gate reprova.
 - **Falta:**
-  - o botão de reportar na nota técnica (`/conferencias`, `/juridico/notas`): o satélite não envia o id da execução e
-    cobrir isso muda a ferramenta `registrar_nota_tecnica` (ADR-0013). Copiloto do relator, do requerimento, rascunho
-    da ata e do resumo cidadão já têm o botão (04/10/2026);
   - antivírus nos anexos;
   - a prova de que o requerente viu a prorrogação, que espera o e-mail;
   - o manifestante anônimo não tem canal para receber a justificativa da prorrogação.
