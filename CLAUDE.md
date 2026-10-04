@@ -47,8 +47,8 @@ não frente de trabalho:
 **O plano de execução da engenharia (`docs/11-plano-execucao-engenharia.md`) também acabou:
 as 8 fases F0–F7 estão mergeadas em `main`** — F0 plataforma base · F1 cadastros+identidade ·
 F2 resolvedor de fatos (o KEYSTONE) · F3 legislativo (8 eixos) · F4 sessões+tempo real (HERO) ·
-F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. 13 módulos,
-61 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
+F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. Ao fim da F7 eram 13
+módulos e 61 migrations; em 04/10/2026 são 121 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
 marcos MFE-1 a MFE-4 cumpridos.
 
 **Marcos de valor demonstrável:** M1 (a Casa existe), M2 (compliance vivo), M3 (coração
@@ -63,7 +63,7 @@ O detalhe rolling de cada fase vive nas memórias de sessão (`oplenario-f0-exec
 
 ## 3. ⚠️ Estado do cursor + primeira ação
 
-**Estado (19/07/2026):** o caminho crítico do plano de engenharia está cumprido. As frentes
+**Estado (04/10/2026):** o caminho crítico do plano de engenharia está cumprido. As frentes
 abertas, em ordem de importância:
 
 **1. Track IA — base comum ENTREGUE (26/09/2026); Faixas A e B são o maior bloco restante.** O satélite existe:
@@ -171,8 +171,13 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
     um por pessoa (`oplenario.interceptors/anexo-multipart`);
   - **complemento da resposta:** depois da janela, a secretaria acrescenta um texto imutável a um protocolo já
     respondido (`participacao.complemento`); não mexe em estado nem prazo e reabre por 10 minutos a janela de anexos da Casa.
+- **Login e gate (04/10/2026):** `?redirect=/.//host` não escapa mais da origem depois do login, e o middleware cobre
+  todas as páginas autenticadas; `middleware.test.ts` mede a lista contra as páginas em disco, então página nova sem
+  entrada no gate reprova.
 - **Falta:**
-  - o botão de reportar nas outras telas de IA (o id da execução não chega a elas);
+  - o botão de reportar na nota técnica (`/conferencias`, `/juridico/notas`): o satélite não envia o id da execução e
+    cobrir isso muda a ferramenta `registrar_nota_tecnica` (ADR-0013). Copiloto do relator, do requerimento, rascunho
+    da ata e do resumo cidadão já têm o botão (04/10/2026);
   - antivírus nos anexos;
   - a prova de que o requerente viu a prorrogação, que espera o e-mail;
   - o manifestante anônimo não tem canal para receber a justificativa da prorrogação.
