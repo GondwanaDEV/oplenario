@@ -158,8 +158,22 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
   art. 10 §7). Nenhuma rota do balcão é ferramenta do agente (dado pessoal → `[GAP]` do fornecedor de IA).
 - Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
   sem texto).
-- **Falta:** indeferir, anexos, ciência da justificativa da prorrogação ao requerente e o botão de reportar nas outras
-  telas de IA (o id da execução não chega a elas).
+- **Indeferir, ciência da prorrogação e anexos ENTREGUES (04/10/2026,
+  [ADR-0022](docs/adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), proposta à espera do "Confirmo"):**
+  - indeferir e-SIC e LGPD com fundamentação obrigatória: ato próprio, conta como prazo cumprido, e o recurso do e-SIC
+    continua cabendo;
+  - o requerente lê a prorrogação e a justificativa em `/meus-protocolos`; as rotas públicas por número de protocolo
+    não mostram a justificativa;
+  - anexos (`participacao.anexo`): a Casa anexa à resposta e o requerente ao próprio pedido, nos 10 minutos seguintes
+    ao ato, até 5 arquivos de 10 MB, tipos fechados e conferidos pelo conteúdo; baixam só a secretaria e o dono do
+    protocolo; a secretaria retira um anexo errado, com motivo;
+  - o upload (também o dos comunicados) confere o pedido antes de ler o corpo e tem teto de 4 envios simultâneos e de
+    um por pessoa (`oplenario.interceptors/anexo-multipart`).
+- **Falta:**
+  - o botão de reportar nas outras telas de IA (o id da execução não chega a elas);
+  - antivírus nos anexos e resposta complementar depois da janela de 10 minutos;
+  - a prova de que o requerente viu a prorrogação, que espera o e-mail;
+  - o manifestante anônimo não tem canal para receber a justificativa da prorrogação.
 
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
