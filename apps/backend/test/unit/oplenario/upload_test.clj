@@ -3,7 +3,8 @@
   sem regex recursiva: um nome de 10 mil caracteres nao pode derrubar a pilha) e a dependencia declarada do parser."
   (:require [clojure.edn :as edn]
             [clojure.test :refer [deftest is testing]]
-            [oplenario.interceptors :as it]))
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.arquivo :as arquivo]))
 
 (deftest filename-entre-aspas-com-escapes
   (is (= "folha 2025.pdf" (it/valor-do-filename "form-data; name=\"arquivo\"; filename=\"folha 2025.pdf\"")))
@@ -100,3 +101,38 @@
       (is (thrown? OutOfMemoryError (enter (ctx-de-upload quem (estoura))))
           "o erro sobe (nao vira 429 nem 503: nem a pessoa nem a vaga ficaram presas)"))
     (is (= it/max-envios-simultaneos (vagas-livres)))))
+
+;; ---------------------------------------------------------------- o teto do cabecalho de UMA parte (bytes, no parser)
+
+(defn- corpo-com-cabecalhos
+  "Um multipart com UMA parte de arquivo, `nome` no `filename`, e os `cabecalhos` da parte depois do Content-Disposition."
+  ^bytes [nome cabecalhos]
+  (.getBytes (str "--" fronteira "\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"" nome "\"\r\n"
+                  (apply str (map #(str % "\r\n") cabecalhos))
+                  "\r\n%PDF-1.7\r\n--" fronteira "--\r\n")
+             "UTF-8"))
+
+(defn- enviar [nome cabecalhos]
+  (let [{:keys [enter leave]} (it/anexo-multipart {:max-bytes 1024})
+        ctx (enter (ctx-de-upload (random-uuid) (java.io.ByteArrayInputStream. (corpo-com-cabecalhos nome cabecalhos))))]
+    (leave ctx)
+    ctx))
+
+(def ^:private tipo-docx "Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+(deftest nome-de-arquivo-longo-e-acentuado-passa
+  ;; o padrao da M5 corta o cabecalho da parte em 512 BYTES: um nome acima de ~410 bytes em UTF-8 voltava 400 "malformado".
+  ;; O Windows aceita nome de ate' 255 caracteres; com acento (2 bytes) ou travessao (3 bytes) ele passa dos 512.
+  (doseq [[caso nome] [["255 caracteres acentuados (2 bytes cada)" (str (apply str (repeat 251 "ç")) ".pdf")]
+                       ["255 caracteres de 3 bytes, o pior nome real" (str (apply str (repeat 251 "–")) ".pdf")]]]
+    (testing caso
+      (let [ctx (enviar nome [tipo-docx])]
+        (is (nil? (:response ctx)) (str "recusado: " (get-in ctx [:response :body])))
+        (is (= (arquivo/nome-de-arquivo nome) (get-in ctx [:request :anexo :nome])))))))
+
+(deftest cabecalho-de-parte-acima-do-teto-continua-recusado
+  ;; o teto subiu, mas segue bem abaixo dos 10 KB da faixa do CVE-2025-48976 (M1..M3): 4 KB num cabecalho da parte e' 400
+  (is (< it/max-bytes-do-cabecalho-da-parte 10240) "o teto nao pode voltar para a faixa do CVE")
+  (let [r (:response (enviar "oficio.pdf" [tipo-docx (str "X-Preenchimento: " (apply str (repeat 4096 "a")))]))]
+    (is (= 400 (:status r)))
+    (is (= "{\"erro\":\"O envio do arquivo veio malformado.\"}" (:body r)) "recusado pelo parser, nao por outra regra")))
