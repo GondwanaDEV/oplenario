@@ -2,7 +2,9 @@
   "PURO (kernel): o que e' comum a QUALQUER modulo que recebe um arquivo do navegador (anexos de comunicado, anexos do
   atendimento ao cidadao). So' as duas limpezas da borda: o nome de exibicao seguro e o tipo declarado. A REGRA de quais
   tipos o modulo aceita, quantos e quando e' do modulo (`logic` dele) — nao daqui."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str])
+  (:import (java.net URLEncoder)
+           (java.nio.charset StandardCharsets)))
 
 (set! *warn-on-reflection* true)
 
@@ -24,3 +26,12 @@
     (if (and t (re-matches #"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}" t))
       t
       "application/octet-stream")))
+
+(defn content-disposition
+  "O cabecalho do download SEMPRE como arquivo (`attachment`, nunca `inline`: o navegador nao renderiza o conteudo de quem
+  enviou), com o nome em ASCII (fallback) e em UTF-8 (RFC 5987). O nome ja' vem sem aspas nem controle
+  (`nome-de-arquivo`)."
+  [nome]
+  (let [ascii (str/replace nome #"[^\x20-\x7E]" "_")
+        utf8 (str/replace (URLEncoder/encode ^String nome StandardCharsets/UTF_8) "+" "%20")]
+    (str "attachment; filename=\"" ascii "\"; filename*=UTF-8''" utf8)))

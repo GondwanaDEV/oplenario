@@ -21,6 +21,19 @@
    [:dias-restantes [:maybe :int]]
    [:prorrogado :boolean]])
 
+(def AnexoOut
+  "Um arquivo anexado a resposta de um protocolo. SO' o que a tela precisa para listar e baixar: nome, tipo, tamanho,
+  de quem veio (`casa` = a secretaria, na resposta; `requerente` = quem pediu) e quando. NUNCA a chave no object
+  storage, o sha256 nem quem enviou (`enviado-por` e' auditoria da Casa). O nome e' conteudo de quem enviou (ja' limpo
+  de caminho e controle na borda): o consumidor escapa antes de renderizar."
+  [:map {:closed true}
+   [:id :string]
+   [:nome :string]
+   [:tipo-midia :string]
+   [:bytes :int]
+   [:origem [:enum "casa" "requerente"]]
+   [:enviado-em :string]])
+
 (def PessoaOut
   "Quem pediu (e-SIC/LGPD). O CPF ja' sai mascarado do banco: '***.456.789-**'."
   [:map {:closed true}
@@ -85,19 +98,21 @@
 (def AcoesEsicOut
   "O que cabe no estado atual (a tela nao deduz regra): responder o pedido, indeferi-lo com fundamentacao (LAI art. 11
   §1º II — mesma condicao do responder), prorrogar o prazo DO PEDIDO (LAI art. 11 §2º, uma vez) e decidir o recurso
-  pendente (o id dele)."
+  pendente (o id dele). `pode-anexar` = a Casa pode juntar arquivo a resposta: so' nos 10 minutos depois do ultimo ato de
+  resposta e abaixo de 5 anexos."
   [:map {:closed true}
    [:pode-responder :boolean]
    [:pode-indeferir :boolean]
    [:pode-prorrogar :boolean]
+   [:pode-anexar :boolean]
    [:recurso-pendente-id [:maybe :string]]])
 
 (def AcoesOuvidoriaOut
-  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean]])
+  [:map {:closed true} [:pode-responder :boolean] [:pode-arquivar :boolean] [:pode-prorrogar :boolean] [:pode-anexar :boolean]])
 
 (def AcoesLgpdOut
   "Responder e indeferir (LGPD art. 18 §4º) a solicitacao aberta: a mesma condicao."
-  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean]])
+  [:map {:closed true} [:pode-responder :boolean] [:pode-indeferir :boolean] [:pode-anexar :boolean]])
 
 (def DetalheEsicOut
   (into [:map {:closed true}
@@ -107,6 +122,7 @@
          [:requerente [:maybe PessoaOut]]
          [:recurso [:maybe RecursoOut]]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesEsicOut]]
         prazo))
 
@@ -118,6 +134,7 @@
          [:identificacao [:enum "anonima" "identificada"]]
          [:estado (km/enum-de logic/estados-manifestacao)]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesOuvidoriaOut]]
         prazo))
 
@@ -129,5 +146,6 @@
          [:estado (km/enum-de logic/estados-solicitacao-titular)]
          [:titular [:maybe PessoaOut]]
          [:historico [:vector EventoOut]]
+         [:anexos [:vector AnexoOut]]
          [:acoes AcoesLgpdOut]]
         prazo))

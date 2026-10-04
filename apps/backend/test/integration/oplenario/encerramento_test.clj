@@ -137,8 +137,10 @@
   shared e na filha de teste; blobs no `st`. `compartilhada` = uma pessoa com vinculo tambem em outra Casa."
   [ente marca st repo-aud compartilhada]
   (let [pessoa (random-uuid) remessa (random-uuid) anexo (random-uuid) seg (random-uuid)
+        pedido (random-uuid) anexo-atendimento (random-uuid)
         chave-remessa (str "remessas/" ente "/remessa_mensal_sim/2026-09/" marca ".bin")
-        chave-gravacao (str "gravacao/" ente "/" seg)]
+        chave-gravacao (str "gravacao/" ente "/" seg)
+        chave-anexo (str "atendimento/" ente "/" pedido "/" anexo-atendimento)]
     (swap! criados update :entes conj ente)
     (sql! "INSERT INTO cadastros.municipios (codigo_ibge, nome, uf, capital, populacao)
            VALUES ('2302008', 'Baturité', 'CE', false, 35000) ON CONFLICT DO NOTHING")
@@ -170,6 +172,11 @@
     (sql! "INSERT INTO sessoes.gravacao_segmento (id, ente_id, iniciou_em, motivo_inicio, container_bruto_uri, fonte_ingestao,
            lote_id) VALUES (?, ?, now(), 'inicio_sessao', ?, 'importacao_legado', ?)"
           (random-uuid) ente (str "gravacao/" ente "/staging") (random-uuid))
+    ;; o anexo da resposta a um pedido de e-SIC (participacao.anexo): tabela com ente_id e RLS entra no inventario sozinha; o
+    ;; blob `atendimento/<ente>/<protocolo>/<anexo>` e' achado pela convencao (a coluna `chave_objeto` nao e' ponteiro)
+    (sql! "INSERT INTO participacao.anexo (ente_id, id, objeto_tipo, objeto_id, origem, nome, tipo_midia, bytes, sha256,
+           chave_objeto, enviado_por) VALUES (?, ?, 'pedido_esic', ?, 'casa', ?, 'application/pdf', 10, ?, ?, ?)"
+          ente anexo-atendimento pedido (str "folha-" marca ".pdf") (apply str (repeat 64 "a")) chave-anexo pessoa)
     (sql! "INSERT INTO integracao_ia.orcamento_ia (id, ente_id, moeda, definido_por) VALUES (?, ?, 'BRL', 'operador')" (random-uuid) ente)
     (sql! "INSERT INTO auditoria.selo_diario (ente_id, dia, seq, selo) VALUES (?, '2026-09-30', 1, ?)" ente (str "selo-" marca))
     (sql! "INSERT INTO normas.norma (id, ente_id, camada, especie, titulo) VALUES (?, ?, 'casa', 'regimento_interno', ?)"
@@ -181,7 +188,7 @@
       (repo-auditoria/registrar! repo-aud {:ente-id ente :ator-tipo "pessoa" :identidade-id pessoa :papeis ["secretario"]
                                            :acao acao :classe "escrita" :decisao "permitido" :status-http 200
                                            :canal "web" :ip "10.0.0.1" :detalhe {:marca marca}}))
-    (doseq [k [chave-remessa chave-gravacao (str "folhas/" ente "/sessao/folha.pdf")]]
+    (doseq [k [chave-remessa chave-gravacao (str "folhas/" ente "/sessao/folha.pdf") chave-anexo]]
       (store/guardar! st k (.getBytes (str "conteudo " marca " " k)) "application/octet-stream"))
     ;; a CIDADA (so' vinculo de cidadao): segue uma materia e faz uma manifestacao ANONIMA a ouvidoria
     (let [cidada (random-uuid)]
@@ -302,6 +309,8 @@
       (is (str/includes? (texto (es "dados/cadastros/vereador.csv")) "\"Vereadora Casa-A \"\"Aspas\"\", vírgula\nquebra\""))
       (is (str/includes? (texto (es "dados/cadastros/ente.csv")) (str a)))
       (is (str/includes? (texto (es "dados/normas/norma.csv")) "Regimento da Casa-A"))
+      (is (str/includes? (texto (es "dados/participacao/anexo.csv")) "folha-Casa-A.pdf") "o anexo da resposta (participacao.anexo)")
+      (is (= 1 (get-in manifesto ["tabelas" "participacao.anexo"])))
       (is (= 5 (get-in manifesto ["tabelas" "auditoria.registro"])))
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_remessa"])) "a filha sem ente_id, pela FK")
       (is (= 1 (get-in manifesto ["tabelas" "teste_encerramento.anexo_nota"])) "e a neta")
@@ -334,6 +343,8 @@
       (is (some? (es (str "arquivos/remessas/" a "/remessa_mensal_sim/2026-09/Casa-A.bin"))))
       (is (some? (es (str "arquivos/folhas/" a "/sessao/folha.pdf"))) "achado pela convencao, sem referencia")
       (is (some #(str/starts-with? % (str "arquivos/gravacao/" a "/")) (keys es)))
+      (is (some #(str/starts-with? % (str "arquivos/atendimento/" a "/")) (keys es))
+          "o blob do anexo, achado pela convencao `atendimento/<ente>/...`")
       (is (= (count (filter #(str/starts-with? % "arquivos/") (keys es)))
              (get-in manifesto ["totais" "arquivos_da_casa"]))))
     (testing "a trilha: a corrente conferida na hora (ADR-0017) e os selos do dia"
@@ -511,7 +522,8 @@
       (is (= 5 (a-antes "auditoria.registro")))
       (is (= 1 (a-antes "auditoria.selo_diario")))
       (is (= 1 (a-antes "legislativo.protocolo_geral")))
-      (is (= 2 (a-antes "sessoes.gravacao_segmento")) "inclusive o staging"))
+      (is (= 2 (a-antes "sessoes.gravacao_segmento")) "inclusive o staging")
+      (is (= 1 (a-antes "participacao.anexo")) "o anexo da resposta (append-only)"))
     (testing "ZERO linhas de A em toda tabela com ente_id (varredura do catalogo) — so' ficam os eventos da Operacao"
       (let [depois (contagens a)]
         (is (= {"shared.outbox" 1} (into {} (filter (comp pos? val)) depois)) (pr-str (filter (comp pos? val) depois)))
@@ -542,7 +554,7 @@
       (is (= 1 (get-in r [:tabelas "identidade.identidade_externa"])))
       (is (contains? (:tabelas r) "paineis.pendencia") "a lista inteira do inventario, zeros inclusive")
       (is (= (reduce + (vals (:tabelas r))) (:linhas-total r)))
-      (is (= 3 (:objetos r)) "remessa + gravacao + folha")
+      (is (= 4 (:objetos r)) "remessa + gravacao + folha + o anexo do atendimento")
       (is (= 1 (:exportacoes-apagadas r)))
       (is (= [] (:objetos-fora-da-convencao r)))
       (is (true? (:realm-apagado? r)))

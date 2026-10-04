@@ -132,6 +132,8 @@
     :participacao/prorrogar-pedido
     ;; o indeferimento fundamentado (LAI art. 11 §1º II; LGPD art. 18 §4º): negar tambem e' responder, dentro do prazo
     :participacao/indeferir-pedido :participacao/indeferir-solicitacao
+    ;; o documento que acompanha a resposta (anexar e' parte de responder; baixar e' GET e ja' passa)
+    :participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia

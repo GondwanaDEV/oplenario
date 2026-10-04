@@ -784,6 +784,8 @@
                                                              repo-identidade ids))
                                         ;; ADR-0018: o recibo dos protocolos diz que a Casa esta' com o sistema restrito
                                         :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
+                                        ;; os anexos da resposta (e-SIC, ouvidoria, LGPD) vao ao object storage
+                                        :objeto-store objeto-store
                                         :relogio relogio-producao}))
         (into (transparencia-http/rotas {:auth auth :repo-transparencia repo-transparencia
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid

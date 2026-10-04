@@ -211,7 +211,7 @@
     (controllers/indeferir-pedido! *repo* relogio-do-ato sec fechado-id {:fundamentacao fundamentacao-esic})
     (controllers/responder-pedido! *repo* relogio-do-ato sec respondido-id {:corpo "Segue a folha."})
     (testing "aberto: as DUAS acoes cabem"
-      (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar true :recurso-pendente-id nil}
+      (is (= {:pode-responder true :pode-indeferir true :pode-prorrogar true :pode-anexar false :recurso-pendente-id nil}
              (:acoes (ver aberto-id)))))
     (testing "indeferido: historico `indeferimento` (e nao `resposta`), com o texto e quem agiu; nada mais cabe"
       (let [d (ver fechado-id)]
@@ -219,7 +219,7 @@
         (is (= [{:tipo "indeferimento" :texto fundamentacao-esic :por "Joana Secretaria"}]
                (map #(select-keys % [:tipo :texto :por]) (:historico d))))
         (is (false? (:aberto d)))
-        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :recurso-pendente-id nil}
+        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :pode-anexar true :recurso-pendente-id nil}
                (:acoes d)))
         (is (nil? (:dias-restantes d)) "encerrado: o prazo nao corre mais")))
     (testing "o respondido segue como `resposta`"
@@ -234,7 +234,7 @@
       (let [rec (controllers/interpor-recurso! *repo* relogio-do-ato (ator ente cidadao) fechado-id {:motivo "Recorro."})
             d (ver fechado-id)]
         (is (:aberto d))
-        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :recurso-pendente-id (str (:id rec))}
+        (is (= {:pode-responder false :pode-indeferir false :pode-prorrogar false :pode-anexar true :recurso-pendente-id (str (:id rec))}
                (:acoes d)))
         (is (= ["indeferimento" "recurso"] (map :tipo (:historico d))))))))
 
@@ -334,12 +334,12 @@
         {fechada-id :id} (solicitar! ente titular)
         ver (fn [id] (out-atendimento/lgpd->wire (controllers/atendimento-lgpd *repo* relogio-do-ato pessoas enc id)))]
     (controllers/indeferir-solicitacao! *repo* relogio-do-ato enc fechada-id {:fundamentacao fundamentacao-lgpd})
-    (is (= {:pode-responder true :pode-indeferir true} (:acoes (ver aberta-id))))
+    (is (= {:pode-responder true :pode-indeferir true :pode-anexar false} (:acoes (ver aberta-id))))
     (let [d (ver fechada-id)]
       (is (= "indeferida" (:estado d)))
       (is (= [{:tipo "indeferimento" :texto fundamentacao-lgpd :por "Camila Encarregada"}]
              (map #(select-keys % [:tipo :texto :por]) (:historico d))))
-      (is (= {:pode-responder false :pode-indeferir false} (:acoes d)))
+      (is (= {:pode-responder false :pode-indeferir false :pode-anexar true} (:acoes d)))
       (is (false? (:aberto d))))
     (let [fila (fn [situacao] (:itens (out-atendimento/fila->wire
                                         :lgpd situacao (controllers/fila-do-balcao *repo* relogio-do-ato enc :lgpd situacao))))]

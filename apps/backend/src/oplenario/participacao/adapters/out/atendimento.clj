@@ -20,6 +20,17 @@
   {:aberto (boolean (:aberto i)) :recebido-em (->str (:recibo-em i)) :prazo-vigente (->str (:prazo-vigente i))
    :dias-restantes (:dias-restantes i) :prorrogado (boolean (:prorrogado i))})
 
+(defn anexo->wire
+  "UM anexo (kebab) -> AnexoOut, por allowlist (nada de chave no object storage, sha256 nem `enviado-por`). Serve o 201 do
+  upload e a lista do detalhe."
+  [a]
+  (validar! wire/AnexoOut
+            {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a) :origem (:origem a)
+             :enviado-em (->str (:enviado-em a))}
+            "AnexoOut"))
+
+(defn- anexos [xs] (mapv anexo->wire xs))
+
 (defn- pessoa [p] (when p {:nome (:nome p) :cpf-mascarado (:cpf-mascarado p)}))
 
 (defn- item-esic [i]
@@ -63,9 +74,10 @@
                                 :prazo-vigente (->str (:prazo-vigente r)) :dias-restantes (:dias-restantes r)
                                 :prorrogado (boolean (:prorrogado r))})
                     :historico (mapv evento (:historico d))
+                    :anexos (anexos (:anexos d))
                     :acoes (let [a (:acoes d)]
                              {:pode-responder (boolean (:pode-responder a)) :pode-indeferir (boolean (:pode-indeferir a))
-                              :pode-prorrogar (boolean (:pode-prorrogar a))
+                              :pode-prorrogar (boolean (:pode-prorrogar a)) :pode-anexar (boolean (:pode-anexar a))
                               :recurso-pendente-id (->str (:recurso-pendente-id a))})}
                    (prazo d))
             "DetalheEsicOut"))
@@ -76,9 +88,10 @@
             (merge {:id (->str (:id d)) :protocolo (:protocolo d) :tipo (:tipo d) :assunto (:assunto d)
                     :descricao (:descricao d) :identificacao (:identificacao d) :estado (:estado d)
                     :historico (mapv evento (:historico d))
+                    :anexos (anexos (:anexos d))
                     :acoes (let [a (:acoes d)]
                              {:pode-responder (boolean (:pode-responder a)) :pode-arquivar (boolean (:pode-arquivar a))
-                              :pode-prorrogar (boolean (:pode-prorrogar a))})}
+                              :pode-prorrogar (boolean (:pode-prorrogar a)) :pode-anexar (boolean (:pode-anexar a))})}
                    (prazo d))
             "DetalheOuvidoriaOut"))
 
@@ -88,7 +101,9 @@
             (merge {:id (->str (:id d)) :protocolo (:protocolo d) :tipo (:tipo d) :detalhe (:detalhe d)
                     :estado (:estado d) :titular (pessoa (:titular d))
                     :historico (mapv evento (:historico d))
+                    :anexos (anexos (:anexos d))
                     :acoes {:pode-responder (boolean (get-in d [:acoes :pode-responder]))
-                            :pode-indeferir (boolean (get-in d [:acoes :pode-indeferir]))}}
+                            :pode-indeferir (boolean (get-in d [:acoes :pode-indeferir]))
+                            :pode-anexar (boolean (get-in d [:acoes :pode-anexar]))}}
                    (prazo d))
             "DetalheLgpdOut"))

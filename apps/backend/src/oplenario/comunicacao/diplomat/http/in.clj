@@ -4,15 +4,13 @@
   `lido` para o destinatario. Comunicado que o ator nao pode ver responde 404 (nao confirma que existe).
 
   `hoje` (o dia civil da Casa) e `agora` vem do relogio injetado, lidos aqui na borda via o controller."
-  (:require [clojure.string :as str]
-            [oplenario.comunicacao.adapters.in.comunicado :as adapters-in]
+  (:require [oplenario.comunicacao.adapters.in.comunicado :as adapters-in]
             [oplenario.comunicacao.adapters.out.comunicado :as adapters-out]
             [oplenario.comunicacao.controllers :as controllers]
             [oplenario.comunicacao.logic :as logic]
             [oplenario.http :as http]
-            [oplenario.interceptors :as it])
-  (:import (java.net URLEncoder)
-           (java.nio.charset StandardCharsets)))
+            [oplenario.interceptors :as it]
+            [oplenario.kernel.arquivo :as arquivo]))
 
 (set! *warn-on-reflection* true)
 
@@ -118,13 +116,6 @@
               :auditoria {:rotulo (:nome a) :recurso-tipo "comunicado" :recurso-id (str (:comunicado-id a))})
        nao-encontrado))))
 
-(defn- content-disposition
-  "attachment com o nome em ASCII (fallback) e em UTF-8 (RFC 5987) — o nome ja' vem sem aspas nem controle."
-  [nome]
-  (let [ascii (str/replace nome #"[^\x20-\x7E]" "_")
-        utf8 (str/replace (URLEncoder/encode ^String nome StandardCharsets/UTF_8) "+" "%20")]
-    (str "attachment; filename=\"" ascii "\"; filename*=UTF-8''" utf8)))
-
 (defn- baixar-anexo-handler [deps]
   (fn [req]
     (if-let [{:keys [anexo stream]} (let [id (adapters-in/id-do-path req :id)
@@ -133,7 +124,7 @@
       {:status 200
        :headers {"Content-Type" (:tipo-midia anexo)
                  "Content-Length" (str (:bytes anexo))
-                 "Content-Disposition" (content-disposition (:nome anexo))}
+                 "Content-Disposition" (arquivo/content-disposition (:nome anexo))}
        :body stream}
       nao-encontrado)))
 

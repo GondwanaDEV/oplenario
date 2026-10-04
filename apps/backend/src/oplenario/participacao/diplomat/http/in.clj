@@ -40,6 +40,7 @@
   sem inventar mais um segmento estatico."
   (:require [oplenario.http :as http]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.arquivo :as arquivo]
             [oplenario.participacao.adapters.in.arquivar-ouvidoria :as adapters-in-arquivar]
             [oplenario.participacao.adapters.in.atendimento :as adapters-in-atendimento]
             [oplenario.participacao.adapters.in.comentario :as adapters-in-comentario]
@@ -70,7 +71,8 @@
             [oplenario.participacao.adapters.out.resposta-esic :as adapters-out-resposta]
             [oplenario.participacao.adapters.out.resposta-ouvidoria :as adapters-out-resposta-ouvidoria]
             [oplenario.participacao.adapters.out.solicitacao-titular :as adapters-out-titular]
-            [oplenario.participacao.controllers :as controllers]))
+            [oplenario.participacao.controllers :as controllers]
+            [oplenario.participacao.logic.anexo :as anexo]))
 
 (set! *warn-on-reflection* true)
 
@@ -394,6 +396,72 @@
       (responder-op #(controllers/prorrogar-pedido! repo-participacao relogio (:ator req) id entrada)
                     adapters-out-resposta-ouvidoria/prorrogar-recibo->wire 200))))
 
+;; ---------- anexos da resposta (e-SIC, ouvidoria, LGPD): um arquivo por requisicao, multipart ----------
+
+(def ^:private anexo-multipart
+  "O interceptor do upload: o generico do host com o teto de 10 MB do anexo do atendimento (413 acima, 400 sem arquivo)."
+  (it/anexo-multipart {:max-bytes anexo/max-bytes-anexo}))
+
+(defn- erro-de-anexo
+  "Os conflitos de anexo -> a resposta nomeada em portugues (nunca 500). nil = nao e' conflito daqui."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/tipo-de-anexo
+    (http/json-resposta 415 {:erro (str "Tipo de arquivo não aceito. Aceitamos " anexo/descricao-dos-tipos
+                                        ", e a extensão do nome tem de combinar com o tipo do arquivo.")})
+    :conflito/anexo-sem-resposta
+    (http/json-resposta 409 {:erro "Este protocolo ainda não tem resposta da Casa: anexe depois de responder."})
+    :conflito/anexo-fora-da-janela
+    (http/json-resposta 409 {:erro "Os anexos vão junto com a resposta: os 10 minutos depois do último ato já passaram."})
+    :conflito/anexos-demais
+    (http/json-resposta 409 {:erro (str "Este protocolo já tem " anexo/max-anexos-da-casa " anexos da Casa.")})
+    nil))
+
+(defn- anexar-handler
+  "POST /atendimento/<especie>/:id/anexos (SERVIDOR, exige-papel; multipart, UM arquivo). 201 com o anexo (sem chave, sem
+  sha256, sem quem enviou); 404 protocolo inexistente/de outra Casa; 415 tipo fora da lista; 409 sem resposta, fora da
+  janela de 10 minutos ou 5 anexos; 413 acima de 10 MB (no interceptor)."
+  [repo-participacao objeto-store relogio especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [a (controllers/anexar-ao-atendimento! repo-participacao objeto-store relogio (:ator req) especie id (:anexo req))]
+          (assoc (http/json-resposta 201 (adapters-out-atendimento/anexo->wire a))
+                 :auditoria {:rotulo (str "anexo em " (:protocolo a)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
+                             :recurso-id (str id)})
+          (http/json-resposta 404 {:erro "protocolo nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e (or (erro-de-anexo e) (throw e)))))))
+
+(defn- baixar-resposta
+  "O anexo como ARQUIVO, sempre: `attachment` (o navegador nao renderiza o que a pessoa enviou) + nosniff, igual ao
+  download dos comunicados. nil -> 404 (uniforme: nao distingue 'nao existe' de 'nao e' seu')."
+  [achado]
+  (if-let [{a :anexo in :stream} achado]
+    {:status 200
+     :headers {"Content-Type" (:tipo-midia a)
+               "Content-Length" (str (:bytes a))
+               "Content-Disposition" (arquivo/content-disposition (:nome a))
+               "X-Content-Type-Options" "nosniff"}
+     :body in}
+    (http/json-resposta 404 {:erro "anexo nao encontrado"})))
+
+(defn- baixar-anexo-handler
+  "GET /atendimento/<especie>/:id/anexos/:anexo (SERVIDOR, exige-papel): o anexo do protocolo da Casa do ator."
+  [repo-participacao objeto-store especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))]
+      (baixar-resposta (controllers/baixar-anexo-do-atendimento repo-participacao objeto-store (:ator req) especie id aid)))))
+
+(defn- baixar-meu-anexo-handler
+  "GET /portal/meus-protocolos/<especie>/:id/anexos/:anexo (REQUERENTE, so-auth): o anexo do PROPRIO protocolo. Quem nao e'
+  o dono recebe 404 igual ao de 'nao existe'."
+  [repo-participacao objeto-store especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))]
+      (baixar-resposta (controllers/baixar-meu-anexo repo-participacao objeto-store (:ator req) especie id aid)))))
+
 (defn- encarregado-da-casa-handler
   "GET /lgpd/encarregado (SERVIDOR, exige-papel): o contato do Encarregado da Casa do ATOR, para o balcao mostrar e
   editar sem conhecer o id do ente (a tela interna nao o tem). A mesma projecao publica {nome, rotulo, email} — o
@@ -408,7 +476,7 @@
   "As rotas do balcao (SERVIDOR, exige-papel 'secretario'), FORA de /portal. `/atendimento/<especie>` e
   `/atendimento/<especie>/:id`: o nivel 2 e' sempre literal (esic|ouvidoria|lgpd) e o :id fica sozinho no nivel 3 —
   sem literal e wildcard no MESMO nivel (o prefix-tree do Pedestal 0.7 nao admite, ver a docstring do ns)."
-  [{:keys [auth repo-participacao relogio pessoas]}]
+  [{:keys [auth repo-participacao relogio pessoas objeto-store]}]
   (let [servidor (fn [& its] (into [auth (it/exige-papel "secretario")] its))]
     #{["/atendimento/esic" :get (servidor (fila-do-balcao-handler repo-participacao relogio :esic))
        :route-name :participacao/fila-esic]
@@ -434,7 +502,27 @@
        :route-name :participacao/encarregado-da-casa]
       ["/esic/pedidos/:id/prorrogar" :post
        (servidor it/corpo-json (prorrogar-pedido-handler repo-participacao relogio))
-       :route-name :participacao/prorrogar-pedido]}))
+       :route-name :participacao/prorrogar-pedido]
+      ;; os ANEXOS da resposta: irmaos do detalhe (`:id` e depois um literal — o prefix-tree aceita, como em
+      ;; `/comunicados/:id/anexos`). O upload e' multipart (nao `corpo-json`); o papel e' conferido ANTES de ler o corpo.
+      ["/atendimento/esic/:id/anexos" :post
+       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :esic))
+       :route-name :participacao/anexar-esic]
+      ["/atendimento/ouvidoria/:id/anexos" :post
+       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :ouvidoria))
+       :route-name :participacao/anexar-ouvidoria]
+      ["/atendimento/lgpd/:id/anexos" :post
+       (servidor anexo-multipart (anexar-handler repo-participacao objeto-store relogio :lgpd))
+       :route-name :participacao/anexar-lgpd]
+      ["/atendimento/esic/:id/anexos/:anexo" :get
+       (servidor (baixar-anexo-handler repo-participacao objeto-store :esic))
+       :route-name :participacao/baixar-anexo-esic]
+      ["/atendimento/ouvidoria/:id/anexos/:anexo" :get
+       (servidor (baixar-anexo-handler repo-participacao objeto-store :ouvidoria))
+       :route-name :participacao/baixar-anexo-ouvidoria]
+      ["/atendimento/lgpd/:id/anexos/:anexo" :get
+       (servidor (baixar-anexo-handler repo-participacao objeto-store :lgpd))
+       :route-name :participacao/baixar-anexo-lgpd]}))
 
 (defn rotas
   "Fragmento de rotas do modulo participacao (table syntax Pedestal). Recebe o interceptor `auth`
@@ -444,7 +532,7 @@
   do host (fn [ente-id] -> Instant|nil): o recibo dos protocolos do cidadao diz que a Casa esta' com o sistema restrito.
   `pessoas` (opcional) = seam do host do BALCAO (fn [identidade-ids] -> {id {:nome :cpf-mascarado}}, o CPF ja' mascarado
   no banco): o nome do requerente do e-SIC/titular LGPD e de quem respondeu. Sem ele, ninguem e' nomeado."
-  [{:keys [auth repo-participacao resolver-ente-publico relogio acesso-restrito-desde] :as deps}]
+  [{:keys [auth repo-participacao resolver-ente-publico relogio acesso-restrito-desde objeto-store] :as deps}]
   (into
    (rotas-do-balcao deps)
    #{["/portal/esic/pedidos" :post
@@ -454,6 +542,17 @@
      ["/portal/meus-protocolos" :get
       [auth (meus-protocolos-handler repo-participacao relogio)]
       :route-name :participacao/meus-protocolos]
+     ;; CIDADA: baixar o anexo que a Casa juntou a resposta do PROPRIO protocolo (so' o dono; qualquer outro, 404).
+     ;; Literal `esic|ouvidoria|lgpd` no nivel 3 e o `:id` so' no nivel 4: sem wildcard ao lado de literal.
+     ["/portal/meus-protocolos/esic/:id/anexos/:anexo" :get
+      [auth (baixar-meu-anexo-handler repo-participacao objeto-store :esic)]
+      :route-name :participacao/baixar-meu-anexo-esic]
+     ["/portal/meus-protocolos/ouvidoria/:id/anexos/:anexo" :get
+      [auth (baixar-meu-anexo-handler repo-participacao objeto-store :ouvidoria)]
+      :route-name :participacao/baixar-meu-anexo-ouvidoria]
+     ["/portal/meus-protocolos/lgpd/:id/anexos/:anexo" :get
+      [auth (baixar-meu-anexo-handler repo-participacao objeto-store :lgpd)]
+      :route-name :participacao/baixar-meu-anexo-lgpd]
      ["/portal/esic/pedidos/:id" :get
       [auth (meu-pedido-handler repo-participacao relogio)]
       :route-name :participacao/meu-pedido-esic]

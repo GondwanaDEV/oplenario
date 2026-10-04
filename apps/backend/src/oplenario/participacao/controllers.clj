@@ -5,11 +5,14 @@
   — determinismo em teste; nunca LocalDate/now direto. O `solicitante`/`created-by` sao INJETADOS do ATOR
   (§22.5: sem ator = proibido), NUNCA do corpo do cliente (anti-forge)."
   (:require [oplenario.kernel.autorizacao :as authz]
+            [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.ids :as ids]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.participacao.components.repositorio :as repo]
-            [oplenario.participacao.logic :as logic])
-  (:import (java.time ZoneId)))
+            [oplenario.participacao.logic :as logic]
+            [oplenario.participacao.logic.anexo :as anexo])
+  (:import (java.security MessageDigest)
+           (java.time ZoneId)))
 
 (set! *warn-on-reflection* true)
 
@@ -102,6 +105,12 @@
   [repo-participacao ator]
   (repo/pedidos-do-solicitante repo-participacao (:ente-id ator) (:identidade-id ator)))
 
+(defn- anexos-do-detalhe
+  "Os anexos como a OUTRA parte os ve: id, nome, tipo, tamanho, quem anexou (casa|requerente) e quando. Nunca a chave no
+  object storage, o sha256 nem quem enviou (identidade de servidor) — a chave e' interna e `enviado-por` e' auditoria."
+  [anexos]
+  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em]) anexos))
+
 (defn meus-protocolos
   "GET /portal/meus-protocolos — o que o `ator` protocolou NESTA Casa (a da sessao), cada item com vence-em
   EFETIVO e dias-restantes, pela mesma derivacao dos detalhes (meu-pedido/minha-solicitacao/minha-manifestacao).
@@ -112,12 +121,13 @@
   corpo do pedido)."
   [repo-participacao ator relogio]
   (let [com-prazo (fn [linhas]
-                    (mapv (fn [{:keys [item prazo resposta recurso prorrogacao]}]
+                    (mapv (fn [{:keys [item prazo resposta recurso prorrogacao anexos]}]
                             (cond-> (assoc item :vence-em (some-> prazo logic/vencimento-efetivo)
                                            :dias-restantes (dias-restantes-do-prazo relogio prazo)
                                            :resposta (some-> resposta (select-keys [:corpo :respondida-em]))
                                            :prorrogacao (some-> prorrogacao
-                                                                (select-keys [:de-data :para-data :justificativa :prorrogado-em])))
+                                                                (select-keys [:de-data :para-data :justificativa :prorrogado-em]))
+                                           :anexos (anexos-do-detalhe anexos))
                               recurso (assoc :recurso {:protocolo (:protocolo recurso) :estado (:estado recurso)
                                                        :recibo-em (:recibo-em recurso)
                                                        :resposta (some-> (:resposta recurso)
@@ -459,6 +469,12 @@
   (let [ids (vec (distinct (remove nil? ids)))]
     (if (and pessoas (seq ids)) (pessoas ids) {})))
 
+(defn- pode-anexar?
+  "A tela do balcao oferece anexar? So' dentro da janela de 10 minutos do ultimo ato de resposta e abaixo do limite de
+  anexos da Casa (a regra e' de `logic.anexo`; aqui so' junta o que o detalhe ja' leu com o relogio injetado)."
+  [especie dados anexos relogio]
+  (anexo/pode-anexar? (anexo/ultimo-ato-de-resposta especie dados) (count (anexo/da-casa anexos)) (tempo/agora relogio)))
+
 (defn- com-nomes
   "Troca o `:por-id` de cada entrada do historico pelo `:por` (o nome de quem agiu, ou nil)."
   [historico por-id]
@@ -493,7 +509,7 @@
   "O pedido e-SIC `id` para o balcao: o texto, o requerente (nome + CPF mascarado), o prazo que vale, o recurso (se
   houver), o historico (respostas, recurso e decisao, prorrogacao) e as acoes cabiveis. nil = inexistente na Casa."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [pedido prazo respostas recurso prorrogacoes]}
+  (when-let [{:keys [pedido prazo respostas recurso prorrogacoes anexos]}
              (repo/atendimento-esic repo-participacao (:ente-id ator) id)]
     (let [hoje        (hoje-civil relogio)
           aberto?     (logic/aberto-no-balcao? :esic {:estado (:estado pedido) :recurso recurso})
@@ -514,14 +530,17 @@
                             (merge (select-keys recurso [:id :protocolo :motivo :estado :recibo-em :decidido-em])
                                    (logic/leitura-do-prazo (:prazo recurso) (logic/recurso-pendente? recurso) hoje)))
               :historico  (com-nomes historico por-id)
-              :acoes      (logic/acoes-do-balcao :esic {:estado (:estado pedido) :recurso recurso :prazo prazo})}
+              :anexos     (anexos-do-detalhe anexos)
+              :acoes      (assoc (logic/acoes-do-balcao :esic {:estado (:estado pedido) :recurso recurso :prazo prazo})
+                                 :pode-anexar (pode-anexar? :esic {:estado (:estado pedido) :respostas respostas :recurso recurso}
+                                                            anexos relogio))}
              (logic/leitura-do-prazo (logic/prazo-vigente-esic {:prazo prazo :recurso recurso}) aberto? hoje)))))
 
 (defn atendimento-ouvidoria
   "A manifestacao `id` para o balcao: tipo, assunto, texto, SE e' identificada (nunca quem — Lei 13.460 art. 10 §7º),
   o prazo que vale, o historico (resposta ou arquivamento, prorrogacao) e as acoes cabiveis. nil = inexistente."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [manifestacao prazo respostas prorrogacoes]}
+  (when-let [{:keys [manifestacao prazo respostas prorrogacoes anexos]}
              (repo/atendimento-ouvidoria repo-participacao (:ente-id ator) id)]
     (let [aberto?   (logic/aberto-no-balcao? :ouvidoria manifestacao)
           ;; a mesma tabela guarda a resposta de merito e a justificativa do arquivamento (a linha so' tem um desfecho)
@@ -533,14 +552,17 @@
              {:aberto        aberto?
               :identificacao (logic/identificacao-da-manifestacao manifestacao)
               :historico     (com-nomes historico por-id)
-              :acoes         (logic/acoes-do-balcao :ouvidoria {:estado (:estado manifestacao) :prazo prazo})}
+              :anexos        (anexos-do-detalhe anexos)
+              :acoes         (assoc (logic/acoes-do-balcao :ouvidoria {:estado (:estado manifestacao) :prazo prazo})
+                                    :pode-anexar (pode-anexar? :ouvidoria {:estado (:estado manifestacao) :respostas respostas}
+                                                               anexos relogio))}
              (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
 
 (defn atendimento-lgpd
   "A solicitacao do titular `id` para o balcao: o direito pedido, o detalhe, o titular (nome + CPF mascarado), o prazo
   que vale, o historico e as acoes cabiveis. nil = inexistente."
   [repo-participacao relogio pessoas ator id]
-  (when-let [{:keys [solicitacao prazo respostas]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
+  (when-let [{:keys [solicitacao prazo respostas anexos]} (repo/atendimento-lgpd repo-participacao (:ente-id ator) id)]
     (let [aberto?   (logic/aberto-no-balcao? :lgpd solicitacao)
           ;; a mesma tabela guarda a resposta e a fundamentacao do indeferimento (a solicitacao so' tem um desfecho)
           tipo      (if (= "indeferida" (:estado solicitacao)) "indeferimento" "resposta")
@@ -551,7 +573,10 @@
              {:aberto    aberto?
               :titular   (get por-id titular)
               :historico (com-nomes historico por-id)
-              :acoes     (logic/acoes-do-balcao :lgpd {:estado (:estado solicitacao)})}
+              :anexos    (anexos-do-detalhe anexos)
+              :acoes     (assoc (logic/acoes-do-balcao :lgpd {:estado (:estado solicitacao)})
+                                :pode-anexar (pode-anexar? :lgpd {:estado (:estado solicitacao) :respostas respostas}
+                                                           anexos relogio))}
              (logic/leitura-do-prazo prazo aberto? (hoje-civil relogio))))))
 
 (defn prorrogar-pedido!
@@ -568,3 +593,96 @@
                :para-data (logic/vence-prorrogado-esic de-data) :justificativa justificativa
                :prorrogado-por (:identidade-id ator) :prorrogado-em (tempo/agora relogio)})
             (em-conflito! "pedido ja prorrogado ou prazo nao esta mais pendente" {:pedido-id id}))))))
+
+;; ========================= ANEXOS da resposta (e-SIC, ouvidoria, LGPD) =========================
+;; A resposta a um pedido costuma SER um documento. A secretaria anexa arquivos a resposta de um protocolo (os 10 minutos
+;; seguintes ao ultimo ato de resposta, ate' 5, so' os 9 tipos da allowlist); o requerente os baixa em /meus-protocolos.
+;; O arquivo sobe ao object storage ANTES da linha (a linha so' existe apontando para um blob que existe); se a linha for
+;; recusada, o blob sai. Padrao de comunicacao/controllers `anexar!`.
+
+(defn- conflito-de-anexo! [tipo msg & [info]] (throw (ex-info msg (merge {:tipo tipo} info))))
+
+(defn- hex [^bytes b] (apply str (map #(format "%02x" (bit-and (int %) 0xff)) b)))
+
+(defn- protocolo-para-anexar
+  "O protocolo `id` da `especie` NESTA Casa, com o que a regra de anexar precisa: {:protocolo :dados :anexos}, ou nil
+  (inexistente ou de outra Casa)."
+  [repo-participacao ente-id especie id]
+  (case especie
+    :esic      (when-let [d (repo/atendimento-esic repo-participacao ente-id id)]
+                 {:protocolo (get-in d [:pedido :protocolo])
+                  :dados {:estado (get-in d [:pedido :estado]) :respostas (:respostas d) :recurso (:recurso d)}
+                  :anexos (:anexos d)})
+    :ouvidoria (when-let [d (repo/atendimento-ouvidoria repo-participacao ente-id id)]
+                 {:protocolo (get-in d [:manifestacao :protocolo])
+                  :dados {:estado (get-in d [:manifestacao :estado]) :respostas (:respostas d)}
+                  :anexos (:anexos d)})
+    :lgpd      (when-let [d (repo/atendimento-lgpd repo-participacao ente-id id)]
+                 {:protocolo (get-in d [:solicitacao :protocolo])
+                  :dados {:estado (get-in d [:solicitacao :estado]) :respostas (:respostas d)}
+                  :anexos (:anexos d)})))
+
+(defn anexar-ao-atendimento!
+  "SERVIDOR (papel exigido na rota) anexa UM arquivo a resposta do protocolo `id` da `especie`. Ordem das recusas: nil =
+  protocolo inexistente/de outra Casa (404); tipo fora da lista ou extensao incoerente com o tipo ->
+  :conflito/tipo-de-anexo (415); sem resposta da Casa ainda -> :conflito/anexo-sem-resposta (409); passou a janela de 10
+  minutos do ultimo ato -> :conflito/anexo-fora-da-janela (409); a Casa ja' tem 5 -> :conflito/anexos-demais (409, na
+  conferencia e de novo DENTRO da tx, que serializa os envios do mesmo protocolo). O tamanho (10 MB) ja' foi limitado na
+  borda. `enviado-por` INJETADO do ator. Devolve o anexo (kebab) com o `:protocolo`, para a trilha."
+  [repo-participacao objeto-store relogio ator especie id {:keys [nome tipo-midia ^bytes conteudo]}]
+  (let [ente-id (:ente-id ator)
+        objeto-tipo (anexo/objeto-tipo-da-especie especie)]
+    (when-let [{:keys [protocolo dados anexos]} (protocolo-para-anexar repo-participacao ente-id especie id)]
+      (let [agora (tempo/agora relogio)
+            tipo (or (anexo/classificar nome tipo-midia)
+                     (conflito-de-anexo! :conflito/tipo-de-anexo "tipo de arquivo nao aceito" {:nome nome :declarado tipo-midia}))
+            ultimo (anexo/ultimo-ato-de-resposta especie dados)]
+        (when-not ultimo
+          (conflito-de-anexo! :conflito/anexo-sem-resposta "o protocolo ainda nao tem resposta da Casa"))
+        (when-not (anexo/na-janela? ultimo agora)
+          (conflito-de-anexo! :conflito/anexo-fora-da-janela "os anexos vao junto com a resposta: a janela de 10 minutos passou"))
+        (when (>= (count (anexo/da-casa anexos)) anexo/max-anexos-da-casa)
+          (conflito-de-anexo! :conflito/anexos-demais "o protocolo ja' tem o maximo de anexos da Casa"
+                              {:limite anexo/max-anexos-da-casa}))
+        (let [anexo-id (ids/novo-id)
+              chave (anexo/chave-do-anexo ente-id id anexo-id)
+              sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
+          (store/guardar! objeto-store chave conteudo tipo)
+          (try
+            (assoc (repo/anexar-ao-atendimento! repo-participacao ente-id
+                     {:id anexo-id :objeto-tipo objeto-tipo :objeto-id id :origem "casa" :nome nome :tipo-midia tipo
+                      :bytes (alength conteudo) :sha256 sha :chave-objeto chave :enviado-por (:identidade-id ator)}
+                     anexo/max-anexos-da-casa)
+                   :protocolo protocolo)
+            (catch Exception e
+              ;; a linha foi recusada (o limite atingido por um envio concorrente): nao deixa blob orfao
+              (try (store/remover! objeto-store chave) (catch Exception _ nil))
+              (throw e))))))))
+
+(defn baixar-anexo-do-atendimento
+  "SERVIDOR (papel exigido na rota) baixa o anexo `anexo-id` do protocolo `id` da `especie` NESTA Casa (a RLS isola):
+  {:anexo :stream} (o CHAMADOR fecha o stream), ou nil (protocolo/anexo inexistente ou de outra Casa -> 404)."
+  [repo-participacao objeto-store ator especie id anexo-id]
+  (when-let [a (repo/anexo-do-atendimento repo-participacao (:ente-id ator) (anexo/objeto-tipo-da-especie especie) id anexo-id)]
+    (when-let [in (store/abrir objeto-store (:chave-objeto a))]
+      {:anexo a :stream in})))
+
+(defn- dono-do-protocolo?
+  "O ator e' o REQUERENTE deste protocolo? e-SIC: o solicitante; LGPD: o titular; ouvidoria: o manifestante — e a
+  anonima nunca tem dono persistido (ninguem a baixa por aqui)."
+  [repo-participacao ator especie id]
+  (let [ente-id (:ente-id ator) eu (:identidade-id ator)]
+    (boolean
+     (and eu
+          (case especie
+            :esic      (some-> (repo/buscar-pedido repo-participacao ente-id id) :solicitante-identidade-id (= eu))
+            :lgpd      (some-> (repo/buscar-solicitacao-titular repo-participacao ente-id id) :titular-identidade-id (= eu))
+            :ouvidoria (when-let [m (repo/buscar-manifestacao repo-participacao ente-id id)]
+                         (and (not (:anonima m)) (= eu (:manifestante-identidade-id m)))))))))
+
+(defn baixar-meu-anexo
+  "O REQUERENTE baixa um anexo do PROPRIO protocolo: {:anexo :stream} ou nil. Quem nao e' o dono — e o protocolo que nao
+  existe — recebe o MESMO nil (404 uniforme: nao confirma que o protocolo existe nem de quem e')."
+  [repo-participacao objeto-store ator especie id anexo-id]
+  (when (dono-do-protocolo? repo-participacao ator especie id)
+    (baixar-anexo-do-atendimento repo-participacao objeto-store ator especie id anexo-id)))

@@ -36,6 +36,9 @@
     :participacao/prorrogar-pedido
     ;; o indeferimento fundamentado e' o outro jeito de responder (LAI art. 11 §1º II; LGPD art. 18 §4º): o prazo corre igual
     :participacao/indeferir-pedido :participacao/indeferir-solicitacao
+    ;; o documento que acompanha a resposta (a resposta a um pedido costuma SER um arquivo): anexar e' parte de responder.
+    ;; Baixar e' GET e ja' passa.
+    :participacao/anexar-esic :participacao/anexar-ouvidoria :participacao/anexar-lgpd
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
     :paineis/marcar-notificacao-lida
