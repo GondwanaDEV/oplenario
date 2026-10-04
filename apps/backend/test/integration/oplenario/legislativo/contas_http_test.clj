@@ -19,6 +19,7 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tempo :as tempo]
@@ -289,6 +290,20 @@
     (testing "tipo invalido -> 400; sem papel -> 403"
       (is (= 400 (:status (enviar-documento ente sec id "foto" "x.pdf" "x"))))
       (is (= 403 (:status (enviar-documento ente ver id "outro" "x.pdf" "x")))))))
+
+(deftest documento-com-nome-longo-e-acentuado-e-aceito
+  ;; a rota lia o upload pelo multipart do Ring, que corta o cabecalho da parte em 512 BYTES (commons-fileupload2 M5) e nao
+  ;; expoe o teto: um nome de 255 caracteres com acento (o maximo do Windows) voltava 400 "O envio do arquivo veio malformado."
+  (let [ente (random-uuid)
+        id (get-in (registrar! ente) [:corpo :id])]
+    (doseq [[caso nome] [["255 caracteres acentuados (2 bytes cada)" (str (apply str (repeat 251 "ç")) ".pdf")]
+                         ["255 caracteres de 3 bytes, o pior nome real" (str (apply str (repeat 251 "–")) ".pdf")]]]
+      (testing caso
+        (let [r (enviar-documento ente sec id "outro" nome "%PDF-1.4 anexo")]
+          (is (= 201 (:status r)) (str "recusado: " (:corpo r)))
+          (is (= (arquivo/nome-de-arquivo nome) (get-in r [:corpo :nome])) "o nome limpo da borda comum, com a extensao"))))
+    (testing "caractere de formato invisivel (U+202E inverte a direcao do nome na tela) sai do nome"
+      (is (= "recibofdp.pdf" (get-in (enviar-documento ente sec id "outro" "recibo\u202Efdp.pdf" "%PDF-1.4 x") [:corpo :nome]))))))
 
 (deftest parametros-so-o-admin-ente-muda
   (let [ente (random-uuid)]

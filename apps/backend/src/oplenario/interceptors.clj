@@ -340,7 +340,7 @@
   tela usa `arquivo`). O arquivo e' lido para memoria com teto de `max-bytes` (o object storage recebe os bytes e o
   sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/partes demais/malformado/vazio -> 400. Resultado em
   `(:request :anexo)` {:nome :tipo-midia :conteudo}. So' a PARTE GENERICA mora aqui: quais tipos o modulo aceita, quantos
-  e quando e' regra do `logic` de cada um (comunicacao, participacao). Nasceu em `comunicacao/diplomat/http/in` e foi
+  e quando e' regra do `logic` de cada um (comunicacao, participacao, legislativo/contas). Nasceu em `comunicacao/diplomat/http/in` e foi
   movida sem mudar o comportamento (`participacao` nao pode importar `comunicacao`, §22.10).
 
   ANTES de ler o corpo (nada disto toca o stream): `Content-Length` declarado acima do teto -> 413; e o TETO GLOBAL de envios
@@ -352,10 +352,13 @@
   proprio antes deste: o do modulo, que conhece a regra.
 
   O NOME do arquivo e' lido dos cabecalhos da parte em UTF-8 explicito (`nome-do-arquivo-da-parte`): um nome acentuado
-  passa em qualquer locale da JVM."
-  [{:keys [max-bytes]}]
+  passa em qualquer locale da JVM.
+
+  `:mensagem-do-teto` (opcional) troca o texto do 413 para o modulo que nao chama o arquivo de \"anexo\" (os documentos
+  das contas); sem ela, \"O anexo passa de N MB.\"."
+  [{:keys [max-bytes mensagem-do-teto]}]
   (let [mb (quot (long max-bytes) (* 1024 1024))
-        grande (str "O anexo passa de " mb " MB.")
+        grande (or mensagem-do-teto (str "O anexo passa de " mb " MB."))
         limite-do-corpo (+ (long max-bytes) folga-do-envelope)
         malformado "Envie um arquivo por vez (campo arquivo)."]
     {:name ::anexo-multipart
