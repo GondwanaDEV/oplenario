@@ -11,7 +11,7 @@ import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
 import type { ComposicaoSessaoOut, MinhaPresencaOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -142,6 +142,7 @@ export function usePlenario(
   const falaEventoSeqRef = useRef(0);
   const inscricaoEventoSeqRef = useRef(0);
   const votacaoEventoSeqRef = useRef(0);
+  const sessaoEventoSeqRef = useRef(0); // idem, para `sessao.transicionou` (ver `buscarSessao`)
   // O mesmo espelho síncrono para a precedência de `hidratarMinhaPresenca` — um MAPA por vereador (ver a
   // docstring de `presencaEventoSeq` em `EstadoPlenario`); imutável no reducer, então guardar a referência basta.
   const presencaEventoSeqRef = useRef<Record<string, number>>({});
@@ -152,6 +153,7 @@ export function usePlenario(
     let vivo = true;
     let ultimaRebusca = 0;
     let ultimaBuscaVotacao = 0;
+    let ultimaBuscaSessao = Date.now(); // a carga inicial (passo 1) já leu a sessão: a 1ª periódica é daqui a 30s
 
     // Fix round 1 (I3): guardas de in-flight INDEPENDENTES por rota (antes era um único `rebuscando`
     // compartilhado, preso até as DUAS buscas resolverem). Com um guarda só, uma `/tribuna` pendurada
@@ -162,6 +164,7 @@ export function usePlenario(
     let tribunaEmVoo = false;
     let votacaoEmVoo = false;
     let minhaPresencaEmVoo = false;
+    let sessaoEmVoo = false;
 
     const buscarQuorum = async () => {
       if (quorumEmVoo) return;
@@ -337,6 +340,37 @@ export function usePlenario(
       }
     };
 
+    /** Relê `GET /sessoes/:id` para o ESTADO da sessão (aberta/suspensa/encerrada…) — o único campo de
+     * `EstadoPlenario` que, depois da carga inicial, só o canal atualizava (`sessao.transicionou`). Uma queda
+     * maior que a retenção de ~5 min perdia a transição em silêncio e o telão seguia dizendo "aberta" sobre
+     * uma sessão encerrada. `seqNoDisparo` capturado ANTES do fetch — a MESMA precedência de
+     * `buscarVotacaoAberta`: uma transição ao vivo chegada com a resposta em voo vence o snapshot.
+     * Qualquer falha DEGRADA SEM MENTIR (mantém o que o SSE mostrou), como `buscarMinhaPresenca`. */
+    const buscarSessao = async () => {
+      if (sessaoEmVoo) return;
+      sessaoEmVoo = true;
+      const seqNoDisparo = sessaoEventoSeqRef.current;
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
+      try {
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}`, { token: token ?? undefined, signal, cache: "no-store" });
+        if (!vivo || !resp.ok) return;
+        const s = (await resp.json()) as SessaoOut;
+        if (!vivo) return;
+        setEstado((prev) => (prev ? hidratarSessao(prev, s, seqNoDisparo) : prev));
+      } catch {
+        // degrada: mantém o que o SSE mostrou
+      } finally {
+        limpar();
+        sessaoEmVoo = false;
+      }
+    };
+
+    const rehidratarSessao = () => {
+      if (!vivo) return;
+      ultimaBuscaSessao = Date.now();
+      void buscarSessao();
+    };
+
     const rehidratarMinhaPresenca = () => {
       if (!comMinhaPresenca || !vivo) return;
       void buscarMinhaPresenca();
@@ -408,6 +442,7 @@ export function usePlenario(
           falaEventoSeqRef.current = proximo.falaEventoSeq;
           inscricaoEventoSeqRef.current = proximo.inscricaoEventoSeq;
           votacaoEventoSeqRef.current = proximo.votacaoEventoSeq;
+          sessaoEventoSeqRef.current = proximo.sessaoEventoSeq;
           presencaEventoSeqRef.current = proximo.presencaEventoSeq;
           return proximo;
         });
@@ -440,6 +475,8 @@ export function usePlenario(
           void rehidratarVotacao();
         }
       }
+      // a periódica da sessão: só as telas que já têm esta rede de segurança (telão e cockpit)
+      if ((comQuorum || comVotacao) && Date.now() - ultimaBuscaSessao >= REBUSCA_PERIODICA_MS) rehidratarSessao();
       if (comMinhaPresenca && pedidoDeRebuscaMinhaPresenca) {
         pedidoDeRebuscaMinhaPresenca = false;
         rehidratarMinhaPresenca();
@@ -463,6 +500,7 @@ export function usePlenario(
         falaEventoSeqRef.current = 0;
         inscricaoEventoSeqRef.current = 0;
         votacaoEventoSeqRef.current = 0;
+        sessaoEventoSeqRef.current = 0;
         presencaEventoSeqRef.current = {};
       } catch (e) {
         if (!vivo || controller.signal.aborted) return;
@@ -551,6 +589,7 @@ export function usePlenario(
         // "demo-tres-consertos" #2b) segue a MESMA disciplina — uma queda que atravesse a retenção também
         // pode ter perdido a abertura/o encerramento de uma votação.
         if (tentativa > 0) {
+          rehidratarSessao();
           void rehidratar();
           void rehidratarVotacao();
           rehidratarMinhaPresenca();
