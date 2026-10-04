@@ -17,9 +17,9 @@
             [oplenario.http :as http]
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.interceptors :as it]
+            [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.idp-dev :as idp-dev]
-            [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.components.objeto-store :as store]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tempo :as tempo]
@@ -114,10 +114,10 @@
 
 (def ^:private fronteira "----contas-teste")
 
-(defn- enviar-documento [ente quem prestacao-id tipo nome conteudo]
+(defn- enviar-documento [ente quem prestacao-id tipo nome conteudo & {:keys [tipo-midia]}]
   (let [corpo (str "--" fronteira "\r\n"
                    "Content-Disposition: form-data; name=\"arquivo\"; filename=\"" nome "\"\r\n"
-                   "Content-Type: application/pdf\r\n\r\n"
+                   "Content-Type: " (or tipo-midia "application/pdf") "\r\n\r\n"
                    conteudo "\r\n"
                    "--" fronteira "--\r\n")
         r (pt/response-for *svc* :post (str "/contas/" prestacao-id "/documentos?tipo=" tipo)
@@ -304,6 +304,24 @@
           (is (= (arquivo/nome-de-arquivo nome) (get-in r [:corpo :nome])) "o nome limpo da borda comum, com a extensao"))))
     (testing "caractere de formato invisivel (U+202E inverte a direcao do nome na tela) sai do nome"
       (is (= "recibofdp.pdf" (get-in (enviar-documento ente sec id "outro" "recibo\u202Efdp.pdf" "%PDF-1.4 x") [:corpo :nome]))))))
+
+(deftest documento-acima-do-teto-e-tipo-declarado-longo
+  (let [ente (random-uuid)
+        id (get-in (registrar! ente) [:corpo :id])]
+    (testing "arquivo acima de 10 MB: 413 com o texto das contas (a tela fala em documento, nao em anexo)"
+      (let [r (enviar-documento ente sec id "outro" "grande.pdf" (apply str (repeat (inc (* 10 1024 1024)) "a")))]
+        (is (= 413 (:status r)))
+        (is (= "O documento passa de 10 MB." (get-in r [:corpo :erro])))))
+    (testing "tipo declarado valido na forma, mas acima dos 200 da coluna: guardado como octet-stream, nunca 500"
+      (let [r (enviar-documento ente sec id "outro" "x.pdf" "%PDF-1.4 x"
+                                :tipo-midia (str "application/" (apply str (repeat 120 "a"))))
+            longo (enviar-documento ente sec id "outro" "y.pdf" "%PDF-1.4 y"
+                                    :tipo-midia (str (apply str (repeat 110 "a")) "/" (apply str (repeat 110 "b"))))]
+        (is (= 201 (:status r)) "132 caracteres cabem")
+        (is (= 201 (:status longo)) (str "recusado: " (:corpo longo)))
+        (is (= "application/octet-stream"
+               (get-in (chamar ente sec :get (str "/contas/" id "/documentos/" (get-in longo [:corpo :id])))
+                       [:headers "Content-Type"])))))))
 
 (deftest parametros-so-o-admin-ente-muda
   (let [ente (random-uuid)]

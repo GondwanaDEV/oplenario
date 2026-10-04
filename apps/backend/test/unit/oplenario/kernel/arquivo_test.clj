@@ -16,7 +16,10 @@
   (is (= "application/pdf" (arquivo/tipo-de-midia "application/pdf; charset=binary")))
   (is (= "text/csv" (arquivo/tipo-de-midia "TEXT/CSV")))
   (is (= "application/octet-stream" (arquivo/tipo-de-midia "isto nao e tipo")))
-  (is (= "application/octet-stream" (arquivo/tipo-de-midia nil))))
+  (is (= "application/octet-stream" (arquivo/tipo-de-midia nil)))
+  ;; as tres colunas `tipo_midia` (comunicacao, participacao, contas) tem CHECK de 200: acima disso o INSERT dava 500
+  (is (= 200 (count (arquivo/tipo-de-midia (str (apply str (repeat 100 "a")) "/" (apply str (repeat 99 "b")))))))
+  (is (= "application/octet-stream" (arquivo/tipo-de-midia (str (apply str (repeat 100 "a")) "/" (apply str (repeat 100 "b")))))))
 
 (deftest o-download-e-sempre-attachment-com-o-nome-em-ascii-e-utf-8
   (is (= "attachment; filename=\"folha.pdf\"; filename*=UTF-8''folha.pdf" (arquivo/content-disposition "folha.pdf")))

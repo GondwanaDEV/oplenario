@@ -210,7 +210,7 @@
   correcao do CVE-2025-48976 (a faixa vulneravel aceitava 10 KB). Com 512, um nome de arquivo acima de ~410 bytes em
   UTF-8 voltava 400 \"malformado\": o Windows aceita nome de ate' 255 caracteres, e com acento (2 bytes) ou travessao
   (3 bytes) ele passa disso. 2048 cabe o pior nome real (255 x 3 = 765 bytes) com o tipo de midia mais longo, e fica 5x
-  abaixo da faixa do CVE. Vale so' para `anexo-multipart`: o multipart do Ring (documentos das contas) nao expoe o teto."
+  abaixo da faixa do CVE. Todo upload da aplicacao passa por `anexo-multipart`; o multipart do Ring nao expoe este teto."
   2048)
 
 (defn- separar-parametros

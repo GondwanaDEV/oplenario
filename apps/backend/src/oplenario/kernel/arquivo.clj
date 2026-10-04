@@ -10,6 +10,7 @@
 
 (def ^:private teto-do-nome 200)
 (def ^:private teto-da-extensao 20)
+(def ^:private teto-do-tipo-de-midia 200)
 
 (defn- cortar-preservando-a-extensao
   "Corta `nome` em `teto-do-nome` caracteres; se tem uma extensao razoavel (ate' `teto-da-extensao`), ela sobrevive ao corte:
@@ -37,10 +38,13 @@
     (if (str/blank? limpo) "anexo" limpo)))
 
 (defn tipo-de-midia
-  "O content-type declarado da parte, se tem a forma `tipo/subtipo`; senao octet-stream (o navegador baixa)."
+  "O content-type declarado da parte, se tem a forma `tipo/subtipo` e cabe em `teto-do-tipo-de-midia`; senao octet-stream
+  (o navegador baixa). O teto e' o CHECK das colunas `tipo_midia` (comunicacao, participacao, contas): sem ele, um tipo
+  valido na forma e longo demais estourava o INSERT (500) depois de o arquivo ja' estar no object storage."
   [s]
   (let [t (some-> s (str/split #";") first str/trim str/lower-case)]
-    (if (and t (re-matches #"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}" t))
+    (if (and t (<= (count t) teto-do-tipo-de-midia)
+             (re-matches #"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}" t))
       t
       "application/octet-stream")))
 
