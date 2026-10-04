@@ -5,6 +5,7 @@
 // rotas de servidor que já existiam no módulo participacao, com o corpo EXATO que cada uma aceita:
 //   · responder  — POST /api/esic/pedidos/{id}/resposta · /api/ouvidoria/manifestacoes/{id}/resposta ·
 //                  /api/lgpd/solicitacoes/{id}/resposta, todas {corpo}
+//   · indeferir  — POST /api/esic/pedidos/{id}/indeferir · /api/lgpd/solicitacoes/{id}/indeferir, ambas {fundamentacao}
 //   · recurso    — POST /api/esic/recursos/{id}/decisao {corpo}
 //   · prorrogar  — POST /api/esic/pedidos/{id}/prorrogar · /api/ouvidoria/manifestacoes/{id}/prorrogar, {justificativa}
 //   · arquivar   — POST /api/ouvidoria/manifestacoes/{id}/arquivar {motivo}
@@ -115,6 +116,23 @@ const RESPONDER: Record<Especie, (id: string) => string> = {
 /** Responder: devolve {respondidaEm}. */
 export function responder(token: string | null, especie: Especie, id: string, corpo: string) {
   return pedir<{ respondidaEm: string }>(token, RESPONDER[especie](id), "responder", { method: "POST", corpo: { corpo } });
+}
+
+/** Indeferir (recusa fundamentada: LAI art. 11 §1º II no e-SIC; LGPD art. 18 §4º): devolve o instante do ato
+ *  (`indeferidoEm` no pedido, `indeferidaEm` na solicitação — a chave segue o gênero do estado; aqui já normalizado). */
+export async function indeferir(
+  token: string | null,
+  especie: "esic" | "lgpd",
+  id: string,
+  fundamentacao: string,
+): Promise<Resultado<{ indeferidoEm: string }>> {
+  const caminho = especie === "esic" ? `/api/esic/pedidos/${enc(id)}/indeferir` : `/api/lgpd/solicitacoes/${enc(id)}/indeferir`;
+  const r = await pedir<{ indeferidoEm?: string; indeferidaEm?: string }>(token, caminho, "indeferir", {
+    method: "POST",
+    corpo: { fundamentacao },
+  });
+  if (!r.ok) return r;
+  return { ok: true, dado: { indeferidoEm: r.dado.indeferidoEm ?? r.dado.indeferidaEm ?? "" } };
 }
 
 /** Decidir o recurso do e-SIC: devolve {decididoEm}. */

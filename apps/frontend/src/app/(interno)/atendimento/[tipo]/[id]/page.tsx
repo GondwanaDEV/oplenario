@@ -28,7 +28,7 @@ import {
   tituloDoItem,
   type Especie,
 } from "@/lib/atendimento-vista";
-import { arquivar, decidirRecurso, prorrogar, responder, useDetalheAtendimento, type DetalheOut } from "@/lib/use-atendimento";
+import { arquivar, decidirRecurso, indeferir, prorrogar, responder, useDetalheAtendimento, type DetalheOut } from "@/lib/use-atendimento";
 import type { DetalheEsicOut, DetalheLgpdOut, DetalheOuvidoriaOut, PessoaOut } from "@/lib/contrato-atendimento.gen";
 import { GuardSecretaria } from "../../../guard-secretaria";
 import { TopoInterno } from "../../../topo";
@@ -43,7 +43,7 @@ export default function PaginaProtocolo() {
   );
 }
 
-type Acao = "responder" | "decidir-recurso" | "prorrogar" | "arquivar";
+type Acao = "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar";
 
 function Conteudo() {
   const { token } = useAuth();
@@ -174,6 +174,11 @@ const FORM: Record<Acao, { botao: string; rotulo: string; enviar: string; envian
     oQue: "a resposta", teto: TETO_RESPOSTA,
     aviso: "A resposta é definitiva: depois de enviada, encerra o protocolo e não pode ser editada.",
   },
+  indeferir: {
+    botao: "Indeferir", rotulo: "Fundamentação do indeferimento", enviar: "Revisar o indeferimento", enviando: "Enviando…",
+    oQue: "a fundamentação", teto: TETO_RESPOSTA,
+    aviso: "O indeferimento é definitivo: encerra o protocolo, não pode ser desfeito, e a pessoa lê a fundamentação. A lei exige que a recusa diga as razões — escreva o motivo e, se houver, o dispositivo legal.",
+  },
   "decidir-recurso": {
     botao: "Decidir o recurso", rotulo: "Decisão sobre o recurso", enviar: "Registrar a decisão", enviando: "Registrando…",
     oQue: "a decisão", teto: TETO_RESPOSTA, aviso: "A decisão é definitiva e encerra o recurso.",
@@ -200,10 +205,19 @@ function Acoes({ especie, d, token, aoConcluir }: {
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // o indeferimento é irreversível: um passo de confirmação mostra o texto que a pessoa vai ler antes de enviar
+  const [confirmando, setConfirmando] = useState(false);
 
-  const a = d.acoes as { podeResponder: boolean; podeProrrogar?: boolean; podeArquivar?: boolean; recursoPendenteId?: string | null };
+  const a = d.acoes as {
+    podeResponder: boolean;
+    podeIndeferir?: boolean;
+    podeProrrogar?: boolean;
+    podeArquivar?: boolean;
+    recursoPendenteId?: string | null;
+  };
   const cabem: Acao[] = [
     ...(a.podeResponder ? (["responder"] as const) : []),
+    ...(a.podeIndeferir ? (["indeferir"] as const) : []),
     ...(a.recursoPendenteId ? (["decidir-recurso"] as const) : []),
     ...(a.podeProrrogar ? (["prorrogar"] as const) : []),
     ...(a.podeArquivar ? (["arquivar"] as const) : []),
@@ -220,6 +234,7 @@ function Acoes({ especie, d, token, aoConcluir }: {
     setAcao(x);
     setTexto("");
     setErro(null);
+    setConfirmando(false);
   }
 
   async function enviar() {
@@ -230,16 +245,23 @@ function Acoes({ especie, d, token, aoConcluir }: {
     const r =
       acao === "responder"
         ? await responder(token, especie, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.respondidaEm } : x))
-        : acao === "decidir-recurso"
-          ? await decidirRecurso(token, a.recursoPendenteId!, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.decididoEm } : x))
-          : acao === "prorrogar"
-            ? await prorrogar(token, especie as "esic" | "ouvidoria", d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.prorrogadoAte } : x))
-            : await arquivar(token, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.arquivadaEm } : x));
+        : acao === "indeferir"
+          ? await indeferir(token, especie as "esic" | "lgpd", d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.indeferidoEm } : x))
+          : acao === "decidir-recurso"
+            ? await decidirRecurso(token, a.recursoPendenteId!, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.decididoEm } : x))
+            : acao === "prorrogar"
+              ? await prorrogar(token, especie as "esic" | "ouvidoria", d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.prorrogadoAte } : x))
+              : await arquivar(token, d.id, t).then((x) => (x.ok ? { ok: true as const, em: x.dado.arquivadaEm } : x));
     setEnviando(false);
     if (r.ok) {
       setAcao(null);
+      setConfirmando(false);
       aoConcluir(textoDoRecibo(acao, r.em, d.protocolo));
-    } else setErro(r.mensagem);
+    } else {
+      setErro(r.mensagem);
+      // o erro volta para o editor (com o texto intacto): quem escreveu a fundamentação não a perde antes de recarregar
+      setConfirmando(false);
+    }
   }
 
   return (
@@ -253,7 +275,23 @@ function Acoes({ especie, d, token, aoConcluir }: {
           ))}
         </div>
       )}
-      {acao && f && (
+      {acao && f && confirmando && (
+        <div className="atd-form" role="group" aria-label="Confirmar o indeferimento">
+          <p className="atd-aviso">
+            Você vai indeferir o {d.protocolo}. Esta ação é definitiva e não pode ser desfeita. A pessoa vai ler esta fundamentação:
+          </p>
+          <p className="atd-texto">{texto.trim()}</p>
+          <div className="atd-acoes">
+            <button type="button" className="btn btn-primaria" disabled={enviando} onClick={enviar}>
+              {enviando ? f.enviando : "Confirmar o indeferimento"}
+            </button>
+            <button type="button" className="btn btn-fantasma" disabled={enviando} onClick={() => setConfirmando(false)}>
+              Voltar e editar
+            </button>
+          </div>
+        </div>
+      )}
+      {acao && f && !confirmando && (
         <div className="atd-form" role="group" aria-label={f.botao}>
           <p className="atd-aviso">{f.aviso}</p>
           <div className="atd-campo">
@@ -264,7 +302,8 @@ function Acoes({ especie, d, token, aoConcluir }: {
           {falta && <p className="atd-falta">{falta}</p>}
           {erro && <p className="atd-erro" role="alert">{erro}</p>}
           <div className="atd-acoes">
-            <button type="button" className="btn btn-primaria" disabled={enviando || falta !== null} onClick={enviar}>
+            <button type="button" className="btn btn-primaria" disabled={enviando || falta !== null}
+              onClick={acao === "indeferir" ? () => setConfirmando(true) : enviar}>
               {enviando ? f.enviando : acao === "prorrogar" ? `${f.enviar} por mais ${dias} dias` : f.enviar}
             </button>
             <button type="button" className="btn btn-fantasma" disabled={enviando} onClick={() => setAcao(null)}>

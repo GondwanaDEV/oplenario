@@ -146,6 +146,8 @@ export function tituloDoEvento(e: EventoOut): string {
   switch (e.tipo) {
     case "resposta":
       return "Resposta da Casa";
+    case "indeferimento":
+      return "Indeferimento (fundamentação da Casa)";
     case "recurso":
       return `Recurso do requerente${e.protocolo ? ` (${e.protocolo})` : ""}`;
     case "decisao-recurso":
@@ -167,6 +169,7 @@ export type AcaoAtendimento =
   | "listar"
   | "abrir"
   | "responder"
+  | "indeferir"
   | "decidir-recurso"
   | "prorrogar"
   | "arquivar"
@@ -177,6 +180,7 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   listar: "",
   abrir: "",
   responder: "Este protocolo já foi respondido ou encerrado por outra pessoa. Recarregue para ver o que mudou.",
+  indeferir: "Este protocolo já foi respondido ou indeferido por outra pessoa. Recarregue para ver o que mudou.",
   "decidir-recurso": "Este recurso já foi decidido. Recarregue para ver a decisão.",
   prorrogar: "O prazo já foi prorrogado uma vez, ou não está mais correndo. A prorrogação só cabe uma vez, antes de vencer.",
   arquivar: "Esta manifestação já foi respondida ou arquivada. Recarregue para ver o que mudou.",
@@ -208,7 +212,7 @@ export function faltaNoTexto(texto: string, teto: number, oQue: string): string 
 
 /** O recibo que fica na tela depois de uma ação. */
 export function textoDoRecibo(
-  acao: "responder" | "decidir-recurso" | "prorrogar" | "arquivar",
+  acao: "responder" | "indeferir" | "decidir-recurso" | "prorrogar" | "arquivar",
   quandoIso: string,
   protocolo: string,
 ): string {
@@ -216,6 +220,8 @@ export function textoDoRecibo(
     return `Prazo do ${protocolo} prorrogado até ${formatarDataSimples(quandoIso)}. A nova data já aparece para quem acompanha o protocolo.`;
   const q = quando(quandoIso);
   if (acao === "arquivar") return `${protocolo} arquivado em ${q}. O motivo fica registrado no protocolo.`;
+  if (acao === "indeferir")
+    return `${protocolo} indeferido em ${q}. A fundamentação fica registrada no protocolo e a pessoa a lê em "Meus protocolos".`;
   if (acao === "decidir-recurso") return `Decisão do recurso do ${protocolo} registrada em ${q}.`;
   return `Resposta ao ${protocolo} registrada em ${q}.`;
 }

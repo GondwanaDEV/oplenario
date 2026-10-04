@@ -6,6 +6,7 @@ import {
   hrefDoPrazo,
   linhaDoPrazo,
   mensagemDeErroAtendimento,
+  rotuloEstado,
   seloDoPrazo,
   textoDoRecibo,
   tituloDoEvento,
@@ -50,6 +51,14 @@ describe("textos", () => {
     expect(tituloDoEvento({ tipo: "arquivamento", em: "2026-07-03T15:00:00Z", texto: "x", por: "Ana" })).toBe("Arquivada sem resposta de mérito");
   });
 
+  it("o indeferimento tem título próprio, distinto da resposta, e o estado sai em palavras (nunca o enum cru)", () => {
+    const e = { em: "2026-07-03T15:00:00Z", texto: "Dado pessoal de terceiro.", por: "Joana" } as const;
+    expect(tituloDoEvento({ ...e, tipo: "indeferimento" })).toBe("Indeferimento (fundamentação da Casa)");
+    expect(tituloDoEvento({ ...e, tipo: "indeferimento" })).not.toBe(tituloDoEvento({ ...e, tipo: "resposta" }));
+    expect(rotuloEstado("indeferido")).toBe("Indeferido");
+    expect(rotuloEstado("indeferida")).toBe("Indeferida");
+  });
+
   it("o vazio de cada fila concorda em gênero", () => {
     expect(vazioDaFila("ouvidoria", "abertos")).toBe("Nenhuma manifestação esperando resposta. Tudo em dia.");
     expect(vazioDaFila("esic", "respondidos")).toBe("Nenhum pedido de informação encerrado ainda.");
@@ -60,6 +69,9 @@ describe("textos", () => {
       "Prazo do ESIC-2026-000001 prorrogado até 25/07/2026. A nova data já aparece para quem acompanha o protocolo.",
     );
     expect(textoDoRecibo("responder", "2026-07-03T15:00:00Z", "ESIC-2026-000001")).toMatch(/^Resposta ao ESIC-2026-000001 registrada em \d{2}\/\d{2}\/2026/);
+    expect(textoDoRecibo("indeferir", "2026-07-03T15:00:00Z", "ESIC-2026-000001")).toMatch(
+      /^ESIC-2026-000001 indeferido em \d{2}\/\d{2}\/2026, .*A fundamentação fica registrada no protocolo/,
+    );
   });
 });
 
@@ -68,6 +80,8 @@ describe("erros e validação", () => {
     expect(mensagemDeErroAtendimento(403, "listar")).toMatch(/secretaria/);
     expect(mensagemDeErroAtendimento(409, "prorrogar")).toMatch(/só cabe uma vez/);
     expect(mensagemDeErroAtendimento(409, "responder")).toMatch(/já foi respondido/);
+    expect(mensagemDeErroAtendimento(409, "indeferir")).toMatch(/já foi respondido ou indeferido/);
+    expect(mensagemDeErroAtendimento(400, "indeferir")).toMatch(/Confira o texto/);
     expect(mensagemDeErroAtendimento(0, "responder")).toMatch(/Falha de rede/);
   });
 

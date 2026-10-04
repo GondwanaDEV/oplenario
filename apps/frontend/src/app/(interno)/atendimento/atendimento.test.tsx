@@ -277,6 +277,144 @@ describe("o protocolo /atendimento/[tipo]/[id]", () => {
     expect(c.find((x) => x.metodo === "POST")!.url).toBe("/api/lgpd/solicitacoes/s1/resposta");
   });
 
+  it("e-SIC: indeferir exige a fundamentação e um passo de confirmação; só então manda {fundamentacao}", async () => {
+    let indeferido = false;
+    const aberto = { "pode-responder": true, "pode-indeferir": true, "pode-prorrogar": true, "recurso-pendente-id": null };
+    const c = mockar({
+      "GET /api/atendimento/esic/p1": () => ({ corpo: indeferido
+        ? detalheEsic({ estado: "indeferido", aberto: false, "dias-restantes": null,
+            historico: [{ tipo: "indeferimento", em: "2026-07-03T15:00:00Z", texto: "Dado pessoal de terceiro (LAI art. 31).", por: "Joana" }],
+            acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": false, "recurso-pendente-id": null } })
+        : detalheEsic({ acoes: aberto }) }),
+      "POST /api/esic/pedidos/p1/indeferir": () => { indeferido = true; return { corpo: { "indeferido-em": "2026-07-03T15:00:00Z" } }; },
+    });
+    render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Contratos de 2025" });
+    fireEvent.click(screen.getByRole("button", { name: "Indeferir" }));
+    expect(screen.getByText(/definitivo/)).toBeTruthy();
+
+    const revisar = screen.getByRole("button", { name: "Revisar o indeferimento" }) as HTMLButtonElement;
+    expect(revisar.disabled).toBe(true);
+    expect(screen.getByText("Escreva a fundamentação.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "   " } });
+    expect(revisar.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "  Dado pessoal de terceiro (LAI art. 31).  " } });
+    expect(revisar.disabled).toBe(false);
+    fireEvent.click(revisar);
+
+    // o passo de confirmação: NADA foi enviado ainda; o texto que vai é o que o requerente lerá
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    const confirmar = screen.getByRole("group", { name: "Confirmar o indeferimento" });
+    expect(within(confirmar).getByText("Dado pessoal de terceiro (LAI art. 31).")).toBeTruthy();
+    expect(within(confirmar).getByText(/ESIC-2026-000007/)).toBeTruthy();
+
+    // dá para voltar e editar (o texto fica)
+    fireEvent.click(within(confirmar).getByRole("button", { name: "Voltar e editar" }));
+    expect((screen.getByLabelText("Fundamentação do indeferimento") as HTMLTextAreaElement).value).toMatch(/Dado pessoal de terceiro/);
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    const recibo = await screen.findByRole("status");
+    expect(recibo.textContent).toMatch(/ESIC-2026-000007 indeferido em/);
+    expect(within(recibo).getByRole("link", { name: "Voltar à fila" }).getAttribute("href")).toBe("/atendimento?aba=esic&token=tk");
+    const posts = c.filter((x) => x.metodo === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toBe("/api/esic/pedidos/p1/indeferir");
+    expect(posts[0].body).toEqual({ fundamentacao: "Dado pessoal de terceiro (LAI art. 31)." });
+
+    // recarregado: encerrado, sem nenhum botão de ação, e o historico distingue o indeferimento da resposta, sem enum cru
+    await waitFor(() => expect(screen.getByText("Este protocolo está encerrado: não há o que responder.")).toBeTruthy());
+    expect(screen.getByText("Indeferimento (fundamentação da Casa)")).toBeTruthy();
+    expect(screen.getByText("Dado pessoal de terceiro (LAI art. 31).")).toBeTruthy();
+    expect(screen.getByText("Indeferido")).toBeTruthy();
+    expect(screen.queryByText("indeferido")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
+  });
+
+  it("o botão Indeferir só aparece quando o servidor diz que cabe", async () => {
+    // acoes SEM `pode-indeferir` (servidor antigo) ou com false: nenhum botão — a tela nao deduz regra
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic() } });
+    const { unmount } = render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Contratos de 2025" });
+    expect(screen.getByRole("button", { name: "Responder" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
+    unmount();
+
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic({
+      acoes: { "pode-responder": true, "pode-indeferir": false, "pode-prorrogar": true, "recurso-pendente-id": null } }) } });
+    render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Contratos de 2025" });
+    expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
+  });
+
+  it("e-SIC com recurso pendente de pedido indeferido: decide o recurso, e não oferece indeferir de novo", async () => {
+    mockar({ "GET /api/atendimento/esic/p1": { corpo: detalheEsic({
+      estado: "indeferido",
+      recurso: { id: "r1", protocolo: "REC-2026-000001", motivo: "Só peço os valores agregados.", estado: "protocolado",
+        "recebido-em": "2026-07-04T12:00:00Z", "decidido-em": null, "prazo-vigente": "2026-07-14", "dias-restantes": 9, prorrogado: false },
+      acoes: { "pode-responder": false, "pode-indeferir": false, "pode-prorrogar": false, "recurso-pendente-id": "r1" },
+    }) } });
+    render(<PaginaProtocolo />);
+    expect(await screen.findByText("Só peço os valores agregados.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decidir o recurso" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Responder" })).toBeNull();
+  });
+
+  it("indeferir: o 409 vira frase (já respondido ou indeferido por outra pessoa) e o ato não vira recibo", async () => {
+    mockar({
+      "GET /api/atendimento/esic/p1": { corpo: detalheEsic({ acoes: { "pode-responder": true, "pode-indeferir": true, "pode-prorrogar": true, "recurso-pendente-id": null } }) },
+      "POST /api/esic/pedidos/p1/indeferir": { status: 409, corpo: { erro: "estado incompativel com a operacao" } },
+    });
+    render(<PaginaProtocolo />);
+    fireEvent.click(await screen.findByRole("button", { name: "Indeferir" }));
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Fora do escopo da LAI." } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/já foi respondido ou indeferido/);
+    expect(screen.queryByRole("status")).toBeNull();
+    // o erro leva de volta ao texto (nada se perde): a pessoa pode copiar a fundamentação antes de recarregar
+    expect((screen.getByLabelText("Fundamentação do indeferimento") as HTMLTextAreaElement).value).toBe("Fora do escopo da LAI.");
+  });
+
+  it("LGPD: indeferir vai para a solicitação, com a fundamentação confirmada", async () => {
+    estado.params = { tipo: "lgpd", id: "s1" };
+    const c = mockar({
+      "GET /api/atendimento/lgpd/s1": { corpo: {
+        id: "s1", protocolo: "LGPD-2026-000002", tipo: "eliminar", detalhe: "Apaguem meus dados.", estado: "protocolada",
+        titular: { nome: "Titular dos Dados", "cpf-mascarado": "***.111.222-**" }, historico: [],
+        acoes: { "pode-responder": true, "pode-indeferir": true }, ...prazo(5),
+      } },
+      "POST /api/lgpd/solicitacoes/s1/indeferir": { corpo: { "indeferida-em": "2026-07-03T16:00:00Z" } },
+    });
+    render(<PaginaProtocolo />);
+    expect(await screen.findByRole("heading", { name: "Eliminação de dados" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Indeferir" }));
+    fireEvent.change(screen.getByLabelText("Fundamentação do indeferimento"), { target: { value: "Dados mantidos por obrigação legal (LGPD art. 16, I)." } });
+    fireEvent.click(screen.getByRole("button", { name: "Revisar o indeferimento" }));
+    expect(c.some((x) => x.metodo === "POST")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar o indeferimento" }));
+    expect((await screen.findByRole("status")).textContent).toMatch(/LGPD-2026-000002 indeferido em/);
+    const post = c.find((x) => x.metodo === "POST")!;
+    expect(post.url).toBe("/api/lgpd/solicitacoes/s1/indeferir");
+    expect(post.body).toEqual({ fundamentacao: "Dados mantidos por obrigação legal (LGPD art. 16, I)." });
+  });
+
+  it("ouvidoria não ganha Indeferir (ela já tem Arquivar)", async () => {
+    estado.params = { tipo: "ouvidoria", id: "m1" };
+    mockar({ "GET /api/atendimento/ouvidoria/m1": { corpo: {
+      id: "m1", protocolo: "OUV-2026-000004", tipo: "denuncia", assunto: "Obra parada", descricao: "Na rua A.",
+      identificacao: "identificada", estado: "protocolada", historico: [],
+      acoes: { "pode-responder": true, "pode-arquivar": true, "pode-prorrogar": true }, ...prazo(20),
+    } } });
+    render(<PaginaProtocolo />);
+    await screen.findByRole("heading", { name: "Denúncia: Obra parada" });
+    expect(screen.queryByRole("button", { name: "Indeferir" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Arquivar sem resposta" })).toBeTruthy();
+  });
+
   it("fila que não existe no endereço: frase, sem buscar", () => {
     estado.params = { tipo: "moderacao", id: "x" };
     const c = mockar({});
