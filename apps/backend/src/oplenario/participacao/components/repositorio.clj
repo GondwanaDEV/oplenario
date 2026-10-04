@@ -13,6 +13,7 @@
   registro append-only de `db/prorrogacao` + emit, na MESMA tx (aborta sem escrever/emitir se a CAS nao
   transicionou — a 2a tentativa nao deixa rastro espurio)."
   (:require [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.participacao.db.atendimento :as db-atendimento]
             [oplenario.participacao.db.comentario :as db-comentario]
             [oplenario.participacao.db.denuncia-comentario :as db-denuncia]
             [oplenario.participacao.db.encarregado :as db-encarregado]
@@ -163,7 +164,25 @@
   (esic-cumprimento [this ente-id] "Cumprimento de prazo do e-SIC (FE Onda A1, §16.11).")
   (meus-protocolos [this ente-id identidade-id]
     "O que a pessoa protocolou nesta Casa, cada item com o seu prazo, numa UNICA tx: {:pedidos-esic
-    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora."))
+    :solicitacoes-lgpd :manifestacoes}, cada um [{:item :prazo}]. Manifestacao anonima fica de fora.")
+  ;; ---- BALCAO interno de atendimento (6.1/6.2/5.10): o que a secretaria le para responder ----
+  (fila-do-balcao [this ente-id especie situacao]
+    "A fila da `especie` (:esic|:ouvidoria|:lgpd) na `situacao` (abertos|respondidos|todos), numa tx: [{:item :prazo
+    :recurso?}] (ver db/atendimento — a ORDEM e o teto moram la').")
+  (atendimento-esic [this ente-id id]
+    "O pedido e-SIC inteiro para o balcao, numa tx: {:pedido :prazo :respostas :recurso (com :prazo e :respostas, ou
+    nil) :prorrogacoes} ou nil (inexistente no tenant).")
+  (atendimento-ouvidoria [this ente-id id]
+    "A manifestacao inteira para o balcao, numa tx: {:manifestacao :prazo :respostas :prorrogacoes} ou nil. A linha
+    traz o manifestante (a tabela o tem); quem o tira do caminho e' o controller, que nunca o le.")
+  (atendimento-lgpd [this ente-id id]
+    "A solicitacao do titular inteira para o balcao, numa tx: {:solicitacao :prazo :respostas} ou nil.")
+  (prorrogar-pedido! [this ente-id m]
+    "SERVIDOR — a prorrogacao do pedido e-SIC (LAI art. 11 §2º), pelo MESMO mecanismo generico de
+    `prorrogar-manifestacao!` (CAS 1x + registro append-only + emit), com objeto_tipo 'pedido_esic'. Devolve
+    {:prorrogado-ate} ou nil."))
+
+(declare prorrogar-prazo-impl)
 
 (defrecord RepoParticipacaoPg [datasource bus]
   RepoParticipacao
@@ -397,23 +416,7 @@
           (producers/emitir-manifestacao-arquivada! bus tx ente-id
             {:manifestacao-id manifestacao-id :protocolo (:protocolo manif) :arquivada-em (str arquivada-em)})
           {:arquivada-em arquivada-em :protocolo (:protocolo manif)}))))
-  (prorrogar-manifestacao! [this ente-id {:keys [prorrogacao-id objeto-tipo objeto-id de-data para-data
-                                                  justificativa prorrogado-por prorrogado-em]}]
-    (transacao this ente-id
-      (fn [tx]
-        ;; CAS PRIMEIRO (short-circuit): so registra/emite se DE FATO prorrogou (1x apenas — a CAS SQL exige
-        ;; pendente + prorrogado_ate ainda nil). nil = ja prorrogado/nao-pendente -> aborta sem escrever nada
-        ;; (a 2a tentativa NAO deixa rastro espurio na tabela de auditoria) — a borda desambigua p/ 409.
-        (when-let [prazo (db-prazo/prorrogar! tx {:ente-id ente-id :objeto-tipo objeto-tipo :objeto-id objeto-id
-                                                   :prorrogado-ate para-data})]
-          (db-prorrogacao/inserir! tx {:id prorrogacao-id :ente-id ente-id :objeto-tipo objeto-tipo
-                                       :objeto-id objeto-id :de-data de-data :para-data para-data
-                                       :justificativa justificativa :prorrogado-por prorrogado-por
-                                       :prorrogado-em prorrogado-em})
-          (producers/emitir-prazo-prorrogado! bus tx ente-id
-            {:objeto-tipo objeto-tipo :objeto-id objeto-id
-             :de-data (str de-data) :para-data (str para-data)})
-          {:prorrogado-ate (:prorrogado-ate prazo)}))))
+  (prorrogar-manifestacao! [this ente-id m] (prorrogar-prazo-impl this ente-id m))
   ;; ---- FAST-FOLLOW Slice 6: Comentarios/moderacao (feature 6.3) ----
   (comentar! [this ente-id {:keys [id proposicao-id autor-identidade-id corpo created-by]}]
     (transacao this ente-id
@@ -477,7 +480,65 @@
            :solicitacoes-lgpd (com-prazo "solicitacao_titular" db-resposta-titular/listar-da-solicitacao
                                          (db-solicitacao/listar-por-titular tx ente-id identidade-id))
            :manifestacoes     (com-prazo "manifestacao_ouvidoria" db-resposta-ouvidoria/listar-da-manifestacao
-                                         (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))})))))
+                                         (db-manifestacao/listar-por-manifestante tx ente-id identidade-id))}))))
+  ;; ---- BALCAO interno de atendimento ----
+  (fila-do-balcao [this ente-id especie situacao]
+    (transacao this ente-id
+      (fn [tx]
+        (case especie
+          :esic      (db-atendimento/fila-esic tx ente-id situacao)
+          :ouvidoria (db-atendimento/fila-ouvidoria tx ente-id situacao)
+          :lgpd      (db-atendimento/fila-lgpd tx ente-id situacao)))))
+  (atendimento-esic [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [pedido (db-pedido/buscar tx ente-id id)]
+          {:pedido       pedido
+           :prazo        (db-prazo/buscar-do-objeto tx ente-id "pedido_esic" id)
+           :respostas    (db-resposta/listar-do-pedido tx ente-id id)
+           :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "pedido_esic" id)
+           ;; V1: uma instancia de recurso por pedido (UNIQUE (pedido, instancia))
+           :recurso      (when-let [r (db-recurso/ultimo-do-pedido tx ente-id id)]
+                           (assoc r :prazo (db-prazo/buscar-do-objeto tx ente-id "recurso_esic" (:id r))
+                                    :respostas (db-resposta/listar-do-recurso tx ente-id (:id r))))}))))
+  (atendimento-ouvidoria [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [manif (db-manifestacao/buscar tx ente-id id)]
+          {:manifestacao manif
+           :prazo        (db-prazo/buscar-do-objeto tx ente-id "manifestacao_ouvidoria" id)
+           :respostas    (db-resposta-ouvidoria/listar-da-manifestacao tx ente-id id)
+           :prorrogacoes (db-prorrogacao/listar-do-objeto tx ente-id "manifestacao_ouvidoria" id)}))))
+  (atendimento-lgpd [this ente-id id]
+    (transacao this ente-id
+      (fn [tx]
+        (when-let [solic (db-solicitacao/buscar tx ente-id id)]
+          {:solicitacao solic
+           :prazo       (db-prazo/buscar-do-objeto tx ente-id "solicitacao_titular" id)
+           :respostas   (db-resposta-titular/listar-da-solicitacao tx ente-id id)}))))
+  (prorrogar-pedido! [this ente-id m]
+    (prorrogar-prazo-impl this ente-id (assoc m :objeto-tipo "pedido_esic"))))
+
+(defn- prorrogar-prazo-impl
+  "A prorrogacao GENERICA (generalizacao 0042 — qualquer objeto_tipo de prazo): ouvidoria (Lei 13.460 art. 10) e
+  e-SIC (LAI art. 11 §2º)."
+  [this ente-id {:keys [prorrogacao-id objeto-tipo objeto-id de-data para-data
+                        justificativa prorrogado-por prorrogado-em]}]
+  (transacao this ente-id
+    (fn [tx]
+      ;; CAS PRIMEIRO (short-circuit): so registra/emite se DE FATO prorrogou (1x apenas — a CAS SQL exige
+      ;; pendente + prorrogado_ate ainda nil). nil = ja prorrogado/nao-pendente -> aborta sem escrever nada
+      ;; (a 2a tentativa NAO deixa rastro espurio na tabela de auditoria) — a borda desambigua p/ 409.
+      (when-let [prazo (db-prazo/prorrogar! tx {:ente-id ente-id :objeto-tipo objeto-tipo :objeto-id objeto-id
+                                                 :prorrogado-ate para-data})]
+        (db-prorrogacao/inserir! tx {:id prorrogacao-id :ente-id ente-id :objeto-tipo objeto-tipo
+                                     :objeto-id objeto-id :de-data de-data :para-data para-data
+                                     :justificativa justificativa :prorrogado-por prorrogado-por
+                                     :prorrogado-em prorrogado-em})
+        (producers/emitir-prazo-prorrogado! (:bus this) tx ente-id
+          {:objeto-tipo objeto-tipo :objeto-id objeto-id
+           :de-data (str de-data) :para-data (str para-data)})
+        {:prorrogado-ate (:prorrogado-ate prazo)}))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource + :bus via `using`)."

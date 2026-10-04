@@ -52,12 +52,17 @@
               :paragrafos-sem-fonte [] :incerteza "normal" :modelo "fake-1" :contaminado false}
    :indisponivel nil})
 
-(defn- ia [pedidos & {:keys [fora?]}]
+(defn- ia [pedidos & {:keys [fora? existe?] :or {existe? true}}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify plataforma-ia/PlataformaIA
     (executar-agente [_ ente-id pedido]
       (swap! pedidos conj [ente-id pedido])
-      (if fora? (throw (ex-info "fora" {:tipo :ia/indisponivel :motivo "teste"})) resposta-ia))))
+      (if fora? (throw (ex-info "fora" {:tipo :ia/indisponivel :motivo "teste"})) resposta-ia))
+    (reportar-erro [_ ente-id execucao-id pedido]
+      (swap! pedidos conj [ente-id execucao-id pedido])
+      (cond fora? (throw (ex-info "fora" {:tipo :ia/indisponivel :motivo "teste"}))
+            existe? {:execucao-id execucao-id :reportado true}
+            :else nil))))
 
 (defn- servico [plataforma & {:keys [repo-integracao-ia]}]
   (let [auth (it/autenticacao (idp-dev/idp-dev) (repo))]
@@ -71,6 +76,14 @@
                    :headers {"Content-Type" "application/json"
                              "Authorization" (str "Bearer " (json/write-value-as-string
                                                              {:sub "u" :ente-id (str ente) :identidade-id (str iid)}))}
+                   :body (json/write-value-as-string corpo)))
+
+(defn- reportar [svc ente iid execucao-id corpo]
+  (pt/response-for svc :post (str "/ia/execucoes/" execucao-id "/reportes")
+                   :headers (cond-> {"Content-Type" "application/json"}
+                              iid (assoc "Authorization"
+                                         (str "Bearer " (json/write-value-as-string
+                                                         {:sub "u" :ente-id (str ente) :identidade-id (str iid)}))))
                    :body (json/write-value-as-string corpo)))
 
 (defn- eventos [body]
@@ -90,6 +103,8 @@
     (is (= ["passo" "resposta" "fim"] (map first evs)))
     (is (= "situacao_da_materia" (get-in (first evs) [1 "ferramenta"])))
     (is (= "conferida" (get-in (second evs) [1 "citacoes" 0 "status"])))
+    (is (= "e1" (get-in (second evs) [1 "execucao-ia"]))
+        "feature 8.4: o id da execucao NA IA vai a tela, para o 'reportar erro' (o `fim` segue com o da credencial)")
     (let [[ente-ia {:keys [credencial correlation_id pergunta]}] (first @pedidos)]
       (is (= ente ente-ia) "a Casa vem do ator, nunca do corpo")
       (is (= "Qual a situacao do PL 12/2026?" pergunta))
@@ -143,3 +158,41 @@
     (is (= ["passo" "proposta" "resposta" "fim"] (map first evs)))
     (is (= {"titulo" "Protocolar o requerimento “X”" "ritual" "assinatura"}
            (select-keys (second (second evs)) ["titulo" "ritual"])))))
+
+(def ^:private eid-ia "5b0c1c9e-2f4e-4d7a-9d43-0f6f3c2a7e11")
+
+(deftest reportar-erro-da-ia-vai-ao-satelite-com-a-casa-e-a-pessoa-da-sessao
+  ;; Feature 8.4: a tela diz que a resposta esta' errada; o core repassa ao registro da Camada de Confianca do satelite
+  (let [ente (random-uuid)
+        iid (pessoa! ente "vereador")
+        pedidos (atom [])
+        svc (servico (ia pedidos))
+        r (reportar svc ente iid eid-ia {:categoria "citacao_errada"})]
+    (is (= 200 (:status r)))
+    (is (= {"reportado" true} (json/read-value (:body r))))
+    (is (= [[ente eid-ia {:quem (str iid) :categoria "citacao_errada"}]] @pedidos)
+        "a Casa e a pessoa saem da sessao, nunca do corpo")
+    (testing "a mesma confirmacao de novo (o satelite nao conta duas vezes)"
+      (is (= 200 (:status (reportar svc ente iid eid-ia {:categoria "outro"})))))))
+
+(deftest reportar-erro-so-com-o-vocabulario-e-id-valido
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        pedidos (atom [])
+        svc (servico (ia pedidos))]
+    (is (= 400 (:status (reportar svc ente iid eid-ia {:categoria "inventou o artigo 45"}))) "sem texto livre")
+    (is (= 400 (:status (reportar svc ente iid eid-ia {}))))
+    (is (= 400 (:status (reportar svc ente iid eid-ia {:categoria "outro" :texto "x"}))) "campo a mais")
+    (is (= 400 (:status (reportar svc ente iid "nao-e-uuid" {:categoria "outro"}))))
+    (is (= 401 (:status (reportar svc ente nil eid-ia {:categoria "outro"}))))
+    (is (empty? @pedidos) "nada chega ao satelite")))
+
+(deftest reportar-erro-execucao-de-outra-casa-e-ia-fora
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")]
+    (testing "o satelite nao acha a execucao nesta Casa -> 404"
+      (is (= 404 (:status (reportar (servico (ia (atom []) :existe? false)) ente iid eid-ia {:categoria "outro"})))))
+    (testing "IA fora -> 503 honesto, nunca 500"
+      (let [r (reportar (servico (ia (atom []) :fora? true)) ente iid eid-ia {:categoria "outro"})]
+        (is (= 503 (:status r)))
+        (is (re-find #"Tente de novo" (get (json/read-value (:body r)) "erro")))))))

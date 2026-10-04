@@ -19,6 +19,7 @@ import { rotuloSessao } from "./inicio-vista";
 import { diaLocal, horaLocal, FUSO_DA_CASA } from "./calendario-vista";
 import { formatarData } from "./formatar-data";
 import { rotularObjetoPrazo } from "./mesa-vista";
+import { hrefDoPrazo } from "./atendimento-vista";
 import { rotularObrigacao } from "./rotulos-compliance";
 import { ESTADOS_AGUARDANDO_PAUTA } from "./proposicoes-vista";
 
@@ -357,7 +358,10 @@ function montarFila(e: EntradaCentral, focoId: string | null): FilaCentral {
           id: `pend-${p.objetoTipo}-${p.objetoId}`, gravidade: "legal", icone: "prazo",
           titulo: `${rotularObjetoPrazo(p.objetoTipo)} ${p.protocolo}`, contexto: null,
           prazo: textoPrazo(diasAte(p.venceEm, e.agoraIso)),
-          acao: { rotulo: "Ver prazos", href: "/paineis/mesa" },
+          // o balcão de atendimento é onde se responde; tipo desconhecido segue para os prazos da Mesa
+          acao: hrefDoPrazo(p.objetoTipo, p.objetoId)
+            ? { rotulo: "Responder", href: hrefDoPrazo(p.objetoTipo, p.objetoId)! }
+            : { rotulo: "Ver prazos", href: "/paineis/mesa" },
         },
       });
     }

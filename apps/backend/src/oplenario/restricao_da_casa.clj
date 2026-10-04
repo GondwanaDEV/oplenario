@@ -33,6 +33,7 @@
     ;; os servidores respondendo aos protocolos do cidadao (prazo legal correndo)
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao
     :participacao/prorrogar-manifestacao :participacao/arquivar-manifestacao :participacao/responder-solicitacao
+    :participacao/prorrogar-pedido
     :participacao/moderar-comentario
     ;; ler a propria caixa de notificacoes (marcar como lida nao e' ato da Casa)
     :paineis/marcar-notificacao-lida

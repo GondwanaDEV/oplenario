@@ -67,6 +67,12 @@ class RegistroPostgres:
             (desde, ate),
         )
 
+    def eventos_da_execucao(self, ente_id: str, execucao_id: str) -> list[Evento]:
+        return self._ler(
+            "SELECT corpo FROM ia.registro_evento WHERE ente_id = %s AND corpo->>'execucao_id' = %s ORDER BY id",
+            (ente_id, execucao_id),
+        )
+
     def gasto_desde(self, ente_id: str, desde: datetime) -> Decimal:
         with self._conectar() as c:
             r = c.execute(

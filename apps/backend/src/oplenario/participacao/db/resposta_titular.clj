@@ -28,6 +28,6 @@
   {:pre [(some? ente-id) (some? solicitacao-id)]}
   (comum/linhas->kebab
    (jdbc/execute! tx
-     (sql/format {:select [:id :solicitacao_id :corpo :respondida_em] :from [:participacao.resposta_titular]
+     (sql/format {:select [:id :solicitacao_id :corpo :respondido_por :respondida_em] :from [:participacao.resposta_titular]
                   :where [:and [:= :ente_id ente-id] [:= :solicitacao_id solicitacao-id]]
                   :order-by [[:respondida_em :asc] [:id :asc]]}))))

@@ -149,6 +149,18 @@ resposta ao "servidor de e-mail" do Daouda é uma caixa DENTRO do sistema, sem e
   - e-mail/push (quando houver SMTP);
   - a convocação oficial de sessão (4.15), que espera a resposta jurídica sobre a prova.
 
+**Balcão de atendimento ao cidadão ENTREGUE (04/10/2026):** a secretaria vê e responde em `/atendimento` o que o
+cidadão protocola no portal — antes só havia as rotas de escrita, sem lista nem tela.
+- Filas e-SIC · Ouvidoria · LGPD (`GET /atendimento/{esic,ouvidoria,lgpd}`, papel `secretario`), abertos pelo prazo que
+  vence primeiro; detalhe com histórico e só as ações que cabem no estado (responder, decidir recurso, prorrogar, arquivar).
+- Prorrogação do e-SIC (LAI art. 11 §2º, +10 dias, uma vez) e `GET /lgpd/encarregado` para editar o contato do DPO.
+- Identidade: e-SIC e LGPD mostram nome + CPF mascarado no SQL; a ouvidoria mostra só identificada/anônima (Lei 13.460
+  art. 10 §7). Nenhuma rota do balcão é ferramenta do agente (dado pessoal → `[GAP]` do fornecedor de IA).
+- Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
+  sem texto).
+- **Falta:** indeferir, anexos, ciência da justificativa da prorrogação ao requerente e o botão de reportar nas outras
+  telas de IA (o id da execução não chega a elas).
+
 **3. Onda E da track FE — MEDIDA em 10/09/2026, e a cauda NÃO é trabalho mecânico.** A descrição
 anterior deste item ("~13 telas com design pronto e zero rota Next… trabalho mecânico, o design já foi
 pago") estava **errada**, e errada de um jeito caro: mandaria 12 agentes portar telas que não têm API

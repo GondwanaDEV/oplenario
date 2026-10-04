@@ -55,6 +55,23 @@
               (jdbc/execute! conn
                 (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:in :id ids]})))))))
 
+(defn com-cpf-mascarado-por-ids
+  "Balcao de atendimento (e-SIC/LGPD): ids -> {id {:nome :cpf-mascarado}}, numa consulta so'. O CPF sai MASCARADO DO
+  BANCO ('***.456.789-**': os 3 primeiros e os 2 ultimos digitos nunca chegam a memoria) — leitura estreita como
+  `nomes-por-ids`, por construcao. Supratenant: o CHAMADOR ja' restringiu os ids aos requerentes da Casa (sob RLS).
+  Vazio nao vai ao banco."
+  [conn ids]
+  (let [ids (vec (distinct (remove nil? ids)))]
+    (if (empty? ids)
+      {}
+      (into {} (map (fn [l] [(:id l) {:nome (:nome l) :cpf-mascarado (:cpf-mascarado l)}]))
+            (comum/linhas->kebab
+              (jdbc/execute! conn
+                (sql/format {:select [:id :nome
+                                      [[:raw "'***.' || substr(cpf, 4, 3) || '.' || substr(cpf, 7, 3) || '-**'"]
+                                       :cpf_mascarado]]
+                             :from [:identidade.identidade] :where [:in :id ids]})))))))
+
 (defn existe?
   "Leitura ESTREITA (nem :nome, nem :cpf — so' um booleano) — usada pelo guard `identidade-existe?`
   default de `rotas.clj`, que backa `PATCH /cadastros/vereadores/:id/identidade` e so' precisa saber SE

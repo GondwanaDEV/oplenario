@@ -151,6 +151,21 @@ describe("SecaoFicha", () => {
     expect(lista.querySelectorAll("li.cmt").length).toBe(1);
   });
 
+  it("cada comentário oferece 'Denunciar' (feature 6.3) — sem sessão, leva ao gov.br e volta à matéria", async () => {
+    mockFetch((url) => ({
+      ok: true,
+      json: async () =>
+        url.endsWith("/comentarios")
+          ? [{ id: "c1", corpo: "Apoio o projeto.", "criado-em": "2026-06-01T00:00:00Z" }]
+          : fichaFake,
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    const link = await screen.findByRole("link", { name: /denunciar/i });
+    expect(decodeURIComponent(link.getAttribute("href")!)).toContain("/portal/casa/fortaleza/materias/p1");
+    // o comentário continua visível: quem decide é a moderação
+    expect(screen.getByText("Apoio o projeto.")).toBeTruthy();
+  });
+
   it("sem comentários aprovados -> estado honesto de vazio (não falha, não some a seção)", async () => {
     mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
