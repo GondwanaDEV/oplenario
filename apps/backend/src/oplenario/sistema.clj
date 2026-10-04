@@ -70,6 +70,16 @@
                       ;; sem erro. Melhor LANCAR no boot.
                       (throw (ex-info "backplane de tempo real invalido — use :memoria ou :valkey"
                                       {:backplane backplane})))
+        _           (when (and (= :valkey backplane)
+                               (not (#{"dev" "test"} (:env config)))
+                               (not (tr-comp/tem-senha? config)))
+                      ;; fail-closed, pela mesma regra de `idp-para`: so' dev/test relaxam; qualquer outro :env
+                      ;; (inclusive ausente) exige a senha. Um Valkey sem senha aceita escrita de quem alcancar a
+                      ;; porta. A mensagem nao leva a URI (pode carregar credencial).
+                      (throw (ex-info (str "Valkey sem senha fora de dev/test: defina VALKEY_PASSWORD (ou a senha "
+                                           "na VALKEY_URI) no ambiente, com a MESMA senha do `requirepass` do "
+                                           "Valkey, antes de subir esta versao — ver docs/27, secao do Valkey")
+                                      {:env (:env config) :backplane backplane})))
         canal-store (if (= :valkey backplane)
                       (tr-comp/canal-store-valkey config)
                       (tr-comp/canal-store-memoria))

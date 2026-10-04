@@ -46,6 +46,10 @@
      (get env "DB_USER")      (assoc-in [:db :user]     (get env "DB_USER"))
      (get env "DB_PASSWORD")  (assoc-in [:db :password] (get env "DB_PASSWORD"))
      (get env "VALKEY_URI")       (assoc-in [:valkey :uri]            (get env "VALKEY_URI"))
+     ;; A senha do Valkey vem SO' do ambiente (cofre do deploy) — o config.edn nao tem default. `rediss://` na
+     ;; VALKEY_URI liga o TLS. Fora de dev/test, backplane :valkey sem senha nao sobe (sistema/novo-sistema).
+     (get env "VALKEY_USERNAME")  (assoc-in [:valkey :username]       (get env "VALKEY_USERNAME"))
+     (get env "VALKEY_PASSWORD")  (assoc-in [:valkey :password]       (get env "VALKEY_PASSWORD"))
      (get env "TEMPO_REAL_BACKPLANE") (assoc-in [:tempo-real :backplane] (keyword (get env "TEMPO_REAL_BACKPLANE")))
      (get env "MINIO_ENDPOINT")   (assoc-in [:objeto-store :endpoint]   (get env "MINIO_ENDPOINT"))
      (get env "MINIO_ACCESS_KEY") (assoc-in [:objeto-store :access-key] (get env "MINIO_ACCESS_KEY"))

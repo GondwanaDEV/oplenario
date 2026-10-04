@@ -30,6 +30,33 @@
         (sistema/novo-sistema (assoc-in (config/carregar) [:tempo-real :backplane] :bogus)))
       "backplane desconhecido bloqueia o boot (fail-closed)"))
 
+(deftest valkey-sem-senha-fora-de-dev-nao-sobe
+  ;; so' dev/test aceitam o backplane :valkey sem senha (mesma regra de `idp-para`). Nenhum IO aqui: `novo-sistema`
+  ;; lanca antes de montar o system-map, e quando nao lanca devolve o sistema NAO iniciado.
+  (let [base (-> (config/carregar)
+                 (assoc-in [:tempo-real :backplane] :valkey)
+                 (assoc :valkey {:uri "redis://valkey-inexistente:6379"}))]
+    (doseq [env ["production" "staging" nil ""]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Valkey sem senha"
+            (sistema/novo-sistema (assoc base :env env)))
+          (str "env " (pr-str env) " sem senha: recusa subir")))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Valkey sem senha"
+          (sistema/novo-sistema (assoc base :env "production" :valkey {:uri "redis://valkey:6379" :password "  "})))
+        "senha em branco = sem senha")
+    (is (some? (sistema/novo-sistema (assoc-in (assoc base :env "production") [:valkey :password] "s3nha")))
+        "production com VALKEY_PASSWORD sobe")
+    (is (some? (sistema/novo-sistema (assoc base :env "production" :valkey {:uri "rediss://:s3nha@valkey:6379"})))
+        "production com a senha na URI sobe")
+    (is (some? (sistema/novo-sistema (assoc base :env "production"
+                                            :valkey {:uri "redis://usuario:s3nha@valkey:6379"})))
+        "usuario e senha na URI tambem valem")
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Valkey sem senha"
+          (sistema/novo-sistema (assoc base :env "production" :valkey {:uri "redis://usuario@valkey:6379"})))
+        "so' o usuario na URI nao e' senha")
+    (is (some? (sistema/novo-sistema (assoc base :env "dev"))) "dev sem senha sobe")
+    (is (some? (sistema/novo-sistema (-> base (assoc :env "production") (assoc-in [:tempo-real :backplane] :memoria))))
+        "backplane :memoria nao usa o Valkey — nao exige senha")))
+
 ;; `idp-para` e' privada (defn- em sistema.clj) — acessada via `#'sistema/idp-para`, convencao do proprio
 ;; ns p/ testar a selecao de impl sem expor a fn no API publica do host.
 (deftest idp-para-producao-usa-keycloak

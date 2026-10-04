@@ -25,9 +25,18 @@ services:
   valkey:
     image: valkey/valkey:8
     restart: unless-stopped
-    ports: ["${OPLENARIO_VALKEY_PORT:-6379}:6379"]
+    # Senha (`requirepass`) vinda de OPLENARIO_VALKEY_PASSWORD (.env; valor de dev no .env.example). Vazia = sem
+    # senha, que so' serve a dev/CI: fora de dev/test o backend nao sobe com o backplane :valkey sem senha. A
+    # variavel entra no container (e nao na linha de comando) para o healthcheck autenticar; `$$` adia a expansao
+    # para o shell do container.
+    environment:
+      VALKEY_SENHA: "${OPLENARIO_VALKEY_PASSWORD:-}"
+    command: ["sh", "-c", "exec docker-entrypoint.sh valkey-server $${VALKEY_SENHA:+--requirepass \"$$VALKEY_SENHA\"}"]
+    # So' no loopback do host: quem esta' na mesma rede da maquina nao alcanca o Valkey. Os outros containers falam
+    # com ele pela rede do compose (`valkey:6379`), sem passar por esta porta.
+    ports: ["127.0.0.1:${OPLENARIO_VALKEY_PORT:-6379}:6379"]
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: ["CMD-SHELL", "valkey-cli $${VALKEY_SENHA:+--no-auth-warning -a \"$$VALKEY_SENHA\"} ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -127,6 +136,7 @@ services:
       DB_USER: "oplenario_pool"
       DB_PASSWORD: "oplenario_dev_pool"
       VALKEY_URI: "redis://valkey:6379"
+      VALKEY_PASSWORD: "${OPLENARIO_VALKEY_PASSWORD:-}"
       MINIO_ENDPOINT: "http://minio:9000"
       # Onda D Slice 2 (T17): split-horizon do Keycloak. base-url INTERNO = DNS do compose (o app resolve
       # `keycloak` p/ o container; localhost dentro do container seria o proprio app). Este e' o URL do

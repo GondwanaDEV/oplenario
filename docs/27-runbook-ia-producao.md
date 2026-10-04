@@ -96,3 +96,61 @@ Na ordem em que já aconteceu:
 5. **`ia-api` fora do ar** — Logs do app no Dokploy.
 
 O `backend` loga o motivo como `plataforma de IA indisponivel` (`integracao_ia/diplomat/http/out.clj`).
+
+## 7. Valkey do tempo real: senha, TLS e rede
+
+Não é do satélite (ele não usa o Valkey), mas a topologia do Dokploy está descrita aqui. O Valkey guarda o canal ao
+vivo do plenário (`tempo_real`, janela de 5 minutos) e só o `backend` fala com ele.
+
+| O quê | Onde se resolve |
+|---|---|
+| O que sai do Valkey nunca vira objeto (texto EDN de dado puro, sem Nippy na leitura) | código — nada a fazer |
+| O `backend` manda a senha (`VALKEY_PASSWORD`, ou na `VALKEY_URI`) e o usuário de ACL opcional (`VALKEY_USERNAME`) | código + variável no Dokploy |
+| Fora de `APP_ENV` dev/test, com `TEMPO_REAL_BACKPLANE=valkey` e sem senha, o `backend` **não sobe** (`Valkey sem senha fora de dev/test`) | código |
+| TLS: `VALKEY_URI=rediss://…` | variável no Dokploy + certificado no servidor |
+| O Valkey exigir a senha (`requirepass`) | **só no Dokploy** |
+| A porta 6379 não ser publicada | **só no Dokploy** |
+
+### Antes de promover a versão que exige a senha (uma vez)
+
+A ordem importa: a senha tem de existir no ambiente **antes** de essa versão subir. Sem ela o `backend` novo recusa o
+boot e a produção fica fora.
+
+1. Abra o Environment do `backend` e leia a `VALKEY_URI`. Se já tem senha (`redis://:senha@…` ou
+   `redis://usuario:senha@…`), pule para o passo 4.
+2. Gere uma senha longa e aleatória e ponha no Valkey (a senha do serviço no Dokploy, ou
+   `valkey-server --requirepass <senha>` no comando). Faça o Deploy do Valkey.
+3. No `backend`, troque a `VALKEY_URI` para `redis://:<senha>@<appName-do-valkey>:6379` e faça o Deploy. A versão
+   que está no ar hoje já entende senha na URI. Entre os passos 2 e 3 o painel ao vivo para de atualizar (o relay
+   tenta de novo sozinho); faça fora de sessão. Confira os Logs do `backend` (subiu sem erro de Valkey) e um painel ao vivo.
+4. Só então promova a versão nova. Depois que ela subir, a senha pode sair da URI e ir para `VALKEY_PASSWORD` (senha
+   com `@`, `:` ou `/` só funciona assim, sem escapar).
+
+Na primeira subida da versão nova, o que ainda estiver no canal no formato antigo é recusado e vira aviso de lacuna:
+quem está com o painel aberto recarrega o estado pelo snapshot. Passa em 5 minutos.
+
+### Conferir que a porta não está exposta
+
+- No serviço do Valkey no Dokploy, a porta externa fica **vazia** (nenhum mapeamento para o host).
+- De fora da VPS, `nc -zv <host-da-vps> 6379` tem de falhar. Se conectar, feche a porta antes de qualquer outra coisa.
+- O Valkey só precisa estar na rede interna do projeto, onde o `backend` o alcança pelo appName.
+
+### Trocar a senha
+
+1. `ACL SETUSER default ><senha-nova>` no Valkey (a antiga continua valendo; as duas convivem).
+2. Troque a senha no `backend` e faça o Deploy.
+3. `ACL SETUSER default <<senha-antiga>` remove a antiga. Grave a nova também na configuração do serviço, senão um
+   restart do Valkey volta para a antiga.
+
+### TLS
+
+Só é preciso se o Valkey sair da rede interna. `rediss://` usa o truststore padrão da JVM: o certificado do servidor
+tem de encadear numa autoridade que ela conhece. O cliente valida a cadeia, mas **não** confere o nome do host.
+
+### Quando o `backend` não sobe por causa do Valkey
+
+| Log | Causa |
+|---|---|
+| `Valkey sem senha fora de dev/test` | falta `VALKEY_PASSWORD` (ou a senha na `VALKEY_URI`) |
+| `NOAUTH` / `WRONGPASS` no start | o Valkey exige senha e o `backend` não tem, ou tem outra |
+| `Connection refused` | appName errado na `VALKEY_URI`, ou o Valkey fora do ar |
