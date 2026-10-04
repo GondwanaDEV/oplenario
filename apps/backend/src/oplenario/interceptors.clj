@@ -16,8 +16,8 @@
             [oplenario.identidade.components.repositorio :as repo]
             [oplenario.kernel.arquivo :as arquivo]
             [oplenario.kernel.autorizacao :as authz]
-            [oplenario.kernel.components.idp :as idp]
-            [ring.middleware.multipart-params :as multipart]))
+            [oplenario.kernel.components.idp :as idp])
+  (:import (org.apache.commons.fileupload2.core AbstractFileUpload FileItemInput RequestContext)))
 
 (set! *warn-on-reflection* true)
 
@@ -180,13 +180,52 @@
   "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
   (* 64 1024))
 
+(defn- nome-do-arquivo-da-parte
+  "O `filename` do cabecalho Content-Disposition da parte, lido do TEXTO do cabecalho (decodificado em UTF-8: a borda fixa
+  o encoding, nao depende de `LANG`). Aceita o valor entre aspas (com `\\\"` e `\\\\` escapados) ou sem aspas; nao confunde
+  `filename*=` (RFC 5987). nil se a parte nao tem `filename`.
+
+  POR QUE NAO `FileItemInput/getName` (o que o Ring faz): em commons-fileupload2 ele passa o nome por `Paths.get` para
+  validar, e numa JVM sem locale UTF-8 (`sun.jnu.encoding` ASCII — o container `clojure:*` de teste, um deploy com
+  `LANG=C`) um nome acentuado vira `InvalidPathException` = 400. O nome aqui e' so' texto de exibicao; o caminho nunca
+  toca o disco (o arquivo vai ao object storage numa chave nossa)."
+  [^FileItemInput item]
+  (when-let [cd (some-> (.getHeaders item) (.getHeader "Content-Disposition"))]
+    (when-let [m (re-find #"(?i)filename\s*=\s*(?:\"((?:[^\"\\]|\\.)*)\"|([^;\s]+))" cd)]
+      (some-> (or (nth m 1) (nth m 2)) (str/replace #"\\(.)" "$1")))))
+
+(defn- ler-arquivos-do-multipart
+  "As partes de ARQUIVO do corpo `multipart/form-data`, ate' 2 (so' para saber se passou de UM; os campos de formulario sao
+  ignorados). Cada arquivo e' lido para memoria com teto de `max-bytes` (`:corpo/grande` se passar) e vem como
+  {:nome :tipo-midia :conteudo}. O encoding do cabecalho da parte e' UTF-8, explicito."
+  [req max-bytes]
+  (let [contexto (reify RequestContext
+                   (getContentType [_] (get-in req [:headers "content-type"]))
+                   (getContentLength [_] (or (some-> (get-in req [:headers "content-length"]) parse-long) -1))
+                   (getCharacterEncoding [_] "UTF-8")
+                   (getInputStream [_] (:body req)))
+        it (.getItemIterator ^AbstractFileUpload (proxy [AbstractFileUpload] []) contexto)]
+    (loop [arquivos []]
+      (if (.hasNext it)
+        (let [^FileItemInput item (.next it)]
+          (cond
+            (.isFormField item) (recur arquivos)
+            (>= (count arquivos) 1) (conj arquivos nil)   ; o 2o arquivo: nao precisa ler nada
+            :else (recur (conj arquivos {:nome (arquivo/nome-de-arquivo (nome-do-arquivo-da-parte item))
+                                         :tipo-midia (arquivo/tipo-de-midia (.getContentType item))
+                                         :conteudo (ler-limitado (.getInputStream item) max-bytes)}))))
+        arquivos))))
+
 (defn anexo-multipart
   "Fabrica o interceptor do upload de anexo: `multipart/form-data` com UM arquivo (o campo pode ter qualquer nome; a
   tela usa `arquivo`). O arquivo e' lido para memoria com teto de `max-bytes` (o object storage recebe os bytes e o
   sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/malformado/vazio -> 400. Resultado em
   `(:request :anexo)` {:nome :tipo-midia :conteudo}. So' a PARTE GENERICA mora aqui: quais tipos o modulo aceita, quantos
   e quando e' regra do `logic` de cada um (comunicacao, participacao). Nasceu em `comunicacao/diplomat/http/in` e foi
-  movida sem mudar o comportamento (`participacao` nao pode importar `comunicacao`, §22.10)."
+  movida sem mudar o comportamento (`participacao` nao pode importar `comunicacao`, §22.10).
+
+  O NOME do arquivo e' lido dos cabecalhos da parte em UTF-8 explicito (`nome-do-arquivo-da-parte`): um nome acentuado
+  passa em qualquer locale da JVM."
   [{:keys [max-bytes]}]
   (let [mb (quot (long max-bytes) (* 1024 1024))
         grande (str "O anexo passa de " mb " MB.")]
@@ -194,20 +233,17 @@
      :enter (fn [ctx]
               (let [req (:request ctx)
                     tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
-                    recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))]
-                (if (and tamanho (> (long tamanho) (+ (long max-bytes) folga-do-envelope)))
-                  (recusa 413 grande)
+                    recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))
+                    multipart? (some-> (get-in req [:headers "content-type"]) str/lower-case (str/starts-with? "multipart/form-data"))]
+                (cond
+                  (and tamanho (> (long tamanho) (+ (long max-bytes) folga-do-envelope))) (recusa 413 grande)
+                  (not multipart?) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
+                  :else
                   (try
-                    (let [params (:multipart-params
-                                  (multipart/multipart-params-request
-                                   req {:max-file-count 1
-                                        :store (fn [{:keys [filename content-type stream]}]
-                                                 {:nome (arquivo/nome-de-arquivo filename)
-                                                  :tipo-midia (arquivo/tipo-de-midia content-type)
-                                                  :conteudo (ler-limitado stream max-bytes)})}))
-                          arquivos (filter #(and (map? %) (:conteudo %)) (vals params))]
+                    (let [arquivos (ler-arquivos-do-multipart req max-bytes)]
                       (cond
                         (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
+                        (nil? (first arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
                         (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
                         :else (assoc-in ctx [:request :anexo] (first arquivos))))
                     (catch clojure.lang.ExceptionInfo e

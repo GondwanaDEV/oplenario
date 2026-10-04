@@ -409,19 +409,34 @@
             (is (= 404 (:status (pt/response-for cid-svc :get (str "/portal/meus-protocolos/" rota "/" outro-id "/anexos/" anexo-id)
                                                  :headers (como ente eu)))))))))))
 
-(deftest o-nome-do-arquivo-nao-escapa-do-cabecalho
-  ;; ASCII de proposito: o parser multipart do Ring (commons-fileupload) transforma o nome do arquivo em Path, e numa JVM
-  ;; sem locale UTF-8 (o container `clojure:*` de teste usa POSIX) um nome acentuado vira 400. A imagem de producao
-  ;; (eclipse-temurin, LANG=en_US.UTF-8) e o CI nao tem isso; o cabecalho com acento e' coberto no unit de
-  ;; `kernel/arquivo/content-disposition`.
+(deftest o-nome-do-arquivo-acentuado-passa-e-nao-depende-do-locale-da-jvm
+  ;; O parser multipart do Ring (commons-fileupload2) transforma o nome do arquivo em `Path` (`getName`), e numa JVM sem
+  ;; locale UTF-8 (`sun.jnu.encoding` ASCII — o container `clojure:*` de teste usa POSIX) um nome acentuado vira 400. O
+  ;; interceptor le o nome dos cabecalhos da parte, em UTF-8 explicito: o resultado nao depende de `LANG`. Este teste
+  ;; roda no container POSIX e e' o que reprova se alguem voltar a usar `getName`.
   (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
         id (protocolo-respondido! c :esic (random-uuid) sec)
-        r (anexar svc ente sec "esic" id "../../etc/relatorio final.txt" "text/plain" "x")
+        r (anexar svc ente sec "esic" id "relatório de diárias.pdf" "application/pdf" conteudo-pdf)
         d (pt/response-for svc :get (str "/atendimento/esic/" id "/anexos/" (get-in r [:corpo :id])) :headers (como ente sec))]
     (is (= 201 (:status r)) (str (:bruto r)))
-    (is (= "relatorio final.txt" (get-in r [:corpo :nome])) "so' o ultimo segmento do caminho")
-    (is (= "attachment; filename=\"relatorio final.txt\"; filename*=UTF-8''relatorio%20final.txt"
-           (get-in d [:headers "Content-Disposition"])))))
+    (is (= "relatório de diárias.pdf" (get-in r [:corpo :nome])) "o nome volta inteiro, com os acentos")
+    (is (= "attachment; filename=\"relat_rio de di_rias.pdf\"; filename*=UTF-8''relat%C3%B3rio%20de%20di%C3%A1rias.pdf"
+           (get-in d [:headers "Content-Disposition"]))
+        "ASCII de reserva + UTF-8 (RFC 5987)")
+    (is (= conteudo-pdf (:body d)) "e o conteudo e' o mesmo")))
+
+(deftest o-nome-do-arquivo-so-fica-com-o-ultimo-segmento-do-caminho
+  (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
+        id (protocolo-respondido! c :esic (random-uuid) sec)
+        r (anexar svc ente sec "esic" id "../../etc/passwd final.txt" "text/plain" "x")]
+    (is (= 201 (:status r)) (str (:bruto r)))
+    (is (= "passwd final.txt" (get-in r [:corpo :nome])))))
+
+(deftest nome-com-porcento-e-sinal-de-mais-nao-e-decodificado-por-engano
+  (let [c (cenario) ente (:ente c) sec (random-uuid) svc (servico c #{"secretario"})
+        id (protocolo-respondido! c :esic (random-uuid) sec)]
+    (doseq [nome ["100% pronto.txt" "a+b.txt" "coisa%20estranha.txt"]]
+      (is (= nome (get-in (anexar svc ente sec "esic" id nome "text/plain" "x") [:corpo :nome])) nome))))
 
 ;; ---------------------------------------------------------------- o requerente ve a lista; o publico nao
 
