@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { usePerfilVereador } from "./use-perfil-vereador";
 
 // Onda E fatia 2 (Task 5) — hook cliente do perfil público do vereador: busca
@@ -172,8 +172,12 @@ describe("usePerfilVereador", () => {
     rerender({ id: "v2" }); // troca ANTES de v1 responder
     await waitFor(() => expect(result.current.perfil?.nomeParlamentar).toBe("NOVO V2"));
 
-    liberarV1(); // a resposta lenta do vereador anterior chega agora
-    await new Promise((r) => setTimeout(r, 0));
+    // a resposta lenta do vereador anterior chega agora, e é processada DENTRO do `act` (a cadeia é só de
+    // microtarefas). Com o `setTimeout(0)` de antes o teste às vezes afirmava antes de a resposta velha ser
+    // aplicada: sem a guarda `vivo` no hook ele passava 1 vez em 3.
+    await act(async () => {
+      liberarV1();
+    });
     expect(result.current.perfil?.nomeParlamentar).toBe("NOVO V2");
     expect(result.current.estado).toBe("pronto");
   });
