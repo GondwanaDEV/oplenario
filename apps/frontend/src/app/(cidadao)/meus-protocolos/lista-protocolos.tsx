@@ -2,7 +2,9 @@
 
 // A lista de "Meus protocolos" (formulários do cidadão, ADR-0015): o que a cidadã protocolou na Casa, em três
 // grupos, cada item com estado, prazo e a resposta da Câmara quando houver. O pedido de e-SIC respondido ou
-// indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem).
+// indeferido oferece o recurso (LAI art. 15) ali mesmo; o backend decide se cabe (409 → mensagem). O protocolo
+// INDEFERIDO (e-SIC ou LGPD) mostra a fundamentação da Casa — a lei exige que a recusa diga as razões — e um selo
+// neutro: negar não é aprovar, e a cor de "aprovado" mentiria sobre o desfecho.
 
 import { useState } from "react";
 import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
@@ -12,6 +14,7 @@ import type { MeusProtocolos, RecursoEsic, Resposta } from "@/lib/use-meus-proto
 
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
+const INDEFERIDOS = new Set(["indeferido", "indeferida"]);
 
 function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   if (!ABERTOS.has(estado) || dias === null) return null;
@@ -19,17 +22,29 @@ function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   return <span className="mp-prazo">{dias === 0 ? "Hoje é o último dia do prazo" : `${dias} dias para a resposta`}</span>;
 }
 
-function RespostaDaCasa({ resposta }: { resposta: Resposta | null }) {
+function RespostaDaCasa({ resposta, indeferido }: { resposta: Resposta | null; indeferido: boolean }) {
   if (!resposta) return null;
   return (
     <div className="mp-resposta">
-      <p className="mp-resposta-cab">Resposta da Câmara · {formatarData(resposta.respondidaEm)}</p>
+      <p className="mp-resposta-cab">
+        {indeferido ? "Fundamentação do indeferimento" : "Resposta da Câmara"} · {formatarData(resposta.respondidaEm)}
+      </p>
       <p>{resposta.corpo}</p>
     </div>
   );
 }
 
-function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string | null; aoMudar: () => void }) {
+function Recurso({
+  pedidoId,
+  token,
+  aoMudar,
+  indeferido,
+}: {
+  pedidoId: string;
+  token: string | null;
+  aoMudar: () => void;
+  indeferido: boolean;
+}) {
   const { enviar, estado, erro } = useEnvioCidadao(token);
   const [aberto, setAberto] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -45,7 +60,7 @@ function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string
   if (!aberto) {
     return (
       <button type="button" className="btn btn-contorno btn-mini" onClick={() => setAberto(true)}>
-        Recorrer da resposta
+        {indeferido ? "Recorrer do indeferimento" : "Recorrer da resposta"}
       </button>
     );
   }
@@ -70,7 +85,9 @@ function Recurso({ pedidoId, token, aoMudar }: { pedidoId: string; token: string
         }
       }}
     >
-      <label htmlFor={`motivo-${pedidoId}`}>Por que você não concordou com a resposta?</label>
+      <label htmlFor={`motivo-${pedidoId}`}>
+        {indeferido ? "Por que você não concordou com o indeferimento?" : "Por que você não concordou com a resposta?"}
+      </label>
       <textarea id={`motivo-${pedidoId}`} value={motivo} maxLength={LIMITES.motivo} onChange={(e) => setMotivo(e.target.value)} />
       {erro && (
         <p className="form-erro" role="alert">
@@ -128,13 +145,15 @@ function Item({
     <li className="mp-item">
       <div className="mp-item-topo">
         <span className="mp-protocolo">{protocolo}</span>
-        <span className={`chip ${ABERTOS.has(estado) ? "chip-aguarda" : "chip-aprovada"}`}>{rotuloEstado(estado)}</span>
+        <span className={`chip ${ABERTOS.has(estado) ? "chip-aguarda" : INDEFERIDOS.has(estado) ? "chip-neutro" : "chip-aprovada"}`}>
+          {rotuloEstado(estado)}
+        </span>
       </div>
       <p className="mp-titulo">{titulo}</p>
       <p className="mp-meta">
         Recebido em {formatarData(reciboEm)} <Prazo estado={estado} dias={dias} />
       </p>
-      <RespostaDaCasa resposta={resposta} />
+      <RespostaDaCasa resposta={resposta} indeferido={INDEFERIDOS.has(estado)} />
       {children}
     </li>
   );
@@ -165,7 +184,9 @@ export function ListaProtocolos({
                 {p.recurso ? (
                   <RecursoInterposto recurso={p.recurso} />
                 ) : (
-                  RECORRIVEIS.has(p.estado) && <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} />
+                  RECORRIVEIS.has(p.estado) && (
+                    <Recurso pedidoId={p.id} token={token} aoMudar={aoMudar} indeferido={INDEFERIDOS.has(p.estado)} />
+                  )
                 )}
               </Item>
             ))}

@@ -47,6 +47,57 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(within(p1).queryByRole("button", { name: /recorrer/i })).toBeNull();
   });
 
+  it("o protocolo indeferido: selo 'Indeferido' (e não o de aprovado), a fundamentação com o título certo e o recurso à mão", () => {
+    const indeferido: MeusProtocolos = {
+      ...DADOS,
+      pedidosEsic: [{
+        ...base, id: "p3", protocolo: "ESIC-2026-000003", assunto: "Folha de pagamento", estado: "indeferido", diasRestantes: 12,
+        resposta: { corpo: "O pedido pede dado pessoal de terceiros (LAI art. 31).", respondidaEm: "2026-07-10T15:00:00Z" },
+      }],
+      solicitacoesLgpd: [{
+        ...base, id: "s2", protocolo: "LGPD-2026-000002", tipo: "eliminar", estado: "indeferida", diasRestantes: 3,
+        resposta: { corpo: "A eliminação não cabe: dados mantidos por obrigação legal.", respondidaEm: "2026-07-10T15:00:00Z" },
+      }],
+    };
+    render(<ListaProtocolos dados={indeferido} token="tok" aoMudar={() => {}} />);
+    const p3 = screen.getByText("ESIC-2026-000003").closest("li")!;
+    const selo = within(p3).getByText("Indeferido");
+    expect(selo.className).not.toMatch(/chip-aprovada/);
+    expect(within(p3).queryByText("indeferido")).toBeNull();
+    expect(within(p3).getByText(/Fundamentação do indeferimento · /)).toBeTruthy();
+    expect(within(p3).queryByText(/Resposta da Câmara/)).toBeNull();
+    expect(within(p3).getByText(/dado pessoal de terceiros/)).toBeTruthy();
+    expect(within(p3).queryByText(/dias para a resposta/)).toBeNull();
+    // o grafo ja' admite recurso de pedido indeferido: o botao fala do indeferimento
+    expect(within(p3).getByRole("button", { name: "Recorrer do indeferimento" })).toBeTruthy();
+    // LGPD indeferida: mesma fundamentacao, sem recurso (a LGPD nao tem)
+    const s2 = screen.getByText("LGPD-2026-000002").closest("li")!;
+    expect(within(s2).getByText("Indeferida")).toBeTruthy();
+    expect(within(s2).getByText(/Fundamentação do indeferimento · /)).toBeTruthy();
+    expect(within(s2).getByText(/dados mantidos por obrigação legal/)).toBeTruthy();
+    expect(within(s2).queryByRole("button", { name: /recorrer/i })).toBeNull();
+  });
+
+  it("recorrer do indeferimento: o formulário pergunta pelo indeferimento e envia o motivo ao mesmo endpoint de recurso", async () => {
+    global.fetch = vi.fn(async () =>
+      ({ ok: true, status: 201, json: async () => ({ protocolo: "REC-2026-000009", "recibo-em": "2026-07-11T12:00:00Z" }) }) as Response,
+    ) as unknown as typeof fetch;
+    const indeferido: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p3", protocolo: "ESIC-2026-000003", assunto: "Folha", estado: "indeferido", diasRestantes: null,
+        resposta: { corpo: "Dado pessoal.", respondidaEm: "2026-07-10T15:00:00Z" } }],
+    };
+    render(<ListaProtocolos dados={indeferido} token="tok" aoMudar={() => {}} />);
+    const p3 = screen.getByText("ESIC-2026-000003").closest("li")!;
+    fireEvent.click(within(p3).getByRole("button", { name: "Recorrer do indeferimento" }));
+    fireEvent.change(within(p3).getByLabelText("Por que você não concordou com o indeferimento?"), { target: { value: "Peço só os valores agregados." } });
+    fireEvent.click(within(p3).getByRole("button", { name: /enviar recurso/i }));
+    await waitFor(() => expect(within(p3).getByText("REC-2026-000009")).toBeTruthy());
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0];
+    expect(url).toBe("/api/portal/esic/pedidos/p3/recursos");
+    expect(JSON.parse(String(init?.body))).toEqual({ motivo: "Peço só os valores agregados." });
+  });
+
   it("pedido que já tem recurso mostra o recurso (e a decisão), sem oferecer recorrer de novo", () => {
     const comRecurso: MeusProtocolos = {
       ...DADOS,
