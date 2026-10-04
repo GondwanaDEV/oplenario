@@ -291,7 +291,8 @@
                    (getContentType [_] (get-in req [:headers "content-type"]))
                    (getContentLength [_] (or (some-> (get-in req [:headers "content-length"]) parse-long) -1))
                    (getCharacterEncoding [_] "UTF-8")
-                   (getInputStream [_] corpo))
+                   (getInputStream [_] corpo)
+                   (isMultipartRelated [_] false))   ; exigido pela API a partir da 2.0.0-M2 (form-data, nao multipart/related)
         it (.getItemIterator ^AbstractFileUpload (proxy [AbstractFileUpload] []) contexto)]
     (loop [arquivos [] partes 0]
       (if (.hasNext it)
