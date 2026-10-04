@@ -3,8 +3,7 @@
   gravadas e do resultado; daqui saem tambem o motivo em palavras de 'por que a pauta nao aceita o PDL', o numero de
   votos que rejeita o parecer (a MESMA aritmetica do quorum da votacao, `logic/votos-necessarios`) e a frase do
   resultado que a ficha e o portal mostram. Sem I/O: `hoje` (o dia civil da Casa) entra como argumento."
-  (:require [clojure.string :as str]
-            [oplenario.legislativo.logic :as logic])
+  (:require [oplenario.legislativo.logic :as logic])
   (:import (java.time LocalDate)
            (java.time.format DateTimeFormatter)))
 
@@ -134,20 +133,3 @@
   "A chave no object storage: a convencao `<pasta>/<ente>/...` que a exportacao e o apagamento da Casa descobrem."
   [ente-id prestacao-id documento-id]
   (str "contas/" ente-id "/" prestacao-id "/" documento-id))
-
-(defn nome-de-arquivo
-  "O nome que o navegador mandou, como nome de exibicao seguro: so' o ultimo segmento do caminho, sem caractere de
-  controle nem aspas, aparado e com teto. Vazio -> \"documento\"."
-  [s]
-  (let [base (last (str/split (str s) #"[/\\]"))
-        limpo (-> (or base "") (str/replace #"[\p{Cntrl}\"]" "") str/trim)
-        limpo (if (> (count limpo) 200) (subs limpo 0 200) limpo)]
-    (if (str/blank? limpo) "documento" limpo)))
-
-(defn tipo-de-midia
-  "O content-type declarado da parte, se tem a forma `tipo/subtipo`; senao octet-stream (o navegador baixa)."
-  [s]
-  (let [t (some-> s (str/split #";") first str/trim str/lower-case)]
-    (if (and t (re-matches #"[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}" t))
-      t
-      "application/octet-stream")))

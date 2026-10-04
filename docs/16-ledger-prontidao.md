@@ -2680,3 +2680,51 @@ do quórum do gate #1** (o cruzado T10 já pina roster-menos-licenciado = `membr
 **Provas (votacao_http_in_test):** `registrar-voto-nominal-fora-do-roster-400` (roster vazio → 400, e a
 escrita não sai) e `registrar-voto-nominal-201` (agora fixa o votante no roster). O DB/repo `registrar-voto!`
 segue coberto direto (o gate é de BORDA, não do domínio). Os dois gates de demo externa estão **fechados**.
+
+---
+
+### Testes do frontend que dependiam de tempo (04/10/2026) — varredura, 8 corridas consertadas, detector no repo
+
+**Sintoma.** O job `frontend` do CI reprovava "do nada" por testes que passavam só quando o React pintava a
+resposta antes da asserção. Dois já tinham conserto e serviram de modelo: `painel-tribuna` (clique num botão ainda
+`disabled`, commit `bf657918`) e `prazos-das-contas` (`findByRole("alert")` devolvia o alerta ANTERIOR, commit
+`cf0fe2e2`).
+
+**Causa.** O `waitFor`/`findBy` do Testing Library drena com `setTimeout(0)`; o React pinta pelo Scheduler, que usa
+`setImmediate`. Sob carga o timer dispara antes da pintura e o teste segue com o DOM velho.
+
+**Método: detecção dinâmica, não leitura.** A busca por regex deu 129 falsos positivos. No lugar, um setup de vitest
+que atrasa 40 ms toda promessa de mock (`vi.fn` e `fetch`) e o commit do React fora de `act`: teste que espera o
+estado certo passa igual; teste que conta com "a resposta já chegou" reprova sempre. Validação do instrumento: as
+versões pré-conserto dos dois modelos reprovam nele com o mesmo erro do CI.
+
+**Resultado:** 312 arquivos, 2757 testes rodados sob atraso; 21 candidatos examinados um a um; **8 corridas
+consertadas em 6 arquivos** (PR #97), nenhuma asserção afrouxada; 13 descartados.
+
+| Arquivo (`apps/frontend/src/…`) | A corrida | O conserto |
+|---|---|---|
+| `app/(interno)/administracao/regras-da-pauta.test.tsx` | o alerta anterior satisfazia a espera | `waitFor` no texto da recusa |
+| `app/(interno)/administracao/exportar-dados.test.tsx` | `findByText` em texto que já estava na tela | espera a lista vazia |
+| `app/(interno)/conferencias/conferencias.test.tsx` | `findByText` casava com o campo editado | espera "Aproveitada em…" e afirma que o editor sumiu |
+| `app/(interno)/atendimento/atendimento.test.tsx` (3 casos) | contava os GET logo após a mensagem; aviso e `beforeunload` lidos logo após o pedido do anexo; foco do indeferimento | `waitFor`/`findByText`; o do foco foi resolvido no código (PR #98, abaixo) |
+| `app/(publico)/formularios-cidadao.test.tsx` | igual ao do anexo do balcão | `findByText` + `waitFor` |
+| `lib/use-perfil-vereador.test.ts` | `setTimeout(0)` para provar ausência | dentro de `act`; sem a guarda `vivo` o teste antigo passava 1 em 3, o novo reprova 5 em 5 |
+
+**Conserto de produto que saiu da varredura (PR #98).** No balcão, o foco do título no indeferimento se perdia quando
+o efeito do passo anterior rodava atrasado. Virou função pura, `tituloQueRecebeOFoco(pedido, confirmando)` em
+`lib/atendimento-vista.ts`, com teste próprio.
+
+**Junto:** `app/api/operacao/rotas.test.ts` deixou de depender do ambiente (apaga `OPERACAO_KEYCLOAK_INTERNAL_URL` e
+`KEYCLOAK_INTERNAL_URL` antes de cada caso, porque o callback prefere essas à URL da descoberta) e ganhou o caso da
+precedência.
+
+**Descartados (não reprovam por corrida):** `painel-tribuna.test.tsx`, `acoes-card.test.tsx`,
+`requerimento/novo/page.test.tsx`, `publicar-pauta.test.tsx`, `use-comunicados.test.ts` e um caso de
+`atendimento.test.tsx`. Mais 6 que reprovaram UMA vez na suíte inteira sob atraso, atribuídos à carga do instrumento
+sem causa confirmada: `caixa.test.tsx`, `notificacoes/page.test.tsx` (2 casos), `encerramento.test.tsx`,
+`use-chamada.test.ts`, `central-da-casa.test.tsx`. **Mesmo desenho frágil, não mexido:** `app/seletor-de-anexos.tsx`
+(ref + efeito passivo).
+
+**O instrumento fica no repo, opt-in, não é gate:** `docker compose exec frontend npm run test:atraso -- <arquivo>`
+(`vitest.atraso.config.ts` + `vitest.atraso.setup.ts`; `ATRASO_MS`=40, `ATRASO_MOCK`=1, `ATRASO_PINTURA`=1). Os três
+falsos vermelhos conhecidos estão no cabeçalho do setup. Rodar antes de mergear teste novo de tela assíncrona.

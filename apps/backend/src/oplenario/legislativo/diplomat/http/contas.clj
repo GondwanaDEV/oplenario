@@ -7,17 +7,14 @@
   `hoje` (o dia civil da Casa, de que depende o estado derivado) sai do relogio injetado, lido aqui na borda. A base do
   quorum vem do servidor (`membros-da-casa`, seam do host), nunca do cliente — o mesmo denominador do encerramento."
   (:require [clojure.string :as str]
-            [io.pedestal.interceptor.chain :as chain]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.adapters.in.contas :as adapters-in]
             [oplenario.legislativo.adapters.out.contas :as adapters-out]
             [oplenario.legislativo.controllers :as controllers]
-            [oplenario.legislativo.logic.contas :as logic-contas]
-            [ring.middleware.multipart-params :as multipart])
-  (:import (java.io InputStream)
-           (java.net URLEncoder)
+            [oplenario.legislativo.logic.contas :as logic-contas])
+  (:import (java.net URLEncoder)
            (java.nio.charset StandardCharsets)
            (java.time ZoneId)))
 
@@ -109,63 +106,23 @@
         :else (let [[status msg] (get erros-notificacao erro [500 "erro interno"])]
                 (http/json-resposta status {:erro msg}))))))
 
-;; ---------- documentos: um arquivo por requisicao, multipart (o mesmo desenho dos anexos dos comunicados) ----------
-
-(defn- ler-ate
-  "Le o stream ate' `teto` bytes; passou -> :corpo/grande (nunca aloca alem do teto + 1 bloco)."
-  ^bytes [^InputStream in teto]
-  (let [out (java.io.ByteArrayOutputStream.)
-        buf (byte-array 8192)]
-    (loop [total 0]
-      (let [n (.read in buf)]
-        (if (neg? n)
-          (.toByteArray out)
-          (let [t (+ total (long n))]
-            (when (> t (long teto)) (throw (ex-info "arquivo grande demais" {:tipo :corpo/grande})))
-            (.write out buf 0 n)
-            (recur t)))))))
-
-(def ^:private folga-do-envelope
-  "O multipart carrega cabecalhos de parte e fronteiras alem do arquivo: o teto do CORPO e' o do arquivo + isto."
-  (* 64 1024))
+;; ---------- documentos: um arquivo por requisicao, multipart (o MESMO parser dos anexos dos comunicados e do balcao) ----------
 
 (def documento-multipart
-  "Interceptor do upload: `multipart/form-data` com UM arquivo (o campo `arquivo`), lido para memoria com teto de 10 MB
-  (o object storage recebe os bytes e o sha256 sai deles); corpo acima do teto -> 413, sem arquivo/mais de um/malformado
-  -> 400. Resultado em `(:request :arquivo)` {:nome :tipo-midia :conteudo}."
-  {:name ::documento-multipart
-   :enter (fn [ctx]
-            (let [req (:request ctx)
-                  tamanho (some-> (get-in req [:headers "content-length"]) parse-long)
-                  recusa (fn [status msg] (chain/terminate (assoc ctx :response (http/json-resposta status {:erro msg}))))]
-              (if (and tamanho (> (long tamanho) (+ logic-contas/max-bytes-documento folga-do-envelope)))
-                (recusa 413 "O documento passa de 10 MB.")
-                (try
-                  (let [params (:multipart-params
-                                (multipart/multipart-params-request
-                                 req {:max-file-count 1
-                                      :store (fn [{:keys [filename content-type stream]}]
-                                               {:nome (logic-contas/nome-de-arquivo filename)
-                                                :tipo-midia (logic-contas/tipo-de-midia content-type)
-                                                :conteudo (ler-ate stream logic-contas/max-bytes-documento)})}))
-                        arquivos (filter #(and (map? %) (:conteudo %)) (vals params))]
-                    (cond
-                      (not= 1 (count arquivos)) (recusa 400 "Envie um arquivo por vez (campo arquivo).")
-                      (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa 400 "O arquivo está vazio.")
-                      :else (assoc-in ctx [:request :arquivo] (first arquivos))))
-                  (catch clojure.lang.ExceptionInfo e
-                    (if (= :corpo/grande (:tipo (ex-data e)))
-                      (recusa 413 "O documento passa de 10 MB.")
-                      (recusa 400 "Envie um arquivo por vez (campo arquivo).")))
-                  (catch Exception _
-                    (recusa 400 "O envio do arquivo veio malformado."))))))})
+  "Interceptor do upload: o parser comum da borda (`it/anexo-multipart`), com o teto de 10 MB dos documentos das contas.
+  Dele vem tudo o que e' generico: o teto do cabecalho da parte (um nome de 255 caracteres acentuados passa), o corpo
+  limitado pelo que e' LIDO, o limite de partes, o teto global de envios simultaneos (503) e UM envio por pessoa (429),
+  e o nome limpo por `kernel/arquivo` (sem caractere de formato Unicode; nome vazio vira \"anexo\"). So' o texto do 413
+  e' daqui: a tela fala em documento. Resultado em `(:request :anexo)` {:nome :tipo-midia :conteudo}."
+  (it/anexo-multipart {:max-bytes logic-contas/max-bytes-documento
+                       :mensagem-do-teto "O documento passa de 10 MB."}))
 
 (defn- anexar-handler [{:keys [repo-legislativo objeto-store]}]
   (fn [req]
     (let [tipo (adapters-in/tipo-do-documento (:query-params req))
           id (adapters-in/id-do-path req :id)]
       (if-let [d (when id (controllers/anexar-documento-de-contas! repo-legislativo objeto-store (:ator req) id tipo
-                                                                   (:arquivo req)))]
+                                                                   (:anexo req)))]
         (assoc (http/json-resposta 201 (adapters-out/documento->wire d))
                :auditoria {:rotulo (str (:tipo d) ": " (:nome d)) :recurso-tipo "prestacao_contas"
                            :recurso-id (str id)})

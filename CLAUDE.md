@@ -297,6 +297,12 @@ specs de browser autenticadas) cobre boa parte da Onda T1 e **é gate do CI desd
 snapshot (revisita >5 min voltava a pedir presença), foi consertada em 04/10/2026: GET
 `/sessoes/:id/presenca/minha` + hidratação no page-load e na reconexão do cockpit. Detalhe e procedência em `docs/16`, seções
 "Progressão do CI" e "A Trilha 3 vira gate".
+**Testes do frontend que dependiam de tempo (04/10/2026, PRs #97 e #98):** o job `frontend` reprovava "do nada"
+porque o `findBy`/`waitFor` drena com `setTimeout(0)` e o React pinta com `setImmediate`. Varredura com detector
+dinâmico (2757 testes), 8 corridas consertadas sem afrouxar asserção. **Teste novo de tela assíncrona: rodar
+`docker compose exec frontend npm run test:atraso -- <arquivo>` antes do merge** (opt-in, não é gate; os falsos
+vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.ts`). Detalhe em `docs/16`, seção
+"Testes do frontend que dependiam de tempo".
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

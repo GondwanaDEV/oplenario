@@ -136,3 +136,22 @@
   (let [r (:response (enviar "oficio.pdf" [tipo-docx (str "X-Preenchimento: " (apply str (repeat 4096 "a")))]))]
     (is (= 400 (:status r)))
     (is (= "{\"erro\":\"O envio do arquivo veio malformado.\"}" (:body r)) "recusado pelo parser, nao por outra regra")))
+
+;; ---------------------------------------------------------------- o texto do 413 e' do modulo
+
+(deftest mensagem-do-teto-e-opcao-da-fabrica
+  ;; os documentos das contas usam a mesma fabrica, mas a tela fala em "documento", nao em "anexo"
+  (let [recusa (fn [opcoes]
+                 (let [{:keys [enter]} (it/anexo-multipart (merge {:max-bytes (* 10 1024 1024)} opcoes))
+                       ctx (ctx-de-upload (random-uuid) (java.io.ByteArrayInputStream. (corpo-multipart "a.pdf" "x")))]
+                   (:response (enter (assoc-in ctx [:request :headers "content-length"] (str (* 11 1024 1024)))))))]
+    (testing "sem a opcao: o texto de sempre"
+      (is (= 413 (:status (recusa {}))))
+      (is (= "{\"erro\":\"O anexo passa de 10 MB.\"}" (:body (recusa {})))))
+    (testing "com a opcao: o texto do modulo, tambem quando o teto estoura na LEITURA (sem Content-Length)"
+      (is (= "{\"erro\":\"O documento passa de 10 MB.\"}" (:body (recusa {:mensagem-do-teto "O documento passa de 10 MB."}))))
+      (let [{:keys [enter]} (it/anexo-multipart {:max-bytes 4 :mensagem-do-teto "O documento passa do teto."})
+            r (:response (enter (ctx-de-upload (random-uuid) (java.io.ByteArrayInputStream. (corpo-multipart "a.pdf" "conteudo longo")))))]
+        (is (= 413 (:status r)))
+        (is (= "{\"erro\":\"O documento passa do teto.\"}" (:body r)))))
+    (is (= it/max-envios-simultaneos (vagas-livres)) "as recusas devolveram a vaga")))
