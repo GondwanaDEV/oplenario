@@ -32,14 +32,18 @@ pelo OpenRouter.**
 4. **Um modelo só por requisição.** Nunca `models` (fallback de modelo do OpenRouter): o modelo não troca em silêncio
    (§22.11.8). Sem retry no cliente: retry, backoff e failover seguem nossos (§22.3.5).
 5. **Proveniência:** `vendor = "openrouter"`, `modelo` = o `model` da resposta (slug do catálogo, ex.
-   `anthropic/claude-opus-5`) e o novo campo `provedor` = o `provider` da resposta (quem de fato atendeu). O
+   `openai/gpt-oss-120b`) e o novo campo `provedor` = o `provider` da resposta (quem de fato atendeu). O
    `provedor` entra no registro da execução (`RegistroExecucao.provedor`, no corpo JSON do `ia.registro_evento`, sem
    migração).
 6. **Custo:** vale o custo que o OpenRouter declara na resposta (`usage.cost`), multiplicado pelo `acrescimo` do
    fornecedor na tabela (`precos.json`, `"openrouter": "1.055"`, a taxa de 5,5% na compra de créditos — fonte
    secundária, conferir no contrato). Sem custo declarado, a tabela é a reserva; modelo sem preço continua `None`,
    nunca zero.
-7. **Modelo padrão:** com `vendor=openrouter` e sem `OPLENARIO_IA_MODELO`, o modelo é `anthropic/claude-opus-5`.
+7. **Modelo padrão, provisório:** com `vendor=openrouter` e sem `OPLENARIO_IA_MODELO`, o modelo é
+   `openai/gpt-oss-120b` (pedido em 05/10/2026, "por enquanto"). É um modelo de pesos abertos servido por vários
+   provedores, então o preço muda conforme quem atende. Por isso ele fica sem linha na `precos.json` e o custo vem
+   do `usage.cost` declarado. Ainda não passou pela avaliação (R-IA-4): rodar `oplenario-ia-avaliar` com ele antes de
+   ligar: os prompts das capacidades só foram medidos contra o fake até hoje.
 8. **Chave:** `OPENROUTER_API_KEY`, do cofre (Eixo 11f). Sem ela, a execução sai "indisponível" (R-IA-1), nunca 500.
 9. **Fora do escopo do OpenRouter:** a transcrição (Whisper + pyannote no sherpa-onnx) e os embeddings da busca
    (fastembed) continuam self-host — nada sai do cluster, e o OpenRouter não oferece transcrição com diarização.

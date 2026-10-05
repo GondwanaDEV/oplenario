@@ -37,7 +37,7 @@ def conclusao(
     *,
     nativo: str | None = "end_turn",
     custo: float | None = 0.0042,
-    provedor: str = "Anthropic",
+    provedor: str = "Groq",
 ) -> dict[str, Any]:
     usage: dict[str, Any] = {
         "prompt_tokens": 20,
@@ -50,7 +50,7 @@ def conclusao(
     return {
         "id": "gen-1",
         "provider": provedor,
-        "model": "anthropic/claude-opus-5",
+        "model": "openai/gpt-oss-120b",
         "object": "chat.completion",
         "choices": [
             {
@@ -79,7 +79,7 @@ def porta_com(
         return resposta
 
     return PortaOpenRouter(
-        "anthropic/claude-opus-5",
+        "openai/gpt-oss-120b",
         timeout_s=5,
         chave=chave,
         provedores=provedores,
@@ -92,20 +92,20 @@ def porta_com(
 
 def test_pedido_vai_no_formato_de_chat_com_a_politica_de_dado_travada() -> None:
     visto: list[httpx.Request] = []
-    porta_com(httpx.Response(200, json=conclusao()), visto, provedores=["anthropic", "amazon-bedrock"]).gerar(
+    porta_com(httpx.Response(200, json=conclusao()), visto, provedores=["groq", "cerebras"]).gerar(
         pedido(max_tokens=500)
     )
     [req] = visto
     assert str(req.url) == "https://openrouter.ai/api/v1/chat/completions"
     assert req.headers["authorization"] == "Bearer sk-or-teste"
     corpo = json.loads(req.content)
-    assert corpo["model"] == "anthropic/claude-opus-5"
+    assert corpo["model"] == "openai/gpt-oss-120b"
     assert corpo["max_tokens"] == 500
     assert corpo["messages"] == [
         {"role": "system", "content": "Resuma."},
         {"role": "user", "content": [{"type": "text", "text": "texto público"}]},
     ]
-    assert corpo["provider"] == {"data_collection": "deny", "zdr": True, "only": ["anthropic", "amazon-bedrock"]}
+    assert corpo["provider"] == {"data_collection": "deny", "zdr": True, "only": ["groq", "cerebras"]}
     assert "models" not in corpo, "sem fallback de modelo: nunca troca de modelo em silêncio"
     assert "reasoning" not in corpo
 
@@ -127,8 +127,8 @@ def test_normaliza_texto_uso_custo_modelo_e_provedor_efetivos() -> None:
         "Olá",
         "fim",
         "openrouter",
-        "anthropic/claude-opus-5",
-        "Anthropic",
+        "openai/gpt-oss-120b",
+        "Groq",
     )
     # prompt_tokens inclui o cache no formato de chat; o Uso o separa
     assert (r.uso.entrada, r.uso.saida, r.uso.cache_leitura) == (16, 3, 4)
@@ -227,13 +227,14 @@ def test_config_do_openrouter() -> None:
     c = carregar(
         {
             "OPLENARIO_IA_VENDOR": "openrouter",
-            "OPLENARIO_IA_OPENROUTER_PROVEDORES": "anthropic, amazon-bedrock,",
+            "OPLENARIO_IA_OPENROUTER_PROVEDORES": "groq, cerebras,",
         }
     )
-    assert (c.vendor, c.modelo) == ("openrouter", "anthropic/claude-opus-5"), "sem modelo, o slug do OpenRouter"
-    assert c.openrouter_provedores == ["anthropic", "amazon-bedrock"]
+    assert (c.vendor, c.modelo) == ("openrouter", "openai/gpt-oss-120b"), "sem modelo, o slug do OpenRouter"
+    assert c.openrouter_provedores == ["groq", "cerebras"]
     assert (
-        carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "openai/gpt-x"}).modelo == "openai/gpt-x"
+        carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "anthropic/claude-opus-5"}).modelo
+        == "anthropic/claude-opus-5"
     )
     assert Config().modelo == "claude-opus-5", "o padrão dos outros fornecedores não muda"
 
@@ -249,7 +250,7 @@ def test_fabrica_cria_a_porta_do_openrouter_com_a_chave_do_ambiente(monkeypatch:
 
 def test_custo_informado_vale_com_a_taxa_da_plataforma() -> None:
     t = tabela_padrao()
-    c = calcular(Uso(entrada=10), "openrouter", "anthropic/claude-opus-5", t, Decimal("0.01"))
+    c = calcular(Uso(entrada=10), "openrouter", "openai/gpt-oss-120b", t, Decimal("0.01"))
     assert c.valor == Decimal("0.01") * Decimal("1.055")
     assert c.tabela == "informado por openrouter"
 
@@ -258,7 +259,7 @@ def test_sem_custo_informado_a_tabela_e_a_reserva_com_a_taxa() -> None:
     t = tabela_padrao()
     c = calcular(Uso(entrada=1_000_000), "openrouter", "anthropic/claude-opus-5", t)
     assert c.valor == Decimal("5.00") * Decimal("1.055")
-    assert calcular(Uso(entrada=1), "openrouter", "modelo/sem-preco", t).valor is None, "nunca zero em silêncio"
+    assert calcular(Uso(entrada=1), "openrouter", "openai/gpt-oss-120b", t).valor is None, "nunca zero em silêncio"
 
 
 # ---------- de ponta a ponta pelo núcleo ----------
@@ -277,6 +278,6 @@ def test_nucleo_registra_provedor_e_custo_informado_sem_conteudo() -> None:
         PedidoGovernado(ente_id="e1", correlation_id="c1", operacao="resumo", instrucoes="Resuma.", pecas=[peca])
     )
     [e] = [x for x in reg.eventos() if isinstance(x, RegistroExecucao)]
-    assert (e.vendor, e.modelo, e.provedor) == ("openrouter", "anthropic/claude-opus-5", "Anthropic")
+    assert (e.vendor, e.modelo, e.provedor) == ("openrouter", "openai/gpt-oss-120b", "Groq")
     assert e.custo is not None and e.custo.valor == Decimal("0.0042") * Decimal("1.055")
     assert "segredo-de-teste" not in e.model_dump_json()

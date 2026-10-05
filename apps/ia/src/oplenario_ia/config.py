@@ -23,7 +23,7 @@ class Config(BaseModel):
     vendor: Vendor = "fake"
     modelo: str = "claude-opus-5"
     timeout_s: float = Field(default=60.0, gt=0)
-    # OpenRouter (ADR-0023): o modelo é o slug do catálogo dele (`anthropic/claude-opus-5`); `openrouter_provedores`
+    # OpenRouter (ADR-0023): o modelo é o slug do catálogo dele (`openai/gpt-oss-120b`); `openrouter_provedores`
     # restringe quem pode atender (`provider.only`) — vazio = qualquer provedor que cumpra ZDR e não colete dado.
     openrouter_url: str = "https://openrouter.ai/api/v1"
     openrouter_provedores: list[str] = Field(default_factory=list)
@@ -49,7 +49,7 @@ class Config(BaseModel):
         return self
 
 
-MODELO_OPENROUTER_PADRAO = "anthropic/claude-opus-5"
+MODELO_OPENROUTER_PADRAO = "openai/gpt-oss-120b"  # provisório (05/10/2026), ADR-0023
 
 
 def carregar(env: Mapping[str, str] | None = None) -> Config:

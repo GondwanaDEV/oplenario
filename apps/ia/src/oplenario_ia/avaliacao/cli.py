@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="oplenario-ia-avaliar", description=__doc__.split("\n")[0] if __doc__ else "")
     ap.add_argument("caminhos", nargs="+", help="arquivos .json de conjunto ou diretórios com eles")
     ap.add_argument("--vendor", choices=["fake", "openrouter", "anthropic"], default="fake")
-    ap.add_argument("--modelo", help="padrão: o do fornecedor (no OpenRouter, o slug `anthropic/claude-opus-5`)")
+    ap.add_argument("--modelo", help="padrão: o do fornecedor (no OpenRouter, o slug `openai/gpt-oss-120b`)")
     ap.add_argument("--saida", type=Path, help="grava o relatório JSON (ex.: avaliacoes/resultados/…)")
     args = ap.parse_args(argv)
 

@@ -83,7 +83,7 @@ não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedo
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
 de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
 `OPENROUTER_API_KEY`), ZDR e "sem coleta" travados em toda requisição, provedor e custo declarados no registro. As 8
-capacidades passam por ele; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
+capacidades passam por ele, com `openai/gpt-oss-120b` como modelo padrão provisório; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
 jurídico, agora com o OpenRouter como contratado; o adaptador nunca falou com o OpenRouter real. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).

@@ -78,7 +78,7 @@ com o carregamento dos modelos.
 | Variável | Padrão | |
 |---|---|---|
 | `OPLENARIO_IA_VENDOR` | `fake` | `openrouter` é o fornecedor real (ADR-0023); `anthropic` é o contrato direto. Qualquer real exige DPA de não-treino (`[GAP]` jurídico, LGPD art. 33) |
-| `OPLENARIO_IA_MODELO` | `claude-opus-5` (`anthropic/claude-opus-5` no OpenRouter) | no OpenRouter, o slug do catálogo |
+| `OPLENARIO_IA_MODELO` | `claude-opus-5` (`openai/gpt-oss-120b` no OpenRouter, provisório) | no OpenRouter, o slug do catálogo |
 | `OPENROUTER_API_KEY` | — | chave do OpenRouter, do cofre; sem ela a IA responde "indisponível" |
 | `OPLENARIO_IA_OPENROUTER_PROVEDORES` | — | provedores aprovados, separados por vírgula (`provider.only`); ZDR e "sem coleta" vão sempre |
 | `OPLENARIO_IA_OPENROUTER_URL` | `https://openrouter.ai/api/v1` | |
