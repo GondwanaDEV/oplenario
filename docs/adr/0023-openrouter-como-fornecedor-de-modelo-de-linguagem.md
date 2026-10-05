@@ -110,3 +110,46 @@ failover entre os provedores da lista fica ligado, porque a lista já é a dos a
   (`carregar()`) com `openai/gpt-oss-120b` ou `qwen/qwen3.8-27b:free`. A avaliação monta a `Config` direto e roda
   qualquer slug fixo — é por ela que um modelo entra na lista. O `qwen/qwen3.8-27b:free` entrou a pedido, com preço
   zero na tabela; o limite diário do nível gratuito não o deixa servir a produção.
+
+## Exceção temporária: modelos gratuitos sem ZDR (05/10/2026)
+
+Decisão do Daouda, por escrito: "use os melhores modelos gratuitos mesmo não sendo compliance à nossa política, vamos
+seguir assim excepcionalmente até conseguir comprar créditos", para os testes e para produção. É uma exceção à
+política de dado desta ADR (`zdr` e `data_collection: deny` em toda requisição), não uma mudança dela.
+
+- **Como liga:** `OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita`. O padrão continua `zdr`, com o comportamento de
+  antes. Na exceção, o bloco `provider` leva só `require_parameters` (e `only`, se configurado), e o satélite sobe só
+  com modelos de `MODELOS_OPENROUTER_GRATUITOS_EXCECAO` (todos `:free`), com um aviso no log a cada subida.
+  `OPLENARIO_IA_MODELOS_RESERVA` dá a ordem de troca: em 429, 503, 408, 5xx, falha de rede ou 404, a chamada vai ao
+  próximo modelo; nunca em 400, 401, 402 ou 403. O modelo e o provedor que de fato atenderam continuam vindo da
+  resposta e vão ao registro.
+- **Os três escolhidos (triagem ao vivo de 05/10/2026):** `nvidia/nemotron-3-super-120b-a12b:free` (principal),
+  `qwen/qwen3.8-27b:free` e `nvidia/nemotron-3-ultra-550b-a55b:free` (reservas, nessa ordem).
+- **A triagem:** 19 modelos gratuitos chamam ferramentas. Cada candidato recebeu "Qual o quórum para derrubar um
+  veto?" com a busca nas normas e respondeu com o dispositivo devolvido.
+
+  | Modelo | Provedor | ZDR | Chamou a busca | Resposta | Tempo (2 passos) |
+  |---|---|---|---|---|---|
+  | nemotron-3-super-120b-a12b | Nvidia | não | sim | maioria absoluta, art. 45 | 3,7 s |
+  | qwen3.8-27b | ModelRun | sim | sim | maioria absoluta, art. 45 | 3,1 s |
+  | nemotron-3-ultra-550b-a55b | Nvidia | não | sim | maioria absoluta, art. 45; acrescenta "metade mais um" | 12,6 s |
+  | ling-3.0-flash-sante | Novita | sim | sim | maioria absoluta, art. 45 | 2,8 s |
+  | apodex-1.1-mini | Novita | sim | sim | maioria absoluta, art. 45 | 2,1 s |
+  | dots-3-note-preview | AtlasCloud | não | nome da ferramenta errado (`/buscar_dispositivos`) | — | — |
+  | gemma-4-31b-it, gemma-4-26b-a4b-it | Google | não | 429 do provedor gratuito, sem vaga | — | — |
+  | inkling | Thinking Machines | não | 403 | — | — |
+
+  O nemotron-3-super ficou à frente por ser o maior entre os rápidos e responder com precisão; o qwen3.8-27b, por
+  ser o único já avaliado nos conjuntos e ter provedor com ZDR; o nemotron-3-ultra, por tamanho, com a ressalva do
+  acréscimo que não estava na fonte. Os dois menores (ling, apodex) ficam como próxima troca se um dos três cair.
+  **A avaliação completa (5 conjuntos, 42 casos) não rodou:** a conta bateu o limite diário no meio da segunda rodada.
+- **O que se aceita com a exceção:**
+  - o provedor gratuito pode guardar e usar para treino o que recebe; com dado real, isso é tratamento sem contrato e
+    com transferência internacional (LGPD art. 33), o `[GAP]` jurídico desta ADR, assumido pelo dono do produto;
+  - **sem crédito comprado, a conta inteira tem 50 chamadas por dia** a modelos gratuitos (`free-models-per-day`;
+    cada pergunta à Clara gasta de 2 a 4). Passado o limite, o satélite responde 429 e a tela mostra "indisponível,
+    siga pela tela" (R-IA-1). A reserva não ajuda: o limite é da conta, não do modelo. Com US$ 10 comprados uma vez,
+    o limite sobe para 1000 por dia;
+  - modelo gratuito some ou muda sem aviso; o 404 cai na reserva.
+- **Como sai:** comprado o crédito, `OPLENARIO_IA_OPENROUTER_POLITICA=zdr` e `OPLENARIO_IA_MODELO` de
+  `MODELOS_OPENROUTER_PERMITIDOS`, depois da avaliação; a lista da exceção pode ser apagada.
