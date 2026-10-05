@@ -23,7 +23,7 @@ const fichaComNormaFake = {
   norma: {
     "norma-id": "n1",
     "proposicao-id": "p1",
-    "tipo-norma": "lei_ordinaria",
+    "tipo-norma": "lei",
     numero: 1234,
     ano: 2026,
     urn: "urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234",
@@ -76,6 +76,8 @@ describe("SecaoFicha", () => {
       }),
     ).toBeTruthy();
     expect(screen.getByText(fichaFake["urn-lex"]).textContent).toBe(fichaFake["urn-lex"]);
+    // a URN não aparece solta: vem rotulada, como na ficha da norma
+    expect(screen.getByText("Identificador oficial:")).toBeTruthy();
   });
 
   it("sem resumo publicado: o aviso honesto diz que a Casa ainda não publicou (não que a IA caiu)", async () => {
@@ -122,18 +124,16 @@ describe("SecaoFicha", () => {
     expect(screen.queryByText(/virou lei/i)).toBeNull();
   });
 
-  it("com norma publicada -> link REAL para o artefato (texto significativo, não a URN crua; URN some como texto adjacente) — review A2.3 item 3", async () => {
+  it("com norma publicada -> 'Lei nº 1234/2026' leva à página da norma; a URN não é impressa crua", async () => {
     mockFetch((url) => ({
       ok: true,
       json: async () => (url.endsWith("/comentarios") ? [] : fichaComNormaFake),
     }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
     await waitFor(() => expect(screen.getByText(/virou lei/i)).toBeTruthy());
-    const link = screen.getByRole("link", { name: /ver a lei 1234\/2026 publicada — texto oficial/i });
-    expect(link.getAttribute("href")).toBe("/api/portal/casa/fortaleza/legislacao/n1/artefato");
-    expect(screen.getByText(/urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234/).textContent).toMatch(
-      "urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234",
-    );
+    const link = screen.getByRole("link", { name: "Lei nº 1234/2026" });
+    expect(link.getAttribute("href")).toBe("/portal/casa/fortaleza/leis/n1");
+    expect(document.body.textContent).not.toContain("urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234");
   });
 
   it("comentários aprovados -> lista read-only (corpo + data, sem autor), marcada como <ul>/<li> — review A2.3 item 2", async () => {

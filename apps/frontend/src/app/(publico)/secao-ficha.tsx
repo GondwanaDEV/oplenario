@@ -17,6 +17,7 @@ import { derivarFicha } from "@/lib/ficha-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
+import { tituloDaNorma } from "@/lib/leis-vista";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
@@ -91,7 +92,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
               strokeLinecap="round"
             />
           </svg>
-          {vista.permalink}
+          <span>
+            <span className="permalink-rotulo">Identificador oficial:</span> <span>{vista.permalink}</span>
+          </span>
         </p>
       </section>
 
@@ -103,10 +106,10 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           </svg>
           <span>
             <b>Virou lei.</b> Publicada em {formatarData(vista.normaPublicada.publicadoEm)} —{" "}
-            <a href={`/api/portal/casa/${ente}/legislacao/${vista.normaPublicada.normaId}/artefato`}>
-              Ver a Lei {vista.normaPublicada.numero}/{vista.normaPublicada.ano} publicada — texto oficial
-            </a>{" "}
-            ({vista.normaPublicada.urn})
+            <a href={`/portal/casa/${encodeURIComponent(ente)}/leis/${encodeURIComponent(vista.normaPublicada.normaId)}`}>
+              {tituloDaNorma(vista.normaPublicada)}
+            </a>
+            , com o texto oficial para baixar.
           </span>
         </p>
       )}
