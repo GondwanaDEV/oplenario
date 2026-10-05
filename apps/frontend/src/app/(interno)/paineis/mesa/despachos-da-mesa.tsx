@@ -4,9 +4,11 @@
 // (fila.relator); os demais (distribuição/autógrafo/ata) ficam em-breve por construção (spec §7 — nenhum
 // tem rota hoje) e NÃO viram bullet points inventados: aparecem como uma nota honesta, não itens fake.
 
+import Link from "next/link";
 import { derivarRef } from "@/lib/materia-vista";
 import { contar } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
+import { comToken } from "@/lib/nav";
 import type { RelatorPendenteOut } from "@/lib/contrato-mesa.gen";
 
 // Fatia "truncamento-familia", achado "classe JOIN": `tipo`/`sequencial`/`ano` ficam `[:maybe ...]` no
@@ -18,7 +20,7 @@ function refDoRelator(it: RelatorPendenteOut): string | null {
   return derivarRef({ tipo: it.tipo, sequencial: it.sequencial, ano: it.ano });
 }
 
-export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
+export function DespachosDaMesa({ vista, token = null }: { vista: MesaVista["despachos"]; token?: string | null }) {
   const relatorItens = vista.relator.estado === "disponivel" ? vista.relator.itens : [];
   return (
     <section className="bloco" aria-labelledby="fila-titulo">
@@ -55,6 +57,13 @@ export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
                     </>
                   )}
                 </div>
+                <Link
+                  className="btn btn-contorno"
+                  href={comToken(`/ficha-materia/${encodeURIComponent(it.proposicaoId)}`, token)}
+                  aria-label={`Abrir ${ref ?? "a matéria"} para designar o relator`}
+                >
+                  Abrir a matéria
+                </Link>
               </li>
             );
           })}

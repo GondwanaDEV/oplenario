@@ -155,6 +155,18 @@
 .org-stat .n small { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--marca); letter-spacing: 0; margin-left: 0.35rem; }
 .org-stat .rot { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.35; }
 
+/* ---- LINKS do dashboard (04/10/2026): o painel era só leitura, nada abria nada ---- */
+/* Link de texto para a tela que detalha o cartão. --cobalto-texto é o par AA do azul para tinta (tokens.css);
+   sublinhado sempre, porque cor sozinha não distingue link de texto corrido. */
+.ver-mais { display: inline-block; margin: 0.5rem 0 0; padding: 0.25rem 0; font-size: var(--t-13); font-weight: 600; color: var(--cobalto-texto); text-decoration: underline; text-underline-offset: 3px; }
+.ver-mais:hover { text-decoration-thickness: 2px; }
+.ver-mais-linha { margin: 0.9rem 0 0; }
+.ver-mais-linha .ver-mais { margin: 0; }
+/* O ref + a ementa de cada proposição do quadro e a referência de cada prazo viram o alvo do link, sem mudar o
+   desenho: herdam a cor do texto e ganham sublinhado ao apontar/focar. */
+.estagio-lista a, .prazo-obj b a { color: inherit; text-decoration: none; display: block; }
+.estagio-lista a:hover .tit, .estagio-lista a:focus-visible .tit, .prazo-obj b a:hover, .prazo-obj b a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+
 /* ---- coluna lateral (Próxima sessão) ---- */
 .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
 

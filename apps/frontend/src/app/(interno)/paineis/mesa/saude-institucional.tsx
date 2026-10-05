@@ -11,7 +11,9 @@
 // existe para consertar — fingir INCOMPLETUDE onde há completude. O aviso real mora em OQueVence, onde a
 // lista truncada de fato aparece na tela.
 
+import Link from "next/link";
 import { contar } from "@/lib/mesa-vista";
+import { comToken } from "@/lib/nav";
 import type { MesaVista, RemessasVista } from "@/lib/mesa-vista";
 import { rotularEstadoRemessa, rotularObrigacao } from "@/lib/rotulos-compliance";
 
@@ -45,7 +47,7 @@ function RemessasAoTce({ remessas }: { remessas: RemessasVista }) {
   );
 }
 
-export function SaudeInstitucional({ vista }: { vista: MesaVista["saude"] }) {
+export function SaudeInstitucional({ vista, token = null }: { vista: MesaVista["saude"]; token?: string | null }) {
   if (vista.estado === "indisponivel") {
     return (
       <section className="saude saude-indisponivel" aria-labelledby="saude-titulo">
@@ -86,6 +88,9 @@ export function SaudeInstitucional({ vista }: { vista: MesaVista["saude"] }) {
             <p className="n">{vencidas}</p>
           </div>
         </div>
+        <p className="ver-mais-linha">
+          <Link className="ver-mais" href={comToken("/calendario", token)}>Ver os prazos no calendário</Link>
+        </p>
         {remessas && <RemessasAoTce remessas={remessas} />}
       </div>
     </section>

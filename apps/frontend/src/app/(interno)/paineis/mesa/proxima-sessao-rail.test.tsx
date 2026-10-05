@@ -119,6 +119,24 @@ describe("ProximaSessaoRail", () => {
     expect(screen.getByText(/Agendada para 19\/09\/2026 às 22h30/)).toBeDefined();
   });
 
+  it("a próxima sessão leva à tela da sessão (com o token dev)", () => {
+    render(
+      <ProximaSessaoRail
+        token="tk"
+        sliSessoes={[agendada("proxima-1", "2026-10-06T13:00:00Z")]}
+        sliSessoesTotal={1}
+        agora={new Date("2026-10-04T15:00:00Z")}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /Abrir a sessão/ });
+    expect(link.getAttribute("href")).toBe("/sessoes/proxima-1/conduzir?token=tk");
+  });
+
+  it("sem próxima sessão (lista cortada ou vazia): nenhum link inventado", () => {
+    render(<ProximaSessaoRail sliSessoes={[]} sliSessoesTotal={0} />);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
   it("a hora vem sem segundos, mesmo quando o instante os traz", () => {
     render(
       <ProximaSessaoRail

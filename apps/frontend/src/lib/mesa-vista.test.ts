@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarMesaVista, diasAteVencer, frasePrazo } from "./mesa-vista";
+import { derivarMesaVista, destinoDoPrazo, diasAteVencer, frasePrazo } from "./mesa-vista";
 
 const mesaBase = {
   complianceTce: {
@@ -335,5 +335,33 @@ describe("frasePrazo — plural de verdade, sem parênteses", () => {
 
   it("data sem leitura -> frase honesta, sem número inventado", () => {
     expect(frasePrazo(null)).toBe("prazo sem data válida");
+  });
+});
+
+describe("destinoDoPrazo — só leva a tela que existe", () => {
+  const pend = (objetoTipo: string, objetoId = "o1") => ({ origem: "pendencia" as const, objetoTipo, objetoId });
+  const obr = (objetoTipo: string, objetoId = "o1") => ({ origem: "compliance" as const, objetoTipo, objetoId });
+
+  it("pedido e-SIC, solicitação LGPD e manifestação abrem o protocolo no balcão", () => {
+    expect(destinoDoPrazo(pend("pedido_esic", "a b"))).toBe("/atendimento/esic/a%20b");
+    expect(destinoDoPrazo(pend("solicitacao_titular"))).toBe("/atendimento/lgpd/o1");
+    expect(destinoDoPrazo(pend("manifestacao_ouvidoria"))).toBe("/atendimento/ouvidoria/o1");
+  });
+
+  it("recurso e-SIC: o id é o do recurso, que o balcão não abre; leva à fila de e-SIC", () => {
+    expect(destinoDoPrazo(pend("recurso_esic"))).toBe("/atendimento?aba=esic");
+  });
+
+  it("obrigação do julgamento das contas abre a prestação; as demais não têm tela própria", () => {
+    expect(destinoDoPrazo(obr("prestacao_contas", "pc1"))).toBe("/contas/pc1");
+    expect(destinoDoPrazo(obr("competencia"))).toBeNull();
+  });
+
+  it("tipo fora do vocabulário -> null (nunca um link inventado)", () => {
+    expect(destinoDoPrazo(pend("tipo_novo"))).toBeNull();
+  });
+
+  it("tipo de pendência numa obrigação não vira link (os vocabulários são de módulos diferentes)", () => {
+    expect(destinoDoPrazo(obr("pedido_esic"))).toBeNull();
   });
 });

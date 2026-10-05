@@ -12,9 +12,11 @@
 // ver o comentário lá. Com isso, `item.templateChave` / `item.objetoTipo` / `item.protocolo` acessam
 // direto, com checagem estática de verdade em vez de um cast que mascarava a falta do campo.
 
+import Link from "next/link";
 import { AnelPrazo } from "@/lib/charts/anel-prazo";
-import { contar, diasAteVencer, frasePrazo, rotularObjetoPrazo } from "@/lib/mesa-vista";
+import { contar, destinoDoPrazo, diasAteVencer, frasePrazo, rotularObjetoPrazo } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
+import { comToken } from "@/lib/nav";
 import { rotularObrigacao } from "@/lib/rotulos-compliance";
 
 /** A cor do anel e da borda: vencido ou a até 2 dias é urgente; até 5, atenção; o resto, no prazo. Mesmos degraus
@@ -24,7 +26,7 @@ function urgenciaDoPrazo(dias: number | null): string {
   return dias <= 5 ? "prz-atencao" : "prz-noprazo";
 }
 
-export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
+export function OQueVence({ vista, token = null }: { vista: MesaVista["oQueVence"]; token?: string | null }) {
   if (vista.estado === "indisponivel") {
     return (
       <section className="bloco" aria-labelledby="prazos-titulo">
@@ -64,6 +66,7 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
         <ul className="prazos">
           {vista.itens.map((item) => {
             const dias = diasAteVencer(item.venceEm);
+            const destino = destinoDoPrazo(item);
             const rotulo =
               item.origem === "compliance"
                 ? `Obrigação · ${rotularObrigacao(item.templateChave)}`
@@ -80,7 +83,7 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
                   atrasoDias={dias !== null && dias < 0 ? -dias : undefined}
                 />
                 <div className="prazo-obj">
-                  <b>{rotulo}</b>
+                  <b>{destino ? <Link href={comToken(destino, token)}>{rotulo}</Link> : rotulo}</b>
                   <span className={dias !== null && dias < 0 ? "quando quando-atrasado" : "quando"}>{frasePrazo(dias)}</span>
                 </div>
               </li>

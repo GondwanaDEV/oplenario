@@ -88,6 +88,24 @@ describe("DespachosDaMesa — a fila de relatores para de fingir completude", ()
     expect(getByText("Matéria indisponível")).toBeTruthy();
   });
 
+  it("cada item da fila abre a matéria, onde o relator é designado (também o item órfão)", () => {
+    const { getAllByRole } = render(
+      <DespachosDaMesa
+        token="tk"
+        vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never, itemOrfao as never], truncado: false })}
+      />,
+    );
+    const hrefs = getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["/ficha-materia/p1?token=tk", "/ficha-materia/p2?token=tk"]);
+  });
+
+  it("o texto do link diz o que ele faz e qual matéria abre", () => {
+    const { getByRole } = render(
+      <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: false })} />,
+    );
+    expect(getByRole("link", { name: /Abrir PL 007\/2026 para designar o relator/ })).toBeTruthy();
+  });
+
   it("item disponível segue mostrando a referência normal (sigla + número/ano)", () => {
     const { getByText } = render(
       <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: false })} />,

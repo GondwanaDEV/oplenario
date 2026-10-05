@@ -315,4 +315,31 @@ export function frasePrazo(dias: number | null): string {
   return `vence em ${dias} dias`;
 }
 
+/** A tela que abre o item de "O que vence", ou `null` quando não há uma. Só rota que EXISTE e que a Mesa (papel
+ *  `secretario`, o mesmo gate de GET /paineis/mesa) pode abrir:
+ *   - pedido e-SIC, solicitação LGPD e manifestação de ouvidoria -> o protocolo no balcão (`/atendimento/<espécie>/<id>`);
+ *   - recurso e-SIC -> a fila de e-SIC: `objetoId` é o id do RECURSO e o balcão abre o pedido, não o recurso;
+ *   - obrigação do julgamento das contas (`prestacao_contas`) -> a prestação (`/contas/<id>`);
+ *   - as demais obrigações (remessa ao TCE, audiência de metas fiscais) não têm tela própria: sem link.
+ *  O vocabulário de `objetoTipo` é do módulo dono de cada origem (CHECK de `paineis.pendencia`; objeto do gatilho
+ *  de compliance): por isso o `origem` entra na decisão e um tipo de um lado nunca vira link do outro. */
+export function destinoDoPrazo(item: { origem: "compliance" | "pendencia"; objetoTipo: string; objetoId: string }): string | null {
+  const id = encodeURIComponent(item.objetoId);
+  if (item.origem === "compliance") {
+    return item.objetoTipo === "prestacao_contas" ? `/contas/${id}` : null;
+  }
+  switch (item.objetoTipo) {
+    case "pedido_esic":
+      return `/atendimento/esic/${id}`;
+    case "solicitacao_titular":
+      return `/atendimento/lgpd/${id}`;
+    case "manifestacao_ouvidoria":
+      return `/atendimento/ouvidoria/${id}`;
+    case "recurso_esic":
+      return "/atendimento?aba=esic";
+    default:
+      return null;
+  }
+}
+
 export type MesaVista = ReturnType<typeof derivarMesaVista>;

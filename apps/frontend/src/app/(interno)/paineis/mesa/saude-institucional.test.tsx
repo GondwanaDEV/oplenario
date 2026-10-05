@@ -44,6 +44,16 @@ describe("SaudeInstitucional — a manchete diz a verdade no singular e no plura
     render(<SaudeInstitucional vista={comVencidas(0)} />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("A Casa está em dia com o TCE-CE.");
   });
+
+  it("o placar leva ao calendário, onde os prazos de compliance têm tela (com o token dev)", () => {
+    render(<SaudeInstitucional vista={comVencidas(1)} token="tk" />);
+    expect(screen.getByRole("link", { name: /prazos no calendário/i }).getAttribute("href")).toBe("/calendario?token=tk");
+  });
+
+  it("compliance indisponível: sem link para o calendário", () => {
+    render(<SaudeInstitucional vista={{ estado: "indisponivel", resumo: undefined, emAberto: undefined, truncamento: null, remessas: undefined }} />);
+    expect(screen.queryByRole("link")).toBeNull();
+  });
 });
 
 describe("SaudeInstitucional — remessas ao TCE", () => {

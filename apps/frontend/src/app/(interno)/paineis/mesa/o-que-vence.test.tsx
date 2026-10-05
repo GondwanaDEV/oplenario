@@ -121,6 +121,49 @@ describe("OQueVence — o prazo em palavras", () => {
     expect(queryByText(/audiencia_metas_fiscais|julgamento_contas_prefeito/)).toBeNull();
   });
 
+  describe("cada prazo que tem tela leva a ela", () => {
+    const pendencia = (objetoTipo: string, objetoId: string, protocolo: string) => ({
+      origem: "pendencia" as const, objetoTipo, objetoId, protocolo, venceEm: "2026-09-30", estado: "pendente",
+    });
+    const vistaMista = (itens: Extract<MesaVista["oQueVence"], { estado: "disponivel" }>["itens"]): MesaVista["oQueVence"] => ({
+      estado: "disponivel", itens, truncamentoCompliance: null, truncamentoPendencias: null,
+    });
+
+    it("pedido e-SIC, solicitação LGPD e manifestação abrem o protocolo no balcão (com o token dev)", () => {
+      const { getByRole } = render(
+        <OQueVence
+          token="tk"
+          vista={vistaMista([
+            pendencia("pedido_esic", "e1", "ESIC-2026-000001"),
+            pendencia("solicitacao_titular", "l1", "LGPD-2026-000001"),
+            pendencia("manifestacao_ouvidoria", "o1", "OUV-2026-000001"),
+          ])}
+        />,
+      );
+      expect(getByRole("link", { name: /Pedido e-SIC · ESIC-2026-000001/ }).getAttribute("href")).toBe("/atendimento/esic/e1?token=tk");
+      expect(getByRole("link", { name: /LGPD-2026-000001/ }).getAttribute("href")).toBe("/atendimento/lgpd/l1?token=tk");
+      expect(getByRole("link", { name: /OUV-2026-000001/ }).getAttribute("href")).toBe("/atendimento/ouvidoria/o1?token=tk");
+    });
+
+    it("sem token dev, o href sai limpo", () => {
+      const { getByRole } = render(<OQueVence vista={vistaMista([pendencia("pedido_esic", "e1", "ESIC-1")])} />);
+      expect(getByRole("link", { name: /ESIC-1/ }).getAttribute("href")).toBe("/atendimento/esic/e1");
+    });
+
+    it("recurso e-SIC leva à fila de e-SIC (o balcão não abre o recurso pelo id dele)", () => {
+      const { getByRole } = render(<OQueVence vista={vistaMista([pendencia("recurso_esic", "r1", "REC-1")])} />);
+      expect(getByRole("link", { name: /REC-1/ }).getAttribute("href")).toBe("/atendimento?aba=esic");
+    });
+
+    it("obrigação do julgamento das contas abre a prestação; a remessa ao TCE não tem tela e fica sem link", () => {
+      const contas = { ...item("2026-10-31", "j"), objetoTipo: "prestacao_contas", objetoId: "pc1", templateChave: "julgamento_contas_prefeito" };
+      const remessa = item("2026-10-31", "s");
+      const { getByRole, queryByRole } = render(<OQueVence vista={vista([contas, remessa])} />);
+      expect(getByRole("link", { name: /Julgamento das contas do Prefeito/ }).getAttribute("href")).toBe("/contas/pc1");
+      expect(queryByRole("link", { name: /Remessa mensal ao SIM/ })).toBeNull();
+    });
+  });
+
   it("as três frases são distintas entre si na mesma lista", () => {
     const { getAllByText } = render(
       <OQueVence
