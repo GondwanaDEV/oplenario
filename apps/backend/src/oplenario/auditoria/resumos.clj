@@ -161,6 +161,8 @@
 
    ;; ---- propostas de ato do assistente ----
    :propostas/confirmar                         "Confirmou uma proposta de ato do assistente"
+   :agente/perguntar                            "Fez uma pergunta à Clara, a assistente da Casa"
+   :agente/reportar-erro-ia                     "Reportou erro em uma resposta da IA"
    :propostas/recusar                           "Recusou uma proposta de ato do assistente"
 
    ;; ---- sessões ----
@@ -207,9 +209,6 @@
 (def ^:private motivo-segredo-do-satelite
   "Chamada do satélite de IA autenticada pelo segredo compartilhado, sem ator da Casa: não entra na trilha")
 
-(def ^:private motivo-assistente
-  "Trilha do assistente em obra na frente da Clara (ADR-0024, PR #176): o handler dele é dono do registro; rotular depois do merge")
-
 (def ^:private motivo-antes-da-entrada
   "Porta pública da entrada pelo CPF (ADR-0025), antes de haver sessão: sem ator e sem Casa, nada entra na trilha")
 
@@ -232,9 +231,7 @@
    :admin-sistema/retomar-apagamento            motivo-operacao
    :integracao-ia/credencial-institucional      motivo-segredo-do-satelite
    :integracao-ia/receber                       motivo-segredo-do-satelite
-   :integracao-ia/revogar-credencial-institucional motivo-segredo-do-satelite
-   :agente/perguntar                            motivo-assistente
-   :agente/reportar-erro-ia                     motivo-assistente})
+   :integracao-ia/revogar-credencial-institucional motivo-segredo-do-satelite})
 
 (defn rotulo-da-acao
   "O rotulo default da acao (`:modulo/nome`, keyword), ou nil."
