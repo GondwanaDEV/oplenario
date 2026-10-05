@@ -49,6 +49,26 @@ describe("trilha de auditoria — a lógica pura", () => {
     expect(objeto({ ...concedeu, recurso: null }).titulo).toBe("conceder acesso · Acessos e identidade");
   });
 
+  it("a frase do ato não ganha um segundo verbo na etiqueta, e o detalhe só situa o módulo", () => {
+    const ato: RegistroTrilha = { ...base, acao: "sessoes/definir-tempos-regimentais",
+      recurso: { tipo: null, id: null, rotulo: "Definiu os tempos regimentais da tribuna" } };
+    expect(verbo(ato).rotulo).toBe("Ato");
+    expect(objeto(ato)).toEqual({ titulo: "Definiu os tempos regimentais da tribuna", detalhe: "Sessões e atas" });
+    // a cor segue a natureza da ação
+    expect(verbo({ ...ato, acao: "identidade/revogar-acesso", recurso: { tipo: null, id: null, rotulo: "Revogou um acesso à Casa" } }))
+      .toEqual({ rotulo: "Ato", tom: "removeu" });
+    // rótulo de objeto continua com o verbo da ação
+    expect(verbo(base).rotulo).toBe("Aprovou");
+    // negação e falha seguem com a etiqueta própria
+    expect(verbo({ ...ato, decisao: "falhou" }).rotulo).toBe("Não concluiu");
+  });
+
+  it("tipo de recurso que a tela não conhece não vira título com pedaço de UUID", () => {
+    const antigo: RegistroTrilha = { ...base, acao: "sessoes/transicionar", recurso: { tipo: "id", id: "17d4218b-cfa8-4c29", rotulo: null } };
+    expect(objeto(antigo).titulo).toBe("transicionar · Sessões e atas");
+    expect(objeto(antigo).titulo).not.toMatch(/17d4218b/);
+  });
+
   it("quem: pessoa pelo papel; cidadão pseudonimizado; agente com 'via'", () => {
     expect(quem(base.ator)).toEqual({ nome: "Maria Secretária", papel: "Secretaria", iniciais: "MS" });
     expect(quem({ tipo: "cidadao", nome: "Cidadão #a1b2c3", papeis: [], via: null })).toMatchObject({
