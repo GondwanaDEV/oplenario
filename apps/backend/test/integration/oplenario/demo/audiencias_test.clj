@@ -10,7 +10,7 @@
             [oplenario.demo.casa-test :refer [with-sistema]]
             [oplenario.sessoes.components.repositorio :as repo-s]
             [oplenario.sessoes.components.repositorio-audiencia :as repo-aud])
-  (:import (java.time Duration Instant)))
+  (:import (java.time Duration Instant LocalTime ZoneId)))
 
 (defn- contar [ds sql ente] (-> (jdbc/execute-one! ds [sql ente]) vals first long))
 
@@ -19,6 +19,9 @@
     (let [ds (:ds (:datasource s))
           repo (:repo-sessoes s)
           {:keys [ente identidades]} (casa/semear! s)
+          ;; a semente agenda a tematica so' na 1a vez, para "hoje + 7 dias"; num banco persistente ela ja existe de
+          ;; uma corrida anterior e a distancia ate hoje encolhe um dia por dia (quebrava no 2o dia, PR #183)
+          criada-agora? (nil? (repo-s/buscar-sessao repo ente audiencias-demo/id-tematica))
           r (audiencias-demo/semear! s ente identidades)]
       (testing "a tematica, agendada para daqui a uma semana, com a fila"
         (let [sessao (repo-s/buscar-sessao repo ente (:tematica r))
@@ -26,7 +29,9 @@
               dias (.toDays (Duration/between (Instant/now) ^Instant (:agendada-para sessao)))]
           (is (= "audiencia_publica" (:tipo-sessao sessao)))
           (is (= "agendada" (:estado sessao)))
-          (is (<= 6 dias 7))
+          (when criada-agora? (is (<= 6 dias 7)))
+          (is (= (LocalTime/of 14 0) (.toLocalTime (.atZone ^Instant (:agendada-para sessao) (ZoneId/of "America/Fortaleza"))))
+              "as 14h no fuso da Casa")
           (is (= "tematica" (:finalidade audiencia)))
           (is (= [["presencial_secretaria" "José Raimundo Lima" "entidade"]
                   ["portal_govbr" "Roberta Costa Aguiar" "individual"]]

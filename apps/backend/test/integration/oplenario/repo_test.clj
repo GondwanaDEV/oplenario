@@ -3,7 +3,8 @@
   Sierra Component. Prova: o sistema inicia com os repos recebendo :datasource via `using`; as ACOES
   sao tenant-aware (com-tenant* por dentro); isolam por tenant; `transacao` compoe atomico; supratenant
   (identidade) roda sobre o :ds. O controller/teste depende do Component, nunca do db/ direto."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.cadastros.components.repositorio :as rc]
             [oplenario.cadastros.db.estrutura :as cad-estrutura]
@@ -24,9 +25,6 @@
       ;; reference data (municipios) e' seed de admin/owner — sobre o :ds, fora do repo do app.
       (ref/inserir-municipio! (:ds (:datasource s)) {:codigo-ibge "2304400" :nome "Fortaleza" :uf "CE" :capital true :populacao 2703391})
       (binding [*sys* s] (try (t) (finally (component/stop s)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (deftest repo-cadastros-disponibiliza-acoes-tenant-aware
   (let [repo (:repo-cadastros *sys*)

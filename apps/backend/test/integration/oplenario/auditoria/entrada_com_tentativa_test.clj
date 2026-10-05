@@ -8,7 +8,8 @@
 
   A regra do login, diferente da escrita: a trilha fora NUNCA tranca a entrada, nem com AUDITORIA_EXIGIR_TENTATIVA=true
   (quem entra para consertar a trilha nao pode ser o que a trilha deixou de fora)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -38,9 +39,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- fake-idp [tokens]
   #_{:clj-kondo/ignore [:missing-protocol-method]}

@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real): o perfil do papel `juridico` (ADR-0019, mig `identidade-perfil-juridico`). Prova o UPSERT
   (reconceder atualiza, sem duplicar), a RLS entre Casas, o nome pela leitura estreita (sem CPF), os CHECKs do
   banco e a gravacao do perfil NA MESMA tx dos papeis em `conceder-acesso!`."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.config :as config]
@@ -21,16 +22,6 @@
 
 (defn- repo-identidade []
   (assoc (repo/repositorio) :datasource {:ds *ds*}))
-
-(defn- dv [ds]
-  (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)]
-    (if (< r 2) 0 (- 11 r))))
-
-(defn- cpf-valido []
-  (let [base (vec (repeatedly 9 #(rand-int 10)))
-        d1 (dv base)
-        d2 (dv (conj base d1))]
-    (apply str (concat base [d1 d2]))))
 
 (defn- nova-identidade! [r nome]
   (repo/criar-identidade! r {:id (random-uuid) :cpf (cpf-valido) :nome nome}))
