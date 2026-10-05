@@ -1,0 +1,13 @@
+/* "Por onde a matéria passou" na ficha pública (linha do tempo da tramitação) — tokens do portal; receita `.tempo` da
+   tela ficha-materia do design system. Escopado em `.mov`: o portal inteiro usa `.secao`, e um `.secao h2` solto mudaria
+   a home e as outras seções da ficha. */
+.mov h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0 0 1rem; }
+.mov-aviso { margin: 0 0 1rem; font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; max-width: 66ch; }
+.mov-lista { list-style: none; margin: 0; padding: 0; }
+.mov-item { position: relative; padding: 0 0 1.3rem 1.8rem; border-left: 2px solid var(--linha); min-width: 0; }
+.mov-item:last-child { border-left-color: transparent; padding-bottom: 0; }
+.mov-item::before { content: ""; position: absolute; left: -7px; top: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--marca); }
+.mov-item[aria-current="step"]::before { background: var(--marca); }
+.mov-data { display: block; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.mov-etapa { margin: 0.1rem 0; font-weight: 600; font-size: var(--t-16); color: var(--texto); overflow-wrap: anywhere; }
+.mov-atual { display: inline-block; margin-top: 0.1rem; font-size: var(--t-12); font-weight: 700; color: var(--marca); letter-spacing: 0.04em; text-transform: uppercase; }

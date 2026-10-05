@@ -90,6 +90,9 @@
       (repo/transicionar! *repo* ente *registro* {:proposicao-id pid :template-id tid :gatilho "andar" :agora data})
       (repo/transicionar! *repo* ente *registro* {:proposicao-id pid :template-id tid :gatilho "encerrar" :agora data})
       (let [[e1 e2] (eventos-transicionou ente)]
+        ;; o portal mostra a etapa pelo NOME no rito (`template_estado.nome`), nunca pela chave
+        (is (re-find #"\"para-nome\": \"em_andamento\"" (:payload e1)) "o evento carrega o nome da etapa de destino")
+        (is (re-find #"\"para-nome\": \"encerrada_do_rito\"" (:payload e2)))
         (is (re-find #"\"para-terminal\": false" (:payload e1)) "andar -> estado nao terminal")
         (is (re-find #"\"para-terminal\": true" (:payload e2)) "encerrar -> estado que o rito declara terminal")))))
 

@@ -30,7 +30,13 @@
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:autor-id {:optional true} [:maybe :string]]
-   [:estado :string]])
+   [:estado :string]
+   ;; Linha do tempo PUBLICA da materia (portal): o ROTULO do estado inicial como o rito da Casa o declara
+   ;; (`template_estado.nome`; ausente = o rito nao o declara) e o INSTANTE do protocolo (string ISO). Opcionais:
+   ;; evento emitido antes dos campos existirem segue valido; o consumer do portal descarta (com log) o que nao
+   ;; os traz, em vez de inventar data ou nome de etapa.
+   [:estado-nome {:optional true} [:maybe :string]]
+   [:protocolada-em {:optional true} :string]])
 
 (defn protocolada
   "Constroi o envelope de `proposicao.protocolada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca
@@ -66,6 +72,10 @@
    ;; consome (paineis: "proposicoes em tramitacao") nao casa nome de estado — o vocabulario e' texto livre por
    ;; Casa. OPCIONAL: evento emitido antes do campo existir segue valido; ausente = nao afirma fim de rito.
    [:para-terminal {:optional true} :boolean]
+   ;; O ROTULO da etapa de destino como o rito da Casa o declara (`template_estado.nome`) — o portal mostra a linha do
+   ;; tempo da materia em palavras, e a chave (`para`) e' texto livre por Casa que nunca vai a tela. OPCIONAL: ausente
+   ;; = o rito nao declara o estado de destino (ou evento anterior ao campo).
+   [:para-nome {:optional true} [:maybe :string]]
    [:ator-id {:optional true} [:maybe :uuid]]])
 
 (defn transicionou
