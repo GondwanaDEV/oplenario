@@ -2729,13 +2729,22 @@ sem causa confirmada: `caixa.test.tsx`, `notificacoes/page.test.tsx` (2 casos), 
 (`vitest.atraso.config.ts` + `vitest.atraso.setup.ts`; `ATRASO_MS`=40, `ATRASO_MOCK`=1, `ATRASO_PINTURA`=1). Os três
 falsos vermelhos conhecidos estão no cabeçalho do setup. Rodar antes de mergear teste novo de tela assíncrona.
 
-## Retriagem do exploratório de 12/09 (04/10/2026) — o que segue aberto no código de hoje
+## Retriagem do exploratório de 12/09 (04/10/2026, fechada em 05/10/2026) — o que segue aberto no código de hoje
 
-Só leitura do código da `main` (`08d71a40`); nada foi rodado. "Fechado" quer dizer "o código atual não tem o defeito",
-não "reproduzi e passou".
+Leitura do código da `main` (`8278d3bc`); um único achado foi também executado (o crítico da remessa, abaixo). "Fechado"
+quer dizer "o código atual não tem o defeito", não "reproduzi e passou". Os 84 achados são os do exploratório de 12/09:
+32 da jornada da servidora (4 críticos · 9 altos · 19 médios/baixos) e 52 das jornadas do presidente e da cidadã (6 · 22 ·
+24); os 21 derrubados pela refutação não entram.
 
-**Placar:** 84 achados · 43 conferidos · **19 abertos** · 24 fechados · 41 não conferidos (36 deles médios ou baixos, só
-lidos no ledger).
+**Placar:** 84 achados · **50 abertos** · 34 fechados · 0 não decididos. A passada de 04/10 contava linhas (19 abertos,
+24 fechados, 41 não conferidos); esta fecha os 41 e conta achados. As duas contas diferem em dois pontos:
+- as linhas 1 e 7 abaixo são **resíduos** de achados fechados (o papel único e a FK ausente), não achados; ficam na
+  tabela porque seguem de pé;
+- a linha 6 cobre três achados (a Mesa vota por ausente justificado, a rota da Mesa e a do celular com regras
+  diferentes, e a vitrine pública com os votos ilegítimos) e a linha 22 cobre dois (sessão em curso e "próxima
+  sessão" no dashboard da Mesa).
+
+Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as linhas 5, 18–21, 24–37 e 39–49).
 
 | # | Achado | Gravidade | Evidência | Só código? |
 |---|---|---|---|---|
@@ -2743,33 +2752,112 @@ lidos no ledger).
 | 2 | Promulgar/publicar a norma não tem rota (`promulgar-norma!` sem chamador) | crítico | `legislativo/db/norma.clj:21`; `legislativo/components/repositorio.clj:1036` | parte; o rito de sanção por LOM é `[GAP]` |
 | 3 | Gerar a remessa ao TCE não tem rota nem agendador | crítico | `compliance/diplomat/http/in.clj:89-97` | parte; o layout do SIM é `[GAP]` |
 | 4 | Convocação oficial da sessão não existe | crítico | `paineis/mesa/proxima-sessao-rail.tsx:30` | espera o jurídico |
-| 5 | A rota da Mesa aceita voto de quem está ausente justificado | alto | `legislativo/controllers.clj:80-98` contra `:111-163` | sim; confirmar se é regra da Casa |
-| 6 | `votos.vereador_id` sem FK nem CHECK | alto | `migrations/20260620000021-legislativo-votacao.up.sql:85` | sim |
-| 7 | A mesma proposição entra duas vezes na pauta | alto | `sessoes/controllers.clj:469-488`; `sessoes/db/pauta.clj:119` | sim |
-| 8 | Placar nominal do telão mostra prefixo de UUID, não o nome | alto | `sessoes/[id]/plenario/page.tsx:377` | sim |
-| 9 | "Proposições em tramitação" soma aprovadas e arquivadas | alto | `paineis/adapters/out/mesa.clj:27`; `paineis/db/tramitacao.clj:90-104` | sim |
-| 10 | Não há como revogar o acesso de ninguém | alto | `identidade/diplomat/http/in.clj:170-186` | sim |
-| 11 | Duas sessões abertas: o cockpit vai para a mais antiga | alto | `paineis/db/sli_sessao.clj:136-139` | sim para o cockpit |
-| 12 | Não existe página pública de votações | alto | `transparencia/diplomat/http/in.clj:220-264` | parte |
-| 13 | Perfil público do vereador só abre por UUID; sem lista | alto | `(publico)/…/vereadores/[vereadorId]/page.tsx` | sim |
-| 14 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |
-| 15 | Responder um pedido não notifica o cidadão | alto | `participacao/events/prazo.clj` | espera SMTP/push |
-| 16 | `secretario` não é papel concedível pela tela | alto | `identidade/wire/in/acesso.clj:7` | decisão do fundador |
-| 17 | Dashboard da Mesa não mostra a sessão em curso; "próxima sessão" sem fuso | médio | `paineis/mesa/proxima-sessao-rail.tsx:25` e `:34` | sim |
-| 18 | Remessas ao TCE não aparecem no painel | médio | `paineis/diplomat/consumers.clj:18-31` | sim |
-| 19 | A raiz `/` ainda diz "Front-end em construção" | baixo | `frontend/src/app/page.tsx:11-25` | sim |
+| 5 | **Aceitar a remessa pela rota não cumpre a obrigação: ela segue pendente e o sweep a vence depois de 30/09** (reproduzido, ver abaixo) | crítico | `compliance/components/repositorio.clj:236-237` (a resposta só transiciona a remessa); `rotas.clj:921-940` (nenhum gatilho em `/compliance/remessas/:id/resposta`); `gatilho_compliance.clj:215-240` (avalia só metas fiscais e contas, e varre todo pendente) | sim; confirmar o desenho (quem reavalia no aceite) |
+| 6 | A rota da Mesa aceita voto de quem está ausente justificado | alto | `legislativo/controllers.clj:80-98` contra `:111-163` | sim; confirmar se é regra da Casa |
+| 7 | `votos.vereador_id` sem FK nem CHECK | alto | `migrations/20260620000021-legislativo-votacao.up.sql:85` | sim |
+| 8 | A mesma proposição entra duas vezes na pauta | alto | `sessoes/controllers.clj:469-488`; `sessoes/db/pauta.clj:119` | sim |
+| 9 | Placar nominal do telão mostra prefixo de UUID, não o nome | alto | `sessoes/[id]/plenario/page.tsx:377` | sim |
+| 10 | "Proposições em tramitação" soma aprovadas e arquivadas | alto | `paineis/adapters/out/mesa.clj:27`; `paineis/db/tramitacao.clj:90-104` | sim |
+| 11 | Não há como revogar o acesso de ninguém | alto | `identidade/diplomat/http/in.clj:170-186` | sim |
+| 12 | Duas sessões abertas: o cockpit vai para a mais antiga | alto | `paineis/db/sli_sessao.clj:136-139` | sim para o cockpit |
+| 13 | Não existe página pública de votações | alto | `transparencia/diplomat/http/in.clj:220-264` | parte |
+| 14 | Perfil público do vereador só abre por UUID; sem lista | alto | `(publico)/…/vereadores/[vereadorId]/page.tsx` | sim |
+| 15 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |
+| 16 | Responder um pedido não notifica o cidadão | alto | `participacao/events/prazo.clj` | espera SMTP/push |
+| 17 | `secretario` não é papel concedível pela tela | alto | `identidade/wire/in/acesso.clj:7` | decisão do fundador |
+| 18 | Matéria aprovada em plenário segue "Aguardando pauta" no portal: encerrar a votação não move o rito e o portal só lê o `estado` (a ficha interna já lê o ato, `aprovada`) | alto | `legislativo/components/repositorio.clj:938-956`; `legislativo/controllers.clj:373` (único chamador de `transicionar!`); `transparencia/db/materia.clj:15` | parte; o portal ler o ato é código, mover o estado é decisão do fundador |
+| 19 | A obrigação de compliance não conhece nenhuma matéria: só nasce de competência (SIM, metas fiscais) ou de prestação de contas | alto | `gatilho_compliance.clj:85-86` e `:229-237` | decisão do fundador (quais prazos por matéria) |
+| 20 | Não existe tramitação pública: o portal guarda só o `estado`, sem histórico de movimentações | alto | `transparencia/diplomat/http/in.clj:220-253` (nenhuma rota de histórico); `transparencia/db/materia.clj:44-64` | sim |
+| 21 | Nenhum item permanente do art. 8º §1º da LAI no portal (estrutura, competências, endereço, horário, perguntas frequentes) | alto | `(publico)/navegacao-civica.tsx:23-62` (só cartões; "Carta de Serviços" em breve) | parte; o conteúdo vem da Casa |
+| 22 | Dashboard da Mesa não mostra a sessão em curso; "próxima sessão" sem fuso | médio | `paineis/mesa/proxima-sessao-rail.tsx:25` e `:34` | sim |
+| 23 | Remessas ao TCE não aparecem no painel | médio | `paineis/diplomat/consumers.clj:18-31` | sim |
+| 24 | A faixa "Onde está a matéria" volta para "Protocolo" quando o estado é `aguardando_pauta` | médio | `lib/tramitacao-vista.ts:25-31` e `:68-75`; usada em `ficha-materia/ficha-cabecalho.tsx:56` | sim |
+| 25 | Ficha e quadro de tramitação discordam: `em_pauta` é "Em pauta" na ficha e "Pronta p/ pauta" no quadro, e "Em Plenário" só conta turnos | médio | `lib/proposicoes-vista.ts:68`; `lib/tramitacao-board-vista.ts:48` e `:56`; `lib/tramitacao-vista.ts:25-28` | sim |
+| 26 | A autoria é texto livre e não se liga ao vereador cadastrado (`autor_id` fica nulo) | médio | `editor-proposicao/formulario-proposicao.tsx:152-173`; `lib/use-criar-proposicao.ts:20` (aceita `autorId`, a tela não envia) | sim |
+| 27 | O número do item na pauta é um só por sessão, não por fase: o primeiro item lido aparece como "item 5" | médio | `sessoes/db/pauta.clj:~113` (`proxima-ordem` sem fase); `sessoes/[id]/conduzir/painel-votacao.tsx:240`; `sessoes/[id]/tv/page.tsx:330` | sim |
+| 28 | A fila da tribuna nunca esvazia: quem já falou segue inscrito, inclusive com a palavra | médio | `sessoes/logic.clj:1060` (só `desistencia` é terminal); `sessoes/db/tribuna.clj:185-194` (iniciar a fala não consome a inscrição); `sessoes/controllers.clj:1178`; `lib/plenario-reducer.ts:720-733` | sim |
+| 29 | Atos humanos aparecem como prefixo de UUID ("Chamada · dbf001fc", "Conduzida por (id)") | médio | `sessoes/[id]/chamada/page.tsx:960`; `sessoes/components/serializador_folha.clj:358` | sim |
+| 30 | Autógrafo e sanção não aparecem na linha do tempo da matéria | médio | `lib/ficha-materia-vista.ts:72-92` (só o histórico de tramitação) | sim |
+| 31 | O prazo de resposta do Executivo não pode ser informado: a tela gera o autógrafo sem prazo | médio | `pos-aprovacao/conteudo-pos-aprovacao.tsx:77` (`gerar({})`); `legislativo/wire/in/pos_aprovacao.clj:19-23` (o backend aceita); `pos-aprovacao/card-autografo.tsx:23-25` | sim; o prazo por LOM é `[GAP]`, a Casa digita |
+| 32 | O gráfico "Carga por estágio" sai cinza: 5 chaves de cor, e uma (`em_comissao`) nem existe | médio | `paineis/mesa/pipeline-legislativo.tsx:20-26` | sim |
+| 33 | Nada é clicável no Dashboard da Mesa: nenhum link nem botão nos cartões | médio | `paineis/mesa/*.tsx` (nenhum `<a>`, `<button>` ou `Link`) | sim |
+| 34 | O e-SIC ensina um protocolo que o sistema não emite ("2026/00488"; o real é "ESIC-2026-000001") | médio | `(publico)/balcao-esic.tsx:94`; `participacao/logic.clj:120-122` | sim |
+| 35 | A cópia promete "toda a tramitação" na ficha pública, que só tem a faixa (instância achada por leitura; o ledger só guarda o título do achado) | médio | `(publico)/secao-ficha.tsx:161`; `(publico)/destaque-tramitacao.tsx:81` | sim; depende da linha 20 |
+| 36 | Rótulo cru na notificação ao cidadão: "PROJETO_LEI 16/2026", "Nova fase: em_pauta", sem acentos | médio | `transparencia/logic/notificacao.clj:18-20` e `:29` | sim; a entrega espera SMTP (linha 16) |
+| 37 | A lista de acompanhamentos é beco sem saída: nenhum item abre a matéria | médio | `(cidadao)/acompanhamentos/page.tsx:63-91` | sim |
+| 38 | A raiz `/` ainda diz "Front-end em construção" | baixo | `frontend/src/app/page.tsx:11-25` | sim |
+| 39 | O filtro "Espécie" da lista de proposições omite Lei Complementar e Emenda à LOM | baixo | `(interno)/proposicoes/page.tsx:96-101`; `lib/proposicoes-vista.ts:19-26`; `legislativo/logic.clj:16` | sim |
+| 40 | "Concluir comissões" passa com zero pareceres: o rito da demo não tem guarda | baixo | `demo/acervo.clj:71` (transição sem `:guarda`) | decisão do fundador (o rito é dado da Casa; o real é `[GAP]`) |
+| 41 | A folha congelada pula números de seção quando uma seção condicional não existe | baixo | `sessoes/components/serializador_folha.clj:238`, `:250` e `:386` | sim |
+| 42 | O mesmo secretário que lança a justificativa a defere, e a tela diz "quem decide é a Mesa" | baixo | `sessoes/diplomat/http/in.clj:1409` e `:299`; `serializador_folha.clj:425` | decisão do fundador (mesma raiz da linha 1) |
+| 43 | O recibo da transição de sessão não devolve o `lock-version`: exige um GET antes do próximo ato | baixo | `sessoes/wire/out.clj:6-8` e `:59-65` | sim; a omissão é deliberada, decidir |
+| 44 | O 409 do ciclo da remessa não diz o estado atual nem o esperado | baixo | `compliance/diplomat/http/in.clj:39`; `compliance/controllers.clj:31-32` | sim |
+| 45 | Percentuais da vitrine sem denominador ("91% de presença" vem de 2 sessões) | baixo | `paineis/mesa/orgulho-institucional.tsx:19-27` | sim |
+| 46 | Plural entre parênteses ("obrigação(ões) venceu(ram)", "dia(s)") e hora com segundos | baixo | `paineis/mesa/saude-institucional.tsx:39`; `paineis/mesa/o-que-vence.tsx:37` e `:39`; `proxima-sessao-rail.tsx:34` | sim |
+| 47 | O 403 do voto negado não diz por quê e o 400 do autógrafo duplicado diz só "requisição inválida" | baixo | `lib/use-meu-voto.ts:53-55`; `interceptors.clj:518` | decisão do fundador (corpo opaco por desenho) |
+| 48 | Três itens do menu do portal (Sessões, Transparência, Ouvidoria) apontam para a mesma âncora | baixo | `(publico)/barra-institucional.tsx:91`, `:94` e `:100` | sim |
+| 49 | URN LexML crua impressa para o cidadão | baixo | `(publico)/secao-ficha.tsx:94` e `:109`; `(publico)/destaque-tramitacao.tsx:60` | sim |
 
-**Fechados com prova** (críticos e altos): denominador do quórum vindo do corpo e o 500 da maioria absoluta
-(`2e442515`); voto da Mesa com UUID fora do roster (`b8e8aaa3`); presidente com 403 no Dashboard (`8d4e8c31`); 403
-mostrado como falha passageira (`ba51c488`); conceder acesso pela tela (ADR-0005, `69ebeee0`, `891ee9cb`); acompanhar
-e deixar de acompanhar (`9c281526`); resposta de e-SIC, LGPD e ouvidoria lida pelo dono (`02b2193a`, `f0ac7cde`);
-balcão (`f4efd695`, `bbfd811e`); gov.br (`6adf217d`, `1170955e`); dados abertos (`bd7b9551`); cockpit pedindo presença
-a quem já estava presente (`50358241`, `1dc62ddd`); agendar, pauta e condução; ata e livro de atas (`464638fe`,
-`fb901214`).
+**Das 30 linhas novas:** 24 só de código, 2 em parte (18, 21) e 4 decisão do fundador (19, 40, 42, 47).
 
-**Não conferidos:** "aceitar a remessa não move o placar de compliance" (crítico, exige rodar); "aguardando pauta" no
-portal com matéria aprovada; obrigação de compliance sem ligação com a matéria; tramitação pública; itens permanentes
-do art. 8 §1º da LAI; e 36 dos 43 médios e baixos.
+**Reprodução da linha 5 (executada em 05/10/2026: 3 testes, 2 vermelhos, 4 asserções falhas; o que passa é o da causa).** Teste de integração (PG, MinIO e a cadeia
+HTTP de `rotas/montar` reais), numa Casa de id aleatório preparada pela semente da demo (`compliance/semear!`, `hoje` =
+12/09/2026, como `oplenario.demo.compliance-test`): a obrigação de 2026-08 nasce pendente, avaliada em 01/09 (a data do
+evento, não `hoje`).
+- A remessa de 2026-08 é gerada por `gerar-remessa!` (o caminho de produção) e percorre `POST .../validar`,
+  `.../submeter` e `.../resposta {"estado":"aceita"}`: as três respondem 200.
+- Sem nenhuma avaliação entre o aceite e a leitura, a obrigação segue `pendente` e o placar segue `pendente 1 · cumprida
+  6` (esperado: 0 e 7).
+- Depois de `varrer-vencimentos!` em 01/10, a obrigação da remessa **aceita** vira `vencida`: o sweep só olha estado e
+  vencimento.
+- A causa está isolada por um teste que passa: a avaliação explícita (`avaliar-obrigacao!`, origem `evento`, `agora` =
+  01/09) devolve `conforme` e `cumprida`. O fato `remessa_enviada` enxerga a remessa aceita; falta o disparo no aceite,
+  porque o gatilho do host (`gatilho_compliance.clj`, composto em `rotas.clj:921-940`) só cobre as rotas de ata de
+  audiência, `POST /contas` e o encerramento de votação, e o painel.
+- O repo não tem marcador de teste pendente no Clojure (nenhum `^:pendente`, `:kaocha/skip` ou quarentena fora do e2e);
+  por isso o teste **não foi commitado** e a reprodução fica descrita aqui. O conserto é de desenho: reavaliar a
+  obrigação da competência no `POST .../resposta` (ou o gatilho do host cobrir essa rota) e fazer o sweep não vencer o
+  que uma remessa aceita já cumpriu. Hoje isso fica escondido porque a obrigação do SIM só existe na demo: sem a linha 3
+  (gerar a remessa por rota) nenhuma Casa real a materializa.
 
-**Correção de registro:** a frase "os 10 críticos seguem de pé" deste ledger valia até 15/09. Em 04/10, 6 dos 9
-críticos conferidos estão fechados.
+**Fechados com prova** (34):
+
+| Achado | Prova |
+|---|---|
+| Conduzir a sessão sem tela (abrir, encerrar, tribuna, votação) | `sessoes/[id]/conduzir/painel-*.tsx`; `lib/use-conducao-sessao.ts` |
+| Agendar a sessão sem tela | `agendar-sessao/form-agendar-sessao.tsx:31` e `:67`; `lib/use-agendar-sessao.ts:59` |
+| Montar a pauta sem tela, e a tela da pauta só de leitura (2 achados) | `pauta-convocacao/page.tsx:19` e `:245`; `lib/use-editar-pauta.ts` (POST, PATCH, DELETE) |
+| O caminho da pauta exige UUID | `sessoes/[id]/form-item-pauta.tsx:115-200` (busca a matéria) |
+| O único documento da sessão é a folha de presença | `sessoes/db/ata.clj`; `sessoes/[id]/ata`; `464638fe`, `fb901214`. Ressalva: a ata-IA não recebe o resultado estruturado da votação, só a transcrição e os oradores (`ia/src/oplenario_ia/ata/redacao.py:80-91`), e o resultado entra como `[confirmar: …]` |
+| A pauta do telão não diz qual matéria | `sessoes/[id]/plenario/page.tsx:236-240`; `sessoes/[id]/tv/page.tsx:328-329`; `sessoes/controllers.clj:455-466` |
+| O tempo adicional da Mesa não aparece no cronômetro | `lib/cronometro.ts:43` e `:56-68` |
+| Sessão agendada aparece no calendário como "encerrada" (refutado: o calendário diz o estado verdadeiro) | `lib/calendario-vista.ts:186-198` |
+| Presidente com 403 no Dashboard da Mesa | `paineis/diplomat/http/in.clj:146-155`; `8d4e8c31` |
+| Denominador do quórum vindo do corpo | `legislativo/controllers.clj:593-611`; `2e442515` |
+| Encerrar maioria absoluta sem `base-membros` dá 500 | idem (`2e442515`) |
+| Voto da Mesa com UUID fora do roster (a FK segue, linha 7) | `legislativo/controllers.clj:88-97`; `b8e8aaa3` |
+| Não há como começar a acompanhar uma matéria | `(publico)/participar-materia.tsx:148-195`; `9c281526` |
+| Não há como deixar de acompanhar | `(publico)/participar-materia.tsx:195` |
+| `/acompanhamentos` sem entrada por navegação | `(cidadao)/layout.tsx:78` |
+| Resposta do e-SIC só gravada, nunca devolvida | `(cidadao)/meus-protocolos`; `02b2193a`, `f0ac7cde` |
+| 403 permanente mostrado como falha passageira, sem saída (2 achados, um alto e um médio) | `ba51c488` |
+| Obrigação vencida mostra "vence em 0 dia(s)" | `paineis/mesa/o-que-vence.tsx:23-39` |
+| `admin_ente` não abre "Conceder acesso" | ADR-0005; `69ebeee0` |
+| Nada mostra quem já tem acesso | `891ee9cb` |
+| O cockpit pede presença a quem já está presente | `50358241`, `1dc62ddd` |
+| Não há dados abertos | `bd7b9551` |
+| A cidadã não tem porta de entrada (gov.br) | `6adf217d`, `1170955e`; `(publico)/barra-institucional.tsx:116` |
+| O servidor recebe 403 ao ler o pedido e-SIC | `participacao/diplomat/http/in.clj:626`; `f4efd695`, `bbfd811e` |
+| O protocolo LGPD é número morto | `participacao/diplomat/http/in.clj:776-779`; `/meus-protocolos` |
+| A tela promete "prorrogável por mais 10" e não há prorrogação | `participacao/diplomat/http/in.clj:391-398` e `:642` |
+| Não existe "os meus pedidos" | `(cidadao)/meus-protocolos/page.tsx` |
+| O anel de prazo conta dias num pedido já respondido | `participacao/controllers.clj:71-77`; `participacao/logic.clj:434`; `(publico)/balcao-esic.tsx:126` |
+| Rótulo cru "Obrigação TCE · remessa_mensal_sim" | `lib/rotulos-compliance.ts:14-18` |
+| Acentos em falta nas famílias de prazo | `lib/mesa-vista.ts:224-228` |
+| A home do vereador diz "acontecendo agora" com a data da próxima sessão | `(vereador)/vereador/page.tsx:80-92`; `lib/sessao-corrente.ts:20-40` |
+| 400 "requisição inválida" não diz o que está errado (refutado: corpo opaco por desenho, como o achado gêmeo da cidadã, derrubado acima) | `interceptors.clj:495-518` |
+
+**Correção de registro:** a frase "os 10 críticos seguem de pé" deste ledger valia até 15/09. Em 05/10, dos 10 críticos
+5 estão fechados (Dashboard da Mesa, denominador, voto fora do roster, acompanhar a matéria, resposta do e-SIC) e 5
+seguem abertos (linhas 2, 3, 4, 5 e a vitrine de votos ilegítimos, coberta pela linha 6). Convocação, promulgação e
+geração da remessa seguem sem rota.
