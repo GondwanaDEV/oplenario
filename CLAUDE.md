@@ -539,8 +539,9 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     `20261005000400`) é projetado do `estado-nome`/`para-nome` dos eventos (destino sem nome no rito zera; as linhas
     antigas foram reconstruídas na migration, só quando o quadro está no estado atual da matéria); o painel da Mesa
     leva o nome por estado só quando as matérias do estado concordam; o histórico da ficha devolve `de-nome`/
-    `para-nome` (LEFT JOIN no `template_estado` do rito da transição). Sem nome, o rótulo fixo. **Resta:** a faixa do
-    portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
+    `para-nome` (LEFT JOIN no `template_estado` do rito da transição). Sem nome, o rótulo fixo. A faixa do portal segue o
+    rito desde a mig `20261005000262` (`transparencia.materia.rito`, projetado dos eventos, **sem reconstrução**): matéria
+    sem evento novo depois dela ainda usa o mapa fixo, e ali o chip e a faixa podem divergir;
     `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
