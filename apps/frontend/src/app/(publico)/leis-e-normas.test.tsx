@@ -22,6 +22,7 @@ const norma1 = {
   ementa: "Institui o Programa Municipal de Hortas Comunitárias.",
   "publicado-em": "2026-03-10T15:00:00Z",
   "veiculo-publicacao": "Diário Oficial do Município",
+  "tem-texto": true,
 };
 const norma2 = {
   ...norma1,
@@ -212,6 +213,16 @@ describe("FichaDaNorma", () => {
     const origem = screen.getByRole("link", { name: /Ver a matéria que deu origem/ });
     expect(origem.getAttribute("href")).toBe(`/portal/casa/${ENTE}/materias/30000000-0000-0000-0000-000000000001`);
     expect(container.textContent).not.toContain(N1);
+  });
+
+  it("norma sem texto publicado: não oferece o download (levaria a um 404) e diz que o texto ainda não foi publicado aqui", async () => {
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao/${N1}`]: { corpo: { ...norma1, "tem-texto": false } } });
+    const { container } = render(<FichaDaNorma ente={ENTE} normaId={N1} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("link", { name: /Baixar o texto publicado/ })).toBeNull();
+    expect(container.querySelector('a[href*="/artefato"]')).toBeNull();
+    expect(screen.getByText("O texto desta norma ainda não foi publicado aqui.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Ver a matéria que deu origem/ })).toBeTruthy();
   });
 
   it("a trilha volta à lista de leis", async () => {

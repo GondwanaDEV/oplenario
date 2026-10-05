@@ -22,6 +22,17 @@
   `(min limite teto-listagem)` garante que ninguem pede mais que isto de uma vez."
   200)
 
+(def ^:private cols-publicas
+  "As colunas que o portal le: as do read-model + `tem_texto` — se ja' ha' artefato de publicacao para baixar (o
+  MESMO ponteiro que a rota `/artefato` consulta para decidir o 404; `db/artefato-publicacao/mais-recente-por-norma`).
+  EXISTS correlacionado, na tx do tenant (FORCE RLS isola os dois lados): nao e' JOIN, entao nao duplica norma que
+  tenha varias versoes de artefato. A tela so' oferece o botao de baixar quando e' verdadeiro."
+  (conj (mapv #(keyword (str "n." (name %))) cols)
+        [[:exists {:select [[[:inline 1]]]
+                   :from [[:transparencia.artefato_publicacao :a]]
+                   :where [:and [:= :a.ente_id :n.ente_id] [:= :a.norma_id :n.norma_id]]}]
+         :tem_texto]))
+
 (defn inserir!
   "Projeta a norma PUBLICADA (`norma.publicada`). `publicado-em` chega como java.time.Instant (parseado do
   ISO-8601 do payload pelo consumer). `ON CONFLICT (ente_id,norma_id) DO NOTHING` (review db MEDIUM) —
@@ -46,8 +57,8 @@
   {:pre [(some? ente-id) (some? norma-id)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
-     (sql/format {:select cols :from [:transparencia.norma]
-                  :where [:and [:= :ente_id ente-id] [:= :norma_id norma-id]]}))))
+     (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
+                  :where [:and [:= :n.ente_id ente-id] [:= :n.norma_id norma-id]]}))))
 
 (defn buscar-por-proposicao
   "A norma publicada de uma materia, se houver (a ficha da materia liga p/ ela). Devolve nil se a materia
@@ -56,8 +67,8 @@
   {:pre [(some? ente-id) (some? proposicao-id)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
-     (sql/format {:select cols :from [:transparencia.norma]
-                  :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
+     (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
+                  :where [:and [:= :n.ente_id ente-id] [:= :n.proposicao_id proposicao-id]]}))))
 
 (defn- where-listar
   "O predicado de `listar`/`contar` (portal PUBLICO) — FONTE UNICA (regra 3 da frente
@@ -93,11 +104,11 @@
    (let [filtros? (or tipo ano numero)]
      (comum/linhas->kebab
       (jdbc/execute! tx
-        (sql/format {:select cols :from [:transparencia.norma]
+        (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
                      :where (into [:and] (where-listar ente-id filtro))
                      :order-by (if filtros?
-                                 [[:ano :desc] [:numero :desc] [:norma_id :desc]]
-                                 [[:publicado_em :desc] [:norma_id :desc]])
+                                 [[:n.ano :desc] [:n.numero :desc] [:n.norma_id :desc]]
+                                 [[:n.publicado_em :desc] [:n.norma_id :desc]])
                      :limit (min limite teto-listagem)
                      :offset deslocamento}))))))
 

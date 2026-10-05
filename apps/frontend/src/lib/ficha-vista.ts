@@ -27,6 +27,8 @@ export type NormaPublicadaVista = {
   tipoNorma: string;
   numero: number;
   ano: number;
+  // há texto publicado para baixar? (o servidor diz; sem isso o link levaria a um 404)
+  temTexto: boolean;
 };
 
 export type ComentarioVista = {
@@ -70,6 +72,7 @@ export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | nul
           tipoNorma: ficha.norma.tipoNorma,
           numero: ficha.norma.numero,
           ano: ficha.norma.ano,
+          temTexto: ficha.norma.temTexto,
         }
       : null,
     resumo: ficha.resumo

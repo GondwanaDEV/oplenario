@@ -3,7 +3,8 @@
 // LEIS E NORMAS no portal do cidadão (GET /portal/casa/{ente}/legislacao): a lista do acervo publicado — a lei como foi
 // promulgada e publicada — e a ficha de cada norma. Só o que o backend entrega: tipo, número, ano, ementa, data e
 // veículo da publicação, o identificador oficial (URN LexML) e o link para a matéria de origem. O texto da norma vem do
-// artefato de publicação (download), não da ficha. Filtro por tipo/ano/número, que a rota suporta, e lista paginada
+// artefato de publicação (download), não da ficha — e só é oferecido quando o servidor diz que existe (`temTexto`), para
+// o cidadão não clicar num botão que leva a um erro. Filtro por tipo/ano/número, que a rota suporta, e lista paginada
 // (20 por página, com o total e as páginas ditos: nada é cortado em silêncio). Os filtros ficam na URL e se mantêm ao
 // trocar de página. Casa sem norma publicada é o estado vazio.
 
@@ -203,9 +204,13 @@ export function FichaDaNorma({ ente, normaId }: { ente: string; normaId: string 
             <dd className="ln-urn">{norma.urn}</dd>
           </dl>
           <div className="ln-links">
-            <a className="btn btn-primaria" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
-              Baixar o texto publicado
-            </a>
+            {norma.temTexto ? (
+              <a className="btn btn-primaria" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
+                Baixar o texto publicado
+              </a>
+            ) : (
+              <p className="ln-sem-texto">O texto desta norma ainda não foi publicado aqui.</p>
+            )}
             <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(norma.proposicaoId)}`}>
               Ver a matéria que deu origem a esta norma
             </a>

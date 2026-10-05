@@ -10,6 +10,7 @@ export interface NormaOut {
   ementa: string;
   publicadoEm: string;
   veiculoPublicacao: string;
+  temTexto: boolean;
 }
 
 export interface NormasOut {

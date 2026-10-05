@@ -102,10 +102,18 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
             <path d="M5.2 8.2l1.8 1.8 3.8-3.8" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span>
-            <b>Virou lei.</b> Publicada em {formatarData(vista.normaPublicada.publicadoEm)} —{" "}
-            <a href={`/api/portal/casa/${ente}/legislacao/${vista.normaPublicada.normaId}/artefato`}>
-              Ver a Lei {vista.normaPublicada.numero}/{vista.normaPublicada.ano} publicada — texto oficial
-            </a>{" "}
+            <b>Virou lei.</b> Publicada em {formatarData(vista.normaPublicada.publicadoEm)}
+            {vista.normaPublicada.temTexto ? (
+              <>
+                {" "}
+                —{" "}
+                <a href={`/api/portal/casa/${ente}/legislacao/${vista.normaPublicada.normaId}/artefato`}>
+                  Ver a Lei {vista.normaPublicada.numero}/{vista.normaPublicada.ano} publicada — texto oficial
+                </a>
+              </>
+            ) : (
+              <>. O texto desta norma ainda não foi publicado aqui.</>
+            )}{" "}
             ({vista.normaPublicada.urn})
           </span>
         </p>

@@ -13,7 +13,10 @@
    [:urn :string]
    [:ementa :string]
    [:publicado-em :string]
-   [:veiculo-publicacao :string]])
+   [:veiculo-publicacao :string]
+   ;; ha' texto publicado para baixar (`/legislacao/:id/artefato`)? A tela so' mostra o botao quando e' verdadeiro: sem
+   ;; isto o cidadao clicava e via um 404 em JSON.
+   [:tem-texto :boolean]])
 
 (def NormasOut
   "Resposta de GET /portal/casa/:ente/legislacao: UMA PAGINA do acervo publico as-enacted + o TOTAL (do mesmo filtro,

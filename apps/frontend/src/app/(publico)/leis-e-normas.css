@@ -36,6 +36,7 @@
 .ln-dl dd { margin: 0; font-size: var(--t-13); color: var(--texto); font-weight: 500; overflow-wrap: anywhere; }
 .ln-urn { font-family: var(--mono); font-size: var(--t-12); font-weight: 400; }
 .ln-links { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; margin: 1.4rem 0 0; }
+.ln-sem-texto { margin: 0; font-size: var(--t-13); color: var(--texto-2); }
 .ln-links a:not(.btn), .ln-voltar { min-height: 44px; display: inline-flex; align-items: center; color: var(--marca); font-weight: 600; }
 @media (max-width: 480px) {
   .ln-dl { grid-template-columns: 1fr; gap: 0.1rem; }

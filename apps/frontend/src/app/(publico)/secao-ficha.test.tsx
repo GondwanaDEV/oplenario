@@ -30,6 +30,7 @@ const fichaComNormaFake = {
     ementa: "Cria o Programa Municipal de Hortas Comunitárias.",
     "publicado-em": "2026-08-01T00:00:00Z",
     "veiculo-publicacao": "diario_oficial",
+    "tem-texto": true,
   },
 };
 
@@ -134,6 +135,17 @@ describe("SecaoFicha", () => {
     expect(screen.getByText(/urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234/).textContent).toMatch(
       "urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234",
     );
+  });
+
+  it("norma publicada SEM texto para baixar -> sem link de download, e diz que o texto ainda não foi publicado aqui", async () => {
+    const semTexto = { ...fichaComNormaFake, norma: { ...fichaComNormaFake.norma, "tem-texto": false } };
+    mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : semTexto) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(screen.getByText(/virou lei/i)).toBeTruthy());
+    expect(screen.queryByRole("link", { name: /texto oficial/i })).toBeNull();
+    expect(document.querySelector('a[href*="/artefato"]')).toBeNull();
+    expect(document.querySelector(".norma-publicada")?.textContent).toContain("O texto desta norma ainda não foi publicado aqui.");
+    expect(document.querySelector(".norma-publicada")?.textContent).toContain("urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234");
   });
 
   it("comentários aprovados -> lista read-only (corpo + data, sem autor), marcada como <ul>/<li> — review A2.3 item 2", async () => {

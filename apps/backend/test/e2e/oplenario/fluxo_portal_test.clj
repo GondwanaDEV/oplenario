@@ -76,7 +76,7 @@
 (def ^:private norma-fixture
   {:norma-id nid :proposicao-id pid :tipo-norma "lei" :numero 1 :ano 2026
    :urn "urn:lex:br;ce;fortaleza:lei:2026-06-28;1" :ementa "Dispoe sobre X"
-   :publicado-em t0 :veiculo-publicacao "Diario Oficial do Municipio"})
+   :publicado-em t0 :veiculo-publicacao "Diario Oficial do Municipio" :tem-texto true})
 
 ;; ---------- GET /portal/casa/:ente/materias ----------
 
@@ -136,6 +136,7 @@
         body (ler-json r)]
     (is (= 200 (:status r)))
     (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first (:normas body)))))
+    (is (true? (:tem-texto (first (:normas body)))) "o wire diz se ha texto para baixar")
     (is (= 1 (:normas-total body)))
     (is (= {:tipo nil :ano nil :numero nil} @cap) "sem query-params -> filtro vazio (compat Slice 1)")))
 

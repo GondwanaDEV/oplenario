@@ -73,6 +73,7 @@ describe("derivarFicha", () => {
           ementa: "Cria o Programa Municipal de Hortas Comunitárias.",
           publicadoEm: "2026-08-01T00:00:00Z",
           veiculoPublicacao: "diario_oficial",
+          temTexto: true,
         },
       }),
       [],
@@ -85,7 +86,30 @@ describe("derivarFicha", () => {
       tipoNorma: "lei_ordinaria",
       numero: 1234,
       ano: 2026,
+      temTexto: true,
     });
+  });
+
+  it("norma sem texto publicado -> temTexto falso na vista (a tela não oferece o link)", () => {
+    const vista = derivarFicha(
+      ficha({
+        estado: "aprovada",
+        norma: {
+          normaId: "n1",
+          proposicaoId: "p1",
+          tipoNorma: "lei",
+          numero: 1,
+          ano: 2026,
+          urn: "urn:lex:br;x:lei:2026;1",
+          ementa: "Cria X.",
+          publicadoEm: "2026-08-01T00:00:00Z",
+          veiculoPublicacao: "diario_oficial",
+          temTexto: false,
+        },
+      }),
+      [],
+    );
+    expect(vista.normaPublicada?.temTexto).toBe(false);
   });
 
   it("comentários vazios ([]) -> []", () => {
