@@ -1,11 +1,14 @@
 {
-  "fonte": "Anthropic, preços públicos da API por modelo (platform.claude.com, página de modelos e preços)",
-  "consultado_em": "2026-09-26",
+  "fonte": "Anthropic, preços públicos da API por modelo (platform.claude.com, página de modelos e preços); o OpenRouter repassa o preço de tabela do provedor",
+  "consultado_em": "2026-10-05",
   "moeda": "USD",
   "unidade_tokens": 1000000,
-  "observacao": "cache_escrita = 1,25x a entrada (TTL de 5 minutos); cache_leitura = 0,1x. Atualizar esta tabela é obrigatório ao trocar fornecedor ou modelo (§22.11.8), junto com a avaliação.",
+  "observacao": "cache_escrita = 1,25x a entrada (TTL de 5 minutos); cache_leitura = 0,1x. Pelo OpenRouter (ADR-0023) vale o custo que ele declara na resposta (usage.cost) e esta tabela é a reserva; o padrão provisório `openai/gpt-oss-120b` fica sem linha de propósito, porque o preço muda por provedor. `acrescimo` = taxa da plataforma na compra de créditos (5,5%, fonte secundária em docs/30 — conferir no contrato). Atualizar esta tabela é obrigatório ao trocar fornecedor ou modelo (§22.11.8), junto com a avaliação.",
+  "acrescimo": {"openrouter": "1.055"},
   "precos": {
     "fake/fake-1": {"entrada": "0", "saida": "0", "cache_leitura": "0", "cache_escrita": "0"},
+    "openrouter/qwen/qwen3.8-27b:free": {"entrada": "0", "saida": "0", "cache_leitura": "0", "cache_escrita": "0"},
+    "openrouter/anthropic/claude-opus-5": {"entrada": "5.00", "saida": "25.00", "cache_leitura": "0.50", "cache_escrita": "6.25"},
     "anthropic/claude-opus-5": {"entrada": "5.00", "saida": "25.00", "cache_leitura": "0.50", "cache_escrita": "6.25"}
   }
 }

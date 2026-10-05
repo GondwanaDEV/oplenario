@@ -77,8 +77,11 @@ com o carregamento dos modelos.
 
 | Variável | Padrão | |
 |---|---|---|
-| `OPLENARIO_IA_VENDOR` | `fake` | `anthropic` exige DPA de não-treino (`[GAP]` jurídico, LGPD art. 33) |
-| `OPLENARIO_IA_MODELO` | `claude-opus-5` | |
+| `OPLENARIO_IA_VENDOR` | `fake` | `openrouter` é o fornecedor real (ADR-0023); `anthropic` é o contrato direto. Qualquer real exige DPA de não-treino (`[GAP]` jurídico, LGPD art. 33) |
+| `OPLENARIO_IA_MODELO` | `claude-opus-5` (`openai/gpt-oss-120b` no OpenRouter, provisório) | no OpenRouter, o slug fixo do catálogo, da lista `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b:free`); fora dela o satélite não sobe |
+| `OPENROUTER_API_KEY` | — | chave do OpenRouter, do cofre; sem ela a IA responde "indisponível" |
+| `OPLENARIO_IA_OPENROUTER_PROVEDORES` | — | provedores aprovados, separados por vírgula (`provider.only`); ZDR e "sem coleta" vão sempre |
+| `OPLENARIO_IA_OPENROUTER_URL` | `https://openrouter.ai/api/v1` | |
 | `OPLENARIO_IA_TIMEOUT_S` | `60` | |
 | `OPLENARIO_IA_REGISTRO_JSONL` | — | registro append-only em arquivo; sem ele, em memória |
 | `ANTHROPIC_API_KEY` | — | lida pelo SDK, vinda do cofre (Eixo 11f) |

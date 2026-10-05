@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -34,12 +35,19 @@ class Uso(BaseModel):
 
 
 class RespostaInferencia(BaseModel):
-    """A resposta normalizada. `vendor` e `modelo` são os EFETIVAMENTE usados (§22.3.5 — sempre carimbados)."""
+    """A resposta normalizada. `vendor` e `modelo` são os EFETIVAMENTE usados (§22.3.5 — sempre carimbados).
+
+    `provedor` é quem atendeu atrás de um gateway (ex.: o OpenRouter roteia para Anthropic, Bedrock, Vertex); `None`
+    quando o fornecedor atende direto. `custo_informado` é o custo que o próprio fornecedor declara na resposta, em USD
+    e sem a taxa da plataforma (a tabela de preços a soma).
+    """
 
     texto: str
     parada: Parada
     vendor: str
     modelo: str
+    provedor: str | None = None
     uso: Uso
+    custo_informado: Decimal | None = None
     latencia_ms: int
     id_requisicao: str | None = None

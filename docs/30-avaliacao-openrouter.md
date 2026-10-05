@@ -1,6 +1,8 @@
 # OpenRouter como intermediário para os fornecedores de LLM — avaliação técnica
 
-- **Status:** 🟡 avaliação para decisão do Daouda (03/10/2026). Nada foi mudado no código.
+- **Status:** ✅ decidido em 05/10/2026 pela [ADR-0023](adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md):
+  o OpenRouter é o fornecedor de modelo de linguagem de toda a plataforma (contra o item 1 da recomendação abaixo).
+  A avaliação fica como registro; o `[GAP]` jurídico que ela descreve continua valendo para ligar em produção.
 - **Pergunta:** vale pôr o OpenRouter entre o satélite `apps/ia` e os fornecedores de modelo de linguagem?
 - **Relacionadas:** ADR-0006 (satélite e porta de inferência), ADR-0014 (orçamento de IA),
   `arquitetura/22-9-stack.md` Eixos 10, 11(h) e 13 (failover), `arquitetura/22-3-contrato-core-ia.md` §22.3.5,
