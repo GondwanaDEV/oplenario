@@ -2771,9 +2771,16 @@ O que essas frentes deixaram registrado:
 - **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
   perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
   o problema: confere a sessão.
-- **Achado novo, aberto:** ao reconceder acesso a quem já tem conta, o convite sai para o e-mail já cadastrado; não há
-  como trocar o e-mail de alguém pela tela. Dar esse poder ao `admin_ente` permitiria assumir a conta de outra pessoa,
-  então é decisão, não só código.
+- **Achado fechado (05/10/2026, decisão do Daouda "A e B"):** ao reconceder acesso a quem já tem conta, o convite saía
+  para o e-mail já cadastrado. Agora:
+  - **A:** se a pessoa nunca entrou (sem `primeiro_acesso_em` na Casa e sem credencial no Keycloak), o e-mail informado
+    substitui o da conta antes do convite (`idp/corrigir-email-do-convite!`; o usuário inteiro é relido e regravado para
+    não perder o atributo `identidade-id`). E-mail de outra pessoa do realm → 409. A resposta do `POST
+    /identidade/acessos` diz `email: novo | atualizado | mantido` e a tela mostra a frase correspondente.
+  - **B:** quem já entrou não tem o e-mail trocado pelo `admin_ente` (seria tomar a conta). A própria pessoa troca na
+    página de conta do Keycloak da Casa (`/realms/ente-<ente>/account`, "Personal info"), conferido em produção na
+    Casa demo: o campo é editável. A página está em inglês e o app não tem link para ela.
+  - Provas: `acesso_http_test` (5 casos novos) e `provisionamento_test` (3 casos contra o Keycloak real do CI).
 - O módulo `compliance` não emite evento nenhum (`events/remessa.clj`, `events/obrigacao.clj` e `producers.clj` são
   stubs). Frente que presuma "evento de remessa" parte de premissa falsa.
 - Decisões embutidas, a confirmar: a matéria é única por sessão em qualquer fase (linha 8); `admin_ente` não é

@@ -177,3 +177,53 @@
           "nasce obrigado a cadastrar passkey antes de qualquer acao (§22.5.2 eixo F)")
       (is (false? (:emailVerified r))
           "emailVerified=true era [GAP] por nao haver SMTP; agora ha' — o KC verifica de verdade"))))
+
+;; ---------------------------------------------------------------------------------------------
+;; corrigir-email-do-convite! (opcao A, 05/10/2026): o reconvite de quem nunca entrou vai para o e-mail novo.
+;; ---------------------------------------------------------------------------------------------
+(defn- usuario-kc [ente-id iid]
+  (let [http (:http-client *idp*)
+        token (kc/admin-token! config http)
+        realm (str "ente-" ente-id)
+        {:keys [corpo]} (kc/admin-req! http token :get (str "/admin/realms/" realm "/users?username=" iid "&exact=true")
+                                       nil base-url)]
+    (first corpo)))
+
+(deftest corrigir-email-troca-so-o-email-e-preserva-o-identidade-id
+  (let [ente-id (random-uuid) iid (random-uuid)]
+    (idp/provisionar-realm! *idp* ente-id)
+    (is (false? (:existia? (idp/criar-usuario! *idp* ente-id {:identidade-id iid :nome "Helena Matos"
+                                                               :email "errado@example.com"}))))
+    (is (true? (:existia? (idp/criar-usuario! *idp* ente-id {:identidade-id iid :nome "Helena Matos"
+                                                              :email "certo@example.com"})))
+        "a segunda vez acha o usuario e avisa que o e-mail informado nao foi gravado")
+    (is (= "errado@example.com" (:email (usuario-kc ente-id iid))))
+    (is (true? (idp/corrigir-email-do-convite! *idp* ente-id iid "certo@example.com")))
+    (let [u (usuario-kc ente-id iid)]
+      (is (= "certo@example.com" (:email u)))
+      (is (= [(str iid)] (get-in u [:attributes :identidade-id]))
+          "o atributo que o login usa continua la' (o PUT leva o usuario inteiro)")
+      (is (= ["webauthn-register-passwordless"] (:requiredActions u)) "o cadastro da passkey continua exigido"))))
+
+(deftest corrigir-email-recusa-quem-ja-tem-credencial
+  (let [ente-id (random-uuid) iid (random-uuid)]
+    (idp/provisionar-realm! *idp* ente-id)
+    (let [{kc-id :keycloak-user-id} (idp/criar-usuario! *idp* ente-id {:identidade-id iid :nome "Ja Entrou"
+                                                                        :email "dela@example.com"})
+          http (:http-client *idp*)
+          token (kc/admin-token! config http)]
+      (kc/admin-req! http token :put (str "/admin/realms/ente-" ente-id "/users/" kc-id "/reset-password")
+                     {:type "password" :value "Senha@123456" :temporary false} base-url)
+      (is (= :idp/conta-ja-ativa
+             (try (idp/corrigir-email-do-convite! *idp* ente-id iid "outro@example.com") nil
+                  (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e))))))
+      (is (= "dela@example.com" (:email (usuario-kc ente-id iid))) "nada mudou"))))
+
+(deftest corrigir-email-para-o-de-outra-pessoa-da-casa-lanca
+  (let [ente-id (random-uuid) a (random-uuid) b (random-uuid)]
+    (idp/provisionar-realm! *idp* ente-id)
+    (idp/criar-usuario! *idp* ente-id {:identidade-id a :nome "Ana" :email "ana@example.com"})
+    (idp/criar-usuario! *idp* ente-id {:identidade-id b :nome "Bia" :email "bia@example.com"})
+    (is (= :idp/email-em-uso
+           (try (idp/corrigir-email-do-convite! *idp* ente-id a "bia@example.com") nil
+                (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e))))))))

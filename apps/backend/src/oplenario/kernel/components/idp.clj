@@ -22,6 +22,12 @@
     dobrada em criar-usuario!) porque 'reenviar convite' e' acao de produto separada. Idempotente: reenviar
     invalida o codigo anterior. O e-mail sai do IdP, NAO da aplicacao — nao confundir com o carry F6
     (e-mail transacional da app). Erro de infra LANCA (borda -> 500), nunca devolve false.")
+  (corrigir-email-do-convite! [idp ente-id identidade-id email]
+    "Troca o e-mail do usuario no realm da Casa SO' se ele ainda nao tem credencial nenhuma (nunca concluiu o convite):
+    sem credencial nao ha' conta a tomar, e o proximo convite vai para o e-mail certo. Com credencial lanca
+    `:idp/conta-ja-ativa`; e-mail ja' usado por outra pessoa no realm lanca `:idp/email-em-uso`; usuario ausente lanca
+    `:idp/usuario-inexistente`. Depois do primeiro acesso, quem troca o e-mail e' a propria pessoa, na conta dela.
+    Erro de infra LANCA.")
   (resetar-mfa! [idp ente-id identidade-id]
     "Reset de fator (ato auditado, nunca autoatendido p/ servidor/vereador — §22.5.2 eixo F).")
   (apagar-realm! [idp ente-id]
