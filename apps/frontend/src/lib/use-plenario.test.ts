@@ -490,6 +490,67 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
     });
   });
 
+  // O voto do próprio vereador gravado (201) só chegava ao cockpit pelo evento `voto.registrado`. Evento perdido
+  // = até 30s sem o "Você votou" com o voto já no banco (e a Trilha 3, E6, estourando os 15s de vez em quando).
+  // `conferirVotacao` relê o placar oficial em até 500ms, sem esperar o evento nem a periódica.
+  it("conferirVotacao — depois do próprio voto, o placar é relido sem evento SSE e sem esperar os 30s", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado(); // conectado e MUDO: nenhum `voto.registrado` chega
+    let chamadas = 0;
+    const corpo = (votos: unknown[]) => ({ "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1", votos });
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => {
+        chamadas += 1;
+        // a 1a leitura é de antes do voto; da 2a em diante o servidor já tem o voto do vereador `vEu`
+        return Promise.resolve({ ok: true, status: 200, json: async () => corpo(chamadas === 1 ? [] : [{ "vereador-id": "vEu", voto: "sim" }]) } as Response);
+      },
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.estado?.placar?.votacaoId === "vt1");
+    expect(chamadas).toBe(1);
+    expect(result.current.estado!.placar!.votosNominais).toEqual({});
+
+    act(() => result.current.conferirVotacao());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(chamadas).toBe(2); // bem antes da periódica de 30s
+    expect(result.current.estado!.placar!.votosNominais).toEqual({ vEu: "sim" });
+  });
+
+  it("conferirVotacao — com uma leitura EM VOO (saída antes do voto), espera ela acabar e lê de novo", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const emVoo = deferido<Response>();
+    let chamadas = 0;
+    const corpo = (votos: unknown[]) => ({ "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1", votos });
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => {
+        chamadas += 1;
+        if (chamadas === 1) return emVoo.promise; // a carga inicial fica pendurada: saiu ANTES do voto
+        return Promise.resolve({ ok: true, status: 200, json: async () => corpo([{ "vereador-id": "vEu", voto: "nao" }]) } as Response);
+      },
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo");
+    expect(chamadas).toBe(1);
+
+    act(() => result.current.conferirVotacao());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(chamadas).toBe(1); // não atropela a que está em voo, mas o pedido NÃO se perde
+
+    await act(async () => {
+      emVoo.resolve({ ok: true, status: 200, json: async () => corpo([]) } as Response); // a antiga volta SEM o voto
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(chamadas).toBe(2);
+    expect(result.current.estado!.placar!.votosNominais).toEqual({ vEu: "nao" });
+  });
+
   it("SEM `comVotacao` a rota de recuperação NÃO é chamada", async () => {
     const f = fetchFake({
       "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
@@ -572,6 +633,124 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
 
     // a vt2 (ao vivo) sobrevive — não é sobrescrita pelo snapshot velho da vt1
     expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+  });
+
+  // Defeito (04/10/2026, CLAUDE.md §3): recarregar o telão/TV/cockpit DEPOIS do encerramento perdia o placar.
+  // `votacao-aberta` responde 404 (não há aberta) e, até aqui, o hook parava ali. Agora pergunta o RESULTADO.
+  describe("o RESULTADO da última votação encerrada (GET /votacao-encerrada)", () => {
+    // O CORPO REAL de GET /sessoes/:id/votacao-encerrada, em kebab-case, como o adapter o emite.
+    const votacaoEncerradaCrua = {
+      "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1",
+      proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+      resultado: "aprovada", "total-sim": 2, "total-nao": 1, "total-abstencao": 0, "base-membros": 3,
+      votos: [{ "vereador-id": "v1", voto: "sim" }, { "vereador-id": "v2", voto: "sim" }, { "vereador-id": "v3", voto: "nao" }],
+    };
+    const naoHaAberta = () => ({ ok: false, status: 404, json: async () => ({}) }) as Response;
+    const resposta = (status: number, corpo: unknown = {}) => () => ({ ok: status >= 200 && status < 300, status, json: async () => corpo }) as Response;
+
+    it("o CASO DO DEFEITO: sem nenhuma aberta, recarregar traz o resultado, a grade por vereador e a ementa", async () => {
+      global.fetch = fetchFake({ "/votacao-aberta": naoHaAberta, "/votacao-encerrada": resposta(200, votacaoEncerradaCrua) });
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt1"));
+      expect(result.current.estado!.placar).toEqual({
+        votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+        proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 7, ementa: "Institui o Programa Municipal de Arborização Urbana." },
+        encerrada: true, votosNominais: { v1: "sim", v2: "sim", v3: "nao" }, votosSecretos: 0,
+        resultado: "aprovada", totais: { sim: 2, nao: 1, abstencao: 0 }, baseMembros: 3,
+      });
+    });
+
+    it("sem votação encerrada (404) o placar segue null — estado legítimo, sem erro", async () => {
+      global.fetch = fetchFake({ "/votacao-aberta": naoHaAberta, "/votacao-encerrada": resposta(404) });
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await waitFor(() => expect(result.current.conexao).toBe("ao-vivo"));
+      expect(result.current.estado?.placar).toBeNull();
+      expect(result.current.conexao).not.toBe("erro");
+    });
+
+    it("com uma votação ABERTA o resultado nem é pedido (a aberta é a mais nova)", async () => {
+      const f = fetchFake({
+        "/votacao-aberta": resposta(200, { "votacao-id": "vt2", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p2", votos: [] }),
+        "/votacao-encerrada": resposta(200, votacaoEncerradaCrua),
+      });
+      global.fetch = f;
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await waitFor(() => expect(result.current.estado?.placar?.votacaoId).toBe("vt2"));
+      expect(result.current.estado!.placar!.encerrada).toBe(false);
+      expect(contarChamadas(f, "/votacao-encerrada")).toBe(0);
+    });
+
+    it("sem `comVotacao` a rota não é tocada (o cockpit/telão que não pediu recuperação não paga a leitura)", async () => {
+      const f = fetchFake({ "/votacao-aberta": naoHaAberta, "/votacao-encerrada": resposta(200, votacaoEncerradaCrua) });
+      global.fetch = f;
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true }));
+      await waitFor(() => expect(result.current.estado?.quorumStatus).toBe("ok"));
+      expect(contarChamadas(f, "/votacao-encerrada")).toBe(0);
+    });
+
+    it("§22.6 sigilo — secreta: só o contador e o agregado, NUNCA vereador-id, mesmo que o corpo trouxesse `votos`", async () => {
+      global.fetch = fetchFake({
+        "/votacao-aberta": naoHaAberta,
+        "/votacao-encerrada": resposta(200, {
+          "votacao-id": "vt1", modalidade: "secreta", "objeto-tipo": "proposicao", "objeto-id": "p1", proposicao: null,
+          resultado: "rejeitada", "total-sim": 2, "total-nao": 8, "total-abstencao": 0, "base-membros": 11,
+          "votos-registrados": 10, votos: [{ "vereador-id": "v1", voto: "sim" }],
+        }),
+      });
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await waitFor(() => expect(result.current.estado?.placar?.votosSecretos).toBe(10));
+      expect(result.current.estado!.placar!.votosNominais).toEqual({});
+      expect(result.current.estado!.placar!.resultado).toBe("rejeitada");
+    });
+
+    it("PRECEDÊNCIA — um `votacao.aberta` chegado ENQUANTO o resultado está em voo não é sobrescrito pelo resultado atrasado (sem piscar)", async () => {
+      vi.useFakeTimers();
+      const sse = sseControlado();
+      const encerradaEmVoo = deferido<Response>();
+      global.fetch = fetchFake({
+        "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+        "/votacao-aberta": naoHaAberta,
+        "/votacao-encerrada": () => encerradaEmVoo.promise,
+      });
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await ateQue(() => result.current.conexao === "ao-vivo");
+
+      await act(async () => {
+        sse.enviar("votacao.aberta", 1, {
+          "votacao-id": "vt2", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p2",
+          modalidade: "nominal", "quorum-tipo": "maioria_simples",
+        });
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+
+      await act(async () => {
+        encerradaEmVoo.resolve({ ok: true, status: 200, json: async () => votacaoEncerradaCrua } as Response);
+        await vi.advanceTimersByTimeAsync(10);
+      });
+      expect(result.current.estado!.placar!.votacaoId).toBe("vt2");
+      expect(result.current.estado!.placar!.encerrada).toBe(false);
+    });
+
+    it("403 (sessão secreta, leitor que não é a Mesa) não gera erro e a tela PARA de perguntar nas rebuscas seguintes", async () => {
+      vi.useFakeTimers();
+      const f = fetchFake({ "/votacao-aberta": naoHaAberta, "/votacao-encerrada": resposta(403) });
+      global.fetch = f;
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await ateQue(() => contarChamadas(f, "/votacao-encerrada") === 1);
+      expect(result.current.estado?.placar).toBeNull();
+      expect(result.current.conexao).not.toBe("erro");
+      await ateQue(() => contarChamadas(f, "/votacao-aberta") >= 2, 500, 200); // a periódica de 30 s
+      expect(contarChamadas(f, "/votacao-encerrada")).toBe(1);
+    });
+
+    it("rede caída ou 500 na leitura do resultado é absorvida (placar segue null, sessão de pé)", async () => {
+      global.fetch = fetchFake({ "/votacao-aberta": naoHaAberta, "/votacao-encerrada": resposta(500) });
+      const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+      await waitFor(() => expect(result.current.conexao).toBe("ao-vivo"));
+      expect(result.current.sessao).not.toBeNull();
+      expect(result.current.estado?.placar).toBeNull();
+    });
   });
 });
 

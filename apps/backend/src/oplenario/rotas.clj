@@ -722,6 +722,9 @@
                                        :consultar-sessao consultar-sessao
                                        :sessao-fechada? sessao-fechada?
                                        :pode-ver-votacao-aberta? pode-ver-votacao-aberta?
+                                       ;; o resultado da ultima votacao: o teto e' o da rota magra `/quorum`
+                                       ;; (publica OU 'secretario'), sem a clausula 'vereador' de acima
+                                       :pode-ver-resultado? sessoes-logic/pode-ver-quorum-da-sessao?
                                        :resolver-municipio resolver-municipio
                                        :resolver-vereador resolver-vereador-fn
                                        :resolver-autor (fn [ente-id identidade-id]

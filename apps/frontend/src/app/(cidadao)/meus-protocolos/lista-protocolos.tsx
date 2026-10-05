@@ -12,7 +12,7 @@
 // do protocolo, até 5 arquivos) o controle "Anexar ao pedido" deixa juntar mais.
 
 import { useState } from "react";
-import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloEstado } from "@/lib/formularios-cidadao";
+import { DIREITOS_LGPD, LIMITES, TIPOS_MANIFESTACAO, rotuloDaLista, rotuloEstado } from "@/lib/formularios-cidadao";
 import { formatarData, formatarDataSimples } from "@/lib/formatar-data";
 import { useEnvioCidadao } from "@/lib/use-envio-cidadao";
 import type { Anexo, Complemento, EspecieDoPortal, MeusProtocolos, Prorrogacao, RecursoEsic, Resposta } from "@/lib/use-meus-protocolos";
@@ -225,8 +225,6 @@ function Item({
 const rotaDoAnexo = (especie: "esic" | "ouvidoria" | "lgpd", id: string) => (anexoId: string) =>
   `/api/portal/meus-protocolos/${especie}/${encodeURIComponent(id)}/anexos/${encodeURIComponent(anexoId)}`;
 
-const rotuloDe = (lista: { valor: string; rotulo: string }[], v: string) => lista.find((o) => o.valor === v)?.rotulo ?? v;
-
 export function ListaProtocolos({
   dados,
   token,
@@ -270,7 +268,7 @@ export function ListaProtocolos({
         ) : (
           <ul className="mp-lista">
             {dados.solicitacoesLgpd.map((s) => (
-              <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDe(DIREITOS_LGPD, s.tipo)} estado={s.estado}
+              <Item key={s.id} protocolo={s.protocolo} titulo={rotuloDaLista(DIREITOS_LGPD, s.tipo)} estado={s.estado}
                 reciboEm={s.reciboEm} dias={s.diasRestantes} resposta={s.resposta} anexos={s.anexos}
                 complementos={s.complementos}
                 rotaDoAnexo={rotaDoAnexo("lgpd", s.id)} token={token}
@@ -290,7 +288,7 @@ export function ListaProtocolos({
         ) : (
           <ul className="mp-lista">
             {dados.manifestacoes.map((m) => (
-              <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDe(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
+              <Item key={m.id} protocolo={m.protocolo} titulo={`${rotuloDaLista(TIPOS_MANIFESTACAO, m.tipo)} · ${m.assunto}`}
                 estado={m.estado} reciboEm={m.reciboEm} dias={m.diasRestantes} resposta={m.resposta}
                 prorrogacao={m.prorrogacao} anexos={m.anexos} complementos={m.complementos}
                 rotaDoAnexo={rotaDoAnexo("ouvidoria", m.id)} token={token}
