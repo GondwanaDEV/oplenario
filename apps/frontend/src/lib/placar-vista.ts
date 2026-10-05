@@ -3,7 +3,7 @@
 // não tem campo `votos`); só na NOMINAL com prova de modalidade o cliente revela quem votou o quê. Testado em
 // placar-vista.test.ts; o componente React só mapeia o resultado (JSX fino, sem lógica).
 
-import type { PlacarVotacao, VotoNominal } from "./plenario-reducer";
+import { identidadeDe, type EstadoPlenario, type PlacarVotacao, type VotoNominal } from "./plenario-reducer";
 
 export interface VistaNominal {
   kind: "nominal";
@@ -96,4 +96,32 @@ export function derivarPlacar(placar: PlacarVotacao | null, avisoLacuna = false)
     totais: encerrada && totais !== null ? { sim: totais.sim ?? 0, nao: totais.nao ?? 0, abstencao: totais.abstencao ?? 0 } : null,
     avisoLacuna,
   };
+}
+
+/** O rótulo neutro de quem votou e ainda não tem nome resolvido: a composição não chegou (corrida de carga),
+ * a busca dela falhou, ou o id não é de membro da Casa. Nunca o prefixo do uuid — um id truncado LÊ como
+ * identidade, e era essa leitura falsa o defeito do telão (04/10/2026). Fonte única: TV e telão da Mesa. */
+export const VEREADOR_SEM_NOME = "Vereador(a)";
+
+export interface VotoRotulado {
+  vereadorId: string;
+  nome: string;
+  voto: VotoNominal;
+}
+
+/** A grade nominal COM o nome parlamentar, resolvido pelo índice de `GET /sessoes/:id/composicao` que
+ * `usePlenario` já hidrata (o evento SSE e o snapshot de votação trazem só o `vereador-id`). Ordem alfabética
+ * por nome (pt-BR), quem não tem nome por último — a ordem por uuid, que a grade tinha, não significa nada
+ * para quem lê. Só se chama com os `votos` de uma VistaNominal: a secreta não tem grade (sigilo §22.6). */
+export function rotularVotos(votos: { vereadorId: string; voto: VotoNominal }[], estado: EstadoPlenario): VotoRotulado[] {
+  const rotulados = votos.map(({ vereadorId, voto }) => ({
+    vereadorId,
+    nome: identidadeDe(estado, vereadorId)?.nomeParlamentar ?? VEREADOR_SEM_NOME,
+    voto,
+  }));
+  return rotulados.sort((a, b) => {
+    const aSem = a.nome === VEREADOR_SEM_NOME;
+    if (aSem !== (b.nome === VEREADOR_SEM_NOME)) return aSem ? 1 : -1;
+    return a.nome.localeCompare(b.nome, "pt-BR") || a.vereadorId.localeCompare(b.vereadorId);
+  });
 }
