@@ -10,7 +10,8 @@
 //     objeto. O detalhe mostra o que o registro tem: a ação, os NOMES dos campos alterados, a decisão, o canal e o selo
 //     encadeado ao anterior;
 //   • a busca livre ("nome, nº da matéria, IP…") — o servidor filtra por período, tipo de ator, tipo de registro e
-//     objeto, e só; sem campo de busca que não busca;
+//     objeto (e, vindo de um link, por um registro só: `recurso-tipo` + `recurso-id`), e só; sem campo de busca que
+//     não busca;
 //   • "Operador da plataforma" como ator da lista — a atuação da Operação vive na corrente DELA (ADR-0016) e aparece
 //     numa lista à parte, para o auditor, com o selo daquela corrente;
 //   • o verbo da ação ("Criou", "Aprovou"…) é derivado do nome da ação do catálogo; o que não se deixa classificar sai
@@ -62,7 +63,10 @@ export type Integridade = {
 // ---- filtros (o vocabulário é o do servidor: adapters/in/filtro.clj) ----
 
 export type Periodo = "7" | "30" | "ano" | "tudo";
-export type Filtro = { periodo: Periodo; ator: string; classe: string; objeto: string };
+/** `recurso`: só os eventos de UM registro (ex.: uma pergunta à Clara, ADR-0024) — vem da URL
+ *  (`?recurso-tipo=…&recurso-id=…`); com ele o período não vale (a história inteira daquele registro). */
+export type RecursoFiltrado = { tipo: string; id: string };
+export type Filtro = { periodo: Periodo; ator: string; classe: string; objeto: string; recurso?: RecursoFiltrado | null };
 
 export const FILTRO_INICIAL: Filtro = { periodo: "30", ator: "", classe: "", objeto: "" };
 
@@ -114,7 +118,11 @@ function diaDaCasa(agora: Date, dias = 0): string {
 /** O filtro da tela -> a query string do servidor (sem `?`). `antesDe` = a página seguinte (keyset por seq). */
 export function queryDoFiltro(f: Filtro, agora: Date, antesDe?: number | null): string {
   const p = new URLSearchParams();
-  if (f.periodo === "7") p.set("desde", diaDaCasa(agora, 6));
+  if (f.recurso) {
+    // os dois juntos (o servidor recusa um sem o outro) e sem `desde`: o registro inteiro, desde o início
+    p.set("recurso-tipo", f.recurso.tipo);
+    p.set("recurso-id", f.recurso.id);
+  } else if (f.periodo === "7") p.set("desde", diaDaCasa(agora, 6));
   else if (f.periodo === "30") p.set("desde", diaDaCasa(agora, 29));
   else if (f.periodo === "ano") p.set("desde", `${diaDaCasa(agora).slice(0, 4)}-01-01`);
   if (f.ator) p.set("ator", f.ator);
@@ -122,6 +130,19 @@ export function queryDoFiltro(f: Filtro, agora: Date, antesDe?: number | null): 
   if (f.objeto) p.set("objeto", f.objeto);
   if (antesDe) p.set("antes-de", String(antesDe));
   return p.toString();
+}
+
+/** O recurso pedido na URL, ou null. Só vale com os dois parâmetros, cada um com conteúdo (um sem o outro é ignorado:
+ *  a tela volta à trilha inteira em vez de mandar ao servidor um filtro que ele recusa). */
+export function recursoDaUrl(ler: (chave: string) => string | null): RecursoFiltrado | null {
+  const tipo = ler("recurso-tipo")?.trim();
+  const id = ler("recurso-id")?.trim();
+  return tipo && id ? { tipo, id } : null;
+}
+
+/** A frase do recorte por recurso, acima da lista. */
+export function rotuloDoRecursoFiltrado(r: RecursoFiltrado): string {
+  return r.tipo === "interacao_assistente" ? "Só os eventos de uma pergunta à Clara" : "Só os eventos deste registro";
 }
 
 // ---- cada registro, em palavras ----
@@ -153,7 +174,7 @@ const TIPOS_DE_RECURSO: Record<string, string> = {
   proposicao: "Proposição", sessao: "Sessão", ata: "Ata", vereador: "Vereador(a)", identidade: "Pessoa",
   pedido: "Pedido de e-SIC", manifestacao: "Manifestação", norma: "Norma", documento: "Documento",
   proposta: "Proposta do agente", nota: "Nota técnica", remessa: "Remessa", item: "Item da pauta",
-  exportacao: "Exportação completa",
+  exportacao: "Exportação completa", interacao_assistente: "Pergunta à Clara",
 };
 
 const NOMES_DE_MODULO: Record<string, string> = Object.fromEntries(OBJETOS.filter((o) => o.valor).map((o) => [o.valor, o.rotulo]));

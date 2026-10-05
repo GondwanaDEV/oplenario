@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tk" }) }));
 vi.mock("../topo", () => ({ TopoInterno: () => null }));
+const url = { busca: "" };
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(url.busca) }));
 
 import PaginaAuditoria from "./page";
 
@@ -27,6 +29,7 @@ const DA_CASA = {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  url.busca = "";
 });
 
 function rotas(trilha: unknown, integridade: unknown = { integra: true, total: 57, cabeca: "x", "quebra-em": null, "selos-do-dia": [] }) {
@@ -54,6 +57,40 @@ describe("Trilha de auditoria (/auditoria)", () => {
     expect(lacre.textContent).toMatch(/57/);
     expect(screen.getByRole("list", { name: "Atuação da Operação" }).textContent).toMatch(/Rafaela/);
     expect(screen.getByRole("button", { name: /Exportar trilha/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Conversas com a Clara" }).getAttribute("href")).toBe("/auditoria/clara?token=tk");
+  });
+
+  it("vindo do link de uma pergunta à Clara, a trilha é só daquele registro, desde o início — e a exportação também", async () => {
+    url.busca = "recurso-tipo=interacao_assistente&recurso-id=i-123";
+    const f = rotas(DA_CASA);
+    vi.stubGlobal("fetch", f);
+    Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => undefined });
+    const clique = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    render(<PaginaAuditoria />);
+    await screen.findByRole("list", { name: "Eventos de auditoria" });
+    const pedidos = () => f.mock.calls.map(([u]) => String(u));
+    expect(pedidos().filter((u) => /^\/api\/auditoria\?/.test(u))).toEqual(["/api/auditoria?recurso-tipo=interacao_assistente&recurso-id=i-123"]);
+    expect(screen.getByText("Só os eventos de uma pergunta à Clara")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Ver toda a trilha" }).getAttribute("href")).toBe("/auditoria?token=tk");
+    // o período não vale aqui: o campo sai, o resumo diz que é o histórico inteiro
+    expect(screen.queryByLabelText("Período")).toBeNull();
+    expect(screen.getByText("todo o histórico")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Exportar trilha/ }));
+    await waitFor(() =>
+      expect(pedidos()).toContain("/api/auditoria/exportar.csv?recurso-tipo=interacao_assistente&recurso-id=i-123"));
+    await waitFor(() => expect(clique).toHaveBeenCalled());
+    clique.mockRestore();
+  });
+
+  it("só um dos dois parâmetros na URL não recorta nada: volta à trilha do período", async () => {
+    url.busca = "recurso-id=i-123";
+    const f = rotas(DA_CASA);
+    vi.stubGlobal("fetch", f);
+    render(<PaginaAuditoria />);
+    await screen.findByRole("list", { name: "Eventos de auditoria" });
+    expect(f.mock.calls.some(([u]) => /^\/api\/auditoria\?desde=/.test(String(u)))).toBe(true);
+    expect(f.mock.calls.some(([u]) => String(u).includes("recurso-"))).toBe(false);
+    expect(screen.queryByText(/Só os eventos/)).toBeNull();
   });
 
   it("o detalhe mostra o que o registro tem — os campos, a decisão e o selo encadeado, nunca conteúdo", async () => {
@@ -81,6 +118,7 @@ describe("Trilha de auditoria (/auditoria)", () => {
     expect(await screen.findByText(/Você vê a sua própria trilha/)).toBeTruthy();
     expect(screen.queryByRole("status", { name: "Estado da cadeia de integridade" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Exportar/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Conversas com a Clara" })).toBeNull();
     expect(f.mock.calls.some(([u]) => String(u).includes("/integridade"))).toBe(false);
   });
 
