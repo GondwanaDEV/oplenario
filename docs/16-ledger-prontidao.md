@@ -2746,7 +2746,53 @@ quer dizer "o código atual não tem o defeito", não "reproduzi e passou". Os 8
 
 Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as linhas 5, 18–21, 24–37 e 39–49).
 
-**Depois das frentes de 05/10/2026: 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
+**Depois da segunda rodada de 05/10/2026: 84 achados · 15 abertos · 69 fechados.** Dos 39 que estavam abertos
+depois da primeira rodada, 24 fecharam: 22 nas frentes da tabela abaixo, a linha 12 (cockpit com duas sessões, #155)
+e a linha 2 (promulgar e publicar a norma, #139). As linhas ficam na tabela principal, com a numeração de antes.
+
+| Linha | O que fechou | PR |
+|---|---|---|
+| 5 | Aceitar a remessa cumpre a obrigação: o gatilho do host reavalia a competência no aceite e, antes do sweep, em toda leitura do painel (acerta as remessas aceitas antes do conserto). O teste da reprodução está commitado (`aceite_move_placar_test`) | #143 |
+| 44 | O 409 do ciclo da remessa diz o estado atual e o esperado | #143 |
+| 20 | Tramitação pública: `transparencia.materia_movimentacao` e "Por onde a matéria passou" na ficha pública; histórico anterior reconstruído uma vez na migration (só projeção) | #147 |
+| 35 | A frase "toda a tramitação" passou a ser verdadeira (ficha) e saiu da notificação | #147 #149 |
+| 24, 25 | Faixa e quadro com um só rótulo de estado; estado desconhecido cai em "Em tramitação", não em "Protocolo"; `em_pauta` é "Em Plenário" | #150 |
+| 26 | Autor vereador ligado ao cadastro (`autor_id`) na nova proposição | #150 |
+| 39 | Filtro de espécie com as 8 espécies, de uma lista só | #150 |
+| 27 | Número do item por posição dentro da fase, só na apresentação (`lib/posicao-na-fase.ts`); `ordem` e a pauta congelada não mudam | #152 |
+| 28 | Fila da tribuna sem quem já falou (leitura; nenhum estado novo). Quem está com a palavra continua na fila e o aparte não consome inscrição | #152 |
+| 29 | Atos com nome no lugar do prefixo de UUID; sem nome, texto neutro | #152 |
+| 41 | Folha congelada com numeração contínua nas próximas versões; as já congeladas não se reescrevem | #152 |
+| 31 | Prazo de sanção ou veto informado ao gerar o autógrafo (opcional, sem padrão; o backend recusa prazo no passado) | #153 |
+| 32, 33, 45, 46 | Dashboard da Mesa: gráfico colorido por posição, cartões com link, plural de verdade, denominador na vitrine, atraso no anel | #151 |
+| 34 | Exemplo de protocolo do e-SIC no formato que o sistema emite | #149 |
+| 36 | Notificação ao cidadão com sigla e fase em palavras | #149 |
+| 37 | Acompanhamentos da cidadã levam à ficha da matéria | #149 |
+| 48 | Menu do portal com três destinos distintos | #149 |
+| 49 | URN crua trocada pelo título da norma com link | #149 |
+
+Fechados também os achados novos da primeira rodada: voto nominal de sessão secreta não sai mais no CSV de dados
+abertos nem no perfil público (#145: toda leitura pública de `voto_parlamentar` passa por
+`parlamentar/da-votacao-publica`, fail-closed, e um teste estrutural reprova a leitura que esquecer); lista de leis
+paginada, `tem-texto` na norma e `/votacoes?materia=` ligando a ficha às votações dela (#148).
+
+**Abertos (15):** linhas 3, 4, 6 (três achados), 16, 17, 18, 19, 21, 30, 40, 42, 43 e 47. A linha 1 segue de pé como
+resíduo (decisão do fundador).
+
+O que a segunda rodada deixou registrado:
+- Linha 30 (autógrafo, sanção e promulgação na linha do tempo da ficha) não foi feita: a rota da ficha não devolve
+  esses atos.
+- "Minha atuação" do vereador usa a rota do perfil público; ele também deixa de ver ali o próprio voto de sessão
+  secreta. Se deve ver, falta rota autenticada própria.
+- Voto de votação anulada em sessão pública continua saindo nas leituras públicas de voto por vereador (não mudou).
+- A faixa "Onde está a matéria" segue dependendo do nome do estado; nenhuma rota devolve ordem ou categoria das etapas
+  do rito. Na ficha pública, matéria aprovada aparece com todas as etapas concluídas, inclusive "Sanção".
+- Decisões embutidas, a confirmar: `em_pauta` conta como "Em Plenário" e não como "pronta para pauta" (a Central caiu
+  de 4 para 3 na demo); prazo do Executivo sem valor padrão; o backend recusa prazo no passado.
+- Não vistos em browser: o formulário do prazo do Executivo (a demo não tem matéria aprovada sem autógrafo), o telão e
+  a TV ao vivo, a folha em PDF com nome.
+
+**Depois das frentes de 05/10/2026 (primeira rodada): 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
 fechados em código e mergeados com o CI verde; as linhas ficam na tabela, com a numeração de antes, e valem como
 histórico.
 
@@ -2773,9 +2819,8 @@ O que essas frentes deixaram registrado:
     em curso agora" com o link para a outra;
   - a Trilha 3 abre o `/votar` com `?sessao=` explícito, então não depende mais da ordem.
   A vista `sli_sessao` segue sem o tipo da sessão: o rótulo da troca é a hora em que a sessão abriu.
-- **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
-  perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
-  o problema: confere a sessão.
+- **Achado novo, fechado no #145:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados
+  abertos e o perfil público do vereador publicavam o voto, porque filtravam só pela modalidade.
 - **Achado fechado (05/10/2026, decisão do Daouda "A e B"):** ao reconceder acesso a quem já tem conta, o convite saía
   para o e-mail já cadastrado. Agora:
   - **A:** se a pessoa nunca entrou (sem `primeiro_acesso_em` na Casa e sem credencial no Keycloak), o e-mail informado
@@ -2791,8 +2836,8 @@ O que essas frentes deixaram registrado:
 - Decisões embutidas, a confirmar: a matéria é única por sessão em qualquer fase (linha 8); `admin_ente` não é
   revogável pela rota nova e a revogação com a Casa suspensa devolve 423 (linha 11); o partido aparece na lista pública
   de vereadores (linha 14).
-- Lacunas conhecidas das páginas novas do portal: a lista de leis corta em 200 sem paginar e o wire não diz se o
-  arquivo do texto existe; a ficha da matéria ainda não leva às votações dela.
+- Lacunas das páginas novas do portal (lista de leis sem paginar, wire sem dizer se há texto, ficha sem levar às
+  votações): fechadas no #148.
 
 | # | Achado | Gravidade | Evidência | Só código? |
 |---|---|---|---|---|
