@@ -346,7 +346,7 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 - Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
   por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
 
-**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 15 abertos · 69 fechados · 0 sem decidir.
+**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 13 abertos · 71 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
 - o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
 - gerar remessa ao TCE sem rota; convocação oficial inexistente;
@@ -394,8 +394,14 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **Pós-aprovação:** o prazo de sanção ou veto é informado ao gerar o autógrafo (opcional, sem padrão; não se
     corrige depois; prazo no passado → 400).
   - **Dashboard da Mesa:** gráfico colorido por posição, cartões com link, plural de verdade, denominador na vitrine.
+- **Terceira rodada de 05/10 (#158 e o seguinte):**
+  - **Ficha pública:** mostra no topo o resultado da última votação em plenário, com link; o chip de estado não muda
+    (mover o rito ao encerrar a votação segue decisão do fundador).
+  - **Ficha interna:** a aba Tramitação junta, pelo instante, o autógrafo, a resposta do Executivo, a apreciação do
+    veto e a promulgação e publicação da norma (lidos de `GET /proposicoes/:id/pos-aprovacao`).
+  - **Voto de votação anulada** não sai mais no perfil público, no CSV nem na contagem do catálogo (era latente: nenhuma
+    rota anula votação hoje).
 - **Falta:**
-  - autógrafo, sanção e promulgação na linha do tempo da ficha da matéria (a rota da ficha não os devolve);
   - o vereador ver o próprio voto de sessão secreta (hoje "Minha atuação" usa a rota pública);
   - a faixa "Onde está a matéria" ainda depende do nome do estado (nenhuma rota devolve a ordem das etapas do rito);
   - não vistos em browser: o formulário do prazo do Executivo, o telão e a TV ao vivo, a folha em PDF com nome;
