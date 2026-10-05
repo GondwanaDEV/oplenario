@@ -217,7 +217,8 @@
   ;; A tabela de rotas e' a prova: se alguem montar um upload SEM o `auth` (publico), este teste reprova.
   (let [c (cenario) d (deps c #{}) auth (:auth d)
         uploads (filter (fn [[caminho verbo]] (and (= :post verbo) (str/includes? caminho "/anexos")
-                                                 (not (str/ends-with? caminho "/retirar"))))   ; retirar nao e' upload
+                                                 (not (str/ends-with? caminho "/retirar"))      ; retirar nao e' upload
+                                                 (not (str/ends-with? caminho "/substituir"))))   ; substituir e' do balcao: tem teste proprio (anexos-substituir-test)
                         (participacao-http/rotas d))]
     (is (= #{"/atendimento/esic/:id/anexos" "/atendimento/ouvidoria/:id/anexos" "/atendimento/lgpd/:id/anexos"
              "/portal/meus-protocolos/esic/:id/anexos" "/portal/meus-protocolos/ouvidoria/:id/anexos"

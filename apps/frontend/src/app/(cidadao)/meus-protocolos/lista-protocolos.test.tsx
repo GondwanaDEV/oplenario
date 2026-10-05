@@ -316,6 +316,31 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(within(p8).getByRole("link", { name: "Baixar resposta.pdf" })).toBeTruthy();
   });
 
+  it("anexo SUBSTITUÍDO pela Câmara: \"Substituído em <data>\", sem motivo e sem link; o novo vem logo abaixo e baixa", () => {
+    const dados: MeusProtocolos = {
+      ...DADOS, solicitacoesLgpd: [], manifestacoes: [],
+      pedidosEsic: [{ ...base, id: "p9", protocolo: "ESIC-2026-000009", assunto: "Folha", estado: "respondido", diasRestantes: 5,
+        resposta: { corpo: "Segue.", respondidaEm: "2026-07-10T15:00:00Z" },
+        anexos: [
+          { ...anexo("a1", "folha-errada.pdf", 2048, "application/pdf", "casa"), retiradoEm: "2026-07-12T10:00:00Z", substituidoPor: "a3" },
+          anexo("a2", "outro.pdf", 1024, "application/pdf", "casa"),
+          anexo("a3", "folha-certa.pdf", 2048, "application/pdf", "casa"),
+        ] }],
+    };
+    render(<ListaDeProtocolosComToken dados={dados} token={null} />);
+    const p9 = screen.getByText("ESIC-2026-000009").closest("li")!;
+    const casa = within(p9).getByRole("list", { name: "Anexos da resposta" });
+    expect(within(casa).getByText(/Substituído em/)).toBeTruthy();
+    expect(within(casa).queryByText(/Retirado em/)).toBeNull();
+    expect(within(casa).queryByText(/Motivo/)).toBeNull();
+    expect(within(casa).queryByRole("link", { name: "Baixar folha-errada.pdf" })).toBeNull();
+    expect(within(casa).getByRole("link", { name: "Baixar folha-certa.pdf" })).toBeTruthy();
+    const nomes = within(casa).getAllByRole("listitem").map((li) => li.querySelector(".anx-nome")!.textContent);
+    expect(nomes).toEqual(["folha-errada.pdf", "folha-certa.pdf", "outro.pdf"]);
+    // o requerente nunca ve "Substituir" (e' do balcao)
+    expect(within(p9).queryByRole("button", { name: /Substituir/ })).toBeNull();
+  });
+
   it("F1: enquanto os arquivos sobem, o controle diz para não fechar a página e o aviso de saída está armado", async () => {
     let termina!: () => void;
     global.fetch = vi.fn(() => new Promise<Response>((r) => { termina = () => r({ ok: true, status: 201, json: async () => ({}) } as Response); })) as unknown as typeof fetch;

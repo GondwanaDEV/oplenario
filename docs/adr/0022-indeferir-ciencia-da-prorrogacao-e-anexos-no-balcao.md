@@ -105,9 +105,11 @@ respostas dos servidores e dos protocolos do cidadão.
 | `POST /atendimento/{esic,ouvidoria,lgpd}/:id/anexos` · `GET …/anexos/:anexo` · `POST …/anexos/:anexo/retirar` | `secretario` |
 | `POST /portal/meus-protocolos/{esic,ouvidoria,lgpd}/:id/anexos` · `GET …/anexos/:anexo` | o dono do protocolo |
 | `POST /atendimento/{esic,ouvidoria,lgpd}/:id/complementos` (corpo `{corpo}`) | `secretario` |
+| `POST /atendimento/{esic,ouvidoria,lgpd}/:id/anexos/:anexo/substituir` (multipart: um arquivo + o campo `motivo`) | `secretario` |
 
-Migrations: `20261004000184-participacao-anexo` (`participacao.anexo` e `participacao.anexo_retirada`) e
-`20261004000185-participacao-complemento` (`participacao.complemento`).
+Migrations: `20261004000184-participacao-anexo` (`participacao.anexo` e `participacao.anexo_retirada`),
+`20261004000185-participacao-complemento` (`participacao.complemento`) e
+`20261004000187-participacao-anexo-substitui` (a coluna `substitui_anexo_id` em `participacao.anexo`).
 
 ## Complemento da resposta
 
@@ -130,6 +132,45 @@ A Casa acrescenta um texto a um protocolo que já respondeu, mesmo depois de a j
 7. **Sem corrida a tratar.** Ter resposta só cresce (uma resposta nunca some), então a conferência prévia não envelhece e a
    gravação não precisa de CAS.
 
+## Substituir um anexo
+
+A secretaria troca o arquivo errado pelo certo num só ato, mesmo depois da janela de 10 minutos.
+
+1. **Um ato só.** `POST /atendimento/{esic,ouvidoria,lgpd}/:id/anexos/:anexo/substituir`, papel `secretario`, multipart com
+   UM arquivo e o campo de texto `motivo` (obrigatório, até 1000 caracteres, aparado; o mesmo teto do motivo da retirada).
+   Mesmas validações do envio: tipos fechados conferidos pelo conteúdo, 10 MB, nome em UTF-8. Passa pelo interceptor comum
+   `oplenario.interceptors/anexo-multipart`, que ganhou a opção `:campos` (nomes de campos de texto lidos junto do arquivo,
+   até 4 KB cada, em `(:request :campos-do-envio)`; sem a opção os campos seguem ignorados). Alvo, anexo e estado são conferidos
+   ANTES de ler o corpo; o motivo, assim que o corpo chega e antes de gravar qualquer blob.
+2. **Só o anexo da Casa e ainda vigente.** O do requerente só se retira. Anexo já retirado ou já substituído, e o mesmo arquivo
+   (mesmo SHA-256) já vigente no protocolo (inclusive o próprio anexo), dão 409 com a frase em palavras. O anexo novo também
+   pode ser substituído depois: a cadeia segue.
+3. **A qualquer tempo.** Não depende da janela de 10 minutos, como a retirada.
+4. **Efeito, numa transação** (trava consultiva do protocolo): o anexo antigo é retirado (linha em
+   `participacao.anexo_retirada` com o motivo e quem retirou; o blob sai do object storage; o download vira 404) e o novo
+   nasce como linha em `participacao.anexo` com `substitui_anexo_id` apontando para o antigo. A tabela segue só SELECT/INSERT:
+   a coluna entra no INSERT do novo, e "substituído por" é lido de volta pela relação inversa. Índice único parcial: um
+   anexo só é substituído uma vez; a FK é composta com a Casa. A retirada e o novo levam o mesmo instante.
+5. **A vaga é do novo.** O antigo, retirado na mesma transação, já não conta no limite de 5 por origem, então substituir
+   cabe com 5 anexos ativos.
+6. **Ordem do storage e do banco** (a do envio e a da retirada: nunca linha sem blob). O blob novo sobe primeiro; a
+   transação grava a retirada do antigo e a linha nova juntas; o blob antigo sai DEPOIS do commit. Pontos de falha:
+   - o upload do novo falha: nada mudou (500), o antigo segue lá;
+   - a transação é recusada com certeza (409, violação de integridade): o blob novo sai, o antigo segue lá;
+   - o resultado da transação é desconhecido (a conexão cai): nenhum blob sai. Se passou, o novo existe e o antigo (já
+     retirado, com download 404) fica órfão até alguém retirar de novo; se não passou, sobra um blob novo sem linha;
+   - o blob antigo não sai depois do commit: a troca está feita (201) e o antigo fica órfão com download 404. `retirar` sobre
+     ele (idempotente) conclui a remoção.
+
+   Em nenhum ponto o protocolo fica sem os dois arquivos.
+7. **Quem vê.** No balcão, o antigo aparece como "Substituído em <data>" (a data da troca é a da retirada) com o motivo,
+   que só a secretaria lê, e o novo logo abaixo. Em `/meus-protocolos` (o dono), o antigo aparece como "Substituído em
+   <data>", sem motivo, e o novo é baixável. O fio ganhou `substituido-por` (o id do anexo que o trocou) no antigo, nos dois
+   contratos. As rotas públicas por número de protocolo não mudam (não mostram anexo).
+8. **Fora do agente e na Casa suspensa.** `fora-do-catalogo.edn` (`:so-tela`, arquivo de um cidadão é dado pessoal) e na
+   allowlist da Casa suspensa, junto de retirar e anexar (`restricao_da_casa.clj`; a cópia de propósito em
+   `vazamento_estado_test`).
+
 ## Reconciliação entre o banco e o object storage
 
 O upload grava o blob antes da linha, então uma falha no meio deixa blob sem linha; o contrário (linha sem blob) é perda do arquivo.
@@ -145,7 +186,6 @@ Existe o comando `reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]` (host: `
 ## Fora, de propósito
 
 - Antivírus.
-- Substituir um anexo.
 - Pré-visualização do arquivo no navegador.
 - Confirmação antes de responder, arquivar e prorrogar. Só o indeferimento tem.
 - Prova de ciência da prorrogação e qualquer aviso por e-mail.

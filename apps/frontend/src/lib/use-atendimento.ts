@@ -13,6 +13,7 @@
 //   · anexar     — POST /api/atendimento/{especie}/{id}/anexos (multipart, campo `arquivo`, UM por chamada, DEPOIS do ato)
 //   · baixar     — GET  /api/atendimento/{especie}/{id}/anexos/{anexo} (a secretaria; o cidadão tem a rota dele)
 //   · retirar    — POST /api/atendimento/{especie}/{id}/anexos/{anexo}/retirar ({motivo}; incidente de conteúdo)
+//   · substituir — POST /api/atendimento/{especie}/{id}/anexos/{anexo}/substituir (multipart: arquivo + motivo; a qualquer tempo)
 //   · encarregado — GET/PUT /api/lgpd/encarregado {nome, rotulo, email}
 // A authz real é o backend (papel `secretario`); aqui só se traduz cada resposta em frase honesta. Uma rota que falha
 // vira erro na tela, nunca uma lista vazia fingindo.
@@ -46,7 +47,7 @@ async function pedir<T>(
   token: string | null,
   caminho: string,
   acao: AcaoAtendimento,
-  init: { method?: string; corpo?: unknown; arquivo?: File } = {},
+  init: { method?: string; corpo?: unknown; arquivo?: File; campos?: Record<string, string> } = {},
 ): Promise<Resultado<T>> {
   if (semCredencial(token)) return { ok: false, status: 401, mensagem: mensagemDeErroAtendimento(401, acao) };
   try {
@@ -54,6 +55,8 @@ async function pedir<T>(
     let extra: RequestInit = {};
     if (init.arquivo) {
       const fd = new FormData();
+      // campos de texto que seguem o arquivo (o motivo da substituição): antes dele, para o servidor ler os dois
+      for (const [nome, valor] of Object.entries(init.campos ?? {})) fd.append(nome, valor);
       fd.append(CAMPO_DO_ANEXO, init.arquivo, init.arquivo.name);
       extra = { body: fd };
     } else if (init.corpo !== undefined) {
@@ -206,6 +209,16 @@ export function retirarAnexo(token: string | null, especie: Especie, id: string,
   return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos/${enc(anexoId)}/retirar`, "retirar-anexo", {
     method: "POST",
     corpo: { motivo },
+  });
+}
+
+/** SUBSTITUIR um anexo da Casa (ADR-0022): troca o arquivo errado pelo certo num só ato, a qualquer tempo. O antigo é retirado (com o
+ *  `motivo`, que só a secretaria lê) e o novo ocupa a vaga dele. Só o anexo da Casa; o do requerente só se retira. Devolve o anexo NOVO. */
+export function substituirAnexo(token: string | null, especie: Especie, id: string, anexoId: string, arquivo: File, motivo: string) {
+  return pedir<AnexoOut>(token, `/api/atendimento/${especie}/${enc(id)}/anexos/${enc(anexoId)}/substituir`, "substituir-anexo", {
+    method: "POST",
+    arquivo,
+    campos: { motivo },
   });
 }
 

@@ -36,7 +36,9 @@
    ;; RETIRADO (incidente de conteudo): quando, e por que. So' presentes se foi retirado. O arquivo saiu do object storage e
    ;; o download e' 404; a linha segue na lista como registro. O MOTIVO so' o balcao le (o requerente ve so' que foi retirado).
    [:retirado-em {:optional true} :string]
-   [:motivo-da-retirada {:optional true} :string]])
+   [:motivo-da-retirada {:optional true} :string]
+   ;; SUBSTITUIDO (ADR-0022): o id do anexo que o trocou. Presente so' no antigo, que tambem tem `retirado-em` (a data da troca).
+   [:substituido-por {:optional true} :string]])
 
 (def ComplementoOut
   "O COMPLEMENTO DA RESPOSTA recem-gravado (o 201 de POST /atendimento/<especie>/:id/complementos): so' o id, o texto e o

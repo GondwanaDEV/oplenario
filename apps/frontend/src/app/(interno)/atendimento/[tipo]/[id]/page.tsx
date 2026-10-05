@@ -42,6 +42,7 @@ import {
   responder,
   retirarAnexo,
   rotaDoAnexoNoBalcao,
+  substituirAnexo,
   useDetalheAtendimento,
   type DetalheOut,
 } from "@/lib/use-atendimento";
@@ -111,6 +112,14 @@ function Conteudo() {
     return null;
   }
 
+  async function substituir(anexoId: string, arquivo: File, motivo: string): Promise<string | null> {
+    if (!especie || !id) return "Endereço inválido: este protocolo não existe.";
+    const r = await substituirAnexo(token, especie, id, anexoId, arquivo, motivo);
+    if (!r.ok) return r.mensagem;
+    recarregar();
+    return null;
+  }
+
   return (
     <>
       <TopoInterno area="Atendimento" />
@@ -140,7 +149,7 @@ function Conteudo() {
         </div>
         {especie && estado.fase === "pronto" && (
           <Protocolo especie={especie} id={id} d={estado.dado} token={token} aoConcluir={concluir} aoAnexar={enviarAnexos}
-            enviandoAnexos={enviando} aoRetirar={retirar} />
+            enviandoAnexos={enviando} aoRetirar={retirar} aoSubstituir={substituir} />
         )}
       </main>
     </>
@@ -156,7 +165,7 @@ function Pessoa({ rotulo, p }: { rotulo: string; p: PessoaOut | null }) {
   );
 }
 
-function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos, aoRetirar }: {
+function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos, aoRetirar, aoSubstituir }: {
   especie: Especie;
   id: string;
   d: DetalheOut;
@@ -167,6 +176,8 @@ function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos
   enviandoAnexos: boolean;
   /** Retirar um anexo (incidente de conteúdo): devolve a frase do erro, ou null se deu certo. */
   aoRetirar: (anexoId: string, motivo: string) => Promise<string | null>;
+  /** Substituir um anexo da Casa por outro arquivo (ADR-0022), a qualquer tempo: devolve a frase do erro, ou null se deu certo. */
+  aoSubstituir: (anexoId: string, arquivo: File, motivo: string) => Promise<string | null>;
 }) {
   const info = ESPECIES.find((e) => e.especie === especie)!;
   const prazo = linhaDoPrazo(d);
@@ -250,7 +261,7 @@ function Protocolo({ especie, id, d, token, aoConcluir, aoAnexar, enviandoAnexos
       <ListaDeAnexos titulo="Anexos do pedido" anexos={doPedido} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)}
         token={token} aoRetirar={aoRetirar} />
       <ListaDeAnexos titulo="Anexos da resposta" anexos={daResposta} rotaDe={(anexoId) => rotaDoAnexoNoBalcao(especie, id, anexoId)}
-        token={token} aoRetirar={aoRetirar} />
+        token={token} aoRetirar={aoRetirar} aoSubstituir={aoSubstituir} />
 
       {podeAnexar && <AnexarAvulso aoEnviar={(arquivos) => void aoAnexar(arquivos)} enviando={enviandoAnexos} anonima={anonima} />}
 
