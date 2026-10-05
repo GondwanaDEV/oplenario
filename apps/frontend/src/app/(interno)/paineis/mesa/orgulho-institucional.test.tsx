@@ -9,7 +9,9 @@ import type { MesaVista } from "@/lib/mesa-vista";
 
 afterEach(() => cleanup());
 
-function vista(over: Partial<MesaVista["orgulho"]> = {}): MesaVista["orgulho"] {
+type Disponivel = Extract<MesaVista["orgulho"], { estado: "disponivel" }>;
+
+function vista(over: Partial<Disponivel> = {}): MesaVista["orgulho"] {
   return {
     estado: "disponivel",
     presencaMedia: 91,

@@ -8,7 +8,9 @@ import type { MesaVista } from "@/lib/mesa-vista";
 
 afterEach(() => cleanup());
 
-function vista(over: Partial<MesaVista["orgulho"]> = {}): MesaVista["orgulho"] {
+type Disponivel = Extract<MesaVista["orgulho"], { estado: "disponivel" }>;
+
+function vista(over: Partial<Disponivel> = {}): MesaVista["orgulho"] {
   return {
     estado: "disponivel",
     presencaMedia: 91,
@@ -34,7 +36,14 @@ describe("OrgulhoInstitucional — links", () => {
   });
 
   it("sem dado (—), sem link para o que não existe", () => {
-    render(<OrgulhoInstitucional vista={vista({ totalTramitacao: null, esicPercentual: null, esicEncerrados: null })} />);
+    render(
+      <OrgulhoInstitucional
+        vista={{
+          estado: "indisponivel", presencaMedia: null, presencaSessoes: null, esicPercentual: null, esicEncerrados: null,
+          totalTramitacao: null, transmissaoAoVivo: { estado: "em-breve" },
+        }}
+      />,
+    );
     expect(screen.queryAllByRole("link")).toHaveLength(0);
   });
 });
