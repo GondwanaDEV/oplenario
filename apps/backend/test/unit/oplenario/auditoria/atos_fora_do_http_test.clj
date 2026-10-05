@@ -122,6 +122,11 @@
     :motivo (str "o operador define o orcamento de IA da Casa: ato do OPERADOR (corrente da Operacao, ADR-0016, nao a da "
                  "Casa); grava o PAR na atuacao (tentativa antes, desfecho depois: `oplenario.ia-orcamento`) e o efeito "
                  "fica no `orcamento` append-only com `definido-por`")}
+   "reaplicar-login"
+   {:classe :comando-do-operador
+    :motivo (str "o operador reaplica a configuracao de login no realm das Casas (ADR-0025), o botao do console pela "
+                 "linha de comando: corrente da Operacao, com o PAR na atuacao (tentativa antes, desfecho depois: "
+                 "`admin-sistema.controllers/reaplicar-login!`); nenhuma linha da Casa muda, so' o realm dela")}
    "reconciliar-anexos"
    {:classe :comando-do-operador
     :motivo "relata; com --apagar-orfaos tira do STORAGE so' o blob sem linha com mais de 24 h (nao e' dado de Casa)"}

@@ -64,8 +64,9 @@
 (def acoes-de-tentativa
   "As acoes que ABREM um par (ADR-0017, adendo de 05/10/2026): a tentativa vai antes do efeito e o desfecho depois,
   apontando-a em `detalhe.tentativa`. O que abre par aqui e' ato do operador que o registro de efeito unico nao cobre:
-  a ENTRADA no console (a sessao nasce entre os dois registros) e comando de linha de comando sobre uma Casa."
-  #{"entrada-no-console-iniciada" "ia-orcamento-iniciado"})
+  a ENTRADA no console (a sessao nasce entre os dois registros) e comando de linha de comando sobre uma Casa
+  (`ia-orcamento`, `reaplicar-login`)."
+  #{"entrada-no-console-iniciada" "ia-orcamento-iniciado" "realm-reprovisionamento-iniciado"})
 
 (defn tentativas-sem-desfecho
   "As tentativas anteriores a `antes-de` (Instant) que nenhum registro aponta como desfecho: o ato comecou e a corrente

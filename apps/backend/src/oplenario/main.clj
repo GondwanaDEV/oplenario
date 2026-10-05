@@ -15,6 +15,7 @@
             [oplenario.ia-republicar :as ia-republicar]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.components.datasource :as datasource]
+            [oplenario.kernel.components.keycloak-idp :as keycloak-idp]
             [oplenario.kernel.components.objeto-store :as objeto-store]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.migracao :as migracao]
@@ -79,6 +80,29 @@
                           (println saida)
                           codigo)
                         (finally (component/stop os) (component/stop ds)))]
+        (System/exit codigo))
+
+      ;; ADR-0025: reaplica a configuracao de login (nome, pt-BR, tema, senha, forca bruta, senha -> codigo) no realm de
+      ;; cada Camara — o botao do console, Casa a Casa, com o par na atuacao. Roda com a config da API (o provisionamento
+      ;; grava tambem o SMTP e o gov.br do realm a partir dela). Sai com 0 = todas reaplicadas, 1 = alguma falhou.
+      (= "reaplicar-login" (first args))
+      (let [[_ & opcoes] args
+            uso "uso: reaplicar-login [--ente <ente-id>]"
+            ente (cond (empty? opcoes) nil
+                       (and (= "--ente" (first opcoes)) (= 2 (count opcoes))) (or (parse-uuid (str (second opcoes)))
+                                                                                  (throw (ex-info uso {})))
+                       :else (throw (ex-info uso {})))
+            ds (component/start (datasource/datasource cfg))
+            idp (component/start (keycloak-idp/keycloak-idp (:keycloak cfg)))
+            codigo (try (let [r (admin-sistema/reaplicar-login! (assoc (repo-admin/repositorio) :datasource ds)
+                                                                {:idp-casa idp} {:ente-id ente})]
+                          (doseq [{:keys [ente-id nome resultado motivo]} r]
+                            (println "[oplenario]" (name resultado) (str ente-id) (pr-str nome) (or motivo "")))
+                          (println "[oplenario] login reaplicado:" (count (filter #(= :reaplicado (:resultado %)) r))
+                                   "| falhou:" (count (filter #(= :falhou (:resultado %)) r))
+                                   "| fora (sem realm):" (count (filter #(= :pulada (:resultado %)) r)))
+                          (if (some #(= :falhou (:resultado %)) r) 1 0))
+                        (finally (component/stop idp) (component/stop ds)))]
         (System/exit codigo))
 
       ;; ADR-0016: o ciclo de vida do OPERADOR da plataforma. O primeiro nao tem console para se convidar.
