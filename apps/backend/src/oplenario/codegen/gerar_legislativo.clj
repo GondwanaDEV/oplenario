@@ -11,6 +11,7 @@
             [oplenario.legislativo.wire.out.documento-modelo :as documento-modelo]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
             [oplenario.legislativo.wire.out.meu-painel :as meu-painel]
+            [oplenario.legislativo.wire.out.norma :as norma]
             [oplenario.legislativo.wire.out.parecer :as parecer]
             [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
             [oplenario.legislativo.wire.out.proposicao :as proposicao]
@@ -54,6 +55,8 @@
    ;; composto referencia os dois primeiros, mesma ordem-referencia-antes-do-composto de ficha-materia).
    ["AutografoOut" autografo/AutografoOut]
    ["TramitacaoExecutivaOut" tramitacao-executiva/TramitacaoExecutivaOut]
+   ;; F3.8b — a norma promulgada (corpo de POST .../publicacao e campo `norma` de PosAprovacaoOut)
+   ["NormaOut" norma/NormaOut]
    ["PosAprovacaoOut" pos-aprovacao/PosAprovacaoOut]
    ;; Onda C1 (borda /meu do vereador) — schemas PROPRIOS (proposicao/parecer resumos ENXUTOS, distintos
    ;; dos irmaos de ficha-materia/editor — so' os campos que o painel do vereador mostra).

@@ -21,19 +21,21 @@ import { usePosAprovacao } from "@/lib/use-pos-aprovacao";
 import { useGerarAutografo } from "@/lib/use-gerar-autografo";
 import { useRegistrarResposta } from "@/lib/use-registrar-resposta";
 import { useApreciarVeto } from "@/lib/use-apreciar-veto";
+import { usePromulgarNorma, usePublicarNorma } from "@/lib/use-norma";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { derivarPipeline } from "@/lib/pos-aprovacao-vista";
+import { derivarPipeline, promulgavel } from "@/lib/pos-aprovacao-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { PipelinePosAprovacao } from "./pipeline-pos-aprovacao";
 import { CardAutografo } from "./card-autografo";
 import { CardPrazoExecutivo } from "./card-prazo-executivo";
+import { CardNorma } from "./card-norma";
 import { FormRegistrarRetorno, type ValoresRetorno } from "./form-registrar-retorno";
 import { FormApreciarVeto, type ValoresApreciacao } from "./form-apreciar-veto";
 import type { PosAprovacaoOut } from "@/lib/contrato-legislativo.gen";
 import "./pos-aprovacao.css";
 
-type UltimaAcao = "gerar" | "registrar" | "apreciar" | null;
+type UltimaAcao = "gerar" | "registrar" | "apreciar" | "promulgar" | "publicar" | null;
 
 export function ConteudoPosAprovacao({ id }: { id: string }) {
   const { token } = useAuth();
@@ -49,6 +51,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
   const posAprovacao = posAprovacaoLocal ?? posAprovacaoHook;
   const autografo = posAprovacao?.autografo ?? null;
   const tramitacaoExecutiva = posAprovacao?.tramitacaoExecutiva ?? null;
+  const norma = posAprovacao?.norma ?? null;
 
   const { gerar, estado: estadoGeracao, erro: erroGeracao } = useGerarAutografo(token, id);
   const { registrar, estado: estadoRegistro, erro: erroRegistro } = useRegistrarResposta(
@@ -59,6 +62,8 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
     token,
     tramitacaoExecutiva?.id ?? null,
   );
+  const { promulgar, estado: estadoPromulgacao, erro: erroPromulgacao } = usePromulgarNorma(token, id);
+  const { publicar, estado: estadoPublicacao, erro: erroPublicacao } = usePublicarNorma(token, norma?.id ?? null);
 
   // Só a AÇÃO MAIS RECENTE mostra erro (mesma disciplina de expediente/page.tsx).
   const erro =
@@ -116,6 +121,30 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
       setMostrarFormApreciacao(false);
     } catch {
       // erro já refletido pelo hook (erroApreciacao).
+    }
+  }
+
+  async function aoPromulgar() {
+    setUltimaAcao("promulgar");
+    setMensagemStatus(null);
+    try {
+      setPosAprovacaoLocal(await promulgar());
+      setMensagemStatus("Lei promulgada");
+    } catch {
+      // erro já refletido pelo hook (erroPromulgacao).
+    }
+  }
+
+  async function aoPublicar(veiculoPublicacao: string) {
+    if (!norma) return;
+    setUltimaAcao("publicar");
+    setMensagemStatus(null);
+    try {
+      const publicada = await publicar({ lockVersion: norma.lockVersion, veiculoPublicacao });
+      setPosAprovacaoLocal({ autografo, tramitacaoExecutiva, norma: publicada });
+      setMensagemStatus("Publicação registrada");
+    } catch {
+      // erro já refletido pelo hook (erroPublicacao).
     }
   }
 
@@ -224,11 +253,21 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
 
         {autografo && (
           <>
-            <PipelinePosAprovacao etapas={derivarPipeline(autografo, tramitacaoExecutiva)} />
+            <PipelinePosAprovacao etapas={derivarPipeline(autografo, tramitacaoExecutiva, norma)} />
 
             <div className="grade">
               <div>
                 <CardAutografo autografo={autografo} />
+                {(norma || promulgavel(tramitacaoExecutiva?.estado)) && (
+                  <CardNorma
+                    norma={norma}
+                    aoPromulgar={aoPromulgar}
+                    aoPublicar={aoPublicar}
+                    enviando={estadoPromulgacao === "enviando" || estadoPublicacao === "enviando"}
+                    erro={ultimaAcao === "promulgar" ? erroPromulgacao : ultimaAcao === "publicar" ? erroPublicacao : null}
+                    mensagem={ultimaAcao === "promulgar" || ultimaAcao === "publicar" ? mensagemStatus : null}
+                  />
+                )}
               </div>
 
               <aside>

@@ -19,6 +19,10 @@
                           :motivo "curadoria humana: importar o texto de uma norma para conferir (Eixo 7.3); o agente nao importa norma"}
  :normas/conferir {:categoria :so-tela
                    :motivo "conferir e publicar norma e' ato de pessoa (Eixo 7.3); o agente nunca confere"}
+ :legislativo/promulgar-norma {:categoria :so-tela
+                               :motivo "promulgar a lei fecha o rito da materia e numera a norma (F3.8b): ato de pessoa, o agente nao promulga"}
+ :legislativo/publicar-norma {:categoria :so-tela
+                              :motivo "registrar a publicacao e' declarar a prova (o veiculo) de que a lei saiu: ato de pessoa, o agente nao publica"}
  :normas/listar {:categoria :so-tela
                  :motivo "lista de curadoria (vigente e em conferencia); o agente le norma pela B.5 (buscar/ler dispositivo)"}
  :normas/versao {:categoria :so-tela

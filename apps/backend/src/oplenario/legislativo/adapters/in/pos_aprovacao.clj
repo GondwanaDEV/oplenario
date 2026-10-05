@@ -4,7 +4,8 @@
   o que nao vem do corpo (`id`/`created-by`/`updated-by` do ator, `proposicao-id`/`veto-votacao-id` p/ UUID,
   nunca do cliente cru, §22.5). `ano`/`destinatario-texto`/`texto-versao-id` do autografo NUNCA saem daqui:
   resolvidos pelo CONTROLLER (fase 2) — este adapter so' ve o wire-in cru."
-  (:require [malli.core :as m]
+  (:require [clojure.string :as str]
+            [malli.core :as m]
             [malli.error :as me]
             [oplenario.legislativo.wire.in.pos-aprovacao :as wire])
   (:import (java.time Instant)
@@ -35,6 +36,7 @@
 (def ^:private campos-gerar ["prazo-resposta-em"])
 (def ^:private campos-resposta ["lock-version" "resultado" "veto-tipo" "veto-razoes"])
 (def ^:private campos-apreciar ["lock-version" "resultado" "veto-votacao-id"])
+(def ^:private campos-publicar ["lock-version" "veiculo-publicacao"])
 
 (defn gerar-autografo->dominio
   "`proposicao-id` (path, ja' UUID) + corpo (wire/in.GerarAutografo) + `ator` -> mapa PARCIAL de dominio p/
@@ -74,3 +76,24 @@
     (validar! wire/ApreciarVeto m "corpo de apreciar veto invalido")
     {:lock-version (:lock-version m) :resultado (:resultado m)
      :veto-votacao-id (->uuid (:veto-votacao-id m) :veto-votacao-id) :updated-by (:identidade-id ator)}))
+
+(defn promulgar-norma->dominio
+  "`proposicao-id` (path, ja' UUID) + corpo (wire/in.PromulgarNorma, vazio) + `ator` -> mapa PARCIAL de dominio
+  p/ Repo/promulgar-norma!. Gera `:id` (novo, da norma) + `:promulgado-por`/`:created-by` (do ator). Especie,
+  ementa, texto, autografo, ano, data e municipio sao resolvidos pelo CONTROLLER."
+  [ator proposicao-id wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (validar! wire/PromulgarNorma (update-keys wire-in keyword) "promulgar nao recebe campos: tudo sai do que ja' esta' registrado")
+  {:id (random-uuid) :proposicao-id proposicao-id
+   :promulgado-por (:identidade-id ator) :created-by (:identidade-id ator)})
+
+(defn publicar-norma->dominio
+  "Corpo (wire/in.PublicarNorma) + `ator` -> mapa PARCIAL de dominio p/ Repo/publicar-norma!. NAO inclui `:id`
+  — o path E' o norma-id, o controller injeta. O veiculo chega aparado (espaco nas pontas nao e' prova)."
+  [ator wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [m (cond-> (so-esperados wire-in campos-publicar)
+            (string? (get wire-in "veiculo-publicacao")) (update :veiculo-publicacao str/trim))]
+    (validar! wire/PublicarNorma m "corpo de registrar publicacao invalido")
+    {:lock-version (:lock-version m) :veiculo-publicacao (:veiculo-publicacao m)
+     :updated-by (:identidade-id ator)}))

@@ -249,7 +249,7 @@
   (tramitacao-executiva-do-autografo [this ente-id autografo-id])
   ;; Onda B Slice 7 — borda do pos-aprovacao: leitura composta + acao composta.
   (buscar-pos-aprovacao [this ente-id proposicao-id]
-    "{:autografo (nil-ou-map) :tramitacao-executiva (nil-ou-map)} NUMA UNICA tx (mesma disciplina de
+    "{:autografo (nil-ou-map) :tramitacao-executiva (nil-ou-map) :norma (nil-ou-map, F3.8b)} NUMA UNICA tx (mesma disciplina de
      buscar-ficha-materia/buscar-proposicao-detalhe). Sem short-circuit no nil do autografo — o controller
      decide 404 vs. corpo parcial (proposicao inexistente vs. proposicao sem autografo ainda).")
   (gerar-autografo-e-abrir-tramitacao! [this ente-id m]
@@ -999,7 +999,8 @@
       (fn [tx]
         (let [aut (autografo/buscar-por-proposicao tx ente-id proposicao-id)]
           {:autografo aut
-           :tramitacao-executiva (when aut (exec/buscar-por-autografo tx ente-id (:id aut)))}))))
+           :tramitacao-executiva (when aut (exec/buscar-por-autografo tx ente-id (:id aut)))
+           :norma (norma/buscar-por-proposicao tx ente-id proposicao-id)}))))
   ;; composicao ATOMICA (mesmo racional de protocolar-documento!): gerar! (numera+insere o autografo,
   ;; append-only) + iniciar! (abre 'aguardando') NA MESMA tx — se iniciar! falhar, gerar! desfaz e o numero
   ;; reservado pelo kernel/sequencial some com o rollback (gapless preservado).
@@ -1037,7 +1038,19 @@
                                                :created-by (:created-by m)})]
           {:autografo-id aut-id :numero numero :tramitacao-executiva-id tram-id}))))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
-  (promulgar-norma! [this ente-id m] (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id))))
+  ;; Duas promulgacoes da MESMA materia ao mesmo tempo passam as duas pelo guard do controller; o UNIQUE
+  ;; (proposicao) ou (autografo) decide no banco e a perdedora vira 409, nunca 500. So' esses dois: colisao de
+  ;; numero ou de URN e' contador fora de sincronia (ver demo/reconciliar_contadores), nao "ja promulgada".
+  (promulgar-norma! [this ente-id m]
+    (try
+      (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id)))
+      (catch PSQLException e
+        (if (and (= "23505" (.getSQLState e))
+                 (#{"norma_ente_id_proposicao_id_key" "norma_ente_id_autografo_id_key"}
+                  (some-> (.getServerErrorMessage e) .getConstraint)))
+          (throw (ex-info "esta materia ja foi promulgada"
+                          {:tipo :conflito/norma :proposicao-id (:proposicao-id m)}))
+          (throw e)))))
   ;; F3.8b: publica (promulgada -> publicada) + EMITE `norma.publicada` (marco de eficacia) na MESMA tx. Le a
   ;; norma pos-UPDATE p/ o snapshot publico (publicado_em/veiculo agora preenchidos). Transparencia projeta.
   (publicar-norma! [this ente-id m]

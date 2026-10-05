@@ -221,9 +221,25 @@ export interface TramitacaoExecutivaOut {
   lockVersion: number;
 }
 
+export interface NormaOut {
+  id: string;
+  proposicaoId: string;
+  tipoNorma: string;
+  numero: number;
+  ano: number;
+  urn: string;
+  ementa: string;
+  estado: string;
+  promulgadoEm: string;
+  publicadoEm?: string | null;
+  veiculoPublicacao?: string | null;
+  lockVersion: number;
+}
+
 export interface PosAprovacaoOut {
   autografo?: AutografoOut | null;
   tramitacaoExecutiva?: TramitacaoExecutivaOut | null;
+  norma?: NormaOut | null;
 }
 
 export interface ProposicaoResumoMeuPainelOut {

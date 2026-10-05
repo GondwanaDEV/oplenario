@@ -348,7 +348,7 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 **Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 39 abertos · 45 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
 - o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
-- promulgar norma e gerar remessa ao TCE sem rota; convocação oficial inexistente;
+- gerar remessa ao TCE sem rota; convocação oficial inexistente;
 - **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
   O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
 
@@ -361,6 +361,9 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   vereador, controle interno e jurídico. A linha revogada fica como histórico e conceder de novo abre outra. Sem papel
   ativo na Casa, o vínculo é encerrado e a sessão cai na chamada seguinte; as credenciais do agente da pessoa caem
   junto. `admin_ente` e `secretario` não são revogáveis por essa rota. O Keycloak não é tocado.
+- **Promulgar e publicar a norma:** em `/pos-aprovacao/:id`, a matéria sancionada (ou com veto derrubado) vira lei
+  com número da espécie no ano, URN LexML e o texto do autógrafo; registrar a publicação (o veículo é a prova) emite
+  `norma.publicada` e a lei vai ao portal. Quem promulga e o prazo seguem `[GAP]` por LOM.
 - **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
   criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
 - **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
