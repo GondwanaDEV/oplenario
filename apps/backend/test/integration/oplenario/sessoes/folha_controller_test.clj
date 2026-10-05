@@ -178,6 +178,32 @@
         (str "o documento inteiro, com dado REAL do banco, bate FolhaDocumento: "
              (m/explain mod-folha/FolhaDocumento doc)))))
 
+;; ---------- a sessao pelo nome e o cargo da Mesa em palavras (acrescimo a v1, 05/10/2026) ----------
+
+(deftest documento-traz-o-titulo-da-sessao-e-o-cargo-da-mesa-em-palavras
+  (let [ente (random-uuid)
+        leg (casa! ente)
+        v1 (vereador-com-mandato! ente leg "Ana")
+        _v2 (vereador-com-mandato! ente leg "Bruno")
+        sid (abrir-e-encerrar! ente (fn [tx sid] (ev! tx ente sid v1 "entrada" "plenario")))
+        sessao-real (repo-sessoes/buscar-sessao *repo-s* ente sid)
+        ;; o cadastro guarda a CHAVE do cargo (`1_secretario`), como na demo — o roster de verdade, com o cargo
+        ;; posto na linha de v1 (o lateral do cargo da Mesa e' coberto em cadastros/repositorio_roster_test)
+        roster (fn [ente-id data]
+                 (mapv #(cond-> % (= v1 (:vereador-id %)) (assoc :cargo-mesa "1_secretario"))
+                       (repo-cadastros/roster-da-casa *repo-c* ente-id data)))
+        doc (controllers/folha-da-sessao *repo-s* roster (dados-da-casa-seam) (ator ente) sid
+                                         (tempo/relogio-fixo (Instant/now)))
+        data (.format (tempo/hoje-de (:aberta-em sessao-real) tempo/zona-civil-padrao)
+                      (java.time.format.DateTimeFormatter/ofPattern "dd/MM/yyyy"))
+        linha-de (fn [vid] (first (filter #(= vid (:vereador-id %)) (:linhas doc))))]
+    (is (= (str "Sessão ordinária nº " (:numero-sequencial sessao-real) " de " data)
+           (get-in doc [:sessao :titulo])))
+    (is (= "1_secretario" (:cargo-mesa (linha-de v1))) "a chave segue no documento (campo nao renomeado)")
+    (is (= "1ª Secretaria" (:cargo-mesa-rotulo (linha-de v1))))
+    (is (= "folha-sessao-v1" (:spec-versao doc)))
+    (is (m/validate mod-folha/FolhaDocumento doc) (str (m/explain mod-folha/FolhaDocumento doc)))))
+
 ;; ---------- CRUZADO (D1 obrigatorio): o quorum do documento == contar-quorum computado de forma independente ----------
 
 (deftest quorum-do-documento-e-identico-ao-contar-quorum-computado-de-forma-independente
