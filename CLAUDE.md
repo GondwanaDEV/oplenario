@@ -349,8 +349,9 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
 - o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
 - gerar remessa ao TCE sem rota; convocação oficial inexistente;
-- **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
-  O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
+- ~~aceitar a remessa pela rota não cumpre a obrigação~~ — consertado em 05/10/2026: o gatilho do host reavalia a
+  obrigação da competência no `POST /compliance/remessas/:id/resposta` "aceita" (`gatilho_compliance/reavaliar-remessa!`).
+  Gerar a remessa por rota segue `[GAP]`: o layout físico do SIM e a fonte das despesas (sistema contábil) vêm de fora.
 
 **Frentes de 05/10/2026 (do exploratório), todas na `main`:**
 - **Portal do cidadão:** `/portal/casa/[ente]/leis` (lista filtrável e ficha da norma), `/vereadores` (quem está em

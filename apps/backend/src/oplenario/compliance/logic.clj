@@ -4,7 +4,9 @@
   `oplenario.motor` (disciplina 5); aqui mora so o ciclo PERSISTIDO que o compliance reconcilia contra
   o veredito que o motor da. Sem banco, sem motor — funcoes puras + vocabularios (fonte unica dos enums;
   os CHECK da mig 0005 / a logica de runtime do motor espelham)."
-  (:import (java.time LocalDate)))
+  (:import (java.nio.charset StandardCharsets)
+           (java.time LocalDate)
+           (java.util UUID)))
 
 (set! *warn-on-reflection* true)
 
@@ -125,3 +127,19 @@
   exatamente o conjunto dos estados terminais. A borda (adapters/in) usa este predicado p/ validar o corpo
   de POST .../resposta — FONTE UNICA do conjunto, nao replicar na borda (review clj M1)."
   [s] (contains? estados-terminais-remessa s))
+
+;; ---- a obrigacao de uma competencia de remessa (o objeto sob prazo) ----
+
+(defn objeto-da-competencia
+  "O id do objeto sob prazo de uma regra cumprida por remessa (`remessa_enviada(sistema, competencia)`): a COMPETENCIA
+  nao e' entidade de dominio, entao o id e' DERIVADO de (Casa, sistema, competencia 'AAAA-MM') — nunca aleatorio,
+  porque a chave de idempotencia da obrigacao e' Casa⋈regra⋈objeto. E' por ele que o aceite de uma remessa acha a
+  obrigacao que cumpre; a semente da demo materializa pelo mesmo id."
+  ^UUID [ente-id sistema competencia]
+  (UUID/nameUUIDFromBytes (.getBytes (str ente-id "|" sistema "|" competencia) StandardCharsets/UTF_8)))
+
+(defn competencia->parametro
+  "'AAAA-MM' -> {:ano :mes}, o valor do parametro `competencia` que a regra recebe."
+  [competencia]
+  (let [[_ ano mes] (re-matches #"(\d{4})-(\d{2})" (str competencia))]
+    (when ano {:ano (parse-long ano) :mes (parse-long mes)})))

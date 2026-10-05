@@ -122,6 +122,8 @@
      :serializador (SerializadorRemessa) :objeto-store (ObjetoStore) :registry-versao-ref}. Devolve a linha.")
   (listar-remessas [this ente-id template-chave competencia]
     "Historico de (re)emissoes de (ente, template, competencia), por versao.")
+  (buscar-remessa [this ente-id id]
+    "A remessa `id` do tenant (metadados: template, sistema, competencia, versao, estado), ou nil.")
   (remessa-existe? [this ente-id id]
     "A remessa `id` existe no tenant (RLS escopa por ente)? Existence-check p/ a borda HTTP (F5.5b)
      desambiguar o nil de uma transicao: existe -> conflito de ciclo (409); ausente -> 404. Projeta so
@@ -227,6 +229,7 @@
       row))
   (listar-remessas [this ente-id template-chave competencia]
     (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
+  (buscar-remessa [this ente-id id] (transacao this ente-id #(db-rem/buscar % ente-id id)))
   (remessa-existe? [this ente-id id]
     (transacao this ente-id #(db-rem/existe? % ente-id id)))
   (validar-remessa! [this ente-id id]

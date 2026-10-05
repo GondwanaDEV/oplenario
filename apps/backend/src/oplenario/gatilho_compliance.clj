@@ -19,7 +19,9 @@
     - ANTES de ler o painel de compliance (`GET /compliance/painel` e o card de `/paineis/mesa`) — origem `sob_demanda`;
     - LOGO DEPOIS dos atos que criam ou cumprem as obrigacoes — origem `evento`: a ata publicada de uma audiencia
       publica (`POST /sessoes/:id/ata`), o registro da prestacao (`POST /contas`) e o encerramento de votacao (o do PDL
-      das contas grava o julgamento na mesma tx).
+      das contas grava o julgamento na mesma tx);
+    - LOGO DEPOIS da resposta do TCE a uma remessa (`POST /compliance/remessas/:id/resposta`): a aceita cumpre a
+      obrigacao da competencia da regra da remessa (`reavaliar-remessa!`).
   Depois de avaliar, varre os vencimentos (a unica transicao que evento nao dispara, §22.7.7 S1).
 
   O QUE AVALIA, por Casa: (a) as competencias de metas fiscais dos quadrimestres JA' TERMINADOS cujo prazo e' de no
@@ -33,6 +35,7 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [oplenario.compliance.components.repositorio :as repo-compliance]
+            [oplenario.compliance.logic :as logic-compliance]
             [oplenario.legislativo.components.repositorio-contas :as repo-contas]
             [oplenario.motor.api :as motor]
             [oplenario.motor.components.repositorio :as repo-motor]
@@ -248,6 +251,35 @@
            (log/error e "gatilho-compliance: falhou; o ato/leitura segue" {:ente-id ente-id :opts opts})
            nil))))
 
+;; ---------------- a remessa aceita cumpre a obrigacao da competencia ----------------
+
+(defn reavaliar-remessa!
+  "Depois da resposta do TCE a uma remessa: se ela foi ACEITA, reavalia (origem `evento`) a obrigacao da competencia que
+  a regra da remessa (`template-chave` da remessa) cobra desta Casa — e' o aceite que torna `remessa_enviada`
+  verdadeiro, e sem esta reavaliacao a obrigacao seguia pendente ate' o sweep a vencer (achado 5 da retriagem, docs/16).
+  So' com a regra vigente no catalogo e a Casa ligada a ela: aqui nada se cria (a regra do SIM nao e' do gatilho).
+  Rejeitada nao cumpre e nao reavalia. Devolve true se avaliou."
+  [{:keys [repo-compliance repo-motor hoje] :as deps} ente-id remessa-id]
+  (let [{:keys [estado template-chave sistema competencia]} (repo-compliance/buscar-remessa repo-compliance ente-id remessa-id)
+        t (when (= "aceita" estado) (repo-motor/template-vigente repo-motor template-chave))
+        b (when t (repo-motor/binding-do-ente repo-motor ente-id template-chave))
+        parametro (logic-compliance/competencia->parametro competencia)]
+    (when (and t (:ativa b) parametro)
+      (boolean
+       (avaliar-objeto! deps ente-id {:regra (nuc/carregar-envelope (:fonte-yaml t)) :reg-ver (:registry-versao-ref t)}
+                        objeto-competencia (logic-compliance/objeto-da-competencia ente-id sistema competencia)
+                        {"competencia" parametro} (hoje) "evento" (Instant/now))))))
+
+(defn reavaliar-remessa-sem-falhar!
+  "`reavaliar-remessa!` que NUNCA lanca: a resposta do TCE ja' commitou; a obrigacao se acerta na proxima leitura."
+  [deps ente-id remessa-id]
+  (when (and deps ente-id remessa-id)
+    (try (reavaliar-remessa! deps ente-id remessa-id)
+         (catch Throwable e
+           (log/error e "gatilho-compliance: falhou ao reavaliar a remessa; a resposta segue"
+                      {:ente-id ente-id :remessa-id remessa-id})
+           nil))))
+
 ;; ---------------- a composicao nas rotas (table syntax Pedestal) ----------------
 
 (defn- sucesso? [ctx] (when-let [s (get-in ctx [:response :status])] (<= 200 (long s) 299)))
@@ -274,6 +306,18 @@
                 (disparar (get-in ctx [:request :ator :ente-id]) opts))
               (catch Throwable e
                 (log/error e "gatilho-compliance: falhou depois do ato; a resposta segue" opts)))
+            ctx)})
+
+(defn interceptor-depois-do-pedido
+  "Como `interceptor-depois`, mas `f` recebe o REQUEST (o ato precisa do path, ex.: a remessa respondida). So' em 2xx;
+  falha logada, resposta intacta."
+  [f]
+  {:name ::depois-do-pedido
+   :leave (fn [ctx]
+            (try
+              (when (sucesso? ctx) (f (:request ctx)))
+              (catch Throwable e
+                (log/error e "gatilho-compliance: falhou depois do ato; a resposta segue")))
             ctx)})
 
 (defn com-gatilho

@@ -983,5 +983,11 @@
         ["/contas" :post]
         (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
         ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post]
-        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))}))
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
+        ;; a remessa ACEITA pelo TCE cumpre a obrigacao da competencia (docs/16, achado 5 da retriagem)
+        ["/compliance/remessas/:id/resposta" :post]
+        (gatilho/interceptor-depois-do-pedido
+         (fn [req]
+           (gatilho/reavaliar-remessa-sem-falhar! deps-gatilho (get-in req [:ator :ente-id])
+                                                 (some-> (get-in req [:path-params :id]) parse-uuid))))}))
      estado-da-casa))))

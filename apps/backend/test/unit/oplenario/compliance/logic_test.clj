@@ -75,3 +75,20 @@
   (is (true?  (logic/remessa-terminal? "rejeitada")) "rejeitada e' terminal")
   (is (false? (logic/remessa-terminal? "submetida")) "submetida nao e' terminal")
   (is (false? (logic/remessa-terminal? "rascunho"))  "rascunho nao e' terminal"))
+
+;; ---------- a obrigacao de uma competencia de remessa ----------
+
+(deftest objeto-da-competencia-e-derivado-e-estavel
+  (let [ente #uuid "10000000-0000-0000-0000-000000000001"]
+    (is (= (logic/objeto-da-competencia ente "SIM" "2026-09") (logic/objeto-da-competencia ente "SIM" "2026-09"))
+        "o mesmo (Casa, sistema, competencia) da' o mesmo objeto: a obrigacao e' idempotente")
+    (is (not= (logic/objeto-da-competencia ente "SIM" "2026-09") (logic/objeto-da-competencia ente "SIM" "2026-10")))
+    (is (not= (logic/objeto-da-competencia ente "SIM" "2026-09") (logic/objeto-da-competencia (random-uuid) "SIM" "2026-09")))
+    (is (= (java.util.UUID/nameUUIDFromBytes (.getBytes (str ente "|SIM|2026-09") java.nio.charset.StandardCharsets/UTF_8))
+           (logic/objeto-da-competencia ente "SIM" "2026-09"))
+        "o mesmo id que a semente da demo sempre usou (as obrigacoes ja' gravadas continuam achaveis)")))
+
+(deftest competencia->parametro-le-AAAA-MM
+  (is (= {:ano 2026 :mes 9} (logic/competencia->parametro "2026-09")))
+  (is (nil? (logic/competencia->parametro "2026-9")))
+  (is (nil? (logic/competencia->parametro nil))))
