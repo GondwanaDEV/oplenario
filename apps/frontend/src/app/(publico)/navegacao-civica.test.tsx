@@ -13,10 +13,10 @@ describe("NavegacaoCivica", () => {
     expect(screen.getByRole("heading", { name: "Tudo o que a Câmara publica" })).toBeTruthy();
   });
 
-  it("mostra os 10 cartões; Ouvidoria, Pautas, Atas, Audiências, Contas e Dados abertos já são link, os outros 4 seguem em-breve honesto", () => {
+  it("mostra os 11 cartões; Ouvidoria, Pautas, Atas, Audiências, Leis e normas, Contas e Dados abertos já são link, os outros 4 seguem em-breve honesto", () => {
     render(<NavegacaoCivica ente="fortaleza" />);
     const titulos = [
-      "Sessões", "Pautas das sessões", "Atas das sessões", "Audiências públicas", "Transparência", "Contas do Prefeito e da Câmara",
+      "Sessões", "Pautas das sessões", "Atas das sessões", "Audiências públicas", "Leis e normas", "Transparência", "Contas do Prefeito e da Câmara",
       "Ouvidoria", "Dados abertos",
       "Agenda pública", "Carta de Serviços",
     ];
@@ -29,6 +29,7 @@ describe("NavegacaoCivica", () => {
     expect(screen.getByRole("link", { name: /pautas das sessões/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/pautas");
     expect(screen.getByRole("link", { name: /contas do prefeito e da câmara/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/contas");
     expect(screen.getByRole("link", { name: /audiências públicas/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/audiencias");
+    expect(screen.getByRole("link", { name: /leis e normas/i }).getAttribute("href")).toBe("/portal/casa/fortaleza/leis");
     expect(screen.getByRole("link", { name: /dados abertos/i }).getAttribute("href")).toBe(
       "/portal/casa/fortaleza/dados-abertos",
     );
