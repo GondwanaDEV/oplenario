@@ -30,6 +30,21 @@ describe("FichaCabecalho", () => {
     expect(screen.getByRole("img", { name: /Tramitação/ })).toBeTruthy();
   });
 
+  it("aguardando_pauta (chave real do rito da demo): a faixa não volta ao Protocolo e o chip diz 'Aguardando pauta'", () => {
+    render(<FichaCabecalho proposicao={{ ...proposicao, estado: "aguardando_pauta" }} />);
+    expect(screen.getByText("Aguardando pauta")).toBeTruthy();
+    const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+    expect(faixa).toContain("concluídos Protocolo, Comissões");
+    expect(faixa).not.toContain("atual Protocolo");
+  });
+
+  it("estado desconhecido da Casa: faixa neutra 'Em tramitação', sem marcar etapa do rito", () => {
+    render(<FichaCabecalho proposicao={{ ...proposicao, estado: "xpto_da_casa" }} />);
+    const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+    expect(faixa).toContain("atual Em tramitação");
+    expect(faixa).not.toContain("Protocolo");
+  });
+
   it("sem autoria informada -> honesto, não lança", () => {
     render(<FichaCabecalho proposicao={{ ...proposicao, autorTexto: null }} />);
     expect(screen.getByText(/não informada/)).toBeTruthy();

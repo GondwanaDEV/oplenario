@@ -104,9 +104,10 @@ describe("derivarFicha", () => {
     ]);
   });
 
-  it("fail-closed: estado desconhecido -> faixa mínima honesta, situação = o estado cru (nunca lança)", () => {
+  it("fail-closed: estado desconhecido -> faixa neutra (sem etapa do rito), situação humanizada (nunca lança)", () => {
     const vista = derivarFicha(ficha({ estado: "xpto-desconhecido" }), []);
-    expect(vista.estagios).toEqual([{ rotulo: "Protocolo", situacao: "ativo" }]);
+    // 05/10/2026: era [{Protocolo, ativo}] — apontava uma etapa que ninguém sabia estar certa.
+    expect(vista.estagios).toEqual([{ rotulo: "Em tramitação", situacao: "ativo" }]);
     // Era `toBe("xpto-desconhecido")` — asserção sobre a CHAVE. `derivarTramitacao` passou a humanizar
     // (defeitos #9/#10 do ledger): fail-closed segue sendo não lançar e não fingir progresso, mas o
     // rótulo nunca é vocabulário de banco. Detector do underscore em tramitacao-vista.test.ts.

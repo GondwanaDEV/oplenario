@@ -57,7 +57,7 @@ async function postar(chamar: ChamarApi, url: string, metodo: "POST" | "PATCH", 
 export async function concederAcesso(
   entrada: ConcederAcessoEntrada,
   chamar: ChamarApi = fetch,
-): Promise<{ identidadeId: string }> {
+): Promise<ResultadoConcessao> {
   // 1. Identidade por CPF — idempotente (mesmo CPF em Casas diferentes = mesma identidade), NÃO concede
   //    acesso nenhum: sem vínculo, `resolver-sessao` não resolve ninguém.
   const passo1 = (await postar(chamar, "/api/identidade/identidades", "POST", {
@@ -75,14 +75,14 @@ export async function concederAcesso(
   );
 
   // 3. Concede o acesso — a porta abre SÓ AQUI: cria o vínculo ativo e dispara o convite (Keycloak).
-  await postar(chamar, "/api/identidade/acessos", "POST", {
+  const concessao = await postar(chamar, "/api/identidade/acessos", "POST", {
     "identidade-id": identidadeId,
     tipo: "vereador",
     papeis: ["vereador"],
     email: entrada.email,
   });
 
-  return { identidadeId };
+  return { identidadeId, email: situacaoEmail(concessao) };
 }
 
 // ADR-0017 — o CONTROLE INTERNO (procuradoria, controladoria): um servidor da Casa com o papel `auditor`, que só lê a
@@ -93,19 +93,19 @@ export type ConcederAuditorEntrada = { cpf: string; nome: string; email: string 
 export async function concederAuditor(
   entrada: ConcederAuditorEntrada,
   chamar: ChamarApi = fetch,
-): Promise<{ identidadeId: string }> {
+): Promise<ResultadoConcessao> {
   const passo1 = (await postar(chamar, "/api/identidade/identidades", "POST", {
     cpf: entrada.cpf,
     nome: entrada.nome,
   })) as { "identidade-id": string };
   const identidadeId = passo1["identidade-id"];
-  await postar(chamar, "/api/identidade/acessos", "POST", {
+  const concessao = await postar(chamar, "/api/identidade/acessos", "POST", {
     "identidade-id": identidadeId,
     tipo: "servidor",
     papeis: ["auditor"],
     email: entrada.email,
   });
-  return { identidadeId };
+  return { identidadeId, email: situacaoEmail(concessao) };
 }
 
 // ADR-0019 — o JURÍDICO da Casa: um servidor com o papel `juridico`, que redige e assina o parecer jurídico. Mesmos 2
@@ -123,13 +123,13 @@ export type ConcederJuridicoEntrada = {
 export async function concederJuridico(
   entrada: ConcederJuridicoEntrada,
   chamar: ChamarApi = fetch,
-): Promise<{ identidadeId: string }> {
+): Promise<ResultadoConcessao> {
   const passo1 = (await postar(chamar, "/api/identidade/identidades", "POST", {
     cpf: entrada.cpf,
     nome: entrada.nome,
   })) as { "identidade-id": string };
   const identidadeId = passo1["identidade-id"];
-  await postar(chamar, "/api/identidade/acessos", "POST", {
+  const concessao = await postar(chamar, "/api/identidade/acessos", "POST", {
     "identidade-id": identidadeId,
     tipo: "servidor",
     papeis: ["juridico"],
@@ -137,10 +137,29 @@ export async function concederJuridico(
     qualificacao: entrada.qualificacao,
     oab: entrada.oab,
   });
-  return { identidadeId };
+  return { identidadeId, email: situacaoEmail(concessao) };
 }
 
 type Estado = "ocioso" | "enviando" | "erro";
+
+// O que aconteceu com o e-mail informado (a resposta do passo que concede): "novo" = conta criada com ele;
+// "atualizado" = a pessoa ja' tinha conta mas nunca entrou, e o e-mail foi trocado antes do convite; "mantido" = a pessoa
+// ja' entrou, e o convite foi para o e-mail que esta' na conta dela (so' ela troca, na propria conta).
+export type SituacaoEmail = "novo" | "atualizado" | "mantido";
+
+export type ResultadoConcessao = { identidadeId: string; email: SituacaoEmail };
+
+function situacaoEmail(corpo: unknown): SituacaoEmail {
+  const e = (corpo as { email?: unknown } | null)?.email;
+  return e === "atualizado" || e === "mantido" ? e : "novo";
+}
+
+// A frase que a tela mostra depois de conceder.
+export function fraseDoConvite(email: SituacaoEmail): string {
+  return email === "mantido"
+    ? "Essa pessoa já entrou no sistema, então o convite foi para o e-mail que está na conta dela. Se o e-mail mudou, ela mesma o troca na página de conta do login da Câmara (seção “Personal info”)."
+    : "O convite foi enviado para o e-mail informado.";
+}
 
 export function useConcederAcesso(token: string | null) {
   return useFluxoDeAcesso<ConcederAcessoEntrada>(token, concederAcesso);
@@ -156,7 +175,7 @@ export function useConcederJuridico(token: string | null) {
 
 function useFluxoDeAcesso<E>(
   token: string | null,
-  fluxo: (entrada: E, chamar: ChamarApi) => Promise<{ identidadeId: string }>,
+  fluxo: (entrada: E, chamar: ChamarApi) => Promise<ResultadoConcessao>,
 ) {
   const [estado, setEstado] = useState<Estado>("ocioso");
   const [erro, setErro] = useState<string | null>(null);
@@ -173,7 +192,7 @@ function useFluxoDeAcesso<E>(
     };
   }, []);
 
-  async function conceder(entrada: E): Promise<{ identidadeId: string }> {
+  async function conceder(entrada: E): Promise<ResultadoConcessao> {
     if (semCredencial(token)) throw new Error("sem token de autenticacao");
     if (enviandoRef.current) throw new Error("envio em andamento");
     enviandoRef.current = true;

@@ -30,16 +30,32 @@ const INDICE_ATIVO_POR_ESTADO: Record<string, number> = {
   em_sancao: 4,
 };
 
+// Estado de ESPERA entre dois estágios: nenhum está em andamento. Chave = estado; valor = quantos estágios
+// (a partir do Protocolo) já se completaram. `aguardando_pauta` é o rito ordinário da Casa de demonstração
+// (acervo.clj: em_comissoes -> concluir_comissoes -> aguardando_pauta -> incluir_pauta -> em_pauta): as
+// comissões já deram o parecer e a matéria espera entrar numa pauta. Antes ele caía no fail-closed e a
+// faixa "Onde está a matéria" voltava para "Protocolo".
+const CONCLUIDOS_ATE_POR_ESTADO_DE_ESPERA: Record<string, number> = {
+  aguardando_pauta: 2,
+};
+
+// ÚNICA fonte de rótulo de estado de proposição — a ficha, a lista, o quadro de tramitação e o painel da
+// Mesa leem daqui (`rotularEstado`). Terminais incluídos, para o quadro rotular o cartão sem outro mapa.
 const ROTULO_SITUACAO_POR_ESTADO: Record<string, string> = {
   protocolada: "Protocolado",
   em_comissoes: "Em comissões",
+  aguardando_pauta: "Aguardando pauta",
   em_pauta: "Em pauta",
   primeiro_turno: "Em 1º turno",
   segundo_turno: "Em 2º turno",
   em_sancao: "Em sanção",
+  aprovada: "Aprovado",
+  arquivada: "Arquivada",
 };
 
-const FAIXA_MINIMA: EstagioTramitacao[] = [{ rotulo: "Protocolo", situacao: "ativo" }];
+// Estado fora do vocabulário conhecido: a faixa não sabe em que etapa a matéria está e NÃO pode apontar uma
+// (já apontou "Protocolo" para matéria que esperava pauta). Um único bloco neutro, sem posição no rito.
+const FAIXA_NEUTRA: EstagioTramitacao[] = [{ rotulo: "Em tramitação", situacao: "ativo" }];
 
 // Último recurso de rótulo. `estado` de proposição é string LIVRE, definida por template POR CÂMARA
 // (§22.4 / Invariante 4: regra é dado, não código) — então NENHUM mapa fixo em código vai cobrir o
@@ -53,6 +69,11 @@ function humanizarEstado(estado: string): string {
   return limpo.charAt(0).toUpperCase() + limpo.slice(1);
 }
 
+/** Rótulo de um estado de proposição, em palavras. Única fonte para ficha, lista, quadro e painel da Mesa. */
+export function rotularEstado(estado: string): string {
+  return ROTULO_SITUACAO_POR_ESTADO[estado] ?? humanizarEstado(estado);
+}
+
 export function derivarTramitacao(estado: string): {
   estagios: EstagioTramitacao[];
   rotuloSituacao: string;
@@ -61,7 +82,7 @@ export function derivarTramitacao(estado: string): {
   if (estado === "aprovada") {
     return {
       estagios: ESTAGIOS_BASE.map((rotulo) => ({ rotulo, situacao: "concluido" as const })),
-      rotuloSituacao: "Aprovado",
+      rotuloSituacao: rotularEstado(estado),
     };
   }
 
@@ -70,16 +91,27 @@ export function derivarTramitacao(estado: string): {
   if (estado === "arquivada") {
     return {
       estagios: [{ rotulo: "Protocolo", situacao: "concluido" }],
-      rotuloSituacao: "Arquivada",
+      rotuloSituacao: rotularEstado(estado),
+    };
+  }
+
+  const concluidosAte = CONCLUIDOS_ATE_POR_ESTADO_DE_ESPERA[estado];
+  if (concluidosAte !== undefined) {
+    return {
+      estagios: ESTAGIOS_BASE.map((rotulo, i) => ({
+        rotulo,
+        situacao: i < concluidosAte ? ("concluido" as const) : ("pendente" as const),
+      })),
+      rotuloSituacao: rotularEstado(estado),
     };
   }
 
   const indiceAtivo = INDICE_ATIVO_POR_ESTADO[estado];
   if (indiceAtivo === undefined) {
     // fail-closed: estado fora do vocabulário ilustrativo (ex. vocabulário real de um tenant via
-    // template) — nunca lança; degrada para a faixa mínima honesta. O rótulo é HUMANIZADO, nunca a
-    // chave crua: degradar não obriga a expor vocabulário de banco ao usuário.
-    return { estagios: FAIXA_MINIMA, rotuloSituacao: humanizarEstado(estado) };
+    // template) — nunca lança e nunca aponta uma etapa: a faixa é só "Em tramitação". O rótulo da situação
+    // é HUMANIZADO, nunca a chave crua: degradar não obriga a expor vocabulário de banco ao usuário.
+    return { estagios: FAIXA_NEUTRA, rotuloSituacao: rotularEstado(estado) };
   }
 
   return {
@@ -87,7 +119,7 @@ export function derivarTramitacao(estado: string): {
       rotulo,
       situacao: i < indiceAtivo ? "concluido" : i === indiceAtivo ? "ativo" : "pendente",
     })),
-    rotuloSituacao: ROTULO_SITUACAO_POR_ESTADO[estado] ?? humanizarEstado(estado),
+    rotuloSituacao: rotularEstado(estado),
   };
 }
 

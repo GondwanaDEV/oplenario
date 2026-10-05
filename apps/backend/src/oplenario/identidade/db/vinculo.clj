@@ -35,6 +35,16 @@
                    ;; (o :vinculo-ativo-id vai p/ o audit; o mais antigo = âncora estável).
                    :order-by [[:criado_em :asc] [:id :asc]]}))))
 
+(defn ja-entrou?
+  "A identidade ja' entrou nesta Casa por algum vinculo (`primeiro_acesso_em` preenchido)? E' o que impede o `admin_ente`
+  de trocar o e-mail de quem ja' tem conta em uso: com o link do convite ele assumiria a conta da pessoa."
+  [tx ente-id identidade-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [1] :from [:identidade.vinculo]
+                        :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]
+                                [:<> :primeiro_acesso_em nil]]
+                        :limit 1}))))
+
 (defn estado-de
   "Leitura ESTREITA (so' :estado) do vinculo pelo id. Usada por `conceder-acesso!` (repositorio component,
   Task 12 achado seguranca) pra checar, LOGO apos o UPSERT de `criar!`, se o vinculo canonico segue ativo

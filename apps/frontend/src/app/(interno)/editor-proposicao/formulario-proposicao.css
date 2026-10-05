@@ -13,6 +13,7 @@
 .ficha-campo { display: flex; flex-direction: column; gap: 0.35rem; min-width: 160px; }
 .ficha-campo label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); }
 .ficha-campo select, .ficha-campo input { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface-2); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.5rem 0.7rem; min-height: 42px; }
+.ficha-dica { margin: 0; max-width: 28rem; font-size: var(--t-12); line-height: 1.5; color: var(--texto-2); }
 .campo-ementa, .campo-texto { display: flex; flex-direction: column; gap: 0.4rem; margin: 1.2rem 0; }
 .campo-ementa label, .campo-texto label { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-2); }
 .campo-ementa textarea, .campo-texto textarea { font-family: var(--corpo); font-size: var(--t-13); color: var(--texto); background: var(--surface); border: 1.5px solid var(--campo-borda); border-radius: var(--raio-sm); padding: 0.8rem; line-height: 1.6; }

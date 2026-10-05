@@ -29,7 +29,10 @@
 (def MeusAcompanhamentosOut
   "Resposta de GET /portal/acompanhamentos (frente 'truncamento-familia', sitio (c)): a lista de subscricoes
   cortava em 200 (`teto-listagem`, `db/acompanhamento.clj`) sem sinalizar. `:acompanhamentos-total` e' o par
-  obrigatorio — o teto em si NUNCA sai neste contrato."
+  obrigatorio — o teto em si NUNCA sai neste contrato. `:ente-id` e' a Casa do ator (a lista e' sempre de UMA
+  Casa): sem ele a tela da cidada nao sabe em qual Casa abrir a ficha publica da materia
+  (`/portal/casa/<ente-id>/materias/<proposicao-id>`)."
   [:map {:closed true}
+   [:ente-id :string]
    [:acompanhamentos [:sequential MinhaMateriaOut]]
    [:acompanhamentos-total :int]])

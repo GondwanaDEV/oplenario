@@ -168,6 +168,39 @@
                            :body (json/write-value-as-string {:prazo-resposta-em "nao-e-data"}))]
     (is (= 400 (:status r)))))
 
+(deftest gerar-autografo-prazo-no-passado-400
+  ;; O autografo e' append-only (migration 0022): um prazo errado nao se corrige depois. Prazo de resposta
+  ;; anterior a AGORA e' recusado na borda, ANTES de qualquer Repo (fake sem metodos: se o handler chamasse o
+  ;; Repo, a chamada nil estouraria em vez de 400).
+  (let [repo (fake-repo-legislativo {})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/proposicoes/" (random-uuid) "/autografo")
+                           :headers (com-bearer (token (random-uuid) (random-uuid)))
+                           :body (json/write-value-as-string {:prazo-resposta-em "2020-01-01T23:59:59-03:00"}))]
+    (is (= 400 (:status r)))))
+
+(deftest gerar-autografo-prazo-no-futuro-e-gravado-201
+  ;; o prazo informado chega ao Repo como Instant (e' o que o wire/in ja' aceitava; aqui fica provado
+  ;; ponta a ponta na borda que a tela usa).
+  (let [ente (random-uuid) pid (random-uuid) aid (random-uuid) tid (random-uuid)
+        recebido (atom nil)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid)
+                                                       :texto {:id (random-uuid)}})
+               :proposicao-aprovada-em-votacao? (fn [_pid] true)
+               :aprovacao-vigente (fn [_pid] {:votacao-id (random-uuid) :texto-versao-id (random-uuid)})
+               :autografo-da-proposicao (fn [_pid] nil)
+               :gerar-autografo-e-abrir-tramitacao! (fn [m] (reset! recebido m)
+                                                      {:autografo-id aid :numero 1 :tramitacao-executiva-id tid})
+               :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
+                                                  :tramitacao-executiva (tramitacao-canonica ente tid aid)})})
+        r (pt/response-for (service-fn #{"secretario"} repo)
+                           :post (str "/legislativo/proposicoes/" pid "/autografo")
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string {:prazo-resposta-em "2999-12-31T23:59:59-03:00"}))]
+    (is (= 201 (:status r)))
+    (is (= (java.time.Instant/parse "2999-12-31T23:59:59-03:00") (:prazo-resposta-em @recebido)))))
+
 (deftest gerar-autografo-sem-papel-403
   (let [repo (fake-repo-legislativo {})
         r (pt/response-for (service-fn #{"vereador"} repo)

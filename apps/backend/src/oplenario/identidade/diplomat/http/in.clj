@@ -79,12 +79,26 @@
                   (repo/conceder-acesso! repo-identidade ente-id vinculo papeis))
               nome (:nome (repo/nome-por-id repo-identidade identidade-id))]
           (idp/provisionar-realm! idp-comp ente-id)
-          (idp/criar-usuario! idp-comp ente-id {:identidade-id identidade-id :nome nome :email email})
-          (idp/convidar! idp-comp ente-id identidade-id)
-          (http/json-resposta 201 {:vinculo-id (str (:vinculo-id r)) :convite "enviado"}))
+          (let [{:keys [existia?]} (idp/criar-usuario! idp-comp ente-id {:identidade-id identidade-id :nome nome :email email})
+                ;; Quem ja' tem conta: o Keycloak guarda o e-mail antigo e o convite iria para ele. Enquanto a pessoa nunca
+                ;; entrou (aqui e no IdP: nenhuma credencial), o e-mail informado substitui o antigo — sem conta nao ha'
+                ;; o que tomar. Depois do primeiro acesso, so' a propria pessoa troca, na conta dela: com o link do convite o
+                ;; `admin_ente` assumiria a conta de outra pessoa.
+                situacao-email (cond
+                                 (not existia?) "novo"
+                                 (repo/ja-entrou-na-casa? repo-identidade ente-id identidade-id) "mantido"
+                                 :else (try (idp/corrigir-email-do-convite! idp-comp ente-id identidade-id email)
+                                            "atualizado"
+                                            (catch clojure.lang.ExceptionInfo e
+                                              (if (= :idp/conta-ja-ativa (:tipo (ex-data e))) "mantido" (throw e)))))]
+            (idp/convidar! idp-comp ente-id identidade-id)
+            (http/json-resposta 201 {:vinculo-id (str (:vinculo-id r)) :convite "enviado" :email situacao-email})))
         (catch clojure.lang.ExceptionInfo e
-          (if (= :conflito/vinculo-nao-ativo (:tipo (ex-data e)))
+          (case (:tipo (ex-data e))
+            :conflito/vinculo-nao-ativo
             (http/json-resposta 409 {:erro "vinculo suspenso — reativar e' uma operacao separada, nao este endpoint"})
+            :idp/email-em-uso
+            (http/json-resposta 409 {:erro "esse e-mail ja e' de outra pessoa nesta Camara"})
             (throw e)))))))
 
 ;; ADR-0005 (adendo "Revogar acesso") ------------------------------------------------------------------------------

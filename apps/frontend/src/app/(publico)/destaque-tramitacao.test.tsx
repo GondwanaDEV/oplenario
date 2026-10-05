@@ -53,6 +53,7 @@ describe("DestaqueTramitacao", () => {
   it("mostra o permalink (URN)", () => {
     render(<DestaqueTramitacao destaque={destaque} ente="fortaleza" />);
     expect(screen.getByText(destaque.permalink).textContent).toBe(destaque.permalink);
+    expect(screen.getByText("Identificador oficial:")).toBeTruthy(); // rotulado, nunca a URN solta
   });
 
   it("resumo por IA: só o estado 'off' honesto (sem resumo fabricado)", () => {

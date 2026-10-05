@@ -17,9 +17,8 @@ import { resolve } from "node:path";
 //
 // Identidade que vota: :presidente (papel "vereador" no banco, ente-id certo) — não :vereador. A :vereador
 // foi deixada deliberadamente AUSENTE nesta mesma sessão 211 para o grupo E5 exercitar "confirmar a própria
-// presença"; /votar deriva a sessão de GET /meu/sessao-atual (sempre a sessão aberta há mais tempo — a 211
-// entra sempre na frente de qualquer sessão nova), então E5 e E6 não podem ter sessões separadas e foram
-// resolvidos por IDENTIDADE, não por sessão (mesmo racional documentado em t3-ids.json/bloqueios).
+// presença"; o preparar.mjs abre o /votar das duas com ?sessao= apontando a 211 (sem o parâmetro, o cockpit
+// abriria a sessão aberta mais recente), e E5 e E6 seguem resolvidos por IDENTIDADE, não por sessão.
 
 const ids = JSON.parse(readFileSync(resolve(__dirname, ".artifacts/t3-ids.json"), "utf8"));
 

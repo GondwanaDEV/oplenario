@@ -30,7 +30,9 @@ export type MinhaMateria = {
   indisponivel: boolean;
 };
 
-export type MeusAcompanhamentosOut = { acompanhamentos: MinhaMateria[]; acompanhamentosTotal: number };
+/** `enteId`: a Casa de onde vem a lista (a cidadã tem sessão de UMA Casa); o portal público endereça a Casa por ele.
+ *  `null` só se um servidor antigo ainda não o manda — a tela então lista sem link, não quebra. */
+export type MeusAcompanhamentosOut = { enteId: string | null; acompanhamentos: MinhaMateria[]; acompanhamentosTotal: number };
 
 type Estado = "carregando" | "pronto" | "erro";
 
@@ -53,11 +55,15 @@ function comoMinhaMateria(d: unknown): MinhaMateria | null {
 
 function comoMeusAcompanhamentos(d: unknown): MeusAcompanhamentosOut | null {
   if (d === null || typeof d !== "object") return null;
-  const { acompanhamentos, acompanhamentosTotal } = d as Record<string, unknown>;
+  const { enteId, acompanhamentos, acompanhamentosTotal } = d as Record<string, unknown>;
   if (!Array.isArray(acompanhamentos) || typeof acompanhamentosTotal !== "number") return null;
   const lista = acompanhamentos.map(comoMinhaMateria);
   if (lista.some((m) => m === null)) return null; // um item malformado -> corpo inteiro suspeito, fail-closed
-  return { acompanhamentos: lista as MinhaMateria[], acompanhamentosTotal };
+  return {
+    enteId: typeof enteId === "string" && enteId.length > 0 ? enteId : null,
+    acompanhamentos: lista as MinhaMateria[],
+    acompanhamentosTotal,
+  };
 }
 
 async function buscar(token: string | null): Promise<MeusAcompanhamentosOut | null> {

@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
 import { useProposicoes, type FiltrosProposicoes } from "@/lib/use-proposicoes";
-import { derivarProposicoesVista } from "@/lib/proposicoes-vista";
+import { derivarProposicoesVista, ESPECIES_PROPOSICAO } from "@/lib/proposicoes-vista";
 import { AzulejoMini } from "@/lib/charts/azulejo-mini";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { TopoInterno } from "../topo";
@@ -92,12 +92,11 @@ export default function PaginaProposicoes() {
                 onChange={(e) => setFiltros((f) => ({ ...f, tipo: e.target.value || undefined, pagina: 1 }))}
               >
                 <option value="">Todas</option>
-                <option value="projeto_lei">Projeto de Lei</option>
-                <option value="requerimento">Requerimento</option>
-                <option value="mocao">Moção</option>
-                <option value="indicacao">Indicação</option>
-                <option value="projeto_resolucao">Projeto de Resolução</option>
-                <option value="projeto_decreto_legislativo">Projeto de Decreto Leg.</option>
+                {ESPECIES_PROPOSICAO.map((e) => (
+                  <option key={e.valor} value={e.valor}>
+                    {e.rotulo}
+                  </option>
+                ))}
               </select>
             </span>
           </div>

@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth";
 import { useVereadores } from "@/lib/use-vereadores";
 import { avatar, estadoChip } from "@/lib/cadastro-vereadores-vista";
 import { comToken } from "@/lib/nav";
+import { fraseDoConvite, type SituacaoEmail } from "@/lib/use-conceder-acesso";
 import { GuardAdminEnte } from "../guard-admin-ente";
 import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
@@ -47,17 +48,17 @@ function Conteudo() {
   const [versao, setVersao] = useState(0);
   const { dados: vereadores, estado } = useVereadores(token, versao);
   const [aberto, setAberto] = useState<string | null>(null);
-  const [concedido, setConcedido] = useState<string | null>(null);
+  const [concedido, setConcedido] = useState<{ nome: string; email: SituacaoEmail } | null>(null);
   // B.8 (ADR-0013): o agente institucional da Casa é LIGADO pelo admin_ente. O painel vivia só em /conferencias, que
   // é da secretaria — o administrador que só tem esse papel não o alcançava.
   const agentes = useAgentesInstitucionais(token);
   // ADR-0017: o controle interno (papel `auditor`) — quem lê a trilha de auditoria da Casa inteira.
   const [auditorAberto, setAuditorAberto] = useState(false);
-  const [auditorConcedido, setAuditorConcedido] = useState<string | null>(null);
+  const [auditorConcedido, setAuditorConcedido] = useState<{ nome: string; email: SituacaoEmail } | null>(null);
 
   // ADR-0019: o jurídico da Casa (papel `juridico`) — quem redige e assina o parecer jurídico.
   const [juridicoAberto, setJuridicoAberto] = useState(false);
-  const [juridicoConcedido, setJuridicoConcedido] = useState<string | null>(null);
+  const [juridicoConcedido, setJuridicoConcedido] = useState<{ nome: string; email: SituacaoEmail } | null>(null);
 
   function abrir(id: string) {
     setConcedido(null);
@@ -79,7 +80,7 @@ function Conteudo() {
 
         {concedido && (
           <p role="status" className="adm-aviso">
-            Acesso concedido a {concedido}. O convite foi enviado para o e-mail informado.
+            Acesso concedido a {concedido.nome}. {fraseDoConvite(concedido.email)}
           </p>
         )}
 
@@ -123,9 +124,9 @@ function Conteudo() {
                         token={token}
                         vereadorId={v.id}
                         nome={nome}
-                        onSucesso={() => {
+                        onSucesso={(_id, email) => {
                           setAberto(null);
-                          setConcedido(nome);
+                          setConcedido({ nome, email });
                           setVersao((n) => n + 1);
                         }}
                         onCancelar={() => setAberto(null)}
@@ -151,16 +152,16 @@ function Conteudo() {
           </p>
           {auditorConcedido && (
             <p role="status" className="adm-aviso">
-              Acesso à trilha concedido a {auditorConcedido}. O convite foi enviado para o e-mail informado.
+              Acesso à trilha concedido a {auditorConcedido.nome}. {fraseDoConvite(auditorConcedido.email)}
             </p>
           )}
           {auditorAberto ? (
             <div className="painel-cad">
               <ConcederAuditorForm
                 token={token}
-                onSucesso={(nome) => {
+                onSucesso={(nome, email) => {
                   setAuditorAberto(false);
-                  setAuditorConcedido(nome);
+                  setAuditorConcedido({ nome, email });
                 }}
                 onCancelar={() => setAuditorAberto(false)}
               />
@@ -184,16 +185,16 @@ function Conteudo() {
           </p>
           {juridicoConcedido && (
             <p role="status" className="adm-aviso">
-              Acesso ao jurídico concedido a {juridicoConcedido}. O convite foi enviado para o e-mail informado.
+              Acesso ao jurídico concedido a {juridicoConcedido.nome}. {fraseDoConvite(juridicoConcedido.email)}
             </p>
           )}
           {juridicoAberto ? (
             <div className="painel-cad">
               <ConcederJuridicoForm
                 token={token}
-                onSucesso={(nome) => {
+                onSucesso={(nome, email) => {
                   setJuridicoAberto(false);
-                  setJuridicoConcedido(nome);
+                  setJuridicoConcedido({ nome, email });
                 }}
                 onCancelar={() => setJuridicoAberto(false)}
               />

@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   derivarPipeline,
+  dataDoPrazo,
   derivarPrazoExecutivo,
   formatarNumeroAutografo,
   formatarNumeroNorma,
   fraseDaNorma,
+  fraseDoPrazoDoExecutivo,
+  fraseErroGerarAutografo,
+  instanteFimDoDia,
   promulgavel,
+  validarDiaDoPrazo,
 } from "./pos-aprovacao-vista";
 import type { AutografoOut, NormaOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
 
@@ -164,5 +169,63 @@ describe("fraseDaNorma — o Desfecho depois da promulgação", () => {
     expect(fraseDaNorma({ tipoNorma: "resolucao", numero: 2, ano: 2026, estado: "promulgada" })).toBe(
       "virou a Resolução nº 2/2026, que ainda falta publicar",
     );
+  });
+});
+
+describe("prazo de resposta do Executivo ao gerar o autógrafo", () => {
+  it("o prazo vai como o ÚLTIMO instante do dia escolhido, no fuso da Casa (-03:00)", () => {
+    expect(instanteFimDoDia("2026-10-20")).toBe("2026-10-20T23:59:59-03:00");
+  });
+
+  it("o instante enviado volta como o MESMO dia, qualquer que seja o fuso de quem lê", () => {
+    expect(dataDoPrazo(instanteFimDoDia("2026-10-20"))).toBe("20/10/2026");
+    // o servidor devolve em UTC: 20/10 23h59 em Fortaleza = 21/10 02h59 UTC
+    expect(dataDoPrazo("2026-10-21T02:59:59Z")).toBe("20/10/2026");
+  });
+
+  it("a frase diz até quando o Executivo pode sancionar ou vetar", () => {
+    expect(fraseDoPrazoDoExecutivo("2026-10-21T02:59:59Z")).toBe(
+      "O Executivo tem até 20/10/2026 para sancionar ou vetar.",
+    );
+  });
+
+  describe("validarDiaDoPrazo (hoje = 2026-10-05)", () => {
+    const hoje = "2026-10-05";
+    it("vazio é permitido: o prazo é opcional no backend", () => {
+      expect(validarDiaDoPrazo("", hoje)).toBeNull();
+    });
+    it("hoje e dias futuros passam", () => {
+      expect(validarDiaDoPrazo("2026-10-05", hoje)).toBeNull();
+      expect(validarDiaDoPrazo("2026-10-26", hoje)).toBeNull();
+    });
+    it("dia anterior a hoje é recusado com frase em português", () => {
+      expect(validarDiaDoPrazo("2026-10-04", hoje)).toBe("O prazo não pode ser uma data que já passou.");
+    });
+    it("data que não existe é recusada", () => {
+      expect(validarDiaDoPrazo("2026-02-31", hoje)).toBe("Informe uma data válida para o prazo.");
+      expect(validarDiaDoPrazo("20/10/2026", hoje)).toBe("Informe uma data válida para o prazo.");
+    });
+  });
+
+  describe("fraseErroGerarAutografo: o erro do backend vira frase para a secretaria", () => {
+    it("400 genérico do backend", () => {
+      expect(fraseErroGerarAutografo("requisicao invalida")).toMatch(/prazo|já foi gerado/i);
+    });
+    it("409: matéria não aprovada em votação", () => {
+      expect(fraseErroGerarAutografo("gerar-autografo: a materia nao foi aprovada em votacao pela Camara")).toMatch(
+        /aprovar a matéria em votação/i,
+      );
+    });
+    it("409: votação não registrou o texto deliberado", () => {
+      expect(
+        fraseErroGerarAutografo("gerar-autografo: a votacao que aprovou esta materia nao registrou qual texto foi deliberado"),
+      ).toMatch(/texto/i);
+    });
+    it("403", () => {
+      expect(fraseErroGerarAutografo("autorizacao negada")).toMatch(/permissão/i);
+    });
+    it("mensagem desconhecida segue como veio (nunca esconde)", () => {
+      expect(fraseErroGerarAutografo("falha de rede — tente novamente")).toBe("falha de rede — tente novamente");
+    });
   });
 });

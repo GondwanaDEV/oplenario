@@ -24,6 +24,12 @@
   (when-let [m (repo/buscar-materia repo-transparencia ente-id proposicao-id)]
     (assoc m :norma (repo/norma-da-materia repo-transparencia ente-id proposicao-id))))
 
+(defn movimentacoes-da-materia
+  "A linha do tempo PUBLICA da materia: {:movimentacoes :total :completo? :desde}, ou nil se a materia nao esta' no
+  portal (proposicao nunca protocolada, ou tenant errado) — a mesma regra da ficha."
+  [repo-transparencia ente-id proposicao-id]
+  (repo/movimentacoes-da-materia repo-transparencia ente-id proposicao-id))
+
 (defn listar-normas
   "Portal: {:normas :normas-total} do acervo de legislacao as-enacted (F6c Slice 3). `filtro` = {:tipo :ano
   :numero} (todos opcionais, ja' coagidos na borda). Sem filtro: mais recente primeiro (compat Slice 1).
@@ -103,12 +109,13 @@
     {:proposicao-id proposicao-id :seguidor-identidade-id (:identidade-id ator)}))
 
 (defn meus-acompanhamentos
-  "{:acompanhamentos :acompanhamentos-total} 'minhas materias acompanhadas' do cidadao autenticado — escopo
+  "{:ente-id :acompanhamentos :acompanhamentos-total} 'minhas materias acompanhadas' do cidadao autenticado — escopo
   pelo seguidor do ATOR (nunca ve as de outro; sem :id, sem policy fina necessaria — a query ja filtra por
   seguidor). `:acompanhamentos-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia',
   sitio (c))."
   [repo-transparencia ator]
-  (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator)))
+  (assoc (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator))
+         :ente-id (:ente-id ator)))
 
 ;; ---------- Onda E: DADOS ABERTOS ----------
 

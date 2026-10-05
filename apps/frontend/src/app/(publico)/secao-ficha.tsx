@@ -17,8 +17,10 @@ import { derivarFicha } from "@/lib/ficha-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
+import { tituloDaNorma } from "@/lib/leis-vista";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
+import { MovimentacoesPublicas } from "./movimentacoes-publicas";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
 import "./participacao.css";
 
@@ -91,9 +93,14 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
               strokeLinecap="round"
             />
           </svg>
-          {vista.permalink}
+          <span>
+            <span className="permalink-rotulo">Identificador oficial:</span> <span>{vista.permalink}</span>
+          </span>
         </p>
       </section>
+
+      {/* "Por onde a matéria passou": a linha do tempo com data e etapa (rótulo do rito da Casa); degrada sozinha */}
+      <MovimentacoesPublicas ente={ente} proposicaoId={proposicaoId} />
 
       {vista.normaPublicada && (
         <p className="norma-publicada">
@@ -103,10 +110,10 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           </svg>
           <span>
             <b>Virou lei.</b> Publicada em {formatarData(vista.normaPublicada.publicadoEm)} —{" "}
-            <a href={`/api/portal/casa/${ente}/legislacao/${vista.normaPublicada.normaId}/artefato`}>
-              Ver a Lei {vista.normaPublicada.numero}/{vista.normaPublicada.ano} publicada — texto oficial
-            </a>{" "}
-            ({vista.normaPublicada.urn})
+            <a href={`/portal/casa/${encodeURIComponent(ente)}/leis/${encodeURIComponent(vista.normaPublicada.normaId)}`}>
+              {tituloDaNorma(vista.normaPublicada)}
+            </a>
+            , com o texto oficial para baixar.
           </span>
         </p>
       )}
@@ -158,7 +165,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
               </svg>
               <p>
                 <b>Esta matéria ainda não tem resumo em linguagem simples.</b> A Câmara publica o resumo depois de
-                revisá-lo. O <b>texto oficial</b> da proposição, com toda a tramitação, já está disponível acima.
+                revisá-lo. Enquanto isso, por onde a matéria já passou está na linha do tempo acima.
               </p>
             </div>
           )}

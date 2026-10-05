@@ -36,7 +36,7 @@ const agente = (ligado: boolean) => ({
 
 const destinosFake = { "pode-enviar-a-grupos": true, setores: [], comissoes: [], vereadores: [], pessoas: [] };
 
-function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean } = {}) {
+function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean; email?: string } = {}) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (method === "GET" && url === "/api/identidade/agentes-institucionais") {
@@ -75,7 +75,7 @@ function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean 
       return { ok: true, status: 200, json: async () => ({ id: "v1", "identidade-id": "id-9" }) } as Response;
     }
     if (method === "POST" && url === "/api/identidade/acessos") {
-      return { ok: true, status: 201, json: async () => ({ "vinculo-id": "vin-1", convite: "enviado" }) } as Response;
+      return { ok: true, status: 201, json: async () => ({ "vinculo-id": "vin-1", convite: "enviado", email: opts.email ?? "novo" }) } as Response;
     }
     return { ok: false, status: 404 } as Response;
   });
@@ -140,6 +140,24 @@ describe("Área do administrador da Casa (/administracao)", () => {
       ["/api/identidade/acessos", "POST"],
     ]);
     expect(screen.queryByRole("form", { name: /^conceder acesso$/i })).toBeNull();
+  });
+
+  it("Conceder acesso: o convite foi para o e-mail informado (conta nova ou e-mail trocado antes do 1º acesso)", async () => {
+    global.fetch = fetchMock({ email: "atualizado" }) as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    preencherESubmeter(await abrirFormDe("Helena Past"));
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(/Helena Past\. O convite foi enviado para o e-mail informado\./),
+    );
+  });
+
+  it("Conceder acesso a quem já entrou: avisa que o convite foi para o e-mail da conta e que só a pessoa o troca", async () => {
+    global.fetch = fetchMock({ email: "mantido" }) as unknown as typeof fetch;
+    montar(TOKEN_ADMIN);
+    preencherESubmeter(await abrirFormDe("Helena Past"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Essa pessoa já entrou no sistema/));
+    expect(screen.getByRole("status").textContent).toMatch(/ela mesma o troca/);
+    expect(screen.getByRole("status").textContent).not.toMatch(/e-mail informado/);
   });
 
   it("Conceder acesso: 409 no passo 2 aparece como alerta, o passo 3 nunca dispara e o form segue aberto", async () => {

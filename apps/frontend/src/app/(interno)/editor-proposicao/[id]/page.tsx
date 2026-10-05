@@ -68,6 +68,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
             ano: dados.ano,
             ementa: dados.ementa,
             autorTipo: dados.autorTipo ?? undefined,
+            autorId: dados.autorId ?? undefined,
             autorTexto: dados.autorTexto ?? undefined,
             objetoIndicacao: dados.objetoIndicacao ?? undefined,
             tipoRequerimento: dados.tipoRequerimento ?? undefined,
@@ -78,6 +79,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
           enviando={estadoEnvio === "enviando"}
           erro={erro}
           rotuloAcaoPrimaria="Salvar alterações"
+          token={token}
           bloquearIdentidade
         />
       </main>

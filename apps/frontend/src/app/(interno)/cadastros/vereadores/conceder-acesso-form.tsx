@@ -12,7 +12,7 @@
 // já vinculada a outro vereador, 400 de CPF inválido, etc. — a mensagem já vem em pt-BR do backend).
 
 import { useState } from "react";
-import { useConcederAcesso } from "@/lib/use-conceder-acesso";
+import { type SituacaoEmail, useConcederAcesso } from "@/lib/use-conceder-acesso";
 import { validarConcederAcesso, apenasDigitos } from "@/lib/cadastro-vereadores-forms";
 
 export function ConcederAcessoForm({
@@ -21,7 +21,7 @@ export function ConcederAcessoForm({
   token: string | null;
   vereadorId: string;
   nome: string;
-  onSucesso: (vereadorId: string) => void;
+  onSucesso: (vereadorId: string, email: SituacaoEmail) => void;
   onCancelar: () => void;
 }) {
   const [cpf, setCpf] = useState("");
@@ -35,8 +35,8 @@ export function ConcederAcessoForm({
     setTocado(true);
     if (!valido) return;
     try {
-      await conceder({ vereadorId, cpf: apenasDigitos(cpf), nome, email: email.trim() });
-      onSucesso(vereadorId);
+      const { email: situacao } = await conceder({ vereadorId, cpf: apenasDigitos(cpf), nome, email: email.trim() });
+      onSucesso(vereadorId, situacao);
     } catch { /* estado 'erro' já exibido abaixo (409 identidade vinculada, 400 cpf inválido, etc.) */ }
   }
 

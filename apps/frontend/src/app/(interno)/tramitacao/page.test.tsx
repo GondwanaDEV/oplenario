@@ -48,6 +48,21 @@ describe("PaginaTramitacao", () => {
     expect(screen.getByText("Concluídas")).toBeTruthy();
   });
 
+  it("o cartão mostra a situação com o mesmo rótulo da ficha ('Em pauta', na coluna Em Plenário)", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        itens: [{ ...itemFake, estado: "em_pauta" }],
+        "totais-por-estado": [{ estado: "em_pauta", total: 1 }],
+      }),
+    }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("PL 42/2026")).toBeTruthy());
+    const coluna = screen.getByRole("region", { name: /Em Plenário/ });
+    expect(coluna.textContent).toContain("Em pauta");
+    expect(screen.getByRole("region", { name: /Pronta p\/ pauta/ }).textContent).not.toContain("PL 42/2026");
+  });
+
   it("erro de rede mostra o estado de erro da página", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");

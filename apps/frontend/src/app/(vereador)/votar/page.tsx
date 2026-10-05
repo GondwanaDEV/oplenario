@@ -10,8 +10,12 @@
 // nunca caem no estado calmo "sem sessão" nem no badge otimista "Ao vivo" (review HIGH: um vereador cuja
 // conexão SSE caiu no meio de uma votação nominal não pode ver uma tela que finge estar tudo bem).
 
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { useMinhaSessaoAtual } from "@/lib/use-minha-sessao-atual";
+import { comToken } from "@/lib/nav";
+import { formatarHora } from "@/lib/formatar-data";
+import { useMinhaSessaoAtual, type SessaoViva } from "@/lib/use-minha-sessao-atual";
 import { useMeuPainel } from "@/lib/use-meu-painel";
 import { usePlenario } from "@/lib/use-plenario";
 import { derivarPlacar, type VistaPlacar } from "@/lib/placar-vista";
@@ -26,7 +30,9 @@ const NOME_VOTO: Record<VotoNominalIn, string> = { sim: "Sim", nao: "Não", abst
 
 export default function VotarPage() {
   const { token } = useAuth();
-  const { sessaoId, estado: estadoSessaoAtual } = useMinhaSessaoAtual(token);
+  // `?sessao=`: com duas sessões em curso, a que o vereador escolheu na troca abaixo (o layout já põe o Suspense).
+  const pedida = useSearchParams()?.get("sessao") ?? null;
+  const { sessaoId, sessoesVivas, estado: estadoSessaoAtual } = useMinhaSessaoAtual(token, pedida);
   const { dados: painel, estado: estadoPainel } = useMeuPainel(token);
   const meuVereadorId = painel?.vereadorId ?? null;
 
@@ -142,6 +148,8 @@ export default function VotarPage() {
           )}
         </div>
 
+        <TrocaDeSessao sessoes={sessoesVivas} atual={sessaoId} token={token} />
+
         {identidadeIndisponivel && (
           <p role="alert" className="voto-erro">
             Não foi possível confirmar sua identificação agora — presença/voto podem não refletir seu estado real.
@@ -229,6 +237,37 @@ export default function VotarPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function rotuloSessaoViva(s: SessaoViva): string {
+  const quando = s.abertaEm ? `aberta às ${formatarHora(s.abertaEm)}` : "aberta";
+  return s.situacao === "suspensa" ? `Sessão ${quando}, suspensa` : `Sessão ${quando}`;
+}
+
+/** Com mais de uma sessão em curso, diz isso e deixa trocar (docs/16, retriagem linha 12). A vista não guarda o
+ * tipo da sessão, então o rótulo é a hora em que ela abriu. Uma só sessão viva: não renderiza nada. */
+export function TrocaDeSessao({ sessoes, atual, token }: { sessoes: SessaoViva[]; atual: string | null; token: string | null }) {
+  if (sessoes.length < 2) return null;
+  return (
+    <nav className="troca-sessao" aria-label="Sessões em curso">
+      <p className="voto-nota">Há {sessoes.length} sessões em curso agora.</p>
+      <ul>
+        {sessoes.map((s) =>
+          s.sessaoId === atual ? (
+            <li key={s.sessaoId} aria-current="page">
+              <b>{rotuloSessaoViva(s)}</b> · esta
+            </li>
+          ) : (
+            <li key={s.sessaoId}>
+              <Link href={comToken(`/votar?sessao=${encodeURIComponent(s.sessaoId)}`, token)}>
+                Abrir a {rotuloSessaoViva(s).replace(/^Sessão/, "sessão")}
+              </Link>
+            </li>
+          ),
+        )}
+      </ul>
+    </nav>
   );
 }
 

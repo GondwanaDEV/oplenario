@@ -8,7 +8,9 @@ vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tok" }) }));
 // (vitest.config.ts) e um timestamp na virada do dia mediria o fuso do RUNNER, não o código (armadilha
 // já registrada neste projeto). 15h UTC cai no MESMO dia calendário em qualquer fuso razoável (UTC-12 a
 // UTC+12 ainda ficam entre 03h e 03h do dia seguinte, nunca cruzando pra trás).
+const ENTE = "3b87b2de-544b-4c43-9d67-930e6ea0ebd8";
 const doisAcompanhamentos = {
+  "ente-id": ENTE,
   acompanhamentos: [
     {
       "proposicao-id": "p1", tipo: "projeto_lei", ano: 2026, sequencial: 12, "urn-lex": "urn:lex:1",
@@ -34,6 +36,19 @@ describe("PaginaAcompanhamentos", () => {
     render(<PaginaAcompanhamentos />);
     await waitFor(() => expect(screen.getByText(/Altera a Lei Orgânica/)).toBeDefined());
     expect(screen.getByText("PL 12/2026")).toBeDefined();
+  });
+
+  it("beco sem saída: o número da matéria abre a ficha pública dela na Casa certa", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => doisAcompanhamentos }) as Response) as unknown as typeof fetch;
+    render(<PaginaAcompanhamentos />);
+    const link = await screen.findByRole("link", { name: "PL 12/2026" });
+    expect(link.getAttribute("href")).toBe(`/portal/casa/${ENTE}/materias/p1`);
+    // a matéria indisponível não tem ficha: não vira link
+    const paraMaterias = screen.getAllByRole("link").filter((a) => a.getAttribute("href")?.includes("/materias/"));
+    expect(paraMaterias).toHaveLength(1);
+    // o estado aparece em palavras, não a chave do banco
+    expect(screen.getByText("Em pauta")).toBeDefined();
+    expect(screen.queryByText(/em_pauta/)).toBeNull();
   });
 
   it("achado ao vivo (Daouda, 12/09/2026): 'seguindo desde' sai formatado dd/mm/aaaa, NUNCA o timestamp ISO cru", async () => {
