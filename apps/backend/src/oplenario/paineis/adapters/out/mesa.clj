@@ -21,10 +21,14 @@
   ["ciencia_convocacao" "assinatura_autografo" "incidente_grant_lgpd"])
 
 (defn- tramitacao->wire
-  "Rollup 'proposicoes por status': linhas {:estado :n} (GROUP BY estado) -> {:total :por-estado}. `total` =
-  soma das contagens (nao um COUNT separado — coerencia com o breakdown por construcao)."
-  [rows]
+  "Rollup 'proposicoes por status': linhas {:estado :n} (GROUP BY estado) -> {:total :em-tramitacao
+  :por-estado}. `total` = soma das contagens (nao um COUNT separado — coerencia com o breakdown por
+  construcao), TODOS os estados do board. `em-tramitacao` = as que o RITO da Casa nao declara terminal
+  (contagem propria do Repo, `(int ...)` sem `(or ... 0)`: ausente e' bug de servidor e vira 500 na validacao
+  Malli, nunca um zero que a UI leria como 'nada em tramitacao')."
+  [rows em-tramitacao]
   {:total (reduce + 0 (map :n rows))
+   :em-tramitacao (int em-tramitacao)
    :por-estado (mapv (fn [r] {:estado (:estado r) :n (:n r)}) rows)})
 
 (defn- pendencias->wire
@@ -55,7 +59,7 @@
   "Rollups internos + os 4 cards opacos (compliance/presenca/esic/relatores) -> MesaOut (validada)."
   [rollups compliance-card presenca-card esic-card relatores-card]
   (let [out {:compliance-tce compliance-card
-             :tramitacao (tramitacao->wire (:tramitacao rollups))
+             :tramitacao (tramitacao->wire (:tramitacao rollups) (:tramitacao-em-tramitacao rollups))
              :pendencias (pendencias->wire (:pendencias rollups))
              :sessoes    (sessoes->wire (:sessoes rollups))
              :presenca-resumo presenca-card

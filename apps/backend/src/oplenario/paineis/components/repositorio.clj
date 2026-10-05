@@ -70,9 +70,10 @@
   "Aplica atualizar-estado! do board e loga se a materia ainda nao existia (redrive fora de ordem / backlog
   — mesmo racional de fechar! e de transparencia/db/materia/atualizar-estado!). `ocorrido-em-str` (F7 carry):
   o instante REAL da transicao (do evento, nao 'agora') — ver docstring de db.tramitacao/atualizar-estado!."
-  [tx ente-id proposicao-id-str estado ocorrido-em-str]
+  [tx ente-id proposicao-id-str estado ocorrido-em-str terminal]
   (or (db-tramitacao/atualizar-estado! tx {:ente-id ente-id :proposicao-id (UUID/fromString proposicao-id-str)
-                                           :estado estado :transicionou-em (Instant/parse ocorrido-em-str)})
+                                           :estado estado :transicionou-em (Instant/parse ocorrido-em-str)
+                                           :terminal terminal})
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
@@ -165,7 +166,8 @@
                                 :estado (:estado payload)})
 
     "proposicao.transicionou"
-    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload))
+    (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload)
+                              (true? (:para-terminal payload)))
 
     ;; F7 E3: projeta o ciclo de vida da SESSAO plenaria (F4) na vista de SLI de janela de sessao (Inv.9). O
     ;; UPSERT e' idempotente + monotonico (ver db/sli-sessao/projetar-transicao!); a 1a transicao de uma
@@ -355,7 +357,8 @@
   (dashboard-mesa [this ente-id]
     "Rollups do dashboard da Mesa (F7, §16.11 item 11.4): os TRES resumos agregados dos read-models do
     proprio paineis (tramitacao/pendencias/sessoes por estado), lidos numa UNICA tx do tenant. Devolve
-    {:tramitacao [...] :pendencias [...] :sessoes [...]} (linhas GROUP BY cruas). NAO le' compliance — o card
+    {:tramitacao [...] :tramitacao-em-tramitacao N :pendencias [...] :sessoes [...]} (linhas GROUP BY cruas +
+    a contagem das materias que o rito NAO declara terminal). NAO le' compliance — o card
     do TCE e' composto na borda (diplomat) via a fn injetada pelo host (inversao de dependencia, nunca
     reprojecao/JOIN cross-schema §22.10).")
   (entregar-pendentes! [this ente-id notificador]
@@ -411,6 +414,7 @@
     (transacao this ente-id
       (fn [tx]
         {:tramitacao (db-tramitacao/resumo tx ente-id)
+         :tramitacao-em-tramitacao (db-tramitacao/contar-em-tramitacao tx ente-id)
          :pendencias (db-pendencia/resumo tx ente-id)
          :sessoes    (db-sli-sessao/resumo tx ente-id)})))
   (entregar-pendentes! [this ente-id notificador]

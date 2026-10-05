@@ -261,3 +261,38 @@
           "a LISTA devolvida pelo Repo continua cortada no teto real")
       (is (= n-real (get n-por-estado "em_comissoes"))
           "o TOTAL devolvido pelo Repo e' o numero REAL (teto+2) — nao o tamanho da lista ja cortada"))))
+
+;; ---------- "em tramitacao" = estado que o RITO nao declara terminal ----------
+
+(defn- transicionou!
+  ([ente pid para ocorrido-em] (transicionou! ente pid para ocorrido-em {}))
+  ([ente pid para ocorrido-em extra]
+   (emitir! ente "proposicao.transicionou"
+            (merge {:proposicao-id (str pid) :template-id (str (random-uuid)) :de "protocolada"
+                    :para para :gatilho "manual" :transicao-id (str (random-uuid))
+                    :ocorrido-em ocorrido-em}
+                   extra))))
+
+(deftest em-tramitacao-nao-conta-estado-que-o-rito-declara-terminal
+  ;; O manchete "Proposicoes em tramitacao" somava TODOS os estados (aprovadas e arquivadas inclusive). O
+  ;; vocabulario de estado e' texto livre por Casa — nunca se filtra por nome; quem diz o que e' fim de rito
+  ;; e' o rito (`para-terminal` no evento `proposicao.transicionou`). O nome do estado terminal aqui e'
+  ;; propositalmente nao-convencional: nenhum codigo pode casar "arquivada"/"aprovada" para acertar.
+  (let [ente (random-uuid) viva (random-uuid) encerrada (random-uuid) sem-flag (random-uuid)]
+    (doseq [pid [viva encerrada sem-flag]]
+      (emitir! ente "proposicao.protocolada" (payload-protocolada {:proposicao-id (str pid)})))
+    (drenar!)
+    (transicionou! ente viva "em_comissao" "2026-07-05T09:00:00Z" {:para-terminal false})
+    (transicionou! ente encerrada "ato_final_da_casa" "2026-07-05T09:00:00Z" {:para-terminal true})
+    ;; evento de antes do campo existir: sem `para-terminal` -> nao terminal (nao ha' o que afirmar)
+    (transicionou! ente sem-flag "em_comissao" "2026-07-05T09:00:00Z")
+    (drenar!)
+    (let [{:keys [tramitacao tramitacao-em-tramitacao]} (repo/dashboard-mesa *repo* ente)]
+      (is (= 3 (reduce + (map :n tramitacao))) "o board segue mostrando as 3")
+      (is (= 2 tramitacao-em-tramitacao) "so' as que o rito nao encerrou"))
+    ;; desarquivar: a transicao seguinte devolve a materia ao fluxo
+    (transicionou! ente encerrada "em_comissao" "2026-07-06T09:00:00Z" {:para-terminal false})
+    (drenar!)
+    (is (= 3 (:tramitacao-em-tramitacao (repo/dashboard-mesa *repo* ente)))
+        "saiu do estado terminal -> volta a contar")
+    (is (= 0 (:tramitacao-em-tramitacao (repo/dashboard-mesa *repo* (random-uuid)))) "RLS: outro ente nao ve")))

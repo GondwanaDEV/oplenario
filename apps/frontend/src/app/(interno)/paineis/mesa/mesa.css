@@ -64,6 +64,21 @@
 .placar-nota { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0.9rem 0 0; display: flex; align-items: center; gap: 0.45rem; }
 .placar-nota svg { color: var(--marca); flex: 0 0 auto; }
 
+/* remessas ao TCE (dentro do hero, sob o placar): uma linha por remessa, nome · competência · situação. A
+   rejeitada leva borda e texto próprios — nunca só a cor. Tokens do tema (AA nos dois temas). */
+.remessas { margin: 1.4rem 0 0; }
+.remessas-titulo { font-family: var(--mono); font-size: var(--t-12); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); margin: 0 0 0.6rem; }
+.remessas-vazio { font-size: var(--t-13); color: var(--texto-2); margin: 0; }
+.remessas-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.remessa { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem; padding: 0.55rem 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); font-size: var(--t-13); line-height: 1.4; }
+.remessa-nome { font-weight: 600; color: var(--texto); }
+.remessa-meta { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+.remessa-estado { margin-left: auto; font-weight: 600; color: var(--texto); }
+.remessa-atencao { border-left-color: var(--acento-texto); }
+.remessa-acao { flex-basis: 100%; color: var(--acento-texto); font-weight: 600; }
+.remessas .aviso-corte { margin: 0.7rem 0 0; }
+@media (max-width: 720px) { .remessa-estado { margin-left: 0; flex-basis: 100%; } }
+
 /* ============== bloco — contêiner genérico do cockpit (reusado por várias seções) ============== */
 .bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); }
 .bloco-cabeca { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--linha); }

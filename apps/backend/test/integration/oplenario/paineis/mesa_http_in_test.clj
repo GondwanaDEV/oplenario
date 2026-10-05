@@ -82,6 +82,7 @@
 
 (def ^:private rollups-fake
   {:tramitacao [{:estado "em_comissao" :n 5} {:estado "protocolada" :n 2}]
+   :tramitacao-em-tramitacao 6
    :pendencias [{:estado "pendente" :n 4} {:estado "vencido" :n 1}]
    :sessoes    [{:estado-atual "aberta" :n 1} {:estado-atual "nao_realizada" :n 2}]})
 
@@ -98,6 +99,7 @@
     (is (= 200 (:status r)) "GET /paineis/mesa com papel secretario -> 200")
     (is (= ente @chamou-com) "painel-compliance foi chamada com o ente-id do ator (composicao no tenant certo)")
     (is (= 7 (get-in body [:tramitacao :total])) "rollup de tramitacao composto (5+2)")
+    (is (= 6 (get-in body [:tramitacao :em-tramitacao])) "o manchete 'em tramitacao' sai da contagem propria")
     (is (= 5 (get-in body [:pendencias :abertas])) "rollup de pendencias (4+1)")
     (is (= 1 (get-in body [:sessoes :em-curso])))
     (is (= 2 (get-in body [:sessoes :nao-realizadas])))

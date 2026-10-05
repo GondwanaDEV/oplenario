@@ -62,6 +62,10 @@
    [:gatilho :string]
    [:transicao-id :uuid]
    [:ocorrido-em :string]
+   ;; O RITO da Casa (`template_estado.terminal`) declara que o estado de DESTINO encerra o processo. Quem
+   ;; consome (paineis: "proposicoes em tramitacao") nao casa nome de estado — o vocabulario e' texto livre por
+   ;; Casa. OPCIONAL: evento emitido antes do campo existir segue valido; ausente = nao afirma fim de rito.
+   [:para-terminal {:optional true} :boolean]
    [:ator-id {:optional true} [:maybe :uuid]]])
 
 (defn transicionou
