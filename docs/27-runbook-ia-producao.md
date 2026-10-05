@@ -196,8 +196,9 @@ login funciona, só não está escondido.
 
 ### Ligar (uma vez, depois de promover)
 
-1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**. Roda sozinho no push da `production` que
-   mexe em `apps/keycloak/**` (e por `workflow_dispatch`). Ele:
+1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**, só por `workflow_dispatch` com a
+   confirmação `trocar-keycloak` (a troca reinicia o Keycloak das Casas; tema novo em `apps/keycloak` = promover e
+   rodar de novo). Ele:
    - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<sha>`), a 26.0.0 com o diretório
      `/opt/keycloak/themes/oplenario`;
    - acha no Dokploy o **compose** do Keycloak das Casas pelo nome do container que a API usa (o host de
