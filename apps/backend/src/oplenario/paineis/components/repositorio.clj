@@ -70,10 +70,10 @@
   "Aplica atualizar-estado! do board e loga se a materia ainda nao existia (redrive fora de ordem / backlog
   — mesmo racional de fechar! e de transparencia/db/materia/atualizar-estado!). `ocorrido-em-str` (F7 carry):
   o instante REAL da transicao (do evento, nao 'agora') — ver docstring de db.tramitacao/atualizar-estado!."
-  [tx ente-id proposicao-id-str estado ocorrido-em-str terminal]
+  [tx ente-id proposicao-id-str estado ocorrido-em-str terminal rotulo-estado]
   (or (db-tramitacao/atualizar-estado! tx {:ente-id ente-id :proposicao-id (UUID/fromString proposicao-id-str)
                                            :estado estado :transicionou-em (Instant/parse ocorrido-em-str)
-                                           :terminal terminal})
+                                           :terminal terminal :rotulo-estado rotulo-estado})
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
@@ -177,11 +177,11 @@
                                 :tipo (:tipo payload) :ano (:ano payload) :sequencial (:sequencial payload)
                                 :urn-lex (:urn-lex payload) :ementa (:ementa payload)
                                 :autor-tipo (:autor-tipo payload) :autor-texto (:autor-texto payload)
-                                :estado (:estado payload)})
+                                :estado (:estado payload) :rotulo-estado (:estado-nome payload)})
 
     "proposicao.transicionou"
     (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload)
-                              (true? (:para-terminal payload)))
+                              (true? (:para-terminal payload)) (:para-nome payload))
 
     ;; docs/16 linha 18: o ato depois do plenario muda a coluna do quadro, mas so' a partir do AUTOGRAFO (a
     ;; aprovacao/rejeicao em plenario passa reto: em dois turnos ela nao encerra a etapa)

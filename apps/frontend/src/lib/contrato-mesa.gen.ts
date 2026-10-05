@@ -130,6 +130,7 @@ export interface ItemBoardOut {
   autorTexto?: string | null;
   estado: string;
   transicionouEm: string;
+  rotuloEstado?: string | null;
   desfecho?: string | null;
 }
 

@@ -15,7 +15,7 @@
 
 (def ^:private cols
   [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :estado
-   :projetado_em :transicionou_em :desfecho])
+   :projetado_em :transicionou_em :desfecho :rotulo_estado])
 
 (def ^:private teto-por-estado-absoluto
   "Ceiling absoluto do teto POR GRUPO de estado (defesa-em-profundidade — `listar-board` recebe `limite` do
@@ -37,7 +37,7 @@
   catch-up, e o gate `WHERE transicionou_em <= ?` rejeitava a atualizacao legitima — CONGELANDO o estado em
   silencio, pior que o bug original (sinal impreciso vira ESTADO ERRADO). EPOCH e' SEMPRE <= qualquer
   `:ocorrido-em` real (nenhuma proposicao tramita antes de 1970), entao a 1a transicao nunca e' rejeitada."
-  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto estado]}]
+  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto estado rotulo-estado]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? tipo) (some? ano) (some? sequencial)
          (some? urn-lex) (some? ementa) (some? estado)]}
   (comum/linha->kebab
@@ -46,6 +46,8 @@
                   :values [{:ente_id ente-id :proposicao_id proposicao-id :tipo tipo :ano ano
                             :sequencial sequencial :urn_lex urn-lex :ementa ementa
                             :autor_tipo autor-tipo :autor_texto autor-texto :estado estado
+                            ;; o nome do estado inicial no rito da Casa (`estado-nome` do evento); nil = sem nome
+                            :rotulo_estado rotulo-estado
                             :transicionou_em Instant/EPOCH}]
                   :on-conflict [:ente_id :proposicao_id]
                   :do-nothing []
@@ -76,13 +78,16 @@
   VISTA interna, best-effort, pode atrasar sob esta janela estreita. Fix correto = `legislativo` trocar
   `now()` por `clock_timestamp()` no DEFAULT de `ocorrido_em` (E em `efetivado_em`) — decisao que tambem
   afeta `historico-da-proposicao` (a prova de auditoria Inv.10), fora do escopo de uma fatia de `paineis`."
-  [tx {:keys [ente-id proposicao-id estado transicionou-em terminal]}]
+  [tx {:keys [ente-id proposicao-id estado transicionou-em terminal rotulo-estado]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? estado) (some? transicionou-em)]}
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :paineis.tramitacao
                          ;; `terminal` = o RITO da Casa declara o estado de destino como fim de processo
                          ;; (evento `para-terminal`); ausente (evento anterior ao campo) = nao afirma = false.
-                         :set {:estado estado :transicionou_em transicionou-em :terminal (boolean terminal)}
+                         ;; `rotulo-estado` = o nome do destino no rito (`para-nome`); ausente = o rito nao o declara ->
+                         ;; NULL, nunca o nome da etapa anterior (a tela cai no rotulo fixo).
+                         :set {:estado estado :transicionou_em transicionou-em :terminal (boolean terminal)
+                               :rotulo_estado rotulo-estado}
                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
                                  [:<= :transicionou_em transicionou-em]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
@@ -129,7 +134,11 @@
   {:pre [(some? ente-id)]}
   (comum/linhas->kebab
    (jdbc/execute! tx
-     (sql/format {:select [:estado [[:count :*] :n]]
+     (sql/format {:select [:estado [[:count :*] :n]
+                           ;; o nome que o rito da Casa da' ao estado — so' quando todas as materias do estado
+                           ;; concordam (dois ritos podem nomear a mesma chave de jeitos diferentes; o painel agrupa
+                           ;; pela chave, entao escolher um seria inventar). NULL = a tela usa o rotulo fixo.
+                           [[:case [:= [:count [:distinct :rotulo_estado]] 1] [:max :rotulo_estado]] :rotulo_estado]]
                   :from [:paineis.tramitacao]
                   :where [:= :ente_id ente-id]
                   :group-by [:estado]

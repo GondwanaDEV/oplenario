@@ -30,9 +30,12 @@
      :assinatura-algoritmo (:assinatura-algoritmo r)}))
 
 (defn- tramitacao-item->wire [linha]
-  {:de-estado (:de-estado linha) :para-estado (:para-estado linha) :gatilho (:gatilho linha)
-   :ocorrido-em (->str (:ocorrido-em linha))
-   :recebimento (recebimento->wire (:recebimento linha))})
+  (cond-> {:de-estado (:de-estado linha) :para-estado (:para-estado linha) :gatilho (:gatilho linha)
+           :ocorrido-em (->str (:ocorrido-em linha))
+           :recebimento (recebimento->wire (:recebimento linha))}
+    ;; o nome do estado no rito da Casa so' sai quando o rito o declara (ausente = a tela usa o rotulo fixo)
+    (:de-nome linha) (assoc :de-nome (:de-nome linha))
+    (:para-nome linha) (assoc :para-nome (:para-nome linha))))
 
 (defn- apensacao->wire [linha]
   {:apensada-id (->str (:apensada-id linha)) :apensada-em (->str (:apensada-em linha))

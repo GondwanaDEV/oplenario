@@ -109,6 +109,8 @@ function truncamentoDePendencias(
 interface EstagioResumo {
   estado: string;
   n: number;
+  /** O nome que o rito da Casa dá ao estado (só quando as matérias do estado concordam); ausente = rótulo fixo. */
+  rotuloEstado?: string | null;
 }
 
 export interface MesaVistaInput {

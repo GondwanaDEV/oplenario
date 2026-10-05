@@ -17,7 +17,10 @@ import { derivarTramitacao } from "@/lib/tramitacao-vista";
 // "EM_COMISSOES") e o tipo cru ("PROJETO_LEI"). Os tradutores ja existiam e ja sao o que o Portal
 // do Cidadao mostra ao publico — `derivarTramitacao().rotuloSituacao` e `derivarRef()`. Reusa-los
 // aqui mantem UMA fonte de rotulo por conceito, em vez de um segundo mapa a divergir com o tempo.
-const rotularEstagio = (estado: string) => derivarTramitacao(estado).rotuloSituacao;
+// O nome que o rito da Casa dá ao estágio (`rotuloEstado`, o mesmo do quadro e da lista) vem primeiro; sem ele, o
+// rótulo fixo.
+const rotularEstagio = (e: { estado: string; rotuloEstado?: string | null }) =>
+  e.rotuloEstado?.trim() || derivarTramitacao(e.estado).rotuloSituacao;
 
 export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista["pipeline"]; token?: string | null }) {
   if (vista.estado === "indisponivel") {
@@ -31,7 +34,7 @@ export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista[
   // A cor vem da POSIÇÃO do estágio (a ordem que a rota devolve), nunca do nome: o estado é texto livre por Casa
   // e 5 chaves fixas deixavam o gráfico cinza (uma delas, `em_comissao`, nem existe).
   const segmentos = vista.porEstado.map((e, i, todos) => ({
-    rotulo: rotularEstagio(e.estado), n: e.n, cor: corPorPosicao(i, todos.length),
+    rotulo: rotularEstagio(e), n: e.n, cor: corPorPosicao(i, todos.length),
   }));
   return (
     <section className="bloco" aria-labelledby="pipeline-titulo">
@@ -42,10 +45,10 @@ export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista[
         {vista.comItens ? (
           <div className="pipeline-board">
             {vista.porEstado.map((e) => (
-              <section className="estagio" key={e.estado} aria-label={`${rotularEstagio(e.estado)}: ${e.n}`}>
+              <section className="estagio" key={e.estado} aria-label={`${rotularEstagio(e)}: ${e.n}`}>
                 <div className="estagio-cab">
                   <div className="meta">
-                    <span className="nome">{rotularEstagio(e.estado)}</span>
+                    <span className="nome">{rotularEstagio(e)}</span>
                     <span className="n">{e.n}</span>
                   </div>
                 </div>
@@ -66,7 +69,7 @@ export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista[
             ))}
           </div>
         ) : (
-          <TabuleiroEstagios estagios={vista.porEstado.map((e) => ({ rotulo: rotularEstagio(e.estado), n: e.n }))} />
+          <TabuleiroEstagios estagios={vista.porEstado.map((e) => ({ rotulo: rotularEstagio(e), n: e.n }))} />
         )}
         <BarraSegmentada segmentos={segmentos} rotuloGeral={`Carga por estágio · ${vista.porEstado.reduce((a, e) => a + e.n, 0)} proposições ativas`} />
       </div>

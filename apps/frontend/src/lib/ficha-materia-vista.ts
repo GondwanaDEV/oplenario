@@ -90,8 +90,9 @@ export function derivarTimelineTramitacao(
       ...item,
       // fail-closed por construção: derivarTramitacao nunca lança, degrada pro estado cru quando fora do
       // vocabulário ilustrativo (ex. vocabulário template-driven de um tenant real).
-      rotuloDe: derivarTramitacao(item.deEstado).rotuloSituacao,
-      rotuloPara: derivarTramitacao(item.paraEstado).rotuloSituacao,
+      // o nome que o rito da Casa dá a cada estado (`deNome`/`paraNome`, o mesmo da faixa e da lista); sem ele, o fixo
+      rotuloDe: item.deNome?.trim() || derivarTramitacao(item.deEstado).rotuloSituacao,
+      rotuloPara: item.paraNome?.trim() || derivarTramitacao(item.paraEstado).rotuloSituacao,
       recebimentoTexto: textoRecebimento(item.recebimento),
     }));
 }
