@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { FichaCabecalho } from "./ficha-cabecalho";
-import type { ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
+import type { ProposicaoDetalheOut, RitoDaMateriaOut } from "@/lib/contrato-legislativo.gen";
 
 const proposicao: ProposicaoDetalheOut = {
   id: "1",
@@ -62,5 +62,67 @@ describe("FichaCabecalho", () => {
     );
     expect(screen.getByText("Bia Lima, Caio Reis")).toBeTruthy();
     expect(screen.getByText(/Coautores/)).toBeTruthy();
+  });
+
+  // "Onde está a matéria" pelo RITO da Casa: a rota da ficha devolve as etapas em ordem; o nome do estado deixa de
+  // decidir a posição. Vocabulário fora do mapa fixo do front, de propósito.
+  describe("faixa pelo rito da Casa", () => {
+    const etapa = (chave: string, rotulo: string, terminal = false) => ({ chave, rotulo, terminal });
+    const ritoEmLinha: RitoDaMateriaOut = {
+      ordemUnica: true,
+      etapas: [etapa("entrada", "Entrada"), etapa("instrucao", "Instrução"), etapa("plenario_unico", "Plenário único")],
+      atual: etapa("instrucao", "Instrução"),
+      anteriores: null,
+      proximas: [etapa("plenario_unico", "Plenário único")],
+    };
+
+    it("estado que o front não conhece, com rito: a faixa marca a etapa e usa os nomes da Casa", () => {
+      render(<FichaCabecalho proposicao={{ ...proposicao, estado: "instrucao" }} rito={ritoEmLinha} />);
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("concluídos Entrada");
+      expect(faixa).toContain("atual Instrução");
+      expect(faixa).toContain("pendente Plenário único");
+      expect(faixa).not.toContain("Em tramitação");
+      expect(faixa).not.toContain("Protocolo");
+    });
+
+    it("com rito, a faixa não usa as etapas ilustrativas nem para um estado que o mapa fixo conhece", () => {
+      render(<FichaCabecalho proposicao={proposicao} rito={ritoEmLinha} />);
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).not.toContain("1º turno");
+      expect(faixa).not.toContain("Sanção");
+    });
+
+    it("sem ordem única: só o entorno, com as próximas possíveis como ramos", () => {
+      const rito: RitoDaMateriaOut = {
+        ordemUnica: false,
+        etapas: [],
+        atual: etapa("analise", "Análise"),
+        anteriores: [etapa("recebida", "Recebida")],
+        proximas: [etapa("via_a", "Via A"), etapa("via_b", "Via B")],
+      };
+      render(<FichaCabecalho proposicao={{ ...proposicao, estado: "analise" }} rito={rito} />);
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("concluídos Recebida");
+      expect(faixa).toContain("atual Análise");
+      expect(faixa).toContain("próximas possíveis Via A, Via B");
+    });
+
+    it("rito que não declara a etapa atual: volta ao comportamento anterior (mapa ilustrativo)", () => {
+      render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: null }} />);
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("atual Comissões");
+    });
+
+    it("rito nulo (matéria sem rito): comportamento anterior", () => {
+      render(<FichaCabecalho proposicao={proposicao} rito={null} />);
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("atual Comissões");
+    });
+
+    it("o chip de situação continua sendo o rótulo único de estado (o mesmo da lista)", () => {
+      render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: etapa("em_comissoes", "Em Comissões") }} />);
+      expect(screen.getByText("Em comissões")).toBeTruthy();
+    });
   });
 });

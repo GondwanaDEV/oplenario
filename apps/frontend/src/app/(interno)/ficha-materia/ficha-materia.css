@@ -43,6 +43,10 @@
    disciplina de duplicação por-rota já documentada no topo deste arquivo (.chip/.em-breve); sem estas
    regras o SVG cai no fill preto padrão do browser (bug: tiles pretos sólidos nos 2 temas). */
 .azulejo-faixa { max-width: 100%; height: auto; display: block; }
+/* rito da Casa com mais de 6 etapas: encolher a faixa para caber deixa o texto ilegível; ela mantém o tamanho de
+   projeto e o cartão rola na horizontal. */
+.tramitacao:has(.azulejo-faixa--larga) { overflow-x: auto; }
+.azulejo-faixa--larga { max-width: none; }
 .azulejo-faixa text { fill: var(--texto-2); }
 .azulejo-faixa text.ativo { fill: var(--acento-texto); font-weight: 600; }
 .azulejo-faixa text.pendente { fill: var(--texto-2); opacity: .88; }
