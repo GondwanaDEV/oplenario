@@ -313,22 +313,43 @@ export function Clara({
     setTamanho(t);
   }, []);
 
-  // O tamanho vai para o <html>: é o que o CSS usa para empurrar a página (e a altura do cabeçalho real, medida).
+  // O tamanho vai para o <html>: é o que o CSS usa para empurrar a página.
+  useEffect(() => {
+    document.documentElement.dataset.clara = tamanho;
+  }, [tamanho]);
+
+  // A altura do cabeçalho (o expandido começa abaixo dele) e a da barra de comando fixa no rodapé (`.comando` do
+  // chassi: o botão da Clara sobe acima dela, para não cobrir a ação principal da tela). Os dois são da PÁGINA, que
+  // troca a cada navegação e muda de altura quando a fonte chega ou a linha quebra: mede de novo a cada mudança no
+  // DOM da página (uma vez por quadro) e no resize.
   useEffect(() => {
     const raiz = document.documentElement;
-    raiz.dataset.clara = tamanho;
-    const topo = document.querySelector<HTMLElement>(".topo");
-    const medir = () => raiz.style.setProperty("--topo-altura", `${topo?.offsetHeight ?? 0}px`);
-    medir();
-    // o cabeçalho muda de altura quando a fonte chega ou a navegação quebra a linha, não só no resize da janela
-    const observador = topo && typeof ResizeObserver !== "undefined" ? new ResizeObserver(medir) : null;
-    if (topo) observador?.observe(topo);
-    window.addEventListener("resize", medir);
-    return () => {
-      observador?.disconnect();
-      window.removeEventListener("resize", medir);
+    let quadro = 0;
+    const medir = () => {
+      quadro = 0;
+      const topo = document.querySelector<HTMLElement>(".topo");
+      const comando = document.querySelector<HTMLElement>(".comando");
+      raiz.style.setProperty("--topo-altura", `${topo?.offsetHeight ?? 0}px`);
+      // do topo da barra até o fim da janela (não o offsetHeight: a barra pode não encostar no rodapé)
+      const r = comando?.getBoundingClientRect();
+      const altura = r && r.height > 0 ? Math.max(0, Math.round(window.innerHeight - r.top)) : 0;
+      raiz.style.setProperty("--comando-altura", `${altura}px`);
     };
-  }, [tamanho]);
+    const agendar = () => {
+      if (!quadro) quadro = requestAnimationFrame(medir);
+    };
+    medir();
+    const observador = typeof MutationObserver !== "undefined" ? new MutationObserver(agendar) : null;
+    observador?.observe(moldura?.current ?? document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", agendar);
+    return () => {
+      if (quadro) cancelAnimationFrame(quadro);
+      observador?.disconnect();
+      window.removeEventListener("resize", agendar);
+      raiz.style.removeProperty("--topo-altura");
+      raiz.style.removeProperty("--comando-altura");
+    };
+  }, [moldura]);
   useEffect(
     () => () => {
       delete document.documentElement.dataset.clara;

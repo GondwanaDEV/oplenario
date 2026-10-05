@@ -236,4 +236,34 @@ describe("Clara — o painel retrátil", () => {
       window.matchMedia = original;
     }
   });
+
+  it("a barra de comando da tela (.comando) é medida, também quando chega depois: o botão sobe acima dela", async () => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (!this.classList.contains("comando")) return original.call(this);
+      const top = window.innerHeight - 68;
+      return { x: 0, y: top, left: 0, top, width: 1024, right: 1024, height: 68, bottom: window.innerHeight } as DOMRect;
+    };
+    try {
+      const moldura = createRef<HTMLDivElement>();
+      render(
+        <>
+          <div ref={moldura} />
+          <Clara token="tok" moldura={moldura} />
+        </>,
+      );
+      const raiz = document.documentElement;
+      expect(raiz.style.getPropertyValue("--comando-altura")).toBe("0px");
+      const barra = document.createElement("div");
+      barra.className = "comando";
+      act(() => {
+        moldura.current?.appendChild(barra);
+      });
+      await vi.waitFor(() => expect(raiz.style.getPropertyValue("--comando-altura")).toBe("68px"));
+      cleanup();
+      expect(raiz.style.getPropertyValue("--comando-altura")).toBe("");
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
+  });
 });
