@@ -4,7 +4,8 @@
   abertos|respondidos|todos, o detalhe com historico e acoes cabiveis, a prorrogacao do e-SIC (LAI art. 11 §2º), o
   isolamento entre Casas (RLS) e, pela borda HTTP, o 403 de quem nao e' secretario. E as tres regras de identidade:
   e-SIC = nome + CPF mascarado; LGPD = idem; ouvidoria = so' identificada/anonima (Lei 13.460 art. 10 §7º)."
-  (:require [clojure.string :as str]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
@@ -38,9 +39,6 @@
 
 (defn- relogio [iso] (tempo/relogio-fixo (Instant/parse iso)))
 (def ^:private hoje (relogio "2026-07-03T15:00:00Z"))   ; 03/07/2026 no fuso civil (Fortaleza)
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa!
   "Uma identidade real (nome + CPF valido). Devolve [id cpf]."

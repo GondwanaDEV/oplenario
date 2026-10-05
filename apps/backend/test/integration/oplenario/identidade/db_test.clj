@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real): o modulo identidade. Prova a separacao disc.1 (identidade SUPRATENANT atravessa
   entes; vinculo TENANT isola), o split de privilegio (dominio NAO le CPF), o broker gov.br (com guarda
   anti-takeover), o snapshot de papeis (RBAC), o ciclo de consentimento (LGPD) e a relacao é_o_próprio."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [malli.core :as m]
             [next.jdbc :as jdbc]
@@ -23,17 +24,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds]
-  (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)]
-    (if (< r 2) 0 (- 11 r))))
-
-(defn- cpf-valido []
-  ;; gera um CPF com digito verificador correto (mesmo algoritmo de mod/valido-cpf?).
-  (let [base (vec (repeatedly 9 #(rand-int 10)))
-        d1 (dv base)
-        d2 (dv (conj base d1))]
-    (apply str (concat base [d1 d2]))))
 
 (defn- criar-identidade-fixture!
   "Fixture: cria a identidade supratenant (sobre *ds*) e devolve {:id ...} — envelope de mapa p/

@@ -3,7 +3,8 @@
   tirar. Prova o ato (quem, quando, por que, historico preservado), o efeito na PROXIMA chamada da pessoa (o ator e'
   recalculado a cada requisicao — sessao viva nao guarda papel), a credencial delegada do agente, o isolamento por
   Casa e a reconcessao."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -34,9 +35,6 @@
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
 
 (defn- repo-id [] (assoc (repo/repositorio) :datasource {:ds *ds*}))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- identidade! [nome] (id/inserir! *ds* {:id (random-uuid) :cpf (cpf-valido) :nome nome}))
 
