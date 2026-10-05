@@ -186,3 +186,43 @@ describe("GET /api/auth/login?via=govbr — o cidadão entra pelo gov.br (ADR-00
     expect(resp.headers.get("set-cookie") ?? "").not.toMatch(/pkce=/);
   });
 });
+
+describe("GET /api/auth/login — a Câmara escolhida depois do CPF (ADR-0025)", () => {
+  const HINT = "0eabd6df-d0cc-40bb-a0ca-043027cb3a1f";
+  const OUTRA = "22222222-2222-2222-2222-222222222222";
+  const comCookie = (path: string, valor: string) => {
+    const r = new NextRequest(new URL(path, ORIGIN));
+    r.cookies.set("entrar_escolha", valor);
+    return r;
+  };
+  const escolha = (casas: string[], redirectPath: string | null = null) =>
+    JSON.stringify({ hint: HINT, redirectPath, casas: casas.map((enteId) => ({ enteId, nome: "Câmara" })) });
+
+  it("a Câmara está na escolha: o usuário já conferido vai como login_hint e o cookie fica (voltar e escolher outra)", async () => {
+    const resp = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([ENTE, OUTRA])), { fetchImpl: fetchOk() });
+    expect(new URL(resp.headers.get("location")!).searchParams.get("login_hint")).toBe(HINT);
+    expect(resp.headers.get("set-cookie")).not.toMatch(/entrar_escolha/);
+  });
+
+  it("o destino guardado na escolha passa pela mesma validação de todo redirect", async () => {
+    const resp = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([ENTE], "/.//evil.example")), { fetchImpl: fetchOk() });
+    expect(pkceCookie(resp).payload.redirectPath).toBeNull();
+  });
+
+  it("o destino pedido antes do CPF segue para o callback", async () => {
+    const resp = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([ENTE], "/tramitacao")), { fetchImpl: fetchOk() });
+    expect(pkceCookie(resp).payload.redirectPath).toBe("/tramitacao");
+  });
+
+  it("Câmara fora da escolha (ou cookie adulterado): sem login_hint — o Keycloak pede o usuário", async () => {
+    const fora = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([OUTRA])), { fetchImpl: fetchOk() });
+    expect(new URL(fora.headers.get("location")!).searchParams.get("login_hint")).toBeNull();
+    const torto = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, "lixo"), { fetchImpl: fetchOk() });
+    expect(new URL(torto.headers.get("location")!).searchParams.get("login_hint")).toBeNull();
+  });
+
+  it("sem cookie, como antes: sem login_hint", async () => {
+    const resp = await GET(req(`/api/auth/login?ente=${ENTE}`), { fetchImpl: fetchOk() });
+    expect(new URL(resp.headers.get("location")!).searchParams.get("login_hint")).toBeNull();
+  });
+});

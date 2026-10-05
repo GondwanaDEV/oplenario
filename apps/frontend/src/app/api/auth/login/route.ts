@@ -9,18 +9,11 @@
 // FECHADO: nunca produz um redirect de authorize quebrado. As três causas caem no MESMO
 // `/entrar?erro=login` — não diferenciar 400 de 404 evita vazar se um tenant existe.
 
-import { randomBytes, createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { COOKIE_ESCOLHA, lerEscolha } from "@/lib/entrada-cpf";
 import { resolveAppOrigin } from "../appOrigin";
+import { buscarDescoberta, redirecionarAoKeycloak, type OpcoesBackend } from "../pkce";
 import { pedidoDeRedirect } from "../redirect";
-
-interface Descoberta {
-  realm: string;
-  "base-url": string;
-  "client-id": string;
-  // ADR-0015: o realm desta Casa tem o broker gov.br (o backend só diz `true` quando está configurado).
-  govbr?: boolean;
-}
 
 function falhaFechada(origin: string): NextResponse {
   return NextResponse.redirect(new URL("/entrar?erro=login", origin));
@@ -34,33 +27,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   return iniciarLogin(request);
 }
 
-export async function iniciarLogin(
-  request: NextRequest,
-  opts?: { backend?: string; fetchImpl?: typeof fetch },
-): Promise<NextResponse> {
-  // `opts.backend` é injeção de dependência só de teste; em produção seria superfície de SSRF
-  // (mesmo guard de src/lib/sse-proxy.ts).
-  if (opts?.backend && process.env.NODE_ENV === "production") {
-    throw new Error("opts.backend não é permitido fora de ambiente de teste");
-  }
-
+export async function iniciarLogin(request: NextRequest, opts?: OpcoesBackend): Promise<NextResponse> {
   const origin = resolveAppOrigin(request);
   const ente = request.nextUrl.searchParams.get("ente");
   if (!ente) return falhaFechada(origin);
 
-  const backend = opts?.backend ?? process.env.BACKEND_URL ?? "http://localhost:8888";
-  const f = opts?.fetchImpl ?? fetch;
-
-  let descoberta: Descoberta;
-  try {
-    const resp = await f(`${backend}/auth/descoberta/${encodeURIComponent(ente)}`, {
-      cache: "no-store",
-    });
-    if (!resp.ok) return falhaFechada(origin);
-    descoberta = (await resp.json()) as Descoberta;
-  } catch {
-    return falhaFechada(origin);
-  }
+  const descoberta = await buscarDescoberta(ente, opts);
+  if (!descoberta) return falhaFechada(origin);
 
   // `via=govbr`: o cidadão pediu para entrar pelo gov.br. Casa sem o broker ligado volta à tela de participar
   // dizendo que não está disponível — nunca cai na tela de login institucional como se fosse a mesma coisa.
@@ -71,39 +44,23 @@ export async function iniciarLogin(
     return NextResponse.redirect(volta);
   }
 
-  const realm = descoberta.realm;
-  const baseUrl = descoberta["base-url"];
-  const clientId = descoberta["client-id"];
+  // ADR-0025: a Câmara escolhida em /entrar/escolher (quem tem acesso a mais de uma). O usuário já conferido pelo CPF
+  // vai como `login_hint` só se ESTA Câmara está na escolha; o destino pedido antes do CPF segue junto (validado de
+  // novo aqui, como todo `redirect`). O cookie NÃO é apagado: quem clicou na Câmara errada e voltou ainda escolhe a
+  // outra até ele vencer (5 min).
+  const escolha = viaGovbr ? null : lerEscolha(request.cookies.get(COOKIE_ESCOLHA)?.value);
+  const daEscolha = escolha?.casas.some((c) => c.enteId === ente) ? escolha : null;
 
   // `null` = ninguém pediu destino; o callback então escolhe a home da persona (destinoPorPapeis).
-  const redirectPath = pedidoDeRedirect(request.nextUrl.searchParams.get("redirect"), origin);
-  const codeVerifier = randomBytes(32).toString("base64url");
-  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
-  const state = randomBytes(16).toString("base64url");
+  const redirectPath =
+    pedidoDeRedirect(request.nextUrl.searchParams.get("redirect"), origin) ??
+    pedidoDeRedirect(daEscolha?.redirectPath ?? null, origin);
 
-  const authorizeUrl = new URL(`${baseUrl}/realms/${realm}/protocol/openid-connect/auth`);
-  authorizeUrl.searchParams.set("client_id", clientId);
-  authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("scope", "openid");
-  authorizeUrl.searchParams.set("redirect_uri", `${origin}/api/auth/callback`);
-  authorizeUrl.searchParams.set("state", state);
-  authorizeUrl.searchParams.set("code_challenge", codeChallenge);
-  authorizeUrl.searchParams.set("code_challenge_method", "S256");
-  // O Keycloak da Casa pula a própria tela e vai direto ao gov.br (o IdP fica escondido da tela institucional).
-  if (viaGovbr) authorizeUrl.searchParams.set("kc_idp_hint", "govbr");
-
-  const response = NextResponse.redirect(authorizeUrl);
-  // Cookie de curta duração — só precisa sobreviver entre este redirect e o callback (T9).
-  response.cookies.set(
-    "pkce",
-    JSON.stringify({ codeVerifier, state, redirectPath, realm, baseUrl, clientId }),
-    {
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      maxAge: 300,
-      path: "/api/auth",
-    },
-  );
-  return response;
+  return redirecionarAoKeycloak({
+    origin,
+    descoberta,
+    redirectPath,
+    loginHint: daEscolha?.hint ?? null,
+    viaGovbr,
+  });
 }

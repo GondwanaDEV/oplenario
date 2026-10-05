@@ -2,7 +2,8 @@
   "INTEGRACAO gated: exige o Keycloak do docker (--profile auth) rodando. Prova provisionar-realm!/
   criar-usuario!/resetar-mfa! contra a admin-API real — nao roda no CI (sem Keycloak la'; ver
   tests.edn/:keycloak e ci.yml --skip :keycloak)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [jsonista.core :as json]
             [oplenario.config :as config]
@@ -15,7 +16,7 @@
 
 (def ^:private config
   {:base-url base-url :realm-prefixo "ente-" :audiencia "oplenario-backend"
-   :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600})
+   :admin-usuario "admin" :admin-senha "admin" :jwks-cache-ttl-s 600 :tema-login "oplenario"})
 
 (def ^:dynamic *idp* nil)
 
@@ -163,7 +164,7 @@
     (first (admin-get-teste! http token kc-base-url
                              (str "/admin/realms/" realm "/users?q=identidade-id:" identidade-id)))))
 
-(deftest criar-usuario-idempotente-e-exige-passkey
+(deftest criar-usuario-idempotente-e-exige-senha-e-codigo
   (let [ente (random-uuid) ident (random-uuid)
         _ (idp/provisionar-realm! *idp* ente)
         u1 (idp/criar-usuario! *idp* ente {:identidade-id ident :nome "Helena Matos"
@@ -173,8 +174,9 @@
     (is (= (:keycloak-user-id u1) (:keycloak-user-id u2))
         "get-or-create: re-provisionar devolve o MESMO usuario (hoje lanca em != 201)")
     (let [r (usuario-representation *idp* ente ident)]
-      (is (= ["webauthn-register-passwordless"] (:requiredActions r))
-          "nasce obrigado a cadastrar passkey antes de qualquer acao (§22.5.2 eixo F)")
+      (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions r)))
+          "ADR-0025: nasce obrigado a criar a senha e o segundo fator (codigo) antes de qualquer acao — o login da Casa
+          e' CPF + senha + codigo; so' passkey deixava a pessoa sem senha para entrar")
       (is (false? (:emailVerified r))
           "emailVerified=true era [GAP] por nao haver SMTP; agora ha' — o KC verifica de verdade"))))
 
@@ -203,7 +205,8 @@
       (is (= "certo@example.com" (:email u)))
       (is (= [(str iid)] (get-in u [:attributes :identidade-id]))
           "o atributo que o login usa continua la' (o PUT leva o usuario inteiro)")
-      (is (= ["webauthn-register-passwordless"] (:requiredActions u)) "o cadastro da passkey continua exigido"))))
+      (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions u)))
+          "a senha e o codigo do primeiro acesso continuam exigidos (ADR-0025)"))))
 
 (deftest corrigir-email-recusa-quem-ja-tem-credencial
   (let [ente-id (random-uuid) iid (random-uuid)]
@@ -227,3 +230,96 @@
     (is (= :idp/email-em-uso
            (try (idp/corrigir-email-do-convite! *idp* ente-id a "bia@example.com") nil
                 (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e))))))))
+
+;; ---------------------------------------------------------------------------------------------
+;; ADR-0025: o realm tem a cara da Casa (nome, pt-BR, tema do O Plenario) e se defende de forca bruta.
+;; ---------------------------------------------------------------------------------------------
+
+(deftest realm-nasce-com-o-nome-da-casa-em-portugues-e-com-o-tema
+  (let [ente (random-uuid)]
+    (idp/provisionar-realm! *idp* ente {:nome "Câmara Municipal de Teste"})
+    (let [r (realm-representation *idp* ente)]
+      (is (= "Câmara Municipal de Teste" (:displayName r)) "o titulo da tela de login e' o nome da Casa, nao o realm")
+      (is (true? (:internationalizationEnabled r)))
+      (is (= ["pt-BR"] (:supportedLocales r)))
+      (is (= "pt-BR" (:defaultLocale r)))
+      (is (= "oplenario" (:loginTheme r)) "o tema do O Plenario")
+      (is (= "oplenario" (:emailTheme r)) "o convite sai com o texto do O Plenario")
+      (is (true? (:bruteForceProtected r)) "senha errada demais trava a conta por um tempo")
+      (is (= 10 (:failureFactor r)))
+      (is (false? (:permanentLockout r)) "trava temporaria: quem sabe o CPF de alguem nao o tranca para sempre")
+      (is (re-find #"length\(8\)" (str (:passwordPolicy r)))))))
+
+(deftest sem-nome-o-realm-guarda-o-que-tinha
+  (let [ente (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (is (= "O Plenário" (:displayName (realm-representation *idp* ente))) "realm novo sem nome: o da plataforma")
+    (idp/provisionar-realm! *idp* ente {:nome "Câmara Municipal de Russas"})
+    (idp/provisionar-realm! *idp* ente)
+    (is (= "Câmara Municipal de Russas" (:displayName (realm-representation *idp* ente)))
+        "reprovisionar sem nome (ex.: conceder acesso) nao apaga o nome da Casa")))
+
+(deftest desligar-o-tema-pela-config-volta-ao-padrao
+  (let [ente (random-uuid)
+        sem-tema (component/start (kc/keycloak-idp (assoc config :tema-login nil)))]
+    (try
+      (idp/provisionar-realm! *idp* ente {:nome "Câmara Municipal de Teste"})
+      (is (= "oplenario" (:loginTheme (realm-representation *idp* ente))))
+      (idp/provisionar-realm! sem-tema ente)
+      (let [r (realm-representation sem-tema ente)]
+        (is (str/blank? (:loginTheme r)) "KEYCLOAK_TEMA_LOGIN vazio + reaplicar = o login volta ao padrao do Keycloak")
+        (is (str/blank? (:emailTheme r))))
+      (finally (component/stop sem-tema)))))
+
+(deftest o-client-web-aponta-para-a-entrada-do-o-plenario
+  (let [ente (random-uuid)
+        idp (component/start (kc/keycloak-idp (assoc config :web-client-id "oplenario-web"
+                                                     :redirect-uris ["https://app.exemplo/api/auth/callback"]
+                                                     :web-origins ["https://app.exemplo"])))]
+    (try
+      (idp/provisionar-realm! idp ente)
+      (let [http (http!) token (admin-token-teste! http base-url)
+            c (first (admin-get-teste! http token base-url
+                                       (str "/admin/realms/ente-" ente "/clients?clientId=oplenario-web")))]
+        (is (= "https://app.exemplo/entrar" (:baseUrl c))
+            "o 'voltar ao aplicativo' do fim do convite leva a' entrada pelo CPF"))
+      (finally (component/stop idp)))))
+
+(deftest resetar-mfa-obriga-cadastrar-o-codigo-de-novo
+  (let [ente (random-uuid) iid (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (idp/criar-usuario! *idp* ente {:identidade-id iid :nome "Servidor Teste" :email "srv@example.com"})
+    (let [u (usuario-representation *idp* ente iid)
+          http (http!) token (admin-token-teste! http base-url)]
+      ;; a pessoa ja' concluiu o convite (tem senha): sem pendencia
+      (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u))
+                        (assoc u :requiredActions []))
+      (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u) "/reset-password")
+                        {:type "password" :value "Senha-de-teste-1" :temporary false})
+      (idp/resetar-mfa! *idp* ente iid)
+      (let [depois (usuario-representation *idp* ente iid)]
+        (is (= ["CONFIGURE_TOTP"] (:requiredActions depois))
+            "sem o fator, o proximo login pede o cadastro do codigo — senao a pessoa entraria so' com a senha")
+        (is (= (str iid) (first (get-in depois [:attributes :identidade-id])))
+            "o PUT do usuario inteiro preserva o identidade-id (o login depende dele)")))))
+
+(deftest o-primeiro-acesso-cria-a-senha-antes-do-codigo
+  (let [ente (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (let [prioridade (fn [alias] (->> (:requiredActions (realm-representation *idp* ente))
+                                      (filter #(= alias (:alias %))) first :priority))]
+      (is (< (prioridade "UPDATE_PASSWORD") (prioridade "CONFIGURE_TOTP"))
+          "o Keycloak executa as acoes por prioridade: sem o ajuste, o convite pedia o codigo antes de a pessoa ter senha"))))
+
+(deftest resetar-mfa-de-quem-nunca-teve-senha-pede-a-senha-tambem
+  ;; quem concluiu o convite ANTIGO (so' passkey) nao tem senha: tirar a passkey sem pedir a senha o deixaria sem
+  ;; como entrar (o login da Casa pede senha)
+  (let [ente (random-uuid) iid (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (idp/criar-usuario! *idp* ente {:identidade-id iid :nome "Do Convite Antigo" :email "antigo@example.com"})
+    (let [u (usuario-representation *idp* ente iid)
+          http (http!) token (admin-token-teste! http base-url)]
+      (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u))
+                        (assoc u :requiredActions []))
+      (idp/resetar-mfa! *idp* ente iid)
+      (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions (usuario-representation *idp* ente iid))))))))

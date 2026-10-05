@@ -9,6 +9,8 @@
 ;; Uma rota nova entra aqui so' com motivo revisado em PR; o padrao e' virar entrada do catalogo.
 {:integracao-ia/mcp {:categoria :servico
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
+ :identidade/localizar-casas {:categoria :so-tela
+                              :motivo "a porta de entrada pelo CPF (ADR-0025), antes de haver sessao: o agente age como uma pessoa ja' dentro da Casa e nunca entra por ela"}
  :agente/perguntar {:categoria :so-tela
                     :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
  :agente/reportar-erro-ia {:categoria :so-tela

@@ -186,3 +186,72 @@ java -jar oplenario.jar reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]
 - **Casa:** sem `--ente`, todas as do registro; `--ente` precisa estar no registro (senão sai com 2: confira o `DATABASE_URL`). Casa `encerrado` ou
   com o apagamento em curso (ADR-0018) não é tocada.
 - **Código de saída:** `0` íntegro (ou só o que o `--apagar-orfaos` limpou) · `1` sobrou divergência · `2` uso ou Casa fora do registro.
+
+## 9. Login das Câmaras: o tema do O Plenário no Keycloak e a entrada pelo CPF
+
+[ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md). Servidor e vereador entram em `/entrar` com o CPF; a
+senha (e o código do aplicativo) é pedida pelo Keycloak da Câmara, numa tela com a cara do O Plenário. Até o passo 1
+abaixo, o Keycloak de produção mostra a própria tela (em português e com o nome da Câmara, mas no visual padrão dele): o
+login funciona, só não está escondido.
+
+### Ligar (uma vez, depois de promover)
+
+1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**. Roda sozinho no push da `production` que
+   mexe em `apps/keycloak/**` (e por `workflow_dispatch`). Ele:
+   - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<sha>`), a 26.0.0 com o diretório
+     `/opt/keycloak/themes/oplenario`;
+   - acha no Dokploy o app com o domínio `keycloak.calvetec.com.br` (o Keycloak do operador é outro e não é tocado);
+     sem exatamente um, para sem mexer em nada;
+   - troca a imagem do app pela do sha e reimplanta. Mesmo banco, mesmas variáveis, mesmo comando;
+   - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, **volta à imagem
+     anterior**, reimplanta e falha.
+
+   **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No Dokploy, a imagem do serviço Keycloak das Casas
+   passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest`, com o acesso ao GHCR. Reimplante e espere o
+   healthcheck.
+2. **Backend:**
+   - `KEYCLOAK_TEMA_LOGIN` pode ficar ausente (padrão `oplenario`);
+   - `KEYCLOAK_TEMA_LOGIN=""` desliga o tema: o login de cada Câmara volta ao padrão do Keycloak quando se reaplica a
+     configuração dela (passo 3);
+   - o limite da entrada pelo CPF é `ENTRADA_LIMITE_POR_IP` (padrão 30) por `ENTRADA_JANELA_MIN` (padrão 5) minutos;
+   - **o limite conta o IP que o Traefik acrescenta ao `X-Forwarded-For`** (o último item, lido pelo frontend). Se
+     algum dia houver outro proxy ou CDN na frente do Traefik, o último item passa a ser o dele e todo mundo cai no
+     mesmo balde: rever `ipDoCliente` (`apps/frontend/src/lib/entrada-cpf.ts`) antes.
+3. **Reaplicar o login de cada Câmara:** workflow **`reaplicar-login-prd.yaml`** (só `workflow_dispatch`, confirmação
+   `reaplicar-login`, `ente` vazio = todas). Ele:
+   - roda o comando `reaplicar-login` da imagem da API (antes confere que a imagem já tem o comando);
+   - usa o **ambiente da API lido do Dokploy**: o provisionamento grava também o SMTP e o gov.br do realm a partir da
+     configuração de quem roda. Só o banco troca para a porta externa. Se o Keycloak da API não responde do runner,
+     para sem tocar em nada;
+   - grava no realm o nome da Câmara, o pt-BR, o tema (login e e-mail), a política de senha, a trava contra força
+     bruta, a ordem senha → código no primeiro acesso e o "voltar" do convite para `/entrar`;
+   - é idempotente e pula Câmara encerrada ou com apagamento iniciado (reaplicar recriaria o realm apagado);
+   - deixa na atuação da Operação o par `realm-reprovisionamento-iniciado` → `realm-reprovisionado` (ou `…-falhou`),
+     com `origem: linha-de-comando`. Sai com erro se alguma Câmara falhou; as outras seguem.
+
+   Para uma Câmara só, o console tem o mesmo efeito: ficha da Câmara → "Reaplicar configuração de login"
+   (`POST /operacao/casas/:ente/realm`).
+4. **Conferir:**
+   - abrir `https://<app>/entrar` e digitar um CPF de quem tem acesso;
+   - a tela de senha deve mostrar o nome da Câmara, o cartão do O Plenário e **nenhum** campo de usuário;
+   - o título da aba é "Entrar · <nome da Câmara>".
+
+### Quem já tinha usuário antes desta mudança
+
+- **Personas da demo e quem já entrava com senha:** nada muda; continuam entrando (agora pelo CPF). Quem não tem código
+  cadastrado entra só com a senha — o código é pedido de quem o tem. Ainda não há tela para exigir o código de quem já
+  entra (o `idp/resetar-mfa!` faz isso, mas nenhuma rota o chama): um novo convite resolve, porque pede a senha e o
+  código de novo.
+- **Quem recebeu o convite antigo (só passkey) e ficou sem senha:** novo convite. Em `/administracao`, o `admin_ente`
+  concede o acesso de novo à pessoa (o convite sai outra vez); para o 1º administrador da Câmara, o operador usa
+  "Reenviar convite" no console.
+
+### Quando a pessoa diz que não consegue entrar
+
+| O que ela vê | O que é | O que fazer |
+|---|---|---|
+| "Não encontramos acesso de servidor ou vereador para este CPF" | O CPF não tem vínculo institucional **ativo** em nenhuma Câmara | Conferir em `/administracao` da Câmara se o acesso foi concedido (e não revogado) |
+| "Este CPF não tem acesso a esta Câmara" | Entrou pelo link de outra Câmara | Entrar por `/entrar` (sem o link) |
+| "Muitas tentativas a partir desta rede" | Passou de 30 consultas de CPF em 5 min no mesmo IP | Esperar; se for a rede da Câmara inteira, subir `ENTRADA_LIMITE_POR_IP` |
+| "Muitas tentativas erradas. A conta fica bloqueada por alguns minutos" | Trava do Keycloak (10 senhas erradas) | Esperar (1 a 15 min); o Keycloak destrava sozinho |
+| "Senha incorreta" e a pessoa esqueceu a senha | — | Novo convite (ver acima). O "esqueci a senha" do Keycloak fica desligado: depende do SMTP de produção |

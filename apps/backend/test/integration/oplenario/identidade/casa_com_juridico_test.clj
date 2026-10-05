@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real): `casa-tem-papel-ativo?` (ADR-0019 Eixo 5) — a Casa tem juridico ativo quando existe pelo menos um
   vinculo ATIVO de pessoa da Casa com o papel `juridico`. Papel de vinculo suspenso ou encerrado nao conta, o vinculo de
   cidadao nao conta, e a resposta e' por Casa (RLS)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
             [oplenario.identidade.components.repositorio :as repo]
@@ -18,10 +19,6 @@
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
 
 (defn- repo-identidade [] (assoc (repo/repositorio) :datasource {:ds *ds*}))
-
-(defn- dv [ds]
-  (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa! [r] (repo/criar-identidade! r {:id (random-uuid) :cpf (cpf-valido) :nome "Pessoa"}))
 

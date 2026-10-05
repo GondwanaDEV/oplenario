@@ -123,6 +123,19 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
+**Entrada pelo CPF e o Keycloak escondido ENTREGUES (05/10/2026, [ADR-0025](docs/adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
+- servidor e vereador digitam o CPF em `/entrar` (ou no link `/entrar/<uuid>` da Câmara); `POST /auth/localizar` diz em
+  quais Câmaras há vínculo institucional ativo (função estreita `identidade.casas_com_acesso_institucional`; o vínculo
+  segue sob RLS) e o BFF vai direto à senha da Câmara com `login_hint` = identidade-id. Mais de uma Câmara →
+  `/entrar/escolher`. CPF só no corpo, limite de 30 por IP a cada 5 min (`oplenario.limite-de-taxa`, o primeiro do backend);
+- a tela de senha é o tema `oplenario` do Keycloak (`apps/keycloak/`, FreeMarker, o arquétipo `login.html`), em pt-BR,
+  com o nome da Câmara; os ids `username`/`password`/`kc-login` não mudaram (workflows de homolog);
+- o realm ganha nome, pt-BR, tema de login e de e-mail, política de senha e trava temporária de força bruta;
+- **o convite pede senha + código do aplicativo** (antes só passkey, e o login pedia senha: o convidado real ficava sem
+  como entrar). A passkey volta quando o domínio definitivo existir — adia o passwordless-first da §22.5 (confirmar);
+- **falta em produção:** a imagem do Keycloak com o tema e "Reaplicar configuração de login" em cada Câmara (`docs/27`,
+  seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
+
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:
   - dois operadores para suspender; o incidente começa com um e volta sozinho se o 2º não confirmar em 24 h;
@@ -500,8 +513,6 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
     `folha-sessao-v2`;
   - em modo dev, conceder acesso grava o vínculo e devolve 500 (não há realm para provisionar);
-  - instáveis conhecidos: `mesa-audiencia.test.tsx` (cronômetro, `04:50` em vez de `00:40`) e o CPF sorteado em ~25
-    arquivos de teste do backend (colisão a cada ~8 mil corridas);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de

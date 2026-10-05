@@ -23,6 +23,7 @@
             (:ente-id c)       (update :ente-id ->uuid))))
       (catch Exception _ nil)))
   (provisionar-realm! [_ _] (throw (ex-info "idp-dev: provisionamento indisponivel (carry Keycloak)" {})))
+  (provisionar-realm! [_ _ _] (throw (ex-info "idp-dev: provisionamento indisponivel (carry Keycloak)" {})))
   (criar-usuario! [_ _ _] (throw (ex-info "idp-dev: criar-usuario indisponivel (carry Keycloak)" {})))
   (convidar! [_ _ente-id _identidade-id]
     (throw (ex-info "idp-dev nao envia convite (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))

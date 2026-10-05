@@ -64,28 +64,27 @@ const cab = (t: string) => ({ Authorization: `Bearer ${t}`, "Content-Type": "app
 // ---------------------------------------------------------------------------------------------- utilidades
 
 // ---------------------------------------------------------------------------- a página abriu de verdade?
-// DIAGNÓSTICO DA REPROVAÇÃO DE CI (run 37293945634): o `next dev` respondeu 404 ao documento de
-// `/portal/casa/:ente/materias/:id` na 1ª visita da rota (compilação a frio, "next.js: 607ms"; o status NÃO depende
-// do dado: com id inexistente a rota devolve 200). Esse 404 é a página de "não encontrado" do Next, não a ficha: o
-// cliente nunca busca nada e o teste esperava 60 s por um título que não viria. Duas defesas, nenhuma é timeout:
-//  1) `aquecer`: antes de qualquer teste, cada rota que a spec abre é visitada em série até responder 200 (se nunca
-//     responder, reprova nomeando a rota);
-//  2) `abrir`: toda navegação confere o status do documento na hora, então um 404/500 reprova em segundos dizendo qual.
+// As specs da Trilha 3 rodam em paralelo no MESMO banco: outra spec cria vereador, matéria e votação enquanto esta lê.
+// Por isso (a) `aquecer` só faz o `next dev` compilar cada rota antes dos testes — qualquer resposta abaixo de 500
+// serve (a ficha de uma matéria que não existe é 404 de verdade); (b) `abrir` confere o status do documento na hora,
+// então 404/500 reprova em segundos dizendo qual; (c) toda comparação "a tela bate com a API" relê a API e recarrega
+// a página até as duas concordarem (`toPass`), em vez de comparar duas leituras feitas em instantes diferentes.
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const UUID_QUALQUER = "00000000-0000-0000-0000-000000000abc";
 
 async function aquecer(rotas: string[]) {
   for (const rota of rotas) {
     let status = 0;
-    for (let i = 0; i < 10 && status !== 200; i++) {
+    const compilou = () => status >= 200 && status < 500;
+    for (let i = 0; i < 10 && !compilou(); i++) {
       try {
         status = (await fetch(`${BASE}${rota}`, { redirect: "manual", signal: AbortSignal.timeout(90_000) })).status;
       } catch {
         status = 0;
       }
-      if (status !== 200) await new Promise((ok) => setTimeout(ok, 1_000));
+      if (!compilou()) await new Promise((ok) => setTimeout(ok, 1_000));
     }
-    expect(status, `aquecer ${rota}: o frontend nunca respondeu 200 (último status ${status})`).toBe(200);
+    expect(compilou(), `aquecer ${rota}: o frontend nunca serviu a rota (último status ${status})`).toBe(true);
   }
 }
 
@@ -313,16 +312,19 @@ async function portalJson<T>(ctx: APIRequestContext, rota: string): Promise<T> {
 }
 
 test.describe("E11-2 o portal do cidadão, sem login", () => {
-  test.setTimeout(150_000);
+  test.setTimeout(300_000);
 
   test("/leis abre sem login: a lista bate com o servidor e a tela não mostra UUID nem enum cru", async ({ page }) => {
     const ctx = await pwRequest.newContext();
-    const { "normas-total": total } = await portalJson<{ "normas-total": number }>(ctx, "legislacao");
-    await abrir(page, `${PORTAL}/leis`);
+    let total = 0;
+    await expect(async () => {
+      ({ "normas-total": total } = await portalJson<{ "normas-total": number }>(ctx, "legislacao"));
+      await abrir(page, `${PORTAL}/leis`);
+      await expect(page.getByRole("heading", { level: 1, name: "Leis e normas" })).toBeVisible({ timeout: 30_000 });
+      if (total > 0) await expect(page.getByText(total === 1 ? "1 norma publicada" : `${total} normas publicadas`)).toBeVisible({ timeout: 10_000 });
+    }).toPass({ timeout: 120_000 });
     await expect(page).toHaveURL(new RegExp(`${PORTAL}/leis`));
-    await expect(page.getByRole("heading", { level: 1, name: "Leis e normas" })).toBeVisible({ timeout: 60_000 });
     if (total > 0) {
-      await expect(page.getByText(total === 1 ? "1 norma publicada" : `${total} normas publicadas`)).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole("list", { name: "Leis e normas publicadas" }).getByRole("listitem").first()).toBeVisible();
     } else {
       await expect(page.getByText("Esta Câmara ainda não publicou leis aqui.")).toBeVisible({ timeout: 30_000 });
@@ -333,14 +335,20 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
 
   test("/vereadores abre sem login: quem exerce o mandato, com o nome parlamentar, sem UUID nem enum cru", async ({ page }) => {
     const ctx = await pwRequest.newContext();
-    const { vereadores } = await portalJson<{ vereadores: { "nome-parlamentar": string | null; nome: string | null }[] }>(ctx, "vereadores");
-    expect(vereadores.length, "a Casa semeada tem vereadores em exercício").toBeGreaterThan(0);
-    await abrir(page, `${PORTAL}/vereadores`);
-    await expect(page.getByRole("heading", { level: 1, name: "Vereadores em exercício" })).toBeVisible({ timeout: 60_000 });
+    type V = { "nome-parlamentar": string | null; nome: string | null };
+    let vereadores: V[] = [];
     const cartoes = page.getByRole("list", { name: "Vereadores em exercício" }).getByRole("listitem");
-    await expect(cartoes).toHaveCount(vereadores.length, { timeout: 30_000 });
+    // a E1 cria vereador e mandato em paralelo: a contagem só vale entre uma leitura da API e uma carga da página feitas juntas
+    await expect(async () => {
+      ({ vereadores } = await portalJson<{ vereadores: V[] }>(ctx, "vereadores"));
+      expect(vereadores.length, "a Casa semeada tem vereadores em exercício").toBeGreaterThan(0);
+      await abrir(page, `${PORTAL}/vereadores`);
+      await expect(page.getByRole("heading", { level: 1, name: "Vereadores em exercício" })).toBeVisible({ timeout: 30_000 });
+      await expect(cartoes).toHaveCount(vereadores.length, { timeout: 10_000 });
+    }).toPass({ timeout: 120_000 });
     const primeiro = vereadores[0]["nome-parlamentar"];
-    if (primeiro) await expect(cartoes.first()).toContainText(primeiro);
+    // a ordem da tela não é a da API, e outra spec cria vereador que entra antes: o nome tem de estar em ALGUM cartão
+    if (primeiro) await expect(cartoes.filter({ hasText: primeiro }).first()).toBeVisible();
     semUuidNemEnumCru(await textoVisivel(page), "/vereadores");
     await ctx.dispose();
   });
@@ -380,11 +388,16 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
     }
     expect(alvo, "nenhuma matéria do portal tem 2 movimentações com etapa nomeada: a projeção do desfecho/etapa não rodou").not.toBeNull();
 
-    await abrir(page, `${PORTAL}/materias/${alvo!.id}`);
-    await expect(page.getByRole("heading", { name: "Por onde a matéria passou" })).toBeVisible({ timeout: 60_000 });
     const linha = page.getByRole("list", { name: "Movimentações da matéria, da mais recente para a mais antiga" }).getByRole("listitem");
-    await expect(linha).toHaveCount(alvo!.mov.movimentacoes.length);
-    await expect(linha.first()).toContainText(alvo!.mov.movimentacoes[0].etapa!);
+    // outra spec pode estar tramitando esta mesma matéria: relê as movimentações e recarrega a ficha até baterem
+    let mov = alvo!.mov;
+    await expect(async () => {
+      mov = await portalJson<Mov>(ctx, `materias/${alvo!.id}/movimentacoes`);
+      await abrir(page, `${PORTAL}/materias/${alvo!.id}`);
+      await expect(page.getByRole("heading", { name: "Por onde a matéria passou" })).toBeVisible({ timeout: 30_000 });
+      await expect(linha).toHaveCount(mov.movimentacoes.length, { timeout: 10_000 });
+      await expect(linha.first()).toContainText(mov.movimentacoes[0].etapa!, { timeout: 5_000 });
+    }).toPass({ timeout: 120_000 });
     await expect(linha.first()).toContainText("Etapa atual");
     semUuidNemEnumCru(await textoVisivel(page), "ficha pública da matéria");
     await ctx.dispose();

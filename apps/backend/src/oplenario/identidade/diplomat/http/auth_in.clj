@@ -45,6 +45,7 @@
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
             [oplenario.identidade.components.repositorio :as repo]
+            [oplenario.identidade.models.identidade :as mod]
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.idp :as idp]
             [oplenario.kernel.tempo :as tempo])
@@ -84,6 +85,47 @@
            :nome-oficial (:nome-oficial e)
            :nome-curto   (:nome-curto e)})
         (http/json-resposta 404 {:erro "ente nao encontrado"})))))
+
+(def ^:private max-cpf-chars
+  "Teto do campo `cpf` no corpo: 11 digitos com mascara (`000.000.000-00`) cabem folgado; o resto e' lixo."
+  32)
+
+(defn- corpo->cpf
+  "Corpo JSON (chaves STRING) -> CPF so' com os digitos, valido pelo digito verificador. ALLOWLIST: so' `cpf` e' lido.
+  Qualquer outra forma -> 400 sem tocar o banco."
+  [json-params]
+  (let [bruto (when (map? json-params) (get json-params "cpf"))
+        digitos (when (and (string? bruto) (<= (count bruto) max-cpf-chars)) (str/replace bruto #"[^0-9]" ""))]
+    (when-not (mod/valido-cpf? digitos)
+      (throw (ex-info "cpf invalido" {:tipo :validacao/invalido :campo :cpf})))
+    digitos))
+
+(defn- localizar-handler
+  "POST /auth/localizar (ADR-0025) — a entrada pelo CPF: em quais Casas a pessoa tem acesso INSTITUCIONAL ativo e o
+  `login-hint` (o identidade-id, que e' o usuario dela no realm de cada Casa) para o BFF levar o navegador direto a'
+  tela de senha. O CPF fica so' aqui: nao vai ao Keycloak, nao vai para a URL, nao vai para o log.
+   - CPF fora do digito verificador -> 400, sem consultar o banco.
+   - Sem identidade, sem vinculo, ou so' Casas encerradas -> 200 {:casas []} SEM hint (nao entrega o id de ninguem).
+   - `casa-para-login` (fn ente-id -> {:nome-oficial :nome-curto} | nil, injetada pelo host) tira a Casa encerrada ou
+     inexistente — identidade nunca importa cadastros (§22.10).
+  A resposta revela a quem conhece o CPF em quais Casas a pessoa atua (ver ADR-0025: quase sempre e' publico, e o
+  limite por IP do host segura a varredura). A consulta ao banco roda mesmo sem identidade, para o tempo de resposta
+  nao contar se o CPF existe."
+  [repo-identidade casa-para-login]
+  (fn [req]
+    (let [cpf (corpo->cpf (:json-params req))
+          iid (repo/id-por-cpf repo-identidade cpf)
+          entes (repo/casas-com-acesso-institucional repo-identidade (or iid (UUID/randomUUID)))
+          casas (when iid
+                  (->> entes
+                       (keep (fn [ente-id]
+                               (when-let [{:keys [nome-oficial nome-curto]} (casa-para-login ente-id)]
+                                 {:ente-id (str ente-id) :nome-oficial nome-oficial :nome-curto nome-curto})))
+                       (sort-by (juxt :nome-oficial :ente-id))
+                       vec))]
+      (http/json-resposta 200 (if (seq casas)
+                                {:casas casas :login-hint (str iid)}
+                                {:casas []})))))
 
 (def ^:private max-token-chars
   "Teto de sanidade do :token no corpo (defesa-em-profundidade; o interceptor global `corpo-json` ja' limita
@@ -178,8 +220,14 @@
   separado). `sessao` = o mapa `:sessao` da config (`:absoluta-h`/`:ociosa-min`), JA RESOLVIDO pelo host
   (`oplenario.rotas/montar`, mesmo padrao do `keycloak` injetado em Task 3 — o fallback pra
   `config/carregar` vive LA, nao aqui). `oplenario.rotas` funde este fragmento."
-  [{:keys [info-ente keycloak idp repo-identidade relogio sessao]}]
-  #{["/auth/descoberta/:ente" :get
+  [{:keys [info-ente keycloak idp repo-identidade relogio sessao casa-para-login limite-localizar]}]
+  #{["/auth/localizar" :post
+     ;; ADR-0025: PUBLICA (pre-login). O limite por IP (host) vem ANTES do parse do corpo: quem passou do limite nem
+     ;; tem o corpo lido. Sem `limite-localizar` (testes de borda) a rota segue sem limite.
+     (cond-> [] limite-localizar (conj limite-localizar)
+             true (conj it/corpo-json (localizar-handler repo-identidade casa-para-login)))
+     :route-name :identidade/localizar-casas]
+    ["/auth/descoberta/:ente" :get
      [(descoberta-handler info-ente keycloak)]
      :route-name :identidade/descoberta]
     ["/auth/sessoes" :post

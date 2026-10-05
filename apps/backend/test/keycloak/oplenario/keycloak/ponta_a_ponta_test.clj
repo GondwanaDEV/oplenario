@@ -2,7 +2,8 @@
   "INTEGRACAO gated (PG + Keycloak reais): prova o criterio de sucesso #4 do design — um token emitido
   por um realm QUE NOS PROVISIONAMOS, verificado por verificar-token, produz claims que resolver-sessao
   transforma num ator real. Fecha o loop Keycloak-adapter -> seam de identidade ja' existente."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [jsonista.core :as json]
             [oplenario.config :as config]
@@ -30,9 +31,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
 
@@ -91,8 +89,8 @@
                   (.build))
             (HttpResponse$BodyHandlers/ofString)))
 
-;; --- o usuario nasce devendo passkey (requiredActions ["webauthn-register-passwordless"], §22.5.2 eixo
-;; F, Task 3): sem descarregar essa acao o Keycloak recusa ROPC ("account is not fully set up") mesmo com
+;; --- o usuario nasce devendo a senha e o codigo do primeiro acesso (requiredActions UPDATE_PASSWORD + CONFIGURE_TOTP,
+;; ADR-0025; §22.5.2 eixo F): sem descarregar essas acoes o Keycloak recusa ROPC ("account is not fully set up") mesmo com
 ;; senha valida. Este teste prova a mecanica token->ator, nao o bootstrap de 1o acesso -- o mesmo
 ;; racional de setar-senha-teste! acima (que ja' fura o bootstrap real de e-mail de uso unico so' para
 ;; poder logar). Descarregar a required-action aqui e' o mesmo gesto, pela mesma razao.

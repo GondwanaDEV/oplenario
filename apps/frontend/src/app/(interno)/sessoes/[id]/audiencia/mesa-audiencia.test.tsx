@@ -93,8 +93,15 @@ describe("Mesa da audiência pública", () => {
     render(<MesaAudiencia token="tok" sessaoId="s1" />);
     const relogio = await screen.findByTestId("relogio");
     expect(relogio.textContent).toBe("04:50");
+    // o relógio aparece na pintura, mas o intervalo que o faz andar nasce num efeito que o React roda depois; sob
+    // carga o teste chegava ao `advanceTimersByTime` antes dele e o relógio ficava em 04:50 (CI do PR #182).
+    // `vi.waitFor` usa o relógio real, então espera mesmo com os timers falsos ligados.
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
     expect((screen.getByRole("button", { name: "Chamar José Lima" }) as HTMLButtonElement).disabled).toBe(true);
 
+    // o relógio só anda depois que o efeito registra o intervalo; o `findBy` devolve o elemento assim que ele pinta, e
+    // o efeito pode vir depois. Sem esta espera, o avanço do tempo caía no vazio e o relógio ficava em "04:50".
+    await vi.waitFor(() => expect(vi.getTimerCount()).toBeGreaterThan(0));
     act(() => vi.advanceTimersByTime(250_000));
     expect(screen.getByTestId("relogio").textContent).toBe("00:40");
     expect(screen.getByTestId("relogio").className).toContain("ultimo-minuto");

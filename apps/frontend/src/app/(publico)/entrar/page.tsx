@@ -1,29 +1,24 @@
-// Tela /entrar — placeholder sem `ente` na URL (Task 12, Onda D Slice 2 — telas de login PKCE). Alvo do
-// middleware (T11, src/middleware.ts) quando falta o cookie `sessao` numa rota protegida: o middleware
-// não conhece o tenant ali (só o link específico /entrar/<ente>, que a Câmara envia ao servidor/
-// vereador, sabe). Por isso esta tela NUNCA oferece um botão de login genérico — não há qual Keycloak
-// (qual realm) chamar sem um `ente` resolvido. Só orienta a buscar a URL certa.
+// Tela /entrar — a porta de entrada de servidores e vereadores (ADR-0025: a entrada pelo CPF).
 //
-// Atalho dev-token (mesmo guard de next.config.ts/middleware.ts: NODE_ENV !== "production"): é uma NOTA
-// informativa, não um link funcional — o dev-token se anexa como `?token=` na URL da PÁGINA PROTEGIDA que
-// se quer acessar (ver src/lib/auth.tsx), não em /entrar.
+// A pessoa digita o CPF; /api/auth/entrar descobre em quais Câmaras ela tem acesso e a leva direto à tela de senha da
+// Câmara dela (o Keycloak com o tema do O Plenário, usuário já preenchido). Antes desta ADR esta tela era um
+// placeholder ("acesse pela URL da sua Câmara"): sem o UUID da Câmara não havia como entrar — o `[GAP]` de entrada a
+// frio da Onda D, fatia 2. O middleware manda para cá quem abre uma rota protegida sem sessão, com `?redirect=`.
 //
-// `?erro=login` (fast-follow, mesma sessão de Task 12): o login handler (app/api/auth/login/route.ts)
-// falha fechado redirecionando pra CÁ quando a descoberta do tenant dá 404/rede/erro — sem isso, quem
-// chegava aqui via login falho via a MESMA cópia genérica de sempre, sem indicação de que algo deu
-// errado. `mensagemErroEntrada` (lib/entrar-erro.ts) deriva a mensagem; aqui só decide renderizar.
-// Server Component: `searchParams` é Promise (Next 16 App Router) — mesmo padrão de entrar/[ente]/page.tsx.
+// `?erro=` vem do login handler (`login`) ou da entrada pelo CPF; `mensagemErroEntrada` deriva a frase.
+// Server Component: `searchParams` é Promise (Next 16 App Router).
 
 import "./entrar.css";
 import { SeloPlenario } from "./selo-plenario";
+import { FormularioCpf } from "./formulario-cpf";
 import { mensagemErroEntrada } from "@/lib/entrar-erro";
 
-export default async function PaginaEntrarPlaceholder({
+export default async function PaginaEntrar({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; redirect?: string }>;
 }) {
-  const { erro } = await searchParams;
+  const { erro, redirect } = await searchParams;
   const mensagemErro = mensagemErroEntrada(erro);
 
   return (
@@ -38,19 +33,22 @@ export default async function PaginaEntrarPlaceholder({
         <div className="entrar-corpo">
           <SeloPlenario tamanho={44} className="entrar-selo" />
 
+          <div className="entrar-titulo">
+            <h1>Entrar no O Plenário</h1>
+            <p>Servidores e vereadores da Câmara.</p>
+          </div>
+
           {mensagemErro && (
             <div className="entrar-erro" role="alert">
               {mensagemErro}
             </div>
           )}
 
-          <div className="entrar-titulo">
-            <h1>Acesse pela URL da sua Câmara</h1>
-            <p>
-              O login é específico de cada Câmara — não existe uma porta de entrada única. Use o link
-              que a sua Câmara enviou (algo como <code>oplenario.app/entrar/sua-camara</code>).
-            </p>
-          </div>
+          <FormularioCpf redirect={redirect} />
+
+          <p className="entrar-cidadao">
+            É cidadão? Acompanhe e participe pelo portal da sua Câmara, com a conta gov.br.
+          </p>
 
           {process.env.NODE_ENV !== "production" && (
             <p className="entrar-dev-nota">

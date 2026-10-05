@@ -3,7 +3,8 @@
   modulo `comunicacao` recebe pronto pelos seams). So' recebe quem tem vinculo ATIVO de quem trabalha na Casa: o
   cidadao nunca, o vinculo suspenso nao, o vereador sem identidade e' contado em `:sem-acesso`. \"Todos os setores\" =
   servidores e administradores (nao vereadores). Quem envia a grupo: secretaria, admin, ou vereador da Mesa vigente."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido] :rename {cpf-valido cpf}]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.components.repositorio :as repo-cad]
@@ -29,9 +30,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*c* c] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (def hoje (LocalDate/parse "2026-10-02"))
 

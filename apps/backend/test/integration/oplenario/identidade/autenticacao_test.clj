@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real): o seam de auth-base (F1.4). De claims VERIFICADAS -> ator (resolver-sessao) ->
   camada de autorizacao do kernel (two-layer: grossa esfera/papel + fina policy.check). Prova o caminho
   ponta-a-ponta sem Keycloak vivo (os fluxos vivos passkey/gov.br/realm sao carry, infra-gated)."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
             [oplenario.identidade.autenticacao :as auth]
@@ -22,9 +23,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 ;; RepoIdentidade construido sobre o *ds* do teste (resolver-sessao agora recebe o Repo, nao o ds — §3-bis).
 (defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
