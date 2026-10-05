@@ -30,6 +30,7 @@ export interface MateriaOut {
   autorTipo?: string | null;
   autorTexto?: string | null;
   estado: string;
+  desfecho: string | null;
 }
 
 export interface MateriasOut {
@@ -54,6 +55,7 @@ export interface FichaOut {
   autorTipo?: string | null;
   autorTexto?: string | null;
   estado: string;
+  desfecho: string | null;
   norma?: NormaOut | null;
   resumo?: ResumoPublicoOut | null;
 }

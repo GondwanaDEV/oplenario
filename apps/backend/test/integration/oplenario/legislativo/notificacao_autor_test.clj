@@ -117,17 +117,18 @@
   (let [ente (random-uuid) vereador (random-uuid)]
     (publicar-norma-de-autor! ente vereador)
     ;; achado 6: `(some? (drenar! ...))` e' vacuo — `drenar!` devolve um INTEIRO, e `(some? 0)` tambem e'
-    ;; `true`; o teste passaria igual se `norma.publicada` nem existisse. O fluxo emite exatamente 2 eventos
-    ;; (`proposicao.protocolada` em `protocolar!` + `norma.publicada` em `publicar-norma!` — nenhum outro
-    ;; passo do fixture emite) e, sem identidade resolvivel, NENHUM `notificacao.requisitada` e' gerado —
-    ;; a contagem real drenada prova que os dois eventos do fluxo de fato passaram pelo relay.
+    ;; `true`; o teste passaria igual se `norma.publicada` nem existisse. O fluxo emite exatamente 4 eventos
+    ;; (`proposicao.protocolada` em `protocolar!`; `proposicao.desfecho-registrado` na sancao e na promulgacao,
+    ;; docs/16 linha 30; `norma.publicada` em `publicar-norma!` — o `gerar-autografo!` cru do fixture nao emite)
+    ;; e, sem identidade resolvivel, NENHUM `notificacao.requisitada` e' gerado — a contagem real drenada prova
+    ;; que os eventos do fluxo de fato passaram pelo relay.
     ;; FLAKE ESTRUTURAL (T1.3): `outbox/drenar!` nao e' escopado por ente — ele drena o outbox INTEIRO
     ;; do banco e devolve essa contagem global. Com outros testes na mesma suite (ou a stack de pe',
     ;; com o relay da aplicacao emitindo), `(= 2 ...)` reprovava em run cheio e passava isolado. A
     ;; pergunta que o criterio 2 realmente faz e' escopada: os 2 eventos DESTE fluxo passaram pelo relay?
     (drenar! (resolver-fixo {}))
     (let [{:keys [processados pendentes]} (outbox-do-ente ente)]
-      (is (= 2 processados) "criterio 2: os 2 eventos deste fluxo foram processados pelo relay")
+      (is (= 4 processados) "criterio 2: os 4 eventos deste fluxo foram processados pelo relay")
       (is (zero? pendentes) "nenhum evento deste fluxo ficou pendente — o relay nao lancou no meio"))
     (is (empty? (caixa ente)) "sem identidade resolvivel -> silencio honesto, nenhuma notificacao")))
 

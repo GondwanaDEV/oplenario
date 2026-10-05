@@ -16,6 +16,8 @@
 // para a demo/seed (Task 1.4), não uma verdade regulatória. QUALQUER estado fora deste mapa cai no
 // fallback FAIL-CLOSED da Global Constraint do plano: nunca lança, degrada para a faixa mínima honesta.
 
+import { situacaoDoDesfecho } from "./desfecho-vista";
+
 export type EstagioTramitacao = { rotulo: string; situacao: "concluido" | "ativo" | "pendente" };
 
 const ESTAGIOS_BASE = ["Protocolo", "Comissões", "1º turno", "2º turno", "Sanção"] as const;
@@ -74,10 +76,18 @@ export function rotularEstado(estado: string): string {
   return ROTULO_SITUACAO_POR_ESTADO[estado] ?? humanizarEstado(estado);
 }
 
-export function derivarTramitacao(estado: string): {
+export function derivarTramitacao(
+  estado: string,
+  // o último ato depois do plenário (portal, docs/16 linha 18): a partir do autógrafo é ele que diz onde a matéria
+  // está — o rito não sabe do Executivo nem da lei. Só a votação não muda o selo (ver desfecho-vista.ts).
+  desfecho?: string | null,
+): {
   estagios: EstagioTramitacao[];
   rotuloSituacao: string;
 } {
+  const peloDesfecho = situacaoDoDesfecho(desfecho);
+  if (peloDesfecho) return peloDesfecho;
+
   // terminal de sucesso: todo o rito se completou.
   if (estado === "aprovada") {
     return {

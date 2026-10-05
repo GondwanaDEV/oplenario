@@ -13,7 +13,8 @@
 
 (def ^:private cols
   [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :autor_id :estado
-   :projetado_em :atualizado_em :resumo_texto :resumo_versao :resumo_gerado_com_ia :resumo_publicado_em])
+   :projetado_em :atualizado_em :resumo_texto :resumo_versao :resumo_gerado_com_ia :resumo_publicado_em
+   :desfecho])
 
 (def ^:private teto-listagem
   "Teto server-side (anti unbounded-read, mesmo racional de teto-listagem/comentario) — sem paginacao nesta
@@ -62,6 +63,20 @@
                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
+
+(defn atualizar-desfecho!
+  "Projeta o ultimo ato da materia depois do plenario (docs/16, retriagem linhas 18 e 30). So' AVANCA: um ato mais
+  antigo que o ja' projetado (reentrega fora de ordem) nao volta atras. TOLERANTE como atualizar-estado! (materia
+  ausente ou ato superado = 0 linhas -> nil, nunca lanca: o relay e' compartilhado)."
+  [tx {:keys [ente-id proposicao-id desfecho desfecho-em]}]
+  {:pre [(some? ente-id) (some? proposicao-id) (some? desfecho) (some? desfecho-em)]}
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :transparencia.materia
+                         :set {:desfecho desfecho :desfecho_em desfecho-em :atualizado_em [:now]}
+                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                 [:or [:= :desfecho_em nil] [:<= :desfecho_em desfecho-em]]]}))]
+    (when-not (zero? (:next.jdbc/update-count r 0))
+      {:proposicao-id proposicao-id :desfecho desfecho})))
 
 (defn atualizar-metadados!
   "Projeta a edicao (`proposicao.editada`, Task 1-N1): ementa/autor_tipo/autor_texto/autor_id + atualizado_em
