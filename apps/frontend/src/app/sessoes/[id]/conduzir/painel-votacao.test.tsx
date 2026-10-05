@@ -255,3 +255,36 @@ describe("PainelVotacao — matéria de contas (ADR-0021)", () => {
     expect(screen.queryByText(/parecer prevalece|parecer foi rejeitado/)).toBeNull();
   });
 });
+
+describe("PainelVotacao — emenda à Lei Orgânica (CF art. 29)", () => {
+  const pelom: ItemPautaVotacao = {
+    id: "it9", tipoItem: "proposicao", proposicaoId: "p9", fase: "ordem_do_dia", ordem: 1,
+    proposicao: { tipo: "proposta_emenda_lom", ano: 2026, sequencial: 1, ementa: "Altera a Lei Orgânica" },
+  };
+
+  it("PELOM: quórum travado em 2/3, modalidade livre, e a regra dita em palavras", async () => {
+    montar({ votacaoAberta: null, itens: [pelom], emApreciacaoItemId: "it9" });
+    const quorum = screen.getByLabelText(/Quórum exigido/) as HTMLSelectElement;
+    expect(quorum.value).toBe("maioria_qualificada_2_3");
+    expect(quorum.disabled).toBe(true);
+    expect(screen.getByText(/Emenda à Lei Orgânica: só é aprovada com 2\/3 dos membros da Câmara/)).toBeTruthy();
+    expect((screen.getByLabelText("Simbólica") as HTMLInputElement).disabled).toBe(false);
+    await waitFor(() => expect(chamadasFetch).toContain("/api/contas-da-proposicao/p9"));
+    await waitFor(() => expect((screen.getByRole("button", { name: /Abrir votação/ }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole("button", { name: /Abrir votação/ }));
+    await waitFor(() =>
+      expect(abrir).toHaveBeenCalledWith(expect.objectContaining({ objetoId: "p9", modalidade: "nominal", quorumTipo: "maioria_qualificada_2_3" })),
+    );
+  });
+
+  it("trocar para uma matéria comum devolve o quórum à escolha da Mesa", () => {
+    const pl: ItemPautaVotacao = { id: "it8", tipoItem: "proposicao", proposicaoId: "p8", fase: "ordem_do_dia", ordem: 2,
+      proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 4, ementa: "Energia" } };
+    montar({ votacaoAberta: null, itens: [pelom, pl], emApreciacaoItemId: "it9" });
+    fireEvent.change(screen.getByLabelText(/Objeto da votação/), { target: { value: "p8" } });
+    const quorum = screen.getByLabelText(/Quórum exigido/) as HTMLSelectElement;
+    expect(quorum.disabled).toBe(false);
+    expect(quorum.value).toBe("maioria_simples");
+    expect(screen.queryByText(/Emenda à Lei Orgânica/)).toBeNull();
+  });
+});

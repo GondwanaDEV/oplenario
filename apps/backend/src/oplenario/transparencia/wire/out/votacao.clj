@@ -37,6 +37,9 @@
    [:modalidade [:enum "nominal" "simbolica" "secreta"]]
    [:quorum-tipo :string]
    [:resultado [:enum "aprovada" "rejeitada"]]
+   ;; o TURNO, quando a materia vota em mais de um (a emenda a Lei Organica, CF art. 29): 'aprovada' no 1o turno nao
+   ;; e' a materia aprovada. Ausente/nil = votacao que nao e' turno (o significado de sempre).
+   [:turno {:optional true} [:maybe :int]]
    [:placar {:optional true} [:maybe PlacarOut]]])
 
 (def VotacaoPublicaOut

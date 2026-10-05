@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  atoDaVotacao,
   nomeModalidade,
   nomeObjeto,
   nomeQuorum,
+  nomeResultado,
   nomeVoto,
   placarEmPalavras,
   resultadoEmPalavras,
@@ -21,6 +23,24 @@ describe("vocabulário do portal de votações", () => {
     expect(resultadoEmPalavras({ resultado: "aprovada", modalidade: "simbolica", placar: null })).toBe(
       "Aprovada por votação simbólica, sem contagem de votos",
     );
+  });
+
+  it("a votação de turno (emenda à Lei Orgânica, dois turnos) diz o turno: o 1º aprovado não é a matéria aprovada", () => {
+    expect(nomeResultado("aprovada", 1)).toBe("Aprovada em 1º turno");
+    expect(nomeResultado("rejeitada", 2)).toBe("Rejeitada em 2º turno");
+    expect(nomeResultado("aprovada")).toBe("Aprovada");
+    expect(nomeResultado("aprovada", null)).toBe("Aprovada");
+    expect(
+      resultadoEmPalavras({ resultado: "aprovada", modalidade: "nominal", turno: 1, placar: { sim: 7, nao: 2, abstencoes: 0 } }),
+    ).toBe("Aprovada em 1º turno: 7 votos a favor, 2 votos contra e 0 abstenções");
+    expect(atoDaVotacao({ objetoTipo: "proposicao", resultado: "aprovada", turno: 1 })).toBe(
+      "a matéria foi aprovada em 1º turno",
+    );
+    expect(atoDaVotacao({ objetoTipo: "proposicao", resultado: "aprovada", turno: 2 })).toBe(
+      "a matéria foi aprovada em 2º turno",
+    );
+    expect(atoDaVotacao({ objetoTipo: "proposicao", resultado: "aprovada" })).toBe("a matéria foi aprovada");
+    expect(atoDaVotacao({ objetoTipo: "redacao_final", resultado: "rejeitada" })).toBe("a redação final foi rejeitada");
   });
 
   it("nenhuma chave de backend chega crua ao leitor", () => {
