@@ -3,7 +3,7 @@
   um gatilho, escolhe a 1a transicao cujo GUARD passa (reusa o avaliador do motor, disciplina 5), grava o
   historico APPEND-ONLY e muda o estado da proposicao; guard que bloqueia = resultado normal (sem transicao).
   Usa um template FIXTURE ilustrativo (nao regulacao real — [GAP] de §22.7.5 segue GAP)."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.relacoes.cadastro :as rel-cad]
@@ -61,6 +61,44 @@
   ([tx ente tid pid gatilho alegado]
    (tram/transicionar! tx {:registro *registro* :ente-id ente :proposicao-id pid :template-id tid
                            :gatilho gatilho :alegado alegado :agora data})))
+
+(deftest criar-estado-recusa-ordem-repetida-entre-etapas
+  ;; `template_estado.ordem` (migration 20261005000261): 0 = nao declarada; > 0 = posicao da etapa na linha do rito,
+  ;; UNICA entre as etapas (nao terminais). A recusa e' no save: a faixa "Onde esta a materia" le a ordem declarada.
+  (let [ente (random-uuid)
+        estado (fn [tx tid chave ordem terminal]
+                 (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave chave :nome chave
+                                         :ordem ordem :terminal terminal}))
+        novo-template (fn [tx chave]
+                        (let [tid (random-uuid)]
+                          (tram/criar-template! tx {:id tid :ente-id ente :chave chave :versao 1 :nome chave
+                                                    :estado-inicial "a"})
+                          tid))]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [tid (novo-template tx "rito_ordem_unica")]
+          (estado tx tid "a" 1 false)
+          (estado tx tid "b" 2 false)
+          (let [e (try (estado tx tid "c" 2 false) nil (catch clojure.lang.ExceptionInfo e e))]
+            (is (some? e) "segunda etapa com a ordem 2 e' recusada no save")
+            (is (= :ordem-repetida (:erro (ex-data e))))
+            (is (= [{:ordem 2 :chaves ["b" "c"]}] (:repetidas (ex-data e)))
+                "o erro diz QUEM repete: a que ja' estava e a que tentou entrar"))
+          (is (= 2 (count (:estados (tram/rito-do-template tx ente tid))))
+              "a recusada nao gravou (nem a metade)")
+          (testing "nao declarada (0 ou ausente) repete a vontade"
+            (estado tx tid "d" 0 false)
+            (estado tx tid "e" nil false))
+          (testing "desfecho (terminal) nao concorre com etapa nem com outro desfecho"
+            (estado tx tid "fim1" 2 true)
+            (estado tx tid "fim2" 2 true))
+          (testing "o mesmo numero em OUTRO template e' outra linha"
+            (let [outro (novo-template tx "rito_outro")]
+              (estado tx outro "a" 1 false)
+              (estado tx outro "b" 2 false)))
+          (testing "etapa com a ordem de um desfecho tambem entra (o desfecho nao e' passo)"
+            (estado tx tid "f" 3 true)
+            (estado tx tid "g" 3 false)))))))
 
 (deftest engine-guard-e-mudanca-de-estado
   (let [ente (random-uuid)]

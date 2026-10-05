@@ -8,8 +8,11 @@
             [clojure.set :as set]
             [clojure.string :as str]
             [clojure.test :refer [deftest is]]
+            [oplenario.sessoes.components.renderizador-pdf :as pdf]
             [oplenario.sessoes.components.serializador-folha :as ser])
-  (:import (java.util Locale)))
+  (:import (java.util Locale)
+           (org.apache.pdfbox Loader)
+           (org.apache.pdfbox.text PDFTextStripper)))
 
 (def ^:private v1 #uuid "00000000-0000-0000-0000-0000000000a1")
 (def ^:private v2 #uuid "00000000-0000-0000-0000-0000000000a2")
@@ -271,15 +274,19 @@
     (is (str/includes? html "&lt;img src=x onerror=alert(1)&gt;"))
     (is (not (str/includes? html "</td><td>injetado")))))
 
-(deftest id-da-sessao-e-escapado-nas-duas-secoes-que-o-imprimem
-  ;; O MESMO dado aparece no bloco 2 (identificacao) e na secao 10 (congelamento). Antes desta correcao um
-  ;; passava por `esc` e o outro nao — heterogeneidade que sobrevive a um refactor que troque `:id` por algo
-  ;; menos garantido que `:uuid`.
-  (let [doc (assoc-in documento-base [:sessao :id] "<script>xx")
+(deftest nome-da-sessao-e-escapado-nas-duas-secoes-que-o-imprimem
+  ;; O MESMO dado aparece no bloco 2 (identificacao) e na secao 10 (congelamento). Antes, esse dado era o id
+  ;; curto da sessao, e um ponto passava por `esc` e o outro nao. Desde 05/10/2026 os dois pontos imprimem o
+  ;; NOME da sessao (`:titulo`, texto) — e o id nao e' mais impresso em lugar nenhum.
+  (let [doc (-> documento-base
+                (assoc-in [:sessao :id] "<script>id")
+                (assoc-in [:sessao :titulo] "<script>xx"))
         {:keys [html]} (render-str doc)]
     (is (not (str/includes? html "<script>")))
-    (is (= 2 (count (re-seq #"&lt;script&gt;" html)))
-        "os DOIS pontos que imprimem o id curto tem de escapar")))
+    (is (= 2 (count (re-seq #"&lt;script&gt;xx" html)))
+        "os DOIS pontos que imprimem o nome da sessao tem de escapar")
+    (is (not (str/includes? html "&lt;script&gt;id"))
+        "o id da sessao nao e' impresso")))
 
 ;; ---------- sessao nao_realizada ----------
 
@@ -436,3 +443,53 @@
   (let [{:keys [html]} (render-str documento-base)]
     (is (re-find #"\.tabela-linhas \.nome-civil \{[^}]*display:\s*block" html)
         "o nome civil e' a SEGUNDA LINHA da celula; inline ele encosta no nome parlamentar")))
+
+;; ---------- a sessao pelo nome e o cargo da Mesa em palavras (nunca o prefixo do UUID, nunca a chave) ----------
+;; Achado de 05/10/2026 (folha vista em browser, HTML e PDF): o cabecalho dizia "Sessão 00000000" (os 8 primeiros
+;; caracteres do UUID) e a coluna Mesa a chave do cadastro (`1_secretario`, `vice`). Os campos novos sao
+;; ACRESCIMO a `folha-sessao-v1` (opcionais); sem eles (documento antigo) a folha cai no texto neutro.
+
+(def ^:private documento-com-nomes
+  (-> documento-base
+      (assoc-in [:sessao :titulo] "Sessão ordinária nº 3 de 20/06/2026")
+      (assoc :linhas [(assoc linha-presente :cargo-mesa "1_secretario" :cargo-mesa-rotulo "1ª Secretaria")
+                      linha-licenciada linha-sem-assento])))
+
+(deftest cabecalho-traz-o-titulo-da-sessao-nunca-o-prefixo-do-uuid
+  (let [html (marcacao (:html (render-str documento-com-nomes)))]
+    (is (str/includes? html "Sessão ordinária nº 3 de 20/06/2026"))
+    (is (not (str/includes? html "00000000"))
+        "o prefixo do UUID da sessao nao aparece em lugar nenhum da folha")))
+
+(deftest documento-sem-titulo-cai-em-sessao-de-data
+  (let [html (marcacao (:html (render-str documento-base)))]
+    (is (str/includes? html "Sessão de 20/06/2026")
+        "sem `:titulo` (folha montada antes do campo), a data da apuracao no fuso civil")
+    (is (not (str/includes? html "00000000")))))
+
+(deftest coluna-mesa-usa-o-rotulo-do-cargo
+  (let [html (marcacao (:html (render-str documento-com-nomes)))]
+    (is (str/includes? html "<td class=\"mesa\">1ª Secretaria</td>"))
+    (is (not (str/includes? html "1_secretario")))))
+
+(deftest coluna-mesa-sem-rotulo-humaniza-a-chave
+  (let [doc (assoc documento-base :linhas [(assoc linha-presente :cargo-mesa "vice")
+                                           (assoc linha-licenciada :cargo-mesa "1_secretario")])
+        html (marcacao (:html (render-str doc)))]
+    (is (str/includes? html "<td class=\"mesa\">Vice-presidência</td>"))
+    (is (str/includes? html "<td class=\"mesa\">1ª Secretaria</td>"))
+    (is (not (str/includes? html ">vice<")))
+    (is (not (str/includes? html "1_secretario")))))
+
+(deftest pdf-da-folha-traz-o-titulo-e-o-cargo-em-palavras
+  ;; O PDF nasce do MESMO HTML canonico; o teste afirma sobre o TEXTO extraido do PDF real.
+  (let [{html :bytes} (ser/serializar (ser/serializador-folha-html) documento-com-nomes)
+        {pdf-bytes :bytes} (pdf/renderizar (pdf/renderizador-pdf) html instante)
+        ;; espaco normalizado: a coluna Mesa e' estreita e quebra '1ª Secretaria' em duas linhas no papel
+        texto (str/replace (with-open [d (Loader/loadPDF ^bytes pdf-bytes)]
+                             (.getText (PDFTextStripper.) d))
+                           #"\s+" " ")]
+    (is (str/includes? texto "Sessão ordinária nº 3 de 20/06/2026"))
+    (is (str/includes? texto "1ª Secretaria"))
+    (is (not (str/includes? texto "00000000")))
+    (is (not (str/includes? texto "1_secretario")))))

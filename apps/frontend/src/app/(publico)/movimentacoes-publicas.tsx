@@ -10,6 +10,11 @@
 //  - mais movimentações do que o servidor devolve: "Mostrando as N mais recentes, de um total de M";
 //  - falha de rede / resposta estranha: a seção diz que não carregou, e a ficha segue de pé (degradação por seção).
 // Enquanto carrega não mostra nada (evita o flash de "sem histórico").
+//
+// "ETAPA ATUAL" é a etapa mais recente que NÃO é votação. Votar não move a matéria de etapa (encerrar a votação não
+// transiciona o rito, e o selo da ficha só muda a partir do autógrafo): marcar "Aprovada em 1º turno" como etapa atual
+// contradizia o selo "Em pauta" ao lado. A votação continua na lista, com a data e o nome do ato (`votacao` vem do
+// servidor; resposta sem o campo conta como etapa).
 
 import { useEffect, useState } from "react";
 import { buscarPublico } from "@/lib/portal-api";
@@ -43,8 +48,20 @@ export function useMovimentacoesPublicas(ente: string, proposicaoId: string): Mo
   return res.chave === chave ? res.dado : null;
 }
 
+/** O nome da etapa atual (a movimentação mais recente, a mesma marcada "Etapa atual"), ou null quando o histórico não
+ * carregou ou o rito não nomeou a etapa. É o que o chip da ficha pública diz. */
+export function etapaAtualDasMovimentacoes(dado: MovimentacoesOut | "erro" | null): string | null {
+  if (!dado || dado === "erro") return null;
+  return dado.movimentacoes[0]?.etapa ?? null;
+}
+
 export function MovimentacoesPublicas({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const dado = useMovimentacoesPublicas(ente, proposicaoId);
+  return <SecaoMovimentacoes dado={dado} />;
+}
+
+/** A seção a partir do histórico já buscado (a ficha busca uma vez e usa também no chip). */
+export function SecaoMovimentacoes({ dado }: { dado: MovimentacoesOut | "erro" | null }) {
   if (dado === null) return null;
 
   return (
@@ -61,6 +78,7 @@ export function MovimentacoesPublicas({ ente, proposicaoId }: { ente: string; pr
 
 function Historico({ dado }: { dado: MovimentacoesOut }) {
   const { movimentacoes, movimentacoesTotal, historicoCompleto, historicoDesde } = dado;
+  const atual = movimentacoes.findIndex((m) => !m.votacao);
   if (movimentacoes.length === 0) {
     return <p className="mov-aviso">O histórico desta matéria ainda não está disponível aqui.</p>;
   }
@@ -79,12 +97,12 @@ function Historico({ dado }: { dado: MovimentacoesOut }) {
       )}
       <ol className="mov-lista" aria-label="Movimentações da matéria, da mais recente para a mais antiga">
         {movimentacoes.map((m, i) => (
-          <li key={`${m.ocorridoEm}-${i}`} className="mov-item" aria-current={i === 0 ? "step" : undefined}>
+          <li key={`${m.ocorridoEm}-${i}`} className="mov-item" aria-current={i === atual ? "step" : undefined}>
             <time className="mov-data" dateTime={m.ocorridoEm}>
               {formatarData(m.ocorridoEm)}
             </time>
             <p className="mov-etapa">{m.etapa ?? "Mudança de etapa"}</p>
-            {i === 0 && <span className="mov-atual">Etapa atual</span>}
+            {i === atual && <span className="mov-atual">Etapa atual</span>}
           </li>
         ))}
       </ol>

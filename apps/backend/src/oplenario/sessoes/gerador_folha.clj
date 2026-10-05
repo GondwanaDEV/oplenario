@@ -16,7 +16,15 @@
 (def spec-versao
   "A versao do SPEC do documento — carimbada em todo documento produzido por `renderizar`. Etapa 5 fatia 1
   e' a v1; um formato incompativel (campo removido/renomeado, nao so' adicionado) exige v2, nunca reescrever
-  esta constante."
+  esta constante.
+
+  Acrescimos a v1 (sem v2, pela regra acima):
+    - 05/10/2026: `:sessao :titulo` ('Sessão ordinária nº 3 de 01/10/2026') e `:cargo-mesa-rotulo` por linha
+      ('1ª Secretaria'), opcionais. A folha deixou de imprimir o prefixo do UUID da sessao e a chave do cargo
+      (`1_secretario`, `vice`). Documento sem eles cai em 'Sessão de <data da apuração>' e no cargo humanizado
+      pelo serializador. Folha JA' congelada nao muda: o congelamento guarda os BYTES do HTML e do PDF no
+      objeto_store, com os dois SHA-256 em `sessoes.folha_sessao`, e as rotas de leitura servem esses bytes —
+      nunca re-serializam. So' a proxima versao congelada sai com os textos novos."
   "folha-sessao-v1")
 
 (defn- exigir! [v campo]

@@ -122,6 +122,15 @@
                                                 (controllers/ficha-da-casa repo-op deps (ente-do-path req)
                                                                            (agora relogio)))))))
 
+(defn- atos-sem-desfecho-handler
+  "GET /operacao/atos-sem-desfecho — ADR-0017 (adendo de 05/10/2026): os atos da Operacao (entrada no console, orcamento de
+  IA, reaplicacao do login) iniciados cujo desfecho a atuacao nao registrou. So' leitura: o desfecho que falta pode ser
+  que o ato nao aconteceu ou que aconteceu e o registro caiu — quem confere e' a pessoa. Mais novo que a tolerancia
+  (`controllers/tolerancia-sem-desfecho-segundos`) ainda pode estar em curso e nao entra. Total sempre; lista truncada
+  diz `truncado`."
+  [repo-op relogio]
+  (fn [_] (http/json-resposta 200 (out-ente/sem-desfecho->wire (controllers/atos-sem-desfecho repo-op (agora relogio))))))
+
 (defn- reenviar-convite-handler [repo-op deps]
   (com-erros (fn [req] (http/json-resposta 200 (out-ente/casa->wire
                                                 (controllers/reenviar-convite! repo-op deps (:ator req)
@@ -330,5 +339,7 @@
        :route-name :admin-sistema/reenviar-convite]
       ["/operacao/casas/:ente/realm" :post [auth papel (reprovisionar-realm-handler repo-admin-sistema deps-registro)]
        :route-name :admin-sistema/reprovisionar-realm]
+      ["/operacao/atos-sem-desfecho" :get [auth papel (atos-sem-desfecho-handler repo-admin-sistema relogio)]
+       :route-name :admin-sistema/atos-sem-desfecho]
       ["/operacao/ia" :get [auth papel (observabilidade-ia-handler observabilidade-ia)]
        :route-name :admin-sistema/observabilidade-ia]}))

@@ -42,3 +42,11 @@
   [{:keys [ato redacao-final turno]}]
   (when-not (str/blank? ato)
     (str "ato:" ato (when redacao-final ":redacao_final") (when turno (str ":turno_" turno)))))
+
+(defn votacao?
+  "A linha da linha do tempo e' uma VOTACAO em plenario (aprovada/rejeitada, de turno ou nao, ou a redacao final)? Pela
+  chave de idempotencia (`chave` acima), que so' a votacao gera com `ato:aprovada`/`ato:rejeitada`. A tela usa isto para
+  nao marcar a votacao como 'Etapa atual': votar nao move a materia de etapa (encerrar a votacao nao transiciona o rito,
+  e o selo so' muda a partir do autografo). Chave de etapa do rito (texto livre por Casa) nunca comeca com `ato:`."
+  [etapa-chave]
+  (boolean (some->> etapa-chave (re-find #"^ato:(aprovada|rejeitada)(:|$)"))))

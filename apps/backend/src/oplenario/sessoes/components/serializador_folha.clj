@@ -39,7 +39,8 @@
   fatia."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [oplenario.kernel.tempo :as tempo])
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.logic.rotulos :as rotulos])
   (:import (java.time.format DateTimeFormatter DecimalStyle)))
 
 (set! *warn-on-reflection* true)
@@ -177,7 +178,11 @@
         inconsistente? (:inconsistencia-cadastro linha)
         risco? (:sem-assento linha)
         partido (esc (or (nao-branco (:partido linha)) "—"))
-        mesa (esc (or (nao-branco (:cargo-mesa linha)) "—"))
+        ;; o rotulo resolvido no controller; documento sem ele (montado antes do campo) humaniza a chave aqui —
+        ;; a coluna nunca mostra `1_secretario`/`vice` crus.
+        mesa (esc (or (nao-branco (:cargo-mesa-rotulo linha))
+                      (rotulos/rotulo-do-cargo-na-mesa (:cargo-mesa linha))
+                      "—"))
         situacao (esc (get rotulo-estado-chamada (:estado linha) (str (:estado linha))))]
     (str "<tr class=\"linha-v\">"
          "<td class=\"conf\"></td>"
@@ -281,18 +286,22 @@
 
 ;; ---------- 2 · identificacao do documento ----------
 
-(defn- identificacao-html [{:keys [spec-versao sessao instante]} versao]
-  (let [id-curto (subs (str (:id sessao)) 0 8)]
+;; O nome da sessao em palavras (`:titulo`, acrescimo a v1). Documento sem ele cai em 'Sessão de <data>', a data
+;; civil da apuracao — nunca o prefixo do UUID (achado de 05/10/2026: a folha dizia 'Sessão 10000000').
+(defn- nome-da-sessao [{:keys [sessao instante]}]
+  (or (nao-branco (:titulo sessao))
+      (rotulos/sessao-de (when instante (tempo/hoje-de instante tempo/zona-civil-padrao)))))
+
+(defn- identificacao-html [{:keys [spec-versao instante] :as documento} versao]
+  (let [nome (nome-da-sessao documento)]
     (str "<h1 class=\"folha-titulo\">Folha de presença</h1>"
          "<table class=\"folha-carimbo-tabela\"><tr>"
          "<td></td>"
          "<td class=\"celula-restrito\"><span class=\"carimbo-restrito\">Uso restrito · contém dado pessoal</span></td>"
          "</tr></table>"
          "<div class=\"folha-identificacao mono\">"
-         ;; `id-curto` passa por `esc` como qualquer outro valor — a secao 10 (congelamento) ja' o fazia com
-         ;; o MESMO dado, e um valor tratado como seguro-por-tipo num lugar e escapado no outro e' o tipo de
-         ;; heterogeneidade que sobrevive a um refactor que troque `:id` por algo menos garantido que `:uuid`.
-         "Sessão " (esc id-curto) " · spec " (esc spec-versao) " · presença apurada em " (esc (fmt-data-hora instante))
+         ;; o nome da sessao e' texto: passa por `esc` como qualquer outro valor.
+         (esc nome) " · spec " (esc spec-versao) " · presença apurada em " (esc (fmt-data-hora instante))
          (if versao
            (str " · versão " (esc versao) " deste congelamento")
            " · versão numerada atribuída no ato de congelamento desta folha")
@@ -453,11 +462,11 @@
 
 ;; ---------- 12 · registro de congelamento ----------
 
-(defn- congelamento-html [n {:keys [spec-versao sessao]} versao]
+(defn- congelamento-html [n {:keys [spec-versao] :as documento} versao]
   (str "<div class=\"folha-congelamento\">"
        "<h2 class=\"folha-secao-titulo\" style=\"margin-top:0;\">" n " · REGISTRO DE CONGELAMENTO</h2>"
        "<div class=\"campo\"><span class=\"rotulo\">Especificação: </span><span class=\"valor\">" (esc spec-versao) "</span></div>"
-       "<div class=\"campo\"><span class=\"rotulo\">Sessão: </span><span class=\"valor\">" (esc (subs (str (:id sessao)) 0 8)) "</span></div>"
+       "<div class=\"campo\"><span class=\"rotulo\">Sessão: </span><span class=\"valor\">" (esc (nome-da-sessao documento)) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Versão: </span><span class=\"valor\">"
        (if versao (esc versao) "atribuída no ato de congelamento — não existe nesta pré-visualização")
        "</span></div>"

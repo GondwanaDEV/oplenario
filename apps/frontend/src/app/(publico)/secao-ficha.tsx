@@ -20,7 +20,7 @@ import { formatarData } from "@/lib/formatar-data";
 import { tituloDaNorma } from "@/lib/leis-vista";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
-import { MovimentacoesPublicas } from "./movimentacoes-publicas";
+import { etapaAtualDasMovimentacoes, SecaoMovimentacoes, useMovimentacoesPublicas } from "./movimentacoes-publicas";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
 import { UltimaVotacaoEmPlenario, useVotacoesDaMateria, VotacoesDaMateria } from "./votacoes-da-materia";
 import "./participacao.css";
@@ -30,6 +30,8 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
   const sessao = useSessaoCidada(ente);
   // uma busca só para as votações públicas da matéria: o ato no topo e a seção "Votações desta matéria"
   const votacoes = useVotacoesDaMateria(ente, proposicaoId);
+  // uma busca só do histórico: "Por onde a matéria passou" e o chip, que diz a etapa atual com o nome da Casa
+  const movimentacoes = useMovimentacoesPublicas(ente, proposicaoId);
 
   // review A2.3 item 5: affordance de carregamento (consistência com secao-em-tramitacao.tsx) — sem
   // skeleton, só o `aria-busy` honesto para leitor de tela/testes; nenhum conteúdo visível ainda.
@@ -49,7 +51,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
   }
 
   if (!ficha) return null; // fail-closed: nunca deveria acontecer com estado "pronto", mas nunca lança.
-  const vista = derivarFicha(ficha, comentarios);
+  const vista = derivarFicha(ficha, comentarios, etapaAtualDasMovimentacoes(movimentacoes));
 
   return (
     <>
@@ -105,7 +107,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
       </section>
 
       {/* "Por onde a matéria passou": a linha do tempo com data e etapa (rótulo do rito da Casa); degrada sozinha */}
-      <MovimentacoesPublicas ente={ente} proposicaoId={proposicaoId} />
+      <SecaoMovimentacoes dado={movimentacoes} />
 
       {vista.normaPublicada && (
         <p className="norma-publicada">

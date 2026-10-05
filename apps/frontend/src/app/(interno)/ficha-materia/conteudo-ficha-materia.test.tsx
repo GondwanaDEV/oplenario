@@ -143,6 +143,47 @@ describe("ConteudoFichaMateria", () => {
     expect(screen.getByRole("tab", { name: /tramitação/i }).textContent).toContain("3");
   });
 
+  // o chip do cabeçalho, a faixa e a "Situação" do rail dizem a mesma coisa: o nome que a Casa deu à etapa
+  it("com rito, o chip e a Situação do rail usam o nome da Casa, o mesmo da faixa", async () => {
+    const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
+    const comRito = {
+      ...respostaFake,
+      proposicao: { ...respostaFake.proposicao, estado: "em_pauta" },
+      rito: {
+        "ordem-unica": true,
+        etapas: [etapa("protocolada", "Protocolada"), etapa("em_pauta", "Em Pauta")],
+        atual: etapa("em_pauta", "Em Pauta"),
+        anteriores: null,
+        proximas: [],
+      },
+    };
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => comRito }) as Response) as unknown as typeof fetch;
+    const { container } = renderComProviders("tok-de-teste");
+    await waitFor(() => expect(container.querySelector(".ficha-cab .chip")?.textContent).toBe("Em Pauta"));
+    const situacao = within(screen.getByText("Situação").parentElement!).getByText("Em Pauta");
+    expect(situacao).toBeTruthy();
+    expect(screen.queryByText("Em pauta")).toBeNull();
+  });
+
+  it("a partir do autógrafo, o chip e a Situação do rail dizem o desfecho (lido do pós-aprovação)", async () => {
+    global.fetch = fetchPorRota({
+      ok: true,
+      corpo: {
+        autografo: {
+          id: "a1", "proposicao-id": "1", numero: 7, ano: 2026, "destinatario-texto": "Prefeito Municipal",
+          "enviado-em": "2026-06-01T12:00:00Z",
+        },
+        "tramitacao-executiva": {
+          id: "t1", "autografo-id": "a1", estado: "vetado", "respondido-em": "2026-06-10T12:00:00Z", "lock-version": 1,
+        },
+        norma: null,
+      },
+    });
+    const { container } = renderComProviders("tok-de-teste");
+    await waitFor(() => expect(container.querySelector(".ficha-cab .chip")?.textContent).toBe("Vetada"));
+    expect(within(screen.getByText("Situação").parentElement!).getByText("Vetada")).toBeTruthy();
+  });
+
   it("linha 30: se a leitura do pós-aprovação falha, a ficha segue só com as transições", async () => {
     global.fetch = fetchPorRota({ ok: false });
     renderComProviders("tok-de-teste");

@@ -81,6 +81,35 @@ describe("SecaoFicha", () => {
     expect(screen.getByText("Identificador oficial:")).toBeTruthy();
   });
 
+  it("o chip diz a etapa atual de 'Por onde a matéria passou' (nome do rito da Casa), com uma só busca do histórico", async () => {
+    const movimentacoes = {
+      movimentacoes: [
+        { "ocorrido-em": "2026-05-12T10:00:00Z", etapa: "Análise nas comissões", abertura: false },
+        { "ocorrido-em": "2026-04-08T09:00:00Z", etapa: "Entrada na Casa", abertura: true },
+      ],
+      "movimentacoes-total": 2,
+      "historico-completo": true,
+      "historico-desde": null,
+    };
+    mockFetch((url) => ({
+      ok: true,
+      json: async () => (url.endsWith("/comentarios") ? [] : url.endsWith("/movimentacoes") ? movimentacoes : fichaFake),
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".estado-chip")?.textContent).toBe("Análise nas comissões"));
+    expect(document.querySelector(".mov-item[aria-current='step'] .mov-etapa")?.textContent).toBe("Análise nas comissões");
+    const buscas = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) =>
+      String(c[0]).endsWith("/movimentacoes"),
+    );
+    expect(buscas.length).toBe(1);
+  });
+
+  it("histórico indisponível: o chip cai no rótulo fixo", async () => {
+    mockFetch((url) => ({ ok: !url.endsWith("/movimentacoes"), json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".estado-chip")?.textContent).toBe("Em comissões"));
+  });
+
   it("sem resumo publicado: o aviso honesto diz que a Casa ainda não publicou (não que a IA caiu)", async () => {
     mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);

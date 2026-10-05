@@ -74,6 +74,19 @@ describe("derivarProposicoesVista", () => {
     expect(semDesfecho.situacao.rotulo).toBe("Aguardando pauta");
   });
 
+  // a lista diz o mesmo que a ficha: o nome que a Casa deu à etapa (`rotuloEstado`, do rito); sem ele, o rótulo fixo
+  it("o chip usa o nome da etapa no rito da Casa; o desfecho a partir do autógrafo ainda vence", () => {
+    const [pelaCasa] = derivarProposicoesVista([{ ...base, estado: "em_pauta", rotuloEstado: "Na Ordem do Dia" }]);
+    expect(pelaCasa.situacao.rotulo).toBe("Na Ordem do Dia");
+    expect(pelaCasa.situacao.categoria).toBe("aguarda");
+    const [vetada] = derivarProposicoesVista([{ ...base, estado: "em_pauta", rotuloEstado: "Na Ordem do Dia", desfecho: "vetado" }]);
+    expect(vetada.situacao.rotulo).toBe("Vetada");
+    const [semRito] = derivarProposicoesVista([{ ...base, estado: "em_pauta", rotuloEstado: null }]);
+    expect(semRito.situacao.rotulo).toBe("Em pauta");
+    const [vazio] = derivarProposicoesVista([{ ...base, estado: "em_pauta", rotuloEstado: "  " }]);
+    expect(vazio.situacao.rotulo).toBe("Em pauta");
+  });
+
   it("autor ausente vira travessão, não string vazia/undefined", () => {
     const [linha] = derivarProposicoesVista([{ ...base, autorTexto: undefined, autorTipo: undefined }]);
     expect(linha.autor).toBe("—");

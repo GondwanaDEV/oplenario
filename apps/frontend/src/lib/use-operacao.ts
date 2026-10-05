@@ -10,6 +10,7 @@ import { cpfValido } from "./cpf";
 import { camelizarChaves } from "./boundary";
 import type { ObservabilidadeIA } from "./observabilidade-ia-vista";
 import type { Exportacao } from "./contrato-exportacao";
+import { type AtosSemDesfecho, lerAtosSemDesfecho } from "./atos-sem-desfecho-vista";
 
 export type { Exportacao } from "./contrato-exportacao";
 
@@ -147,6 +148,17 @@ export function useCasas(token: string | null) {
 
 export function useObservabilidadeIA(horas: number, token: string | null) {
   return useLeitura<ObservabilidadeIA>(`/api/operacao/ia?horas=${horas}`, token);
+}
+
+/**
+ * ADR-0017 (adendo de 05/10/2026): os atos da Operação iniciados cujo desfecho não foi registrado. `atos` é nulo
+ * enquanto carrega e quando a resposta não tem a forma esperada — que vira `estado: "erro"`, nunca "nenhum ato".
+ */
+export function useAtosSemDesfecho(token: string | null) {
+  const r = useLeitura<unknown>("/api/operacao/atos-sem-desfecho", token);
+  const atos: AtosSemDesfecho | null = r.estado === "pronto" ? lerAtosSemDesfecho(r.dados) : null;
+  const estado: Estado = r.estado === "pronto" && !atos ? "erro" : r.estado;
+  return { atos, estado, recarregar: r.recarregar };
 }
 
 export function useFichaDaCasa(ente: string, token: string | null) {
@@ -392,6 +404,10 @@ const ACOES: Record<string, string> = {
   "convite-enviado": "Convite enviado ao 1º administrador",
   "convite-reenviado": "Convite reenviado ao 1º administrador",
   "casa-ativada": "A Casa assumiu: o 1º administrador entrou",
+  // ADR-0017 (adendo de 05/10/2026): a entrada no console abre o par tentativa → desfecho (não tem Câmara)
+  "entrada-no-console-iniciada": "Entrada no console: iniciada",
+  "entrou-no-console": "Entrou no console",
+  "entrada-no-console-falhou": "Entrada no console: a sessão não abriu",
   "realm-reprovisionado": "Configuração de login reaplicada",
   // ADR-0025: a reaplicação pela linha de comando (reaplicar-login) abre o par tentativa → desfecho
   "realm-reprovisionamento-iniciado": "Configuração de login: reaplicação iniciada",

@@ -97,3 +97,20 @@
     (is (= [] (:justificativas doc)))
     (is (= [] (:atos-de-chamada-conduzida doc)))
     (is (m/validate mod/FolhaDocumento doc))))
+
+;; ---------- campos ACRESCENTADOS na v1 (opcionais): titulo da sessao e cargo da Mesa em palavras ----------
+
+(deftest titulo-da-sessao-e-rotulo-do-cargo-passam-e-batem-o-model
+  ;; Acrescentar campo nao exige v2 (`spec-versao`): o documento segue "folha-sessao-v1", e os dois campos
+  ;; novos sao OPCIONAIS — folha montada antes deles continua valida.
+  (let [linha (assoc linha-ok :cargo-mesa "1_secretario" :cargo-mesa-rotulo "1ª Secretaria")
+        doc (ger/renderizar (-> dados-sessao-encerrada
+                                (assoc-in [:sessao :titulo] "Sessão ordinária nº 3 de 20/06/2026")
+                                (assoc :linhas [linha])))]
+    (is (= "folha-sessao-v1" (:spec-versao doc)))
+    (is (= "Sessão ordinária nº 3 de 20/06/2026" (get-in doc [:sessao :titulo])))
+    (is (= "1ª Secretaria" (:cargo-mesa-rotulo (first (:linhas doc)))))
+    (is (m/validate mod/FolhaDocumento doc)
+        (str "documento com os campos novos deveria bater FolhaDocumento: " (m/explain mod/FolhaDocumento doc)))
+    (is (m/validate mod/FolhaDocumento (ger/renderizar dados-sessao-encerrada))
+        "sem os campos novos (folha antiga) continua valido")))

@@ -11,6 +11,7 @@
 // linha do tempo pública com os rótulos de `transparencia/logic/desfecho.clj`.
 
 import type { EstagioTramitacao } from "./tramitacao-vista";
+import type { PosAprovacaoOut } from "./contrato-legislativo.gen";
 
 const SITUACAO_POR_DESFECHO: Record<string, string> = {
   autografo_enviado: "Enviada ao Executivo",
@@ -71,4 +72,18 @@ export function categoriaDoDesfecho(desfecho: string | null | undefined): "aprov
 export function colunaDoDesfecho(desfecho: string | null | undefined): "em-plenario" | "concluidas" | null {
   if (!desfecho || !(desfecho in SITUACAO_POR_DESFECHO)) return null;
   return desfecho === "vetado" ? "em-plenario" : "concluidas";
+}
+
+const RESPOSTAS_DO_EXECUTIVO = new Set(["sancionado", "sancao_tacita", "vetado", "veto_mantido", "veto_derrubado"]);
+
+/** O desfecho a partir da rota de pós-aprovação (a ficha interna não recebe `desfecho` na rota da ficha). A mesma regra
+ * do SQL da lista (`legislativo/db/proposicao.clj`, `desfecho-depois-do-autografo`): lei publicada, só promulgada, a
+ * resposta do Executivo ou a apreciação do veto, o autógrafo ainda sem resposta. Null = não saiu do plenário. */
+export function desfechoDaPosAprovacao(pos: PosAprovacaoOut | null | undefined): string | null {
+  if (!pos) return null;
+  if (pos.norma) return pos.norma.estado === "publicada" ? "publicada" : "promulgada";
+  const executivo = pos.tramitacaoExecutiva?.estado;
+  if (executivo && RESPOSTAS_DO_EXECUTIVO.has(executivo)) return executivo;
+  if (pos.autografo) return "autografo_enviado";
+  return null;
 }
