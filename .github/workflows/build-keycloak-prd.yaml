@@ -176,6 +176,7 @@ jobs:
       - name: Conferir o tema no Keycloak (ou voltar atras)
         env:
           ID: ${{ steps.app.outputs.id }}
+          VERSAO: ${{ steps.app.outputs.versao }}
           KC_SENHA: ${{ secrets.HML_KEYCLOAK_ADMIN_SENHA }}
         run: |
           set -uo pipefail
@@ -199,7 +200,7 @@ jobs:
           echo "::error::o tema nao apareceu: voltando o compose anterior"
           if ! curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' \
                  -d @"$RUNNER_TEMP/anterior.json" "$DK/compose.update" > /dev/null; then
-            echo "::error::o Dokploy recusou a volta do compose: no compose do Keycloak, voltar a imagem para quay.io/keycloak/keycloak:26.0.0"
+            echo "::error::o Dokploy recusou a volta do compose: no compose do Keycloak, voltar a imagem para quay.io/keycloak/keycloak:$VERSAO (a que estava; versao mais antiga nao sobe contra o banco)"
             exit 1
           fi
           if ! jq -n --arg id "$ID" '{composeId: $id}' | curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" \
