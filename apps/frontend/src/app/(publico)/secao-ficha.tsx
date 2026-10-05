@@ -59,7 +59,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           <span className="num">{vista.ref}</span>
           <span className="estado-chip">{vista.situacao}</span>
         </div>
-        <h1>{vista.titulo}</h1>
+        <h1 className="titulo-longo">{vista.titulo}</h1>
         <p className="autoria">
           {vista.autorTexto ? (
             <>
