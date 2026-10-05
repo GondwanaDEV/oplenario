@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>O Plenário — Assistente da Casa (painel em toda tela interna)</title>
+<title>O Plenário — Clara, a assistente da Casa (painel em toda tela interna)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet" />
@@ -11,11 +11,12 @@
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
   /* ============================================================
-     O PLENÁRIO · Componente "Assistente da Casa" — painel retrátil
+     O PLENÁRIO · Componente "Clara", a assistente da Casa — painel retrátil
+     (nome decidido em 05/10/2026, docs/04 §6; busca no INPI pendente)
      ARQUÉTIPO: nenhum novo. É uma MOLDURA que acompanha qualquer
      tela interna (aqui, sobre a Ficha da matéria resumida). Os
      três estados de tamanho são do mesmo componente:
-       recolhido  -> só o botão "Perguntar à Casa", canto inferior
+       recolhido  -> só o botão "Pergunte à Clara", canto inferior
        aberto     -> JANELA de 400px no canto, abaixo do cabeçalho,
                      até 680px de altura; EMPURRA o conteúdo
                      (não cobre: o foco nunca some atrás dela)
@@ -295,9 +296,9 @@
 </div><!-- /.pagina -->
 
 <!-- ================= RECOLHIDO ================= -->
-<button class="ast-lancador" id="ast-lancador" type="button" aria-controls="ast" aria-expanded="false" title="Perguntar à Casa (Ctrl + /)">
+<button class="ast-lancador" id="ast-lancador" type="button" aria-controls="ast" aria-expanded="false" title="Pergunte à Clara (Ctrl + /)">
   <span class="glifo-ia" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
-  <span>Perguntar <span class="rotulo-longo">à Casa</span></span>
+  <span><span class="rotulo-longo">Pergunte à </span>Clara</span>
   <kbd aria-hidden="true">Ctrl /</kbd>
 </button>
 
@@ -308,17 +309,17 @@
 <aside class="ast" id="ast" aria-labelledby="ast-titulo">
   <div class="ast-cabe">
     <span class="glifo-ia" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
-    <h2 class="titulo" id="ast-titulo">Assistente da Casa</h2>
+    <h2 class="titulo" id="ast-titulo">Clara</h2>
     <button class="ast-icone" id="ast-historico" type="button" aria-pressed="false" aria-label="Histórico de conversas" title="Histórico de conversas">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
     </button>
-    <button class="ast-icone ast-expandir" id="ast-expandir" type="button" aria-label="Expandir o assistente" title="Expandir">
+    <button class="ast-icone ast-expandir" id="ast-expandir" type="button" aria-label="Expandir a Clara" title="Expandir">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
     </button>
-    <button class="ast-icone" id="ast-recolher" type="button" aria-label="Recolher o assistente" title="Recolher (Esc)">
+    <button class="ast-icone" id="ast-recolher" type="button" aria-label="Recolher a Clara" title="Recolher (Esc)">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
-    <p class="ast-sub">Consulta o sistema com o seu acesso. Não faz nada por você.</p>
+    <p class="ast-sub">Assistente da Casa. Consulta o sistema com o seu acesso e não faz nada por você.</p>
   </div>
 
   <!-- dica da tela: o assistente busca pelas ferramentas, com o acesso da pessoa; a tela nunca é fonte -->
@@ -372,7 +373,7 @@
     <div class="ast-pergunta" data-estado="conversa guardada"><span class="ast-quem">Você · 10:42</span>Qual a situação do PL 042/2026 e quem relata na CCJ?</div>
     <div class="ast-resposta" data-estado="conversa guardada">
       <span class="selo-ia"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>Resposta gerada por IA</span>
-      <ul class="ast-passos" aria-label="O que o assistente consultou">
+      <ul class="ast-passos" aria-label="O que a Clara consultou">
         <li>Situação do PL 042/2026</li>
         <li>Tramitação do PL 042/2026</li>
         <li>Regimento Interno, art. 112</li>
@@ -417,7 +418,7 @@
       <div class="sinal sinal-atencao" role="status">
         <span class="sinal-ic ia" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2l20 20"/><path d="M17.5 19H9a7 7 0 0 1-6.71-9M5.6 5.6A7 7 0 0 1 20 9c1.7 0 3 1.3 3 3a4 4 0 0 1-1.3 2.9"/></svg></span>
         <div class="sinal-corpo">
-          <p class="sinal-titulo">O assistente está indisponível agora</p>
+          <p class="sinal-titulo">A Clara está indisponível agora</p>
           <p class="sinal-ctx">Siga pela tela: nada do seu trabalho depende dele. Sua pergunta ficou no histórico, sem resposta.</p>
         </div>
       </div>
@@ -429,7 +430,7 @@
         <span class="sinal-ic ia" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
         <div class="sinal-corpo">
           <p class="sinal-titulo">A cota de IA da Casa deste mês acabou</p>
-          <p class="sinal-ctx">O assistente volta no dia 1º. Para antecipar, fale com quem administra a Casa no sistema.</p>
+          <p class="sinal-ctx">A Clara volta no dia 1º. Para antecipar, fale com quem administra a Casa no sistema.</p>
         </div>
       </div>
     </div>
@@ -485,7 +486,7 @@
       lancador.setAttribute('aria-expanded', t === 'recolhido' ? 'false' : 'true');
       marcar('data-tamanho', t);
       var exp = document.getElementById('ast-expandir');
-      exp.setAttribute('aria-label', t === 'expandido' ? 'Reduzir para o painel' : 'Expandir o assistente');
+      exp.setAttribute('aria-label', t === 'expandido' ? 'Reduzir a Clara para a janela' : 'Expandir a Clara');
       exp.title = t === 'expandido' ? 'Reduzir' : 'Expandir';
       if (focar && t !== 'recolhido') campo.focus();
       if (focar && t === 'recolhido') lancador.focus();

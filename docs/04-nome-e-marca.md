@@ -78,3 +78,22 @@ Não derrubam o nome, mas o time precisa saber:
 - **"O legislativo em tempo real."** — puxa o moderno / IA / real-time.
 
 A de trabalho é a primeira, mas é trocável — definir junto com identidade visual.
+
+---
+
+## 6. Nome da assistente: Clara (05/10/2026)
+
+**Decisão do Daouda (05/10/2026):** a assistente de IA da Casa, o painel que acompanha toda tela interna
+(`produto/design-system/o-plenario/telas/assistente-da-casa.html`), chama-se **Clara**.
+
+- **Pedido:** um nome **convidativo**, que chame a conversar.
+- **Candidatos considerados:** Lume ("vir a lume"), Prosa ("dois dedos de prosa"), Cora e Clara. Clara venceu
+  pelo convite e pela leitura de **clareza e transparência**, que é o que a Casa deve ao servidor e ao cidadão.
+- **Como aparece:** "Pergunte à Clara" no botão; "Clara · Assistente da Casa" no cabeçalho do painel. O nome é
+  do **produto** e não muda de Câmara para Câmara: nas telas internas quem lidera a marca é O Plenário.
+- **O que o nome não muda:** a Clara não tem autoridade. Toda resposta segue com o selo "Resposta gerada por IA",
+  as fontes conferidas e "Reportar erro"; ato pedido a ela vira proposta que a pessoa confirma (ADR-0012).
+- **Riscos assumidos:**
+  - é nome de pessoa, feminino, e puxa para tratar a IA como colega; a camada de confiança compensa;
+  - é um nome comum em assistentes de IA de outras marcas.
+- **Pendente:** busca no INPI (classes 9 e 42), como para o nome do produto (§4).

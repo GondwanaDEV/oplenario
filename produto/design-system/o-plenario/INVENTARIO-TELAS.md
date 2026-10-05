@@ -97,7 +97,7 @@ POC) · **MÉDIA** (paridade institucional, admin) · **BAIXA** (diferível, nic
 |---|---|---|---|---|
 | 8.1-8.5 citação/incerteza/log/reportar/revisão | **padrão transversal** (camada de IA) | ⤵ | ✅* | — |
 | 8.6 Observabilidade do modelo | console do operador | 🔩 | ⬜ | BAIXA |
-| Assistente da Casa (B.3) em toda tela interna + histórico auditável | **Painel do assistente** (`telas/assistente-da-casa.html`, 05/10/2026) | moldura: recolhido · painel que empurra · expandido | ✅ | — |
+| Assistente da Casa (B.3) em toda tela interna + histórico auditável | **Painel da Clara** (`telas/assistente-da-casa.html`, 05/10/2026) | moldura: recolhido · painel que empurra · expandido | ✅ | — |
 
 *o padrão de confiança da IA está provado no Portal e documentado na galeria; reusa-se onde houver IA.
 
