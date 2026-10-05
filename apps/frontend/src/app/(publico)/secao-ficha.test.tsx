@@ -61,6 +61,29 @@ describe("SecaoFicha", () => {
     expect(screen.getByText(/matéria não encontrada/i)).toBeTruthy();
   });
 
+  it("com o rito da Casa -> a faixa 'Onde este projeto está' segue a ordem do rito, com o nome que a Casa deu", async () => {
+    const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
+    const comRito = {
+      ...fichaFake,
+      estado: "instrucao",
+      rito: {
+        "ordem-unica": true,
+        etapas: [etapa("entrada", "Entrada na Mesa"), etapa("instrucao", "Em instrução"), etapa("plenario_unico", "Plenário único")],
+        atual: etapa("instrucao", "Em instrução"),
+        anteriores: null,
+        proximas: [etapa("plenario_unico", "Plenário único")],
+      },
+    };
+    mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : comRito) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".ficha-cab .num")?.textContent).toBe("PL 042/2026"));
+    expect(
+      screen.getByRole("img", {
+        name: "Tramitação de PL 042/2026: concluídos Entrada na Mesa; atual Em instrução; pendente Plenário único.",
+      }),
+    ).toBeTruthy();
+  });
+
   it("dado real -> cabeçalho (ref+ementa+autoria) + faixa de tramitação + permalink", async () => {
     mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);

@@ -40,9 +40,30 @@
    [:gerado-com-ia :boolean]
    [:publicado-em :string]])
 
+(def EtapaDoRitoPublicoOut
+  "Uma etapa do rito DA CASA no portal: `chave` (texto livre de template, nunca enum), `rotulo` (o nome que a Casa deu) e
+  `terminal` (encerra o processo). Nada mais: o portal e' publico."
+  [:map {:closed true}
+   [:chave :string]
+   [:rotulo :string]
+   [:terminal :boolean]])
+
+(def RitoPublicoOut
+  "O rito da materia para a faixa 'Onde este projeto esta' da ficha publica (a mesma linha que a ficha interna recebe).
+  `ordem-unica` true = `etapas` e' a linha do rito em ordem (fecha na atual quando ela e' terminal); false = o rito nao
+  da' ordem unica verificavel e `etapas` vem vazio — a faixa mostra so' o entorno (`anteriores` · `atual` · `proximas`).
+  `atual` nil = o rito nao declara o estado da materia. `anteriores` nil = nao se sabe por onde passou."
+  [:map {:closed true}
+   [:ordem-unica :boolean]
+   [:etapas [:sequential EtapaDoRitoPublicoOut]]
+   [:atual [:maybe EtapaDoRitoPublicoOut]]
+   [:anteriores [:maybe [:sequential EtapaDoRitoPublicoOut]]]
+   [:proximas [:sequential EtapaDoRitoPublicoOut]]])
+
 (def FichaOut
   "MateriaOut + a norma publicada, se houver (:norma ausente/nil = a materia ainda nao virou lei) + o resumo cidadao
-  publicado, se houver (:resumo ausente/nil = a Casa ainda nao publicou)."
+  publicado, se houver (:resumo ausente/nil = a Casa ainda nao publicou) + o rito da Casa (:rito ausente/nil = a
+  materia nao teve evento com rito; a tela usa o mapa fixo)."
   [:map {:closed true}
    [:proposicao-id :string]
    [:tipo :string]
@@ -57,5 +78,6 @@
    ;; sancao_tacita, vetado, veto_mantido, veto_derrubado, promulgada, publicada); nil = ainda nao foi a votos
    [:desfecho [:maybe :string]]
    [:norma {:optional true} [:maybe wire-norma/NormaOut]]
-   [:resumo {:optional true} [:maybe ResumoPublicoOut]]])
+   [:resumo {:optional true} [:maybe ResumoPublicoOut]]
+   [:rito {:optional true} [:maybe RitoPublicoOut]]])
 

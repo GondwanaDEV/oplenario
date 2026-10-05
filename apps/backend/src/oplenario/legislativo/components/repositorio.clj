@@ -57,6 +57,7 @@
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.logic.contas :as logic-contas]
             [oplenario.legislativo.logic.notificacao :as logic-notif]
+            [oplenario.legislativo.logic.rito :as logic-rito]
             [oplenario.legislativo.logic.votacao-ia :as logic-votacao-ia])
   (:import (java.security MessageDigest)
            (java.util UUID)
@@ -469,6 +470,32 @@
         (vec linhas))
       truncado?])))
 
+(defn- rito-para-o-evento
+  "A linha do rito da materia (a MESMA de `GET /legislativo/proposicoes/:id/ficha`, `logic.rito`) para levar no evento
+  que move a faixa 'Onde esta' a materia' do portal; `atual` = o estado em que a materia ficou. nil sem rito (materia
+  sem template, ou rito que nao existe neste tenant).
+
+  O `transparencia` nao le' schema de `legislativo` (ADR-0001 §6): a linha tem de viajar NO evento. Ela sai so' com
+  chave, rotulo e terminal por etapa (o que `logic.rito` ja' devolve). E' ACESSORIA ao ato: a leitura do rito e' do
+  dominio, mas um defeito no calculo puro vira nil + log, nunca um protocolo ou uma transicao que falha por causa da
+  faixa do portal."
+  [tx ente-id proposicao-id template-id atual]
+  (when template-id
+    (when-let [rito (tram/rito-do-template tx ente-id template-id)]
+      (let [[tramitacao truncado] (lista-com-sonda
+                                    (tram/historico-da-proposicao tx ente-id proposicao-id (inc teto-tramitacao-ficha))
+                                    teto-tramitacao-ficha)]
+        (try
+          (logic-rito/rito-da-materia {:estado-inicial (:estado-inicial rito) :estados (:estados rito)
+                                       :transicoes (:transicoes rito) :atual atual
+                                       :tramitacao tramitacao :tramitacao-truncado truncado})
+          (catch Exception e
+            (log/warn e "legislativo: rito da materia nao pode ser calculado para o evento — segue sem rito"
+                      {:ente-id ente-id :proposicao-id proposicao-id})
+            nil))))))
+
+(defn- com-rito [payload rito] (cond-> payload rito (assoc :rito rito)))
+
 (defn- protocolar-na-tx!
   "O corpo de `protocolar!` sobre uma tx JA' ABERTA — para compor o protocolo com outra escrita na MESMA tx
   (fatia 2c: o protocolo da proposta de requerimento fecha a proposta e os convites junto com a numeracao)."
@@ -497,7 +524,7 @@
         (texto/promover! tx {:ente-id ente-id :proposicao-id (:id r) :versao-id versao-id
                               :updated-by (:created-by p) :lock-version 0})))
     (producers/emitir-protocolada! bus tx ente-id
-      {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
+      (com-rito {:proposicao-id (:id r) :tipo (:tipo p) :ano (:ano p) :sequencial (:sequencial r)
        ;; o estado vem do RETORNO de protocolar! (= a linha), nao de um literal: com o elo
        ;; materia<->template (mig 0076) a materia nasce no `estado_inicial` do rito da Casa, que
        ;; nao e' necessariamente 'protocolada'. Cravar a string aqui faria o evento publico
@@ -511,7 +538,10 @@
        :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
        ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
        ;; o UUID/fromString do consumer (Onda E fatia 2).
-       :autor-id (some-> (:autor-id p) str)})
+       :autor-id (some-> (:autor-id p) str)}
+        ;; a faixa "Onde esta' a materia" do portal pela ordem do rito da Casa (a atual e' o estado inicial); sem rito
+        ;; a chave nem entra e o portal usa o mapa fixo
+        (rito-para-o-evento tx ente-id (:id r) (:template-id r) (:estado r))))
     (cond-> r assinatura (assoc :assinatura assinatura))))
 
 (defn- hidratar-prestacao
@@ -710,14 +740,18 @@
               ;; :ator-id so entra quando ha ator (acao anonima omite a chave — contrato {:optional true}).
               ;; :ocorrido-em (F7 carry): string ISO do Instant real da transicao (RETURNING de
               ;; registrar-transicao!) — NAO o momento de projecao a jusante.
-              (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
-                       :de (:de r) :para (:para r) :gatilho (:gatilho args)
-                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))
-                       ;; o rito da Casa diz se o destino encerra o processo (paineis: "em tramitacao")
-                       :para-terminal (boolean (:para-terminal r))
-                       ;; e como ele CHAMA a etapa de destino (o portal mostra o rotulo, nunca a chave)
-                       :para-nome (:para-nome r)}
-                (:ator-id args) (assoc :ator-id (:ator-id args)))))
+              (com-rito
+                (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
+                         :de (:de r) :para (:para r) :gatilho (:gatilho args)
+                         :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))
+                         ;; o rito da Casa diz se o destino encerra o processo (paineis: "em tramitacao")
+                         :para-terminal (boolean (:para-terminal r))
+                         ;; e como ele CHAMA a etapa de destino (o portal mostra o rotulo, nunca a chave)
+                         :para-nome (:para-nome r)}
+                  (:ator-id args) (assoc :ator-id (:ator-id args)))
+                ;; a faixa do portal anda junto com o estado: o rito da Casa com a atual no destino (a transicao ja'
+                ;; esta' no historico desta tx). Sem rito, a chave nem entra.
+                (rito-para-o-evento tx ente-id (:proposicao-id args) (:template-id args) (:para r)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
   (receber-movimentacao! [this ente-id registro args]

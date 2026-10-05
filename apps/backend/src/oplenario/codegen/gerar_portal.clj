@@ -34,6 +34,9 @@
    ;; /portal/casa/:ente/materias, frente "truncamento-familia" sitio (b) — o par lista+total.
    ["MateriasOut" materia/MateriasOut]
    ["ResumoPublicoOut" materia/ResumoPublicoOut]
+   ;; O rito da Casa na ficha publica (faixa "Onde este projeto esta"): a etapa antes do rito, o rito antes da ficha.
+   ["EtapaDoRitoPublicoOut" materia/EtapaDoRitoPublicoOut]
+   ["RitoPublicoOut" materia/RitoPublicoOut]
    ["FichaOut" materia/FichaOut]
    ;; "Por onde a materia passou" (GET /portal/casa/:ente/materias/:id/movimentacoes): a folha antes do agregado.
    ["MovimentacaoOut" movimentacao/MovimentacaoOut]

@@ -16,9 +16,9 @@ export interface ComentarioOut {
 }
 
 import type { FichaOut } from "./contrato-portal.gen";
-import { derivarRef } from "./materia-vista";
-import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
 import { situacaoDoDesfecho } from "./desfecho-vista";
+import { derivarRef } from "./materia-vista";
+import { derivarTramitacao, faixaDoRito, type EstagioTramitacao } from "./tramitacao-vista";
 
 export type NormaPublicadaVista = {
   normaId: string;
@@ -54,15 +54,32 @@ export type FichaVista = {
 
 export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
+/**
+ * A faixa "Onde este projeto está" pelo RITO da Casa (a rota devolve as etapas em ordem, com o nome que a Casa deu), ou
+ * null quando o rito não vale e a tela usa o mapa fixo por nome de estado (o comportamento anterior):
+ *  - o desfecho depois do plenário (do autógrafo em diante) decide a faixa — o rito não sabe do Executivo nem da lei;
+ *  - sem rito (matéria sem evento com rito), ou rito que não declara a etapa atual: mapa fixo;
+ *  - a etapa atual do rito tem de ser a do estado da matéria: o portal guarda o último rito junto com o estado, mas um
+ *    rito de outra etapa (corrida entre eventos) apontaria a etapa errada, então não se confia nele.
+ * Só a FAIXA vem daqui. O selo de situação (nome da etapa) segue o caminho próprio dele.
+ */
+function faixaPeloRito(ficha: FichaOut): EstagioTramitacao[] | null {
+  if (situacaoDoDesfecho(ficha.desfecho)) return null;
+  const rito = ficha.rito?.atual?.chave === ficha.estado ? ficha.rito : null;
+  return faixaDoRito(rito)?.estagios ?? null;
+}
+
 /** `etapaAtual`: o nome que o rito da Casa dá à etapa atual, como "Por onde a matéria passou" o mostra (a movimentação
  * mais recente, já projetada em `transparencia.materia_movimentacao`). O chip diz o mesmo; a partir do autógrafo vale
- * o desfecho; sem etapa nomeada, o rótulo fixo. A faixa continua o mapa fixo: a projeção pública não carrega o rito. */
+ * o desfecho; sem etapa nomeada, o rótulo fixo. A faixa vem do rito da Casa quando a ficha o traz (`faixaPeloRito`);
+ * senão, do mapa fixo. */
 export function derivarFicha(
   ficha: FichaOut,
   comentarios: ComentarioOut[] | null,
   etapaAtual?: string | null,
 ): FichaVista {
-  const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
+  const { estagios: estagiosFixos, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
+  const estagios = faixaPeloRito(ficha) ?? estagiosFixos;
   const nomeDaCasa = etapaAtual?.trim();
   return {
     ref: derivarRef(ficha),

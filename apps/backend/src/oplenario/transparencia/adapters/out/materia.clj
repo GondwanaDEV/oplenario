@@ -58,8 +58,10 @@
      :publicado-em (->str (:resumo-publicado-em m))}))
 
 (defn ficha->wire
-  "Materia + norma (dominio, opcional) -> FichaOut. O resumo cidadao vem da propria linha projetada (A.8b)."
+  "Materia + norma (dominio, opcional) -> FichaOut. O resumo cidadao vem da propria linha projetada (A.8b); o rito da
+  Casa tambem (`:rito`, nil sem evento com rito), PASSADO COMO ESTA' — o schema e' fechado, entao campo alem de
+  chave/rotulo/terminal reprova aqui (500), nunca vaza no portal publico."
   [m norma]
   (validar! wire/FichaOut
-            (assoc (campos-comuns m) :norma (norma-embutida norma) :resumo (resumo-embutido m))
+            (assoc (campos-comuns m) :norma (norma-embutida norma) :resumo (resumo-embutido m) :rito (:rito m))
             "FichaOut"))
