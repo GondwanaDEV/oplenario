@@ -15,6 +15,7 @@
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
+            [oplenario.legislativo.components.repositorio-meus-votos :as repo-meus-votos]
             [oplenario.legislativo.components.repositorio-votacao-publica :as repo-votacao-publica]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
             [oplenario.legislativo.db.apensacao :as apensacao]
@@ -26,6 +27,7 @@
             [oplenario.legislativo.db.documento-modelo :as doc-modelo]
             [oplenario.legislativo.db.emenda :as emenda]
             [oplenario.legislativo.db.meu-painel :as meu-painel-db]
+            [oplenario.legislativo.db.meus-votos :as meus-votos-db]
             [oplenario.legislativo.db.norma :as norma]
             [oplenario.legislativo.db.parecer :as parecer]
             [oplenario.legislativo.db.parametro-parecer :as parametro-parecer]
@@ -1310,6 +1312,15 @@
     (transacao this ente-id #(votacao-publica/ids-das-sessoes % ente-id sessao-ids)))
   (votacao-encerrada [this ente-id votacao-id]
     (transacao this ente-id #(votacao-publica/encerrada % ente-id votacao-id)))
+
+  ;; 'Minha atuacao': os votos do proprio vereador, da fonte (protocolo proprio, mesmo motivo do RepoJuridico)
+  repo-meus-votos/RepoMeusVotos
+  (meus-votos [this ente-id vereador-id]
+    (transacao this ente-id
+      (fn [tx]
+        (let [{:keys [total sim nao abstencao]} (meus-votos-db/contar-por-opcao tx ente-id vereador-id)]
+          {:votos (meus-votos-db/votos-do-vereador tx ente-id vereador-id)
+           :total total :sim sim :nao nao :abstencao abstencao}))))
 
   ;; ADR-0021 Parte B — o julgamento das contas (protocolo proprio, mesmo motivo do RepoJuridico)
   repo-contas/RepoContas

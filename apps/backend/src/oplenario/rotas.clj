@@ -747,6 +747,10 @@
                                                              (repo-identidade-comp/casa-tem-papel-ativo? repo-identidade ente-id "juridico"))
                                        ;; ADR-0020 fatia 2: o aviso automatico do pedido de parecer as pessoas com `juridico`
                                        :juridicos-a-avisar juridicos-a-avisar-fn
+                                       ;; 'Minha atuacao' (GET /meu/votos): quais sessoes o portal mostra — so' MARCA o
+                                       ;; voto do vereador; a mesma regra das votacoes publicas
+                                       :sessoes-publicas (fn [ente-id]
+                                                           (votacoes-publicas/ids-de-sessoes-publicas repo-sessoes ente-id))
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
