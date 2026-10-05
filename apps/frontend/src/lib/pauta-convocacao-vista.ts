@@ -8,6 +8,7 @@ import type { SliSessaoOut } from "./use-mesa";
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 import { formatarData, formatarDiaSemana, formatarHora } from "./formatar-data";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
+import { nomeDaSessao } from "./rotulos-sessao";
 import type { PautaItemOut, PautaOut, SessaoOut } from "./use-sessao-pauta";
 
 export type { PautaItemOut, PautaOut, SessaoOut };
@@ -64,7 +65,7 @@ export function formatarTipoSessao(tipoSessao: string): string {
 }
 
 export function formatarTituloSessao(sessao: { numeroSequencial: number; tipoSessao: string }): string {
-  return `${sessao.numeroSequencial}ª Sessão ${formatarTipoSessao(sessao.tipoSessao)}`;
+  return nomeDaSessao(sessao.numeroSequencial, sessao.tipoSessao);
 }
 
 // ---------- agrupamento da pauta por fase (os 5 valores fechados de logic/fases-pauta no backend, na ordem

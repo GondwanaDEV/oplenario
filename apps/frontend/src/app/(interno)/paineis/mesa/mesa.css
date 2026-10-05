@@ -200,15 +200,11 @@
   .ob-col:first-child { border-top: 0; }
   .ob-col .rotulo { margin: 0; }
   .ob-col .est { display: none; }
-  .prazo-item { grid-template-columns: 56px 1fr; }
+  .prazo-item { grid-template-columns: 64px 1fr; }
   .prazo-item .tag-urg { grid-column: 2; justify-self: start; }
   .pipeline-board { grid-template-columns: 1fr; }
   .fila-item { grid-template-columns: 1fr; }
   .org-stat { border-left: 0; padding: 0; flex-basis: 100%; }
-}
-@media (max-width: 460px) {
-  .anel-c { width: 56px; height: 56px; }
-  .anel-c svg { width: 56px; height: 56px; }
 }
 
 /* Fatia "painel não mente" apendou: .aviso-corte — aviso de truncamento de `compliance.emAberto`

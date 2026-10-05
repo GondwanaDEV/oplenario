@@ -127,10 +127,12 @@ describe("escolherDestaque", () => {
     expect(truncamento).toBeNull();
   });
 
-  it("materiasTotal maior que o exibido -> truncamento com o total REAL, texto igual ao do perfil do vereador", () => {
+  it("materiasTotal maior que a lista recebida -> o texto diz o total REAL da Casa, sem inventar quantas tramitam", () => {
     const itens = [1, 2, 3, 4, 5].map((n) => materia({ proposicaoId: String(n) }));
     const { truncamento } = escolherDestaque(itens, 250);
-    expect(truncamento).toBe("Mostrando 4 de 250 matérias, da numeração mais alta para a mais baixa.");
+    expect(truncamento).toBe(
+      "Mostrando 4 matérias em tramitação, das 250 da Casa no portal, da numeração mais alta para a mais baixa.",
+    );
   });
 
   it("regra 4 (aposenta heurística, nunca empilha): o truncamento segue o TOTAL DO SERVIDOR, nunca uma dedução de itens.length — payload onde as duas discordariam", () => {
@@ -141,5 +143,34 @@ describe("escolherDestaque", () => {
     const { truncamento } = escolherDestaque(itens, 999);
     expect(truncamento).toContain("999");
     expect(truncamento).not.toContain(" 5 ");
+  });
+
+  it("matéria fora do rito não entra: arquivada, aprovada sem ato depois, lei e veto mantido; à espera do Executivo entra", () => {
+    const itens = [
+      materia({ proposicaoId: "arq", estado: "arquivada" }),
+      materia({ proposicaoId: "lei", estado: "aprovada", desfecho: "publicada" }),
+      materia({ proposicaoId: "apr", estado: "aprovada" }),
+      materia({ proposicaoId: "vm", estado: "aprovada", desfecho: "veto_mantido" }),
+      materia({ proposicaoId: "exe", estado: "aprovada", desfecho: "autografo_enviado" }),
+      materia({ proposicaoId: "com", estado: "em_comissoes" }),
+    ];
+    const { destaque, maisTramitacao, truncamento } = escolherDestaque(itens, 6);
+    expect(destaque?.proposicaoId).toBe("exe");
+    expect(maisTramitacao.map((m) => m.proposicaoId)).toEqual(["com"]);
+    expect(truncamento).toBeNull();
+  });
+
+  it("lista inteira com mais de 4 em tramitação: o total é o das que tramitam", () => {
+    const itens = [
+      ...[1, 2, 3, 4, 5, 6].map((n) => materia({ proposicaoId: String(n) })),
+      materia({ proposicaoId: "arq", estado: "arquivada" }),
+    ];
+    expect(escolherDestaque(itens, 7).truncamento).toBe(
+      "Mostrando 4 de 6 matérias em tramitação, da numeração mais alta para a mais baixa.",
+    );
+  });
+
+  it("nenhuma em tramitação -> sem destaque (a seção diz que não há)", () => {
+    expect(escolherDestaque([materia({ estado: "arquivada" })], 1).destaque).toBeNull();
   });
 });
