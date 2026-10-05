@@ -222,6 +222,10 @@ login funciona, só não está escondido.
    `ghcr.io` em Settings → Registry do Dokploy com o mesmo login que a aplicação da API já usa (testa o login antes;
    já cadastrado = nada a fazer).
 
+   **Feito em 05/10/2026:** `registrar-ghcr-dokploy` cadastrou o `ghcr.io` (login da API) e o `build-keycloak-prd`
+   trocou a imagem às 14:35 UTC para `oplenario-keycloak-prd:26.3.5-<sha>`; o Keycloak ficou ~55 s fora (o reinício) e
+   o tema carregou sem volta.
+
    **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No compose do Keycloak das Casas no Dokploy, a
    imagem passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest` (o servidor precisa de login no GHCR).
    Reimplante e espere o healthcheck.
