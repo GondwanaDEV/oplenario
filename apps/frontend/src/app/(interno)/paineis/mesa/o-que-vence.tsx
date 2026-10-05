@@ -17,6 +17,13 @@ import { contar, diasAteVencer, frasePrazo, rotularObjetoPrazo } from "@/lib/mes
 import type { MesaVista } from "@/lib/mesa-vista";
 import { rotularObrigacao } from "@/lib/rotulos-compliance";
 
+/** A cor do anel e da borda: vencido ou a até 2 dias é urgente; até 5, atenção; o resto, no prazo. Mesmos degraus
+ *  do prazo do Executivo no pós-aprovação. Sem a classe o arco do anel nem era desenhado (só o trilho). */
+function urgenciaDoPrazo(dias: number | null): string {
+  if (dias === null || dias <= 2) return "prz-urgente";
+  return dias <= 5 ? "prz-atencao" : "prz-noprazo";
+}
+
 export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
   if (vista.estado === "indisponivel") {
     return (
@@ -65,8 +72,13 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
               // Chave ESTAVEL, nao o indice: `vista.itens` e' recomposta de duas fontes e reordenada
               // por `venceEm`, entao um prazo novo mais urgente entra no meio e desloca todos os
               // indices seguintes — o React reaproveitaria o <li> errado.
-              <li key={item.origem === "compliance" ? item.id : item.objetoId} className="prazo-item">
-                <AnelPrazo diasRestantes={Math.max(0, dias ?? 0)} diasTotal={30} rotulo={rotulo} />
+              <li key={item.origem === "compliance" ? item.id : item.objetoId} className={`prazo-item ${urgenciaDoPrazo(dias)}`}>
+                <AnelPrazo
+                  diasRestantes={Math.max(0, dias ?? 0)}
+                  diasTotal={30}
+                  rotulo={rotulo}
+                  atrasoDias={dias !== null && dias < 0 ? -dias : undefined}
+                />
                 <div className="prazo-obj">
                   <b>{rotulo}</b>
                   <span className={dias !== null && dias < 0 ? "quando quando-atrasado" : "quando"}>{frasePrazo(dias)}</span>

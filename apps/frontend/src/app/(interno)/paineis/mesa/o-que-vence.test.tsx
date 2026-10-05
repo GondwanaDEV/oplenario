@@ -85,6 +85,22 @@ describe("OQueVence — o prazo em palavras", () => {
     expect(getByText("vence hoje")).toBeTruthy();
   });
 
+  it("o número grande do anel de um prazo vencido é o atraso, não '0 dias'", () => {
+    // 10/08/2026 -> 36 dias antes de 15/09/2026.
+    const { container } = render(<OQueVence vista={vista([item("2026-08-10", "v")])} />);
+    expect(container.querySelector(".anel-c .d")?.textContent).toBe("36");
+    expect(container.querySelector(".anel-c .u")?.textContent).toBe("atraso");
+    expect(container.querySelector(".prazo-obj .quando")?.textContent).toBe("venceu há 36 dias");
+    expect(container.textContent ?? "").not.toMatch(/0\s*dias/);
+  });
+
+  it("o anel de um prazo vencido leva a cor de urgência; o de um prazo folgado, a de 'no prazo'", () => {
+    const { container } = render(<OQueVence vista={vista([item("2026-08-10", "v"), item("2026-12-31", "f")])} />);
+    const [vencido, folgado] = Array.from(container.querySelectorAll("li.prazo-item"));
+    expect(vencido.className).toContain("prz-urgente");
+    expect(folgado.className).toContain("prz-noprazo");
+  });
+
   it("prazo de HOJE não se confunde com prazo vencido", () => {
     const { getByText, queryByText } = render(<OQueVence vista={vista([item("2026-09-15", "b")])} />);
     expect(getByText("vence hoje")).toBeTruthy();
