@@ -372,10 +372,12 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   aparecem no card de compliance.
 - **Votos:** `votos.vereador_id` segue sem FK (ADR-0001 §6 proíbe FK entre schemas); a integridade é a recusa na
   aplicação, provada com Postgres real, mais um CHECK contra UUID nulo.
+- **Voto nominal de sessão não pública (#146):** o CSV de dados abertos e o perfil público do vereador recortam o
+  voto pelas sessões públicas da Casa (`voto_parlamentar.sessao_id` + seam do host `sessoes-publicas`, a mesma regra
+  da página de votações). Sem o seam, nenhum voto sai. A votação nominal em sessão secreta segue permitida.
 - **Falta:**
   - o cockpit com duas sessões vivas ainda abre a mais antiga (o conserto por data reprovou a Trilha 3 e foi desfeito;
     depende de o evento de sessão carregar o tipo);
-  - voto nominal em sessão secreta sai no CSV de dados abertos e no perfil público do vereador;
   - trocar o e-mail de quem já tem conta (o reconvite vai para o e-mail antigo);
   - a lista de leis corta em 200 sem paginar; a ficha da matéria não leva às votações dela;
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem

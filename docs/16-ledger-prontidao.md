@@ -2768,7 +2768,7 @@ O que essas frentes deixaram registrado:
 - **Linha 12 segue aberta.** A tentativa de fazer o cockpit abrir a sessão viva mais recente reprovou a Trilha 3 (votar
   e confirmar presença) e foi desfeita no próprio #133. A vista `sli_sessao` não guarda o tipo da sessão nem o corpo do
   vereador; o conserto certo depende de o evento de sessão carregar o tipo.
-- **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
+- **Achado novo, fechado em 05/10/2026 (#146):** o CSV e o perfil passaram a recortar o voto nominal pelas sessões públicas (a regra da página de votações). Era: nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
   perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
   o problema: confere a sessão.
 - **Achado novo, aberto:** ao reconceder acesso a quem já tem conta, o convite sai para o e-mail já cadastrado; não há
