@@ -612,6 +612,82 @@ export function falharVotacao(estado: EstadoPlenario): EstadoPlenario {
   return estado;
 }
 
+/** O corpo de `GET /sessoes/:id/votacao-encerrada` (200), já camelizado — o RESULTADO da última votação
+ * encerrada da sessão, para o telão/TV/cockpit que recarrega DEPOIS do encerramento (a rota
+ * `votacao-aberta` só lê votação aberta). Mão-tipado, como `VotacaoAbertaSnapshot`. Mesmo sigilo do evento
+ * ao vivo, decidido no servidor (`VotacaoEncerradaOut`, união por modalidade): `votos` só na nominal,
+ * `votosRegistrados` só na secreta, nenhum dos dois na simbólica; os totais e a base são o agregado de
+ * `votacao.encerrada` (público mesmo na secreta). */
+export type VotacaoEncerradaSnapshot = {
+  votacaoId: string;
+  modalidade: string;
+  objetoTipo: string;
+  objetoId: string;
+  proposicao?: ProposicaoResumoPlacar | null;
+  resultado: string;
+  totalSim?: number | null;
+  totalNao?: number | null;
+  totalAbstencao?: number | null;
+  baseMembros?: number | null;
+  votos?: { vereadorId: string; voto: VotoNominal }[];
+  votosRegistrados?: number;
+};
+
+const comoContagem = (n: unknown): number | null => (typeof n === "number" ? n : null);
+
+/** Hidrata `placar` com o RESULTADO da última votação encerrada, a partir de `GET .../votacao-encerrada`.
+ * PURA e TOTAL (nunca lança; corpo de forma inesperada devolve o estado inalterado) e irmã de
+ * `hidratarVotacao`, com a MESMA precedência por `seqNoDisparo`: um evento de votação ao vivo chegado com a
+ * resposta em voo descarta o snapshot inteiro.
+ *
+ * Só ocupa o lugar de um placar AUSENTE ou já ENCERRADO. Um placar ABERTO no estado é uma votação mais nova
+ * (ou ainda em curso) e nunca é sobrescrita pelo resultado da anterior — é isso que impede o telão de
+ * "piscar" para o resultado velho no meio de uma votação. (O caso do encerramento perdido passa antes por
+ * `hidratarVotacao(null)`, que tira o placar aberto e deixa o lugar livre.) Um placar encerrado DIFERENTE
+ * é substituído: o servidor é a verdade e o `votacao.encerrada` do mais novo se perdeu.
+ *
+ * Espelha o que `votacao.encerrada` constrói ao vivo (mesmos campos, totais nulos na simbólica) e acrescenta
+ * o que o evento não carrega: `proposicao`, `objetoTipo`/`objetoId` e a grade nominal inteira. Sigilo
+ * também aqui, fail-closed: `votos` só vale quando a modalidade é EXATAMENTE `nominal`. */
+export function hidratarVotacaoEncerrada(
+  estado: EstadoPlenario,
+  cru: VotacaoEncerradaSnapshot | null,
+  seqNoDisparo: number,
+): EstadoPlenario {
+  if (estado.votacaoEventoSeq !== seqNoDisparo) return estado;
+  if (cru === null || typeof cru !== "object") return estado;
+  if (typeof cru.votacaoId !== "string" || typeof cru.modalidade !== "string" || typeof cru.resultado !== "string") {
+    return estado;
+  }
+  if (estado.placar !== null && !estado.placar.encerrada) return estado;
+
+  const votosNominais: Record<string, VotoNominal> = {};
+  if (cru.modalidade === "nominal" && Array.isArray(cru.votos)) {
+    for (const v of cru.votos) {
+      if (v && typeof v.vereadorId === "string" && typeof v.voto === "string") {
+        votosNominais[v.vereadorId] = v.voto as VotoNominal;
+      }
+    }
+  }
+
+  return {
+    ...estado,
+    placar: {
+      votacaoId: cru.votacaoId,
+      modalidade: cru.modalidade,
+      objetoTipo: typeof cru.objetoTipo === "string" ? cru.objetoTipo : null,
+      objetoId: typeof cru.objetoId === "string" ? cru.objetoId : null,
+      proposicao: comoProposicaoResumoPlacar(cru.proposicao),
+      encerrada: true,
+      votosNominais,
+      votosSecretos: cru.modalidade === "secreta" && typeof cru.votosRegistrados === "number" ? cru.votosRegistrados : 0,
+      resultado: cru.resultado,
+      totais: { sim: comoContagem(cru.totalSim), nao: comoContagem(cru.totalNao), abstencao: comoContagem(cru.totalAbstencao) },
+      baseMembros: comoContagem(cru.baseMembros),
+    },
+  };
+}
+
 /** Hidrata o ESTADO DA SESSÃO a partir de `GET /sessoes/:id` — a irmã de `hidratarVotacao` para o campo
  * `estado`. Existe porque `sessao.transicionou` só chega pelo canal (retenção ~5 min) e a carga inicial lê a
  * sessão uma vez: numa queda longa o telão seguiria dizendo "aberta" sobre uma sessão suspensa/encerrada.

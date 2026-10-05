@@ -43,16 +43,19 @@
                                                           :from [:legislativo.votacoes] :where onde}))))})))
 
 (defn ids-das-sessoes
-  "#{votacao-id} das votacoes (qualquer estado) cujas sessoes estao em `sessao-ids`. Sem sessoes -> `#{}`, sem consulta.
-  Nao filtra por estado de proposito: quem usa e' a leitura publica de VOTO POR VEREADOR, e o voto ja' esta' projetado
-  desde que foi registrado; o que decide se ele sai e' a sessao ser publica, nao o estado da votacao."
+  "#{votacao-id} das votacoes cujas sessoes estao em `sessao-ids`, menos as ANULADAS. Sem sessoes -> `#{}`, sem consulta.
+  Quem usa e' a leitura publica de VOTO POR VEREADOR, e o voto ja' esta' projetado desde que foi registrado: a aberta
+  entra (o voto nominal de sessao publica e' publico ao vivo, no telao), a encerrada entra, a anulada NAO — a anulacao
+  desfaz a votacao (correcao = nova votacao), e o voto dela nao pode seguir no perfil, nas contagens e no CSV. A regra e'
+  da LEITURA: anular depois da projecao esconde o voto na proxima leitura, sem reprocessar evento (ledger docs/16)."
   [tx ente-id sessao-ids]
   (if (empty? sessao-ids)
     #{}
     (into #{}
           (map :id)
           (jdbc/execute! tx (sql/format {:select [:id] :from [:legislativo.votacoes]
-                                         :where [:and [:= :ente_id ente-id] [:in :sessao_id (vec sessao-ids)]]})
+                                         :where [:and [:= :ente_id ente-id] [:in :sessao_id (vec sessao-ids)]
+                                                 [:<> :estado [:inline "anulada"]]]})
                          {:builder-fn rs/as-unqualified-maps}))))
 
 (defn encerrada

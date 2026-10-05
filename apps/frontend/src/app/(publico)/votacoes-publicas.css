@@ -5,7 +5,8 @@
 .votacoes-publicas .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
 .votacoes-publicas .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
 .votacoes-publicas .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; line-height: 1.55; }
-.votacoes-publicas .secao-tit { font-family: var(--display); font-size: var(--t-16); margin: 1.6rem 0 0.6rem; }
+/* título da seção no arquétipo das vizinhas (contas, dados abertos): rótulo mono, não texto corrido */
+.votacoes-publicas .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.8rem 0 0.7rem; }
 .votacoes-publicas .estado { color: var(--texto-2); }
 
 .votacoes-publicas .vp-filtro { margin: 1.2rem 0 0; padding: 0.6rem 0.9rem; border-left: 4px solid var(--marca); background: var(--surface);
@@ -25,7 +26,7 @@
 .vp-meta { display: block; margin-top: 0.2rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 
 .vp-aberta { margin: 1.4rem 0 0; padding: 1.2rem 1.3rem; border: 1px solid var(--linha); border-left-width: 6px; border-radius: var(--raio); background: var(--surface); }
-.vp-aberta h2 { font-family: var(--display); margin: 0; }
+.vp-aberta h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0; }
 .vp-aberta .vp-ementa { font-size: var(--t-16); margin-top: 0.3rem; }
 .vp-aberta .vp-resultado { font-size: var(--t-16); font-weight: 700; margin-top: 0.8rem; }
 .vp-aberta p { margin: 0.4rem 0 0; }
