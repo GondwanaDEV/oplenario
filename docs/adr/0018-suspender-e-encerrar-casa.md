@@ -185,6 +185,12 @@ Depois do "Confirmo" (com as correções), esta ADR vira **Aceita** e a fatia 1 
 - **Cota de IA zerada** enquanto a Casa está suspensa, pelo orçamento da ADR-0014.
   - A reativação devolve o que valia antes.
   - Se antes era "só mede", volta a ser "só mede": mig `…161`, orçamento sem valor, aceito também pelo satélite.
+  - **Orçamento definido com a Casa suspensa (regra de 05/10/2026): a suspensão vence.** O valor novo fica guardado e
+    é o que a reativação devolve, no lugar do de antes da suspensão; até lá a cota segue zero e o satélite só recebe o
+    0/0. Antes, a definição nova reabria a cota da Casa suspensa e a reativação não fazia nada. O `ia-orcamento` avisa
+    na saída e no resumo da atuação ("a cota segue zero e este valor vale a partir da reativação").
+    Ver `integracao_ia/components/repositorio.clj` (`definir-com-a-casa-suspensa!`) e
+    `admin_sistema/suspender_casa_test`.
 - **Console e telas:**
   - Na ficha da Casa em `/operacao`: "Acesso da Câmara", com Suspender (motivo e justificativa), a fila "aguardando 2º
     operador" (aprovar, recusar, retirar), Reativar e Iniciar encerramento.
