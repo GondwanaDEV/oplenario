@@ -64,25 +64,25 @@ export default function VotarPage() {
   // fetch caiu precisa ver ISSO, nao uma tela tranquila que parece dizer "nada acontecendo".
   if (estadoSessaoAtual === "erro") {
     return (
-      <main className="votar-pagina tela-estado">
+      <div className="votar-pagina tela-estado">
         <h1>Não foi possível abrir o cockpit</h1>
         <p>Não deu para descobrir sua sessão atual. Tente novamente em instantes.</p>
-      </main>
+      </div>
     );
   }
   if (estadoSessaoAtual === "carregando" || estadoPainel === "carregando") {
     return (
-      <main className="votar-pagina tela-estado">
+      <div className="votar-pagina tela-estado">
         <p>Carregando…</p>
-      </main>
+      </div>
     );
   }
   if (!sessaoId) {
     return (
-      <main className="votar-pagina tela-estado">
+      <div className="votar-pagina tela-estado">
         <h1>Nenhuma sessão em curso agora.</h1>
         <p>Assim que uma sessão abrir, o cockpit de votação aparece aqui.</p>
-      </main>
+      </div>
     );
   }
   // review HIGH: sem isto, `conexao === "erro"` (SSE negado/caído) caia no `else` do badge e mostrava
@@ -90,10 +90,10 @@ export default function VotarPage() {
   // no pior momento possível (uma votação nominal em curso que o celular já não está mais recebendo).
   if (conexao === "erro") {
     return (
-      <main className="votar-pagina tela-estado">
+      <div className="votar-pagina tela-estado">
         <h1>Não foi possível abrir o painel ao vivo</h1>
         <p>{erroConexao ?? "Erro desconhecido."}</p>
-      </main>
+      </div>
     );
   }
 
@@ -129,7 +129,7 @@ export default function VotarPage() {
   }
 
   return (
-    <main className="votar-pagina">
+    <div className="votar-pagina">
       <h1 className="sr-only">Cockpit de votação</h1>
 
       {/* .cockpit-ao-vivo (NAO .ao-vivo — review MEDIUM: a Mesa's plenario.css já tem uma badge .ao-vivo
@@ -238,7 +238,7 @@ export default function VotarPage() {
           </>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
