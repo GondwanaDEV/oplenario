@@ -145,3 +145,18 @@
     (is (:integra (logic/verificar c)))
     (is (not (:integra (logic/verificar [(assoc (first c) :rotulo "Outro texto")])))
         "o rotulo e' selado: trocar o texto depois quebra a corrente")))
+
+(deftest a-clara-ganha-rotulo-e-a-trilha-segue-sem-conteudo
+  ;; fatia 4 da Clara: as duas escritas do assistente saem do `sem-resumo` e ganham o rotulo do ato
+  (let [h (apply str (repeat 64 "b"))
+        r (logic/registro-da-requisicao (req :post)
+                                        {:status 200 :auditoria {:recurso-tipo "interacao_assistente" :recurso-id "i1"
+                                                                 :conteudo-sha256 h}}
+                                        :agente/perguntar)]
+    (is (= ["Perguntou à Clara" "interacao_assistente" "i1" h]
+           ((juxt :rotulo :recurso-tipo :recurso-id #(get-in % [:detalhe :conteudo-sha256])) r))
+        "o rotulo diz o ato; a pergunta continua so' apontada pelo recurso e pelo hash"))
+  (is (= "Reportou erro numa resposta da IA"
+         (:rotulo (logic/registro-da-requisicao (req :post) {:status 200} :agente/reportar-erro-ia))))
+  (is (nil? (:rotulo (logic/registro-da-requisicao (req :post) {:status 503} :agente/reportar-erro-ia)))
+      "a IA fora: o reporte nao aconteceu, sem rotulo"))

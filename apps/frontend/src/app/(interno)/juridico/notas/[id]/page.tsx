@@ -18,6 +18,7 @@ import type { NotaTecnicaOut } from "@/lib/contrato-legislativo.gen";
 import { GuardJuridico } from "../../../guard-juridico";
 import { LeituraDaNota } from "../../../conferencias/leitura-nota";
 import { TopoInterno } from "../../../topo";
+import { dicaDaMateria, useDicaDaClara } from "../../../clara/dica";
 import "../../../conferencias/conferencias.css";
 import "../../juridico.css";
 
@@ -38,6 +39,8 @@ function Conteudo() {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const ehJuridico = papeis.includes("juridico");
+  // A Clara: a nota é o rascunho do parecer sobre uma matéria — "Nesta tela: PL 42/2026".
+  useDicaDaClara(estado.fase === "pronto" ? dicaDaMateria(estado.dado.tipo, estado.dado.sequencial, estado.dado.ano) : null);
 
   async function usar() {
     if (!id) return;

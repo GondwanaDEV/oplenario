@@ -91,7 +91,8 @@ jobs:
 
             // ---------- telas ----------
             await tela(ctx, '/assistente', '1-assistente', /A assistente da Casa\. Pergunte em palavras/);
-            await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /A assistente da Casa\. Pergunte em palavras/);
+            // ADR-0024 fatia 4: o endereco antigo leva a /vereador com a Clara expandida (o texto so aparece com ela aberta)
+            await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /Pergunte o que precisar saber da Casa/);
             await tela(ctx, '/normas', '3-normas', /Normas da Casa/);
             await tela(ctx, '/propostas', '4-propostas', /Propostas do assistente/);
             await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);

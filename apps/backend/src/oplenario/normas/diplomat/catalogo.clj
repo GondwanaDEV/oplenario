@@ -90,7 +90,9 @@
                      "coisa sobre prazo, quorum, rito ou competencia: 'qual o quorum para derrubar um veto?'. Devolve "
                      "cada dispositivo com a citacao pronta ('Regimento Interno, art. 45, § 1º') e o endereco para ler.")
      :classe :leitura
-     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
+     ;; fatia 4 da Clara: o texto vigente conferido da LOM e do RI e' lei publica; quem consulta (juridico, auditor,
+     ;; admin_ente) le como o vereador, que tambem nao tem tela de /normas
+     :papeis #{"secretario" "vereador" "juridico" "auditor" "admin_ente" authz/papel-agente-institucional}
      :entrada [:map {:closed true}
                [:consulta {:description "O assunto ou o numero, em palavras: 'quorum veto', 'art. 45'."}
                 [:string {:min 2 :max 300}]]
@@ -106,7 +108,9 @@
                      "(artigo), 'art45_par1' (§ 1º), 'art45_par1u' (paragrafo unico), 'art45_cpt_inc2' (inciso II do "
                      "caput), 'art45_par1_inc2_ali1' (alinea a). Leia o dispositivo antes de cita-lo.")
      :classe :leitura
-     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
+     ;; fatia 4 da Clara: o texto vigente conferido da LOM e do RI e' lei publica; quem consulta (juridico, auditor,
+     ;; admin_ente) le como o vereador, que tambem nao tem tela de /normas
+     :papeis #{"secretario" "vereador" "juridico" "auditor" "admin_ente" authz/papel-agente-institucional}
      :entrada [:and
                [:map {:closed true :description "Informe norma-id ou especie, e o endereco."}
                 [:norma-id {:optional true :description "Id da norma (vem da busca)."} :uuid]

@@ -135,5 +135,6 @@
 
 (deftest a-pessoa-sem-papel-ve-lista-vazia
   (let [ente (random-uuid)
-        cred (credencial! ente "admin_ente" :secretaria)]
+        ;; papel que nenhuma ferramenta atende (o admin_ente, desde a fatia 4 da Clara, le a pauta, a ata, a caixa, as normas e os vereadores)
+        cred (credencial! ente "papel_sem_ferramenta" :secretaria)]
     (is (= [] (get-in (:corpo (rpc (servico) cred (chamada 1 "tools/list" {}))) ["result" "tools"])))))

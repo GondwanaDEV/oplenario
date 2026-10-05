@@ -12,6 +12,7 @@ vi.mock("next/navigation", () => ({ useParams: () => ({ id: "ped1" }) }));
 
 import PaginaJuridico from "./page";
 import PaginaPedido from "./[id]/page";
+import { ProvedorDaDica, useDicaAtual } from "../clara/dica";
 
 type Rota = { status?: number; corpo: unknown };
 type Chamada = { metodo: string; url: string; body: unknown };
@@ -430,5 +431,38 @@ describe("pedido aberto a partir da nota (origem do rascunho)", () => {
     render(<PaginaPedido />);
     await screen.findByLabelText("Parecer jurídico nº 3/2026, texto");
     expect(screen.queryByText(/nota técnica da IA/)).toBeNull();
+  });
+});
+
+describe("detalhe /juridico/:id — a dica da Clara", () => {
+  const url = `${BASE}/ped1`;
+  function Sonda() {
+    const dica = useDicaAtual();
+    return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+  }
+  const naMoldura = () =>
+    render(
+      <ProvedorDaDica>
+        <PaginaPedido />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+
+  it("pedido sobre uma matéria: a dica é a matéria ('PL 7/2026'), e só depois de carregar", async () => {
+    estadoAuth.papeis = ["secretario"];
+    mockar({ [`GET ${url}`]: { corpo: pedido() } });
+    naMoldura();
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    await screen.findByRole("heading", { name: "Análise jurídica da matéria" });
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe("PL 7/2026 | Sobre o PL 7/2026,  | Perguntar sobre esta matéria"),
+    );
+  });
+
+  it("consulta avulsa (sem matéria): sem dica", async () => {
+    mockar({ [`GET ${url}`]: { corpo: pedido({ proposicao: null, assunto: "Decoro do vereador X" }) } });
+    naMoldura();
+    await screen.findByRole("heading", { name: "Decoro do vereador X" });
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
   });
 });

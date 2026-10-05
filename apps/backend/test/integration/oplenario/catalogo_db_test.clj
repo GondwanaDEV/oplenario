@@ -197,8 +197,11 @@
             "ler_dispositivo" "ler_leitura_do_comunicado" "pareceres_juridicos_da_materia"
             "pauta_da_sessao" "prestacao_de_contas" "situacao_da_materia" "tramitacao_da_materia" "vereadores_da_casa"]
            (map :nome (catalogo/ferramentas secretaria))))
-    (is (empty? (catalogo/ferramentas (agente-de ente "admin_ente" :secretaria)))
-        "o conjunto do publico nao da' a ninguem o que o papel dele nao alcanca")
+    (is (= ["ata_da_sessao" "buscar_dispositivos" "ler_caixa" "ler_comunicado" "ler_dispositivo"
+            "ler_leitura_do_comunicado" "pauta_da_sessao" "vereadores_da_casa"]
+           (map :nome (catalogo/ferramentas (agente-de ente "admin_ente" :secretaria))))
+        "o conjunto do publico nao da' a ninguem o que o papel dele nao alcanca (a materia e as contas, nao)")
+    (is (empty? (catalogo/ferramentas (agente-de ente "papel_sem_ferramenta" :secretaria))))
     (is (= :validacao/ferramenta-desconhecida
            (:tipo (erro #(catalogo/executar! (deps) secretaria "apagar_tudo" {})))))
     (is (= :validacao/ferramenta-desconhecida
@@ -208,6 +211,48 @@
            (:tipo (erro #(catalogo/executar! (deps) {:identidade-id (random-uuid) :ente-id ente :papeis #{"secretario"}}
                                              "pauta_da_sessao" {}))))
         "o catalogo so' atende ator de agente (credencial delegada)")))
+
+;; ---------- fatia 4: o publico de consulta (juridico, auditor, admin_ente) ----------
+
+(def ^:private leituras-de-todos
+  ["ata_da_sessao" "buscar_dispositivos" "ler_caixa" "ler_comunicado" "ler_dispositivo" "ler_leitura_do_comunicado"
+   "pauta_da_sessao" "vereadores_da_casa"])
+
+(def ^:private matriz-da-consulta
+  {"juridico" ["ata_da_sessao" "buscar_dispositivos" "contas_da_casa" "ler_caixa" "ler_comunicado" "ler_dispositivo"
+               "ler_leitura_do_comunicado" "pareceres_juridicos_da_materia" "pauta_da_sessao" "prestacao_de_contas"
+               "situacao_da_materia" "tramitacao_da_materia" "vereadores_da_casa"]
+   "auditor" leituras-de-todos
+   "admin_ente" leituras-de-todos})
+
+(deftest a-consulta-oferece-a-cada-papel-so-o-que-a-tela-dele-le
+  (let [ente (random-uuid)]
+    (doseq [[papel esperadas] matriz-da-consulta]
+      (testing papel
+        (let [c (credencial! ente (pessoa! ente papel) :consulta :classes #{:leitura})
+              a (ator-agente c)]
+          (is (= {:publico :consulta :classes #{:leitura}} (select-keys (:via a) [:publico :classes])))
+          (is (= esperadas (map :nome (catalogo/ferramentas a))))
+          (testing "mesmo com ato concedido por engano, o conjunto de consulta nao tem ato"
+            (is (= esperadas (map :nome (catalogo/ferramentas (assoc-in a [:via :classes] #{:leitura :ato})))))))))
+    (testing "o banco recusa credencial de consulta com ato ou rascunho (defesa alem do agente.clj)"
+      (doseq [classes [#{:leitura :ato} #{:leitura :rascunho} #{:ato}]]
+        (is (thrown? Exception (credencial! ente (pessoa! ente "juridico") :consulta :classes classes)) (pr-str classes))))
+    (testing "o auditor nunca le a trilha nem o historico da Clara pela Clara"
+      (is (not-any? #(re-find #"auditoria|trilha|historico|conversa" %)
+                    (map :nome (catalogo/ferramentas (ator-agente (credencial! ente (pessoa! ente "auditor") :consulta)))))))
+    (testing "ferramenta fora do conjunto de consulta nao existe para ele, mesmo que o papel a alcance"
+      (let [jur (ator-agente (credencial! ente (pessoa! ente "juridico") :consulta))]
+        (is (= :validacao/ferramenta-desconhecida
+               (:tipo (erro #(catalogo/executar! (deps) jur "registrar_prestacao_de_contas" {})))))))
+    (testing "o papel ainda e' conferido a cada chamada"
+      (let [aud (ator-agente (credencial! ente (pessoa! ente "auditor") :consulta))
+            p (proposicao! ente "Dispoe sobre a praca.")]
+        (is (= :autorizacao/negado
+               (:tipo (erro #(catalogo/executar! (deps) aud "situacao_da_materia" {:proposicao-id (str (:id p))})))))
+        (is (= (str (:id p))
+               (:id (catalogo/executar! (deps) (ator-agente (credencial! ente (pessoa! ente "juridico") :consulta))
+                                        "situacao_da_materia" {:proposicao-id (str (:id p))}))))))))
 
 ;; ---------- TESTE DE VAZAMENTO, dimensao agente ----------
 

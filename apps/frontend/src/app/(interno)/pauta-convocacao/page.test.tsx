@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PaginaPautaConvocacao from "./page";
 import { MSG_CONFLITO_PAUTA } from "@/lib/use-editar-pauta";
+import { ProvedorDaDica, useDicaAtual } from "../clara/dica";
 
 // docs/23 Fatia 1 — "Montar a pauta". Um servidor FALSO com estado: as escritas mudam a pauta que o GET
 // seguinte devolve, então cada teste prova o ciclo inteiro (escrita → recarga → tela), não só o request.
@@ -255,6 +256,28 @@ describe("PaginaPautaConvocacao — montar a pauta", () => {
     render(<PaginaPautaConvocacao />);
     await pautaCarregada();
     expect((screen.getByLabelText("Sessão") as HTMLSelectElement).value).toBe("s1");
+  });
+
+  it("a Clara: a tela diz que trata da pauta da sessão escolhida, e troca junto com a sessão", async () => {
+    function Sonda() {
+      const dica = useDicaAtual();
+      return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+    }
+    render(
+      <ProvedorDaDica>
+        <PaginaPautaConvocacao />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    await pautaCarregada();
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe(
+        "Pauta da 15ª Sessão Ordinária | Sobre a pauta da 15ª Sessão Ordinária,  | Perguntar sobre esta pauta",
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("Sessão"), { target: { value: "s2" } });
+    await waitFor(() => expect(screen.getByTestId("dica").textContent).toMatch(/^Pauta da 16ª Sessão Ordinária \|/));
   });
 
   it("quem não é secretaria vê acesso restrito", () => {

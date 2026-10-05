@@ -4,8 +4,10 @@
   leitura, e ato — que por agente so' vira PROPOSTA, ADR-0012), chama o satelite, devolve a conversa em SSE e revoga a
   credencial ao fim — com sucesso ou nao.
 
-  O publico do agente sai do papel da pessoa: 'secretario' -> conjunto da secretaria, 'vereador' -> do vereador; quem
-  tem os dois escolhe pelo campo `publico`, e nunca um publico cujo papel nao tem (403).
+  O publico do agente sai do papel da pessoa: 'secretario' -> conjunto da secretaria, 'vereador' -> do vereador,
+  'juridico', 'auditor' e 'admin_ente' -> o de consulta (fatia 4 da Clara). Quem tem mais de um escolhe pelo campo
+  `publico`; sem escolha, secretaria > vereador > consulta; nunca um publico cujo papel nao tem (403). A credencial de
+  consulta leva so' `leitura`: esses papeis nao propoem ato pela Clara.
 
   SSE (§22.3.2): `passo` (cada ferramenta chamada, com o desfecho), `proposta` (cada proposta de ato criada na execucao,
   para a tela levar a pessoa a confirmar), depois `resposta` (texto, citacoes conferidas,
@@ -32,7 +34,22 @@
 
 (def agente-da-casa "assistente-da-casa")
 
-(def ^:private publico-por-papel {"secretario" :secretaria "vereador" :vereador})
+(def ^:private publico-por-papel
+  {"secretario" :secretaria "vereador" :vereador "juridico" :consulta "auditor" :consulta "admin_ente" :consulta})
+
+(def ^:private precedencia
+  "Sem `publico` no corpo, o primeiro desta ordem que um papel da pessoa alcanca."
+  [:secretaria :vereador :consulta])
+
+(def papeis-da-clara
+  "Os papeis que perguntam a' Clara e leem o proprio historico."
+  (vec (sort (keys publico-por-papel))))
+
+(defn classes-do-publico
+  "As classes que a credencial da execucao recebe (ADR-0010): `ato` (que por agente so' vira PROPOSTA, ADR-0012) so'
+  para a secretaria e o vereador; o publico de consulta so' le."
+  [publico]
+  (if (= :consulta publico) #{:leitura} #{:leitura :ato}))
 
 (def mensagem-indisponivel "A Clara está indisponível agora. Siga pela tela — nada do seu trabalho depende dela.")
 
@@ -48,11 +65,11 @@
         conversa-id (when (some? conversa)
                       (or (and (string? conversa) (parse-uuid conversa)) (invalido! "conversa deve ser um uuid")))
         pedido-publico (get corpo "publico")
-        possiveis (keep publico-por-papel (sort (:papeis ator)))
+        possiveis (into #{} (keep publico-por-papel) (:papeis ator))
         publico (if pedido-publico
                   (or (some #(when (= pedido-publico (name %)) %) possiveis)
                       (authz/negar! :publico-sem-papel {:publico pedido-publico}))
-                  (first (sort-by #(if (= :secretaria %) 0 1) possiveis)))]
+                  (some possiveis precedencia))]
     (when-not (and pergunta (<= 2 (count pergunta) 1000)) (invalido! "pergunta de 2 a 1000 caracteres"))
     (when-not publico (authz/negar! :sem-publico {}))
     {:pergunta pergunta :publico publico :conversa-id conversa-id}))
@@ -95,7 +112,7 @@
     (invalido! "conversa desconhecida"))
   (let [{:keys [execucao-id credencial]}
         (auten/emitir-credencial-agente! repo-identidade ator {:agente agente-da-casa :publico publico
-                                                               :classes #{:leitura :ato}})]
+                                                               :classes (classes-do-publico publico)})]
     (try
       (let [r (executar-na-ia ia (:ente-id ator) pergunta credencial execucao-id)
             propostas (when repo-integracao-ia
@@ -249,18 +266,18 @@
                                        :recurso-id (str cid)}))))))
 
 (defn rotas
-  "POST /agente/perguntas — a secretaria ou o vereador perguntam a' Clara, a assistente da Casa. POST
-  /ia/execucoes/:execucao-id/reportes — quem recebeu uma resposta de IA diz que ela esta' errada (feature 8.4).
-  GET /agente/historico e GET /agente/conversas/:conversa-id — o historico da Clara (ADR-0024): cada pessoa le o seu;
-  o `auditor` le o da Casa, e essa leitura vai a' trilha."
+  "POST /agente/perguntas — a secretaria, o vereador, o juridico, o auditor e o administrador da Casa perguntam a'
+  Clara, a assistente da Casa (os tres ultimos so' para ler). POST /ia/execucoes/:execucao-id/reportes — quem recebeu
+  uma resposta de IA diz que ela esta' errada (feature 8.4). GET /agente/historico e GET /agente/conversas/:conversa-id
+  — o historico da Clara (ADR-0024): cada pessoa le o seu; o `auditor` le o da Casa, e essa leitura vai a' trilha (pela
+  tela: o historico e a trilha nunca sao ferramenta da Clara)."
   [{:keys [auth] :as deps}]
-  #{["/agente/perguntas" :post [auth (it/exige-algum-papel ["secretario" "vereador"]) it/corpo-json
-                                 (perguntar-handler deps)]
-     :route-name :agente/perguntar]
-    ["/ia/execucoes/:execucao-id/reportes" :post [auth it/corpo-json (reportar-handler deps)]
-     :route-name :agente/reportar-erro-ia]
-    ["/agente/historico" :get [auth (it/exige-algum-papel ["secretario" "vereador" "auditor"]) (historico-handler deps)]
-     :route-name :agente/historico]
-    ["/agente/conversas/:conversa-id" :get [auth (it/exige-algum-papel ["secretario" "vereador" "auditor"])
-                                            (conversa-handler deps)]
-     :route-name :agente/conversa]})
+  (let [papel (it/exige-algum-papel papeis-da-clara)]
+    #{["/agente/perguntas" :post [auth papel it/corpo-json (perguntar-handler deps)]
+       :route-name :agente/perguntar]
+      ["/ia/execucoes/:execucao-id/reportes" :post [auth it/corpo-json (reportar-handler deps)]
+       :route-name :agente/reportar-erro-ia]
+      ["/agente/historico" :get [auth papel (historico-handler deps)]
+       :route-name :agente/historico]
+      ["/agente/conversas/:conversa-id" :get [auth papel (conversa-handler deps)]
+       :route-name :agente/conversa]}))

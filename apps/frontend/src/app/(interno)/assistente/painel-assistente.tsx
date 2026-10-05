@@ -21,17 +21,7 @@ export const SUGESTOES_SECRETARIA = [
   "Qual o quórum para derrubar um veto?",
 ];
 
-export const SUGESTOES_VEREADOR = [
-  "Protocole um requerimento de informação à Secretaria de Obras sobre a reforma da praça do Centro",
-  "Qual a situação do PL 11/2026?",
-  "Qual o quórum para derrubar um veto?",
-];
-
 const CONFIANCA_CONSULTA = "Só consulta: não protocola, não assina, não altera nada. Confira as fontes antes de usar a resposta.";
-
-export const CONFIANCA_PROPOE =
-  "Não protocola nem assina por você: quando você pede um ato, ela prepara uma proposta e você lê e decide aqui, na " +
-  "plataforma. Confira as fontes antes de usar a resposta.";
 
 function Resposta({ conversa, token }: { conversa: Conversa; token: string | null }) {
   const { passos, resposta, indisponivel } = conversa;
