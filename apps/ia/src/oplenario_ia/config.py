@@ -58,6 +58,15 @@ class Config(BaseModel):
 
 
 MODELO_OPENROUTER_PADRAO = "openai/gpt-oss-120b"  # provisório (05/10/2026), ADR-0023
+
+# Os modelos com que o satélite pode SUBIR pelo OpenRouter (ADR-0023). Entra aqui o que passou pela avaliação
+# (`oplenario-ia-avaliar`, R-IA-4) — a avaliação em si monta a `Config` direto e roda qualquer slug fixo.
+MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(
+    {
+        MODELO_OPENROUTER_PADRAO,
+        "qwen/qwen3.8-27b:free",  # gratuito: limite diário de requisições do OpenRouter, não serve a produção
+    }
+)
 _SLUG_OPENROUTER = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*$")
 
 
@@ -102,4 +111,8 @@ def carregar(env: Mapping[str, str] | None = None) -> Config:
     ):
         if v := e.get(var):
             dados[campo] = v
-    return Config.model_validate(dados)
+    config = Config.model_validate(dados)
+    if config.vendor == "openrouter" and config.modelo not in MODELOS_OPENROUTER_PERMITIDOS:
+        permitidos = ", ".join(sorted(MODELOS_OPENROUTER_PERMITIDOS))
+        raise ValueError(f"OPLENARIO_IA_MODELO fora da lista de modelos permitidos do OpenRouter ({permitidos})")
+    return config

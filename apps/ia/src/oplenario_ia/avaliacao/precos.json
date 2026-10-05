@@ -7,6 +7,7 @@
   "acrescimo": {"openrouter": "1.055"},
   "precos": {
     "fake/fake-1": {"entrada": "0", "saida": "0", "cache_leitura": "0", "cache_escrita": "0"},
+    "openrouter/qwen/qwen3.8-27b:free": {"entrada": "0", "saida": "0", "cache_leitura": "0", "cache_escrita": "0"},
     "openrouter/anthropic/claude-opus-5": {"entrada": "5.00", "saida": "25.00", "cache_leitura": "0.50", "cache_escrita": "6.25"},
     "anthropic/claude-opus-5": {"entrada": "5.00", "saida": "25.00", "cache_leitura": "0.50", "cache_escrita": "6.25"}
   }

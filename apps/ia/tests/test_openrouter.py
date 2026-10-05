@@ -10,7 +10,7 @@ import pytest
 
 from oplenario_ia.avaliacao.custo import calcular, tabela_padrao
 from oplenario_ia.confianca.registro import RegistroExecucao, RegistroMemoria
-from oplenario_ia.config import Config, carregar
+from oplenario_ia.config import MODELOS_OPENROUTER_PERMITIDOS, Config, carregar
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.governanca.filtro import PedidoGovernado
 from oplenario_ia.governanca.proveniencia import Fonte, Peca, Proveniencia, Sigilo
@@ -237,11 +237,24 @@ def test_config_do_openrouter() -> None:
     )
     assert (c.vendor, c.modelo) == ("openrouter", "openai/gpt-oss-120b"), "sem modelo, o slug do OpenRouter"
     assert c.openrouter_provedores == ["groq", "cerebras"]
-    assert (
-        carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "anthropic/claude-opus-5"}).modelo
-        == "anthropic/claude-opus-5"
-    )
+    gratis = carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "qwen/qwen3.8-27b:free"})
+    assert gratis.modelo == "qwen/qwen3.8-27b:free"
     assert Config().modelo == "claude-opus-5", "o padrão dos outros fornecedores não muda"
+
+
+def test_producao_so_sobe_com_modelo_da_lista_mas_a_avaliacao_roda_qualquer_um() -> None:
+    with pytest.raises(ValueError, match="lista de modelos permitidos"):
+        carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "anthropic/claude-opus-5"})
+    assert {"openai/gpt-oss-120b", "qwen/qwen3.8-27b:free"} == MODELOS_OPENROUTER_PERMITIDOS
+    assert Config(vendor="openrouter", modelo="anthropic/claude-opus-5").modelo == "anthropic/claude-opus-5"
+    assert (
+        carregar({"OPLENARIO_IA_VENDOR": "anthropic", "OPLENARIO_IA_MODELO": "claude-sonnet-5"}).vendor == "anthropic"
+    )
+
+
+def test_modelo_gratuito_tem_preco_zero_na_tabela() -> None:
+    c = calcular(Uso(entrada=1000, saida=100), "openrouter", "qwen/qwen3.8-27b:free", tabela_padrao())
+    assert c.valor == 0
 
 
 @pytest.mark.parametrize(

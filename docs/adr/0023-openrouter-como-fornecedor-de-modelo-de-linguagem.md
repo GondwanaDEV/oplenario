@@ -86,6 +86,19 @@ failover entre os provedores da lista fica ligado, porque a lista já é a dos a
   `avaliacao/precos.json`, `confianca/registro.py`, `nucleo.py`, `avaliacao/cli.py`.
 - Testes: `apps/ia/tests/test_openrouter.py` (corpo e política de dado, normalização, recusa, 11 status, erro em
   200, rede, chave ausente, config, custo, ponta a ponta pelo núcleo).
-- **Não verificado contra o OpenRouter real:** a sessão não tem rede até `openrouter.ai` nem chave. Antes de ligar,
-  rodar a avaliação com a chave e conferir na resposta real: `provider`, `usage.cost` e
-  `prompt_tokens_details.cached_tokens`.
+- **Verificado ao vivo em 05/10/2026**, com uma chave de nível gratuito e sem crédito:
+  - `openai/gpt-oss-120b` → 402, classificado como "créditos do OpenRouter esgotados", sem nova tentativa. **Ele não
+    foi avaliado:** não existe variante gratuita dele.
+  - modelos `:free` sem provedor com ZDR → 404 "No endpoints found matching your data policy" → "configuração do
+    fornecedor". Confirma que a política de dado vai e é obedecida.
+  - `qwen/qwen3.8-27b:free` (provedor ModelRun, aceita ZDR) respondeu. A resposta real tem `provider`, `usage.cost`,
+    `prompt_tokens_details.cached_tokens` e `cache_write_tokens` com os nomes que o adaptador lê; o raciocínio vem à
+    parte (`message.reasoning`) e não entra no texto; o corpo pode vir com espaço em branco antes do JSON.
+  - avaliação com ele (`oplenario-ia-avaliar avaliacoes`): `base-comum` 8/8, `copiloto-relator` 1/1 (os casos só-fake
+    pulados) e `agente-seguranca` entre 2/7 e 4/7. As reprovações são do modelo e da conta, não do adaptador: em parte
+    dos planos o modelo gasta os 2000 tokens raciocinando e não escreve a resposta (`finish_reason=length`, texto
+    vazio → "saída inválida"), e o nível gratuito devolve 429 depois de ~16 requisições seguidas ("sobrecarga").
+- **Lista de modelos permitidos** (`MODELOS_OPENROUTER_PERMITIDOS`, `config.py`): o satélite só SOBE
+  (`carregar()`) com `openai/gpt-oss-120b` ou `qwen/qwen3.8-27b:free`. A avaliação monta a `Config` direto e roda
+  qualquer slug fixo — é por ela que um modelo entra na lista. O `qwen/qwen3.8-27b:free` entrou a pedido, com preço
+  zero na tabela; o limite diário do nível gratuito não o deixa servir a produção.
