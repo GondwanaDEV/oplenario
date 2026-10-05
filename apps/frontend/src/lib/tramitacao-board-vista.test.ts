@@ -113,6 +113,26 @@ describe("derivarBoard", () => {
     expect(concluidas.itens.map((i) => i.proposicaoId)).toEqual(["8", "9", "10"]);
   });
 
+  it("a partir do autógrafo a coluna vem do desfecho: lei em Concluídas, veto por apreciar em Em Plenário (docs/16 linha 18)", () => {
+    const colunas = derivarBoard(
+      [
+        item({ proposicaoId: "lei", estado: "aguardando_pauta", desfecho: "publicada" }),
+        item({ proposicaoId: "veto", estado: "aguardando_pauta", desfecho: "vetado" }),
+        item({ proposicaoId: "espera", estado: "aguardando_pauta", desfecho: null }),
+      ],
+      [
+        { estado: "aguardando_pauta", desfecho: "publicada", total: 3 },
+        { estado: "aguardando_pauta", desfecho: "vetado", total: 1 },
+        { estado: "aguardando_pauta", desfecho: null, total: 5 },
+      ],
+    );
+    const col = (chave: string) => colunas.find((c) => c.chave === chave)!;
+    expect(col("concluidas").itens.map((i) => [i.proposicaoId, i.situacao])).toEqual([["lei", "Virou lei"]]);
+    expect(col("em-plenario").itens.map((i) => [i.proposicaoId, i.situacao])).toEqual([["veto", "Vetada"]]);
+    expect(col("pronta-pauta").itens.map((i) => i.proposicaoId)).toEqual(["espera"]);
+    expect([col("concluidas").total, col("em-plenario").total, col("pronta-pauta").total]).toEqual([3, 1, 5]);
+  });
+
   it("estado desconhecido -> não descarta em silêncio: cai numa 6ª coluna 'Outros' (azulejo neutro)", () => {
     const colunas = derivarBoard([item({ proposicaoId: "11", estado: "xpto-desconhecido" })]);
     const outros = colunas.find((c) => c.titulo === "Outros")!;

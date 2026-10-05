@@ -43,3 +43,30 @@ export function situacaoDoDesfecho(
     })),
   };
 }
+
+/** A cor do chip da situação pelo desfecho: lei ou sanção = aprovada; veto mantido = sem lei, a cor da arquivada; à
+ * espera do Executivo ou com o veto por apreciar = em tramitação. Null quando o desfecho não decide. */
+export function categoriaDoDesfecho(desfecho: string | null | undefined): "aprovada" | "arquivada" | "tram" | null {
+  switch (desfecho) {
+    case "sancionado":
+    case "sancao_tacita":
+    case "veto_derrubado":
+    case "promulgada":
+    case "publicada":
+      return "aprovada";
+    case "veto_mantido":
+      return "arquivada";
+    case "autografo_enviado":
+    case "vetado":
+      return "tram";
+    default:
+      return null;
+  }
+}
+
+/** A coluna do quadro de tramitação pelo desfecho: o veto ainda por apreciar volta ao Plenário (é a Câmara que o
+ * aprecia); todo o resto saiu das mãos da Câmara — "Concluídas". Null quando o desfecho não decide (vale o rito). */
+export function colunaDoDesfecho(desfecho: string | null | undefined): "em-plenario" | "concluidas" | null {
+  if (!desfecho || !(desfecho in SITUACAO_POR_DESFECHO)) return null;
+  return desfecho === "vetado" ? "em-plenario" : "concluidas";
+}

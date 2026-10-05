@@ -23,7 +23,9 @@
             {:id (->str (:id linha)) :tipo (:tipo linha) :ano (:ano linha) :sequencial (:sequencial linha)
              :urn-lex (:urn-lex linha) :ementa (:ementa linha) :autor-tipo (:autor-tipo linha)
              :autor-texto (:autor-texto linha) :estado (:estado linha)
-             :atualizado-em (->str (:atualizado-em linha))}
+             :atualizado-em (->str (:atualizado-em linha))
+             ;; docs/16 linha 18: o ultimo ato a partir do autografo (nil = nao saiu do plenario)
+             :desfecho (:desfecho linha)}
             "item de proposicao"))
 
 (defn listar->wire
