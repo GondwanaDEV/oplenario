@@ -528,10 +528,7 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     nome da etapa: pede coluna nova, projeção do rótulo que `proposicao.protocolada`/`transicionou` já carregam e
     reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
     portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
-    `template_estado.ordem` não tem validação nem significado documentado;
-  - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
-    cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
-    `folha-sessao-v2`;
+    `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de

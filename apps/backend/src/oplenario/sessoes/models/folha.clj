@@ -33,6 +33,10 @@
    [:nome-parlamentar [:maybe :string]]
    [:partido [:maybe :string]]
    [:cargo-mesa [:maybe :string]]
+   ;; ACRESCIMO (05/10/2026, sem v2 — ver `gerador-folha/spec-versao`): o cargo em palavras ('1ª Secretaria'),
+   ;; resolvido no controller por `logic.rotulos/rotulo-do-cargo-na-mesa`. Opcional: folha montada antes dele
+   ;; segue valida, e o serializador humaniza `:cargo-mesa` sozinho.
+   [:cargo-mesa-rotulo {:optional true} [:maybe :string]]
    [:estado (km/enum-de logic/estados-chamada)]
    [:inconsistencia-cadastro :boolean]
    [:sem-assento :boolean]
@@ -50,7 +54,10 @@
   [:map {:closed true}
    [:id :uuid]
    [:estado (km/enum-de logic/estados-sessao-fechada)]
-   [:motivo-nao-realizada {:optional true} [:maybe :string]]])
+   [:motivo-nao-realizada {:optional true} [:maybe :string]]
+   ;; ACRESCIMO (05/10/2026, sem v2): o nome da sessao em palavras ('Sessão ordinária nº 3 de 01/10/2026'),
+   ;; `logic.rotulos/titulo-da-sessao`. Ausente = o serializador escreve 'Sessão de <data>', nunca o prefixo do id.
+   [:titulo {:optional true} [:maybe :string]]])
 
 (def CabecalhoDaCasa
   "O que o seam `dados-da-casa` (irmao de `roster-da-casa`, rotas.clj) resolve sobre `cadastros` — nome do

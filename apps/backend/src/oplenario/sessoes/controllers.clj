@@ -16,6 +16,7 @@
             [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.gerador-folha :as gerador-folha]
             [oplenario.sessoes.logic :as logic]
+            [oplenario.sessoes.logic.rotulos :as rotulos]
             [oplenario.sessoes.models.folha :as mod-folha])
   (:import (java.security DigestInputStream MessageDigest)
            (java.time Instant)
@@ -1269,11 +1270,16 @@
         (gerador-folha/renderizar
          ;; `:id` sai da LINHA LIDA (uuid round-tripado pelo PG), nao do parametro cru — e' este valor que
          ;; `gerar-folha!` usa para montar a chave do objeto_store (disciplina do molde de `legislativo`).
+         ;; `:titulo` e `:cargo-mesa-rotulo` sao ACRESCIMOS a v1 (05/10/2026): a folha diz 'Sessão ordinária nº 3
+         ;; de 01/10/2026' e '1ª Secretaria', nunca o prefixo do UUID nem a chave do cadastro. A data e' a MESMA
+         ;; data de referencia que resolveu a composicao.
          {:sessao {:id (:id sessao) :estado (:estado sessao)
-                   :motivo-nao-realizada (:motivo-nao-realizada sessao)}
+                   :motivo-nao-realizada (:motivo-nao-realizada sessao)
+                   :titulo (rotulos/titulo-da-sessao sessao data)}
           :instante (:instante chamada)
           :cabecalho-da-casa (dados-da-casa ente-id (:data-de-composicao chamada))
-          :linhas (:linhas chamada)
+          :linhas (mapv #(assoc % :cargo-mesa-rotulo (rotulos/rotulo-do-cargo-na-mesa (:cargo-mesa %)))
+                        (:linhas chamada))
           :quorum (:quorum chamada)
           :serie (logic/agrupar-serie-por-vereador (:serie lido))
           :justificativas (:justificativas lido)
