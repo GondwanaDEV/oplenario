@@ -1,0 +1,7 @@
+# PoC de áudio — tudo do PyPI; modelos ONNX dos releases do GitHub do sherpa-onnx (poc/modelos.py).
+# Sem PyTorch e sem HuggingFace: os dois estão fora da política de rede deste ambiente.
+numpy==2.1.3
+scipy==1.14.1
+imageio-ffmpeg==0.6.0
+sherpa-onnx==1.13.8
+pytest==8.3.3

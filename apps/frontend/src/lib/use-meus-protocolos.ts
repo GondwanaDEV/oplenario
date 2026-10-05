@@ -26,8 +26,9 @@ export type Prorrogacao = { deData: string; paraData: string; justificativa: str
 export type Complemento = { id: string; corpo: string; complementadoEm: string };
 /** Um arquivo do protocolo — da Casa (na resposta) ou do requerente (no pedido), pela `origem`. O servidor não manda a chave do
  *  object storage, nem quem enviou, nem o MOTIVO de uma retirada. `retiradoEm`: a Casa retirou o arquivo (incidente de
- *  conteúdo) — sem link para baixar, o download é 404. */
-export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string; retiradoEm?: string | null };
+ *  conteúdo) — sem link para baixar, o download é 404. `substituidoPor`: a Casa trocou este arquivo por outro (o id do novo, que
+ *  vem na mesma lista e baixa); a data da troca é o `retiradoEm`. */
+export type Anexo = { id: string; nome: string; tipoMidia: string; bytes: number; origem: string; enviadoEm: string; retiradoEm?: string | null; substituidoPor?: string | null };
 /** `podeAnexar`: o requerente ainda pode juntar arquivo ao PRÓPRIO pedido (10 minutos do protocolo, até 5 seus). */
 export type PedidoEsic = Base & { assunto: string; recurso?: RecursoEsic | null; prorrogacao?: Prorrogacao | null; anexos?: Anexo[]; complementos?: Complemento[]; podeAnexar?: boolean };
 export type SolicitacaoLgpd = Base & { tipo: string; anexos?: Anexo[]; complementos?: Complemento[]; podeAnexar?: boolean };

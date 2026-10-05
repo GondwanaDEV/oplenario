@@ -715,3 +715,116 @@ describe("usePlenario — a PRÓPRIA presença do vereador por snapshot (docs/16
     expect(result.current.estado!.presentes).toEqual(["v-eu"]);
   });
 });
+
+// A RECONEXÃO refaz o snapshot de tudo o que o canal pode ter perdido (retenção MINID de ~5 min). O carry
+// do telão (recarregar a página não achava a votação em curso) já estava fechado para a ABERTURA da votação;
+// o que ficava só no SSE era o oposto — o ENCERRAMENTO e a transição da sessão perdidos numa queda longa —
+// e a reconexão em si só tinha teste para a presença do próprio vereador.
+describe("usePlenario — a RECONEXÃO refaz o snapshot (telão e cockpit)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  const enc = new TextEncoder();
+  /** 1ª conexão entrega `eventos` e cai (erro de rede) 1s depois; as seguintes ficam penduradas (ao vivo). */
+  function conexaoQueCai(eventos: { evento: string; seq: number; dados: unknown }[]) {
+    let conexoes = 0;
+    return () => {
+      if (++conexoes > 1) return new Promise<Response>(() => {});
+      const body = new ReadableStream<Uint8Array>({
+        start(c) {
+          for (const e of eventos) c.enqueue(enc.encode(`event: ${e.evento}\nid: ${e.seq}\ndata: ${JSON.stringify(e.dados)}\n\n`));
+          setTimeout(() => c.error(new TypeError("queda")), 1000);
+        },
+      });
+      return { ok: true, status: 200, body } as unknown as Response;
+    };
+  }
+
+  const aberturaVt1 = {
+    evento: "votacao.aberta", seq: 1,
+    dados: { "votacao-id": "vt1", "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1", modalidade: "nominal", "quorum-tipo": "maioria_simples" },
+  };
+
+  const naoHaVotacao = () => ({ ok: false, status: 404, json: async () => ({}) }) as Response;
+
+  it("o ENCERRAMENTO perdido na queda: o snapshot da reconexão diz 'nenhuma votação aberta' e o placar 'em curso' sai", async () => {
+    vi.useFakeTimers();
+    global.fetch = fetchFake({ "/plenario": conexaoQueCai([aberturaVt1]), "/votacao-aberta": naoHaVotacao });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.estado?.placar?.votacaoId === "vt1"); // o SSE abriu a votação
+    await ateQue(() => result.current.estado?.placar === null, 50); // a queda + reconexão re-hidratam: o servidor não tem votação aberta
+  });
+
+  it("a reconexão refaz votação, quórum e tribuna (1 request de cada por queda, além da carga)", async () => {
+    vi.useFakeTimers();
+    const f = fetchFake({ "/plenario": conexaoQueCai([]), "/votacao-aberta": naoHaVotacao });
+    global.fetch = f;
+    renderHook(() => usePlenario("s1", "tok", { comQuorum: true, comVotacao: true }));
+    await ateQue(() => contarChamadas(f, "/votacao-aberta") === 1 && contarChamadas(f, "/quorum") === 1 && contarChamadas(f, "/tribuna") === 1);
+    await ateQue(() => contarChamadas(f, "/votacao-aberta") === 2 && contarChamadas(f, "/quorum") === 2 && contarChamadas(f, "/tribuna") === 2, 50);
+  });
+
+  /** fetch que serve `GET /api/sessoes/s1` (a sessão em si) com o estado dado pelo n-ésimo pedido. */
+  function comSessaoQueMuda(estados: string[], resto: typeof fetch) {
+    const chamadas = { n: 0 };
+    const f = vi.fn(async (url: string, o?: RequestInit) => {
+      if (/\/api\/sessoes\/s1(\?.*)?$/.test(url)) {
+        const estado = estados[Math.min(chamadas.n, estados.length - 1)];
+        chamadas.n += 1;
+        return { ok: true, status: 200, json: async () => ({ ...sessaoCrua, estado }) } as Response;
+      }
+      return resto(url, o);
+    }) as unknown as typeof fetch;
+    return { f, chamadas };
+  }
+
+  it("o `sessao.transicionou` perdido na queda: a reconexão relê a sessão e o estado corrige (sem isto o telão diz 'aberta' sobre uma sessão encerrada)", async () => {
+    vi.useFakeTimers();
+    const { f, chamadas } = comSessaoQueMuda(["aberta", "encerrada"], fetchFake({ "/plenario": conexaoQueCai([]) }));
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok"));
+    await ateQue(() => result.current.estado?.estado === "aberta"); // a carga
+    await ateQue(() => result.current.estado?.estado === "encerrada", 50);
+    expect(chamadas.n).toBe(2);
+  });
+
+  it("a periódica (30s) também relê a sessão, para a queda que não derrubou o stream", async () => {
+    vi.useFakeTimers();
+    const { f, chamadas } = comSessaoQueMuda(["aberta", "suspensa"], fetchFake());
+    global.fetch = f;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comQuorum: true, comVotacao: true }));
+    await ateQue(() => result.current.estado?.estado === "aberta");
+    await ateQue(() => result.current.estado?.estado === "suspensa", 1000, 60);
+    expect(chamadas.n).toBeGreaterThanOrEqual(2);
+  });
+
+  it("PRECEDÊNCIA — um `sessao.transicionou` chegado com o GET /sessoes/:id em voo não é desfeito pelo snapshot atrasado", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const emVoo = deferido<Response>();
+    let n = 0;
+    const base = fetchFake({ "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response });
+    global.fetch = vi.fn(async (url: string, o?: RequestInit) => {
+      if (/\/api\/sessoes\/s1(\?.*)?$/.test(url)) {
+        // a carga responde na hora; a 2ª leitura (periódica) fica em voo
+        return ++n === 1 ? ({ ok: true, status: 200, json: async () => ({ ...sessaoCrua, estado: "aberta" }) } as Response) : emVoo.promise;
+      }
+      return base(url, o);
+    }) as unknown as typeof fetch;
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo");
+    await ateQue(() => n >= 2, 1000, 60); // a periódica disparou a 2ª leitura e ela está em voo
+    await act(async () => {
+      sse.enviar("sessao.transicionou", 1, { "sessao-id": "s1", de: "aberta", para: "suspensa" });
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.estado).toBe("suspensa");
+    await act(async () => {
+      emVoo.resolve({ ok: true, status: 200, json: async () => ({ ...sessaoCrua, estado: "aberta" }) } as Response); // snapshot de T0, velho
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(result.current.estado!.estado).toBe("suspensa");
+  });
+});

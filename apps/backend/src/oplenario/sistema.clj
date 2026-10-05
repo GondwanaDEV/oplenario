@@ -3,7 +3,8 @@
   sub-systems dos modulos. F0.1 fia o minimo (datasource); F0.2+ adicionam outbox-relay, scheduler e
   os Components de cada modulo via `using`. So recurso stateful e' componente. O host (raiz de
   composicao) PODE requerer modulos — e' aqui que os Repo-Components recebem o :datasource."
-  (:require [com.stuartsierra.component :as component]
+  (:require [clojure.tools.logging :as log]
+            [com.stuartsierra.component :as component]
             [oplenario.admin-sistema.components.idp-admin :as idp-admin]
             [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema]
             [oplenario.admin-sistema.diplomat.consumers :as admin-sistema-consumers]
@@ -56,6 +57,18 @@
             (merge acc m))
           {} mapas))
 
+(defn- postura-da-senha-do-valkey
+  "O que fazer no boot quanto a' senha do Valkey: nil (nada a dizer), :avisar ou :recusar.
+  So' interessa com o backplane :valkey e fora de dev/test (mesma regra de `idp-para`: qualquer outro :env, inclusive
+  ausente, e' tratado como producao). Sem senha, o padrao e' SUBIR e avisar em nivel error a cada boot — recusar por
+  padrao derrubaria a producao na promocao desta versao, antes de o operador por a senha. A recusa fica atras de
+  `VALKEY_EXIGIR_SENHA=true` (`[:valkey :exigir-senha]`), que o operador liga depois de por a senha (docs/27, secao 7)."
+  [config]
+  (when (and (= :valkey (get-in config [:tempo-real :backplane]))
+             (not (#{"dev" "test"} (:env config)))
+             (not (tr-comp/tem-senha? config)))
+    (if (true? (get-in config [:valkey :exigir-senha])) :recusar :avisar)))
+
 (defn novo-sistema
   "Monta o sistema a partir do config carregado. Cresce por agregacao conforme os modulos chegam."
   [config]
@@ -70,6 +83,18 @@
                       ;; sem erro. Melhor LANCAR no boot.
                       (throw (ex-info "backplane de tempo real invalido — use :memoria ou :valkey"
                                       {:backplane backplane})))
+        _           (case (postura-da-senha-do-valkey config)
+                      :recusar (throw (ex-info (str "Valkey sem senha e VALKEY_EXIGIR_SENHA ligada: defina "
+                                                    "VALKEY_PASSWORD (ou a senha na VALKEY_URI), com a MESMA senha "
+                                                    "do `requirepass` do Valkey — ver docs/27, secao 7")
+                                               {:env (:env config) :backplane backplane}))
+                      ;; a mensagem nao leva a URI (pode carregar credencial)
+                      :avisar  (log/error (str "Valkey sem senha em producao: defina VALKEY_PASSWORD (ou a senha na "
+                                               "VALKEY_URI) e o `requirepass` do Valkey; depois ligue "
+                                               "VALKEY_EXIGIR_SENHA=true. Sem senha, quem alcancar a porta do Valkey "
+                                               "escreve no canal ao vivo. Ver docs/27, secao 7.")
+                                          {:env (:env config) :backplane backplane})
+                      nil)
         canal-store (if (= :valkey backplane)
                       (tr-comp/canal-store-valkey config)
                       (tr-comp/canal-store-memoria))
@@ -184,11 +209,13 @@
 
 ;; ADR-0017: a trilha de auditoria entra entre os interceptors globais (ve a resposta final e o ator). O selo do dia que
 ;; fecha e' ancorado na corrente da Operacao (outra esfera, outro papel de banco) — o host cruza os dois modulos.
-(defn- globais-do-host [{repo-op :repo-admin-sistema :keys [repo-auditoria]}]
+(defn- globais-do-host [{repo-op :repo-admin-sistema :keys [repo-auditoria config]}]
   (if repo-auditoria
     [(auditoria-http/interceptor
       repo-auditoria
-      {:ancorar! (fn [ente-id {:keys [dia seq selo]}]
+      {;; adendo de 04/10/2026: so' com AUDITORIA_EXIGIR_TENTATIVA=true a escrita e' recusada quando a tentativa nao grava
+       :exigir-tentativa? (true? (get-in config [:auditoria :exigir-tentativa]))
+       :ancorar! (fn [ente-id {:keys [dia seq selo]}]
                    (when repo-op
                      (repo-admin-sistema/registrar-atuacao! repo-op
                                                             {:operador-id nil :ente-id ente-id

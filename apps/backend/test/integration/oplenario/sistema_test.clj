@@ -4,6 +4,7 @@
   (:require [clojure.test :refer [deftest is]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
+            [clojure.tools.logging.test :as log-test]
             [oplenario.sistema :as sistema]
             [next.jdbc :as jdbc]))
 
@@ -29,6 +30,62 @@
   (is (thrown-with-msg? clojure.lang.ExceptionInfo #"backplane de tempo real invalido"
         (sistema/novo-sistema (assoc-in (config/carregar) [:tempo-real :backplane] :bogus)))
       "backplane desconhecido bloqueia o boot (fail-closed)"))
+
+(defn- erros-de-valkey-no-log
+  "Monta o sistema (NAO iniciado, sem IO) e devolve as mensagens de nivel error sobre o Valkey registradas no boot."
+  [config]
+  (log-test/with-log
+    (sistema/novo-sistema config)
+    (->> (log-test/the-log)
+         (filter #(and (= :error (:level %)) (re-find #"Valkey sem senha em producao" (str (:message %)))))
+         (mapv #(str (:message %))))))
+
+(deftest valkey-sem-senha-fora-de-dev-sobe-e-avisa
+  ;; padrao (sem VALKEY_EXIGIR_SENHA): o sistema SOBE e registra um error a cada boot. Recusar por padrao derrubaria
+  ;; a producao na promocao desta versao, antes de o operador por a senha.
+  (let [base (-> (config/carregar)
+                 (assoc-in [:tempo-real :backplane] :valkey)
+                 (assoc :valkey {:uri "redis://valkey-inexistente:6379"}))]
+    (doseq [env ["production" "staging" nil ""]]
+      (let [erros (erros-de-valkey-no-log (assoc base :env env))]
+        (is (= 1 (count erros)) (str "env " (pr-str env) " sem senha: sobe e avisa uma vez por boot"))
+        (is (re-find #"VALKEY_PASSWORD" (str (first erros))) "o aviso diz o que definir")
+        (is (re-find #"docs/27" (str (first erros))) "e aponta o runbook")
+        (is (not (re-find #"valkey-inexistente" (str (first erros)))) "sem a URI (pode carregar credencial)")))
+    (is (= 1 (count (erros-de-valkey-no-log (assoc base :env "production" :valkey {:uri "redis://v:6379" :password "  "}))))
+        "senha em branco = sem senha")
+    (is (= 1 (count (erros-de-valkey-no-log (assoc base :env "production" :valkey {:uri "redis://usuario@v:6379"}))))
+        "so' o usuario na URI nao e' senha")
+    (is (= 1 (count (erros-de-valkey-no-log (assoc-in (assoc base :env "production") [:valkey :exigir-senha] false))))
+        "VALKEY_EXIGIR_SENHA diferente de true: so' avisa")
+    (is (empty? (erros-de-valkey-no-log (assoc-in (assoc base :env "production") [:valkey :password] "s3nha")))
+        "com VALKEY_PASSWORD o aviso some")
+    (is (empty? (erros-de-valkey-no-log (assoc base :env "production" :valkey {:uri "rediss://:s3nha@v:6379"})))
+        "com a senha na URI o aviso some")
+    (is (empty? (erros-de-valkey-no-log (assoc base :env "production" :valkey {:uri "redis://usuario:s3nha@v:6379"}))))
+    (is (empty? (erros-de-valkey-no-log (assoc base :env "dev"))) "dev sem senha: nada a dizer")
+    (is (empty? (erros-de-valkey-no-log (-> base (assoc :env "production")
+                                            (assoc-in [:tempo-real :backplane] :memoria))))
+        "backplane :memoria nao usa o Valkey")))
+
+(deftest valkey-sem-senha-com-exigir-senha-nao-sobe
+  ;; VALKEY_EXIGIR_SENHA=true: o operador ligou a recusa depois de por a senha; sem senha, o boot para.
+  (let [base (-> (config/carregar)
+                 (assoc-in [:tempo-real :backplane] :valkey)
+                 (assoc :valkey {:uri "redis://valkey-inexistente:6379" :exigir-senha true}))]
+    (doseq [env ["production" "staging" nil ""]]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Valkey sem senha e VALKEY_EXIGIR_SENHA ligada"
+            (sistema/novo-sistema (assoc base :env env)))
+          (str "env " (pr-str env) ": recusa subir")))
+    (is (some? (sistema/novo-sistema (assoc-in (assoc base :env "production") [:valkey :password] "s3nha")))
+        "com a senha, sobe")
+    (is (some? (sistema/novo-sistema (assoc base :env "production"
+                                            :valkey {:uri "redis://:s3nha@v:6379" :exigir-senha true})))
+        "senha na URI tambem vale")
+    (is (some? (sistema/novo-sistema (assoc base :env "dev"))) "dev/test nunca recusam")
+    (is (some? (sistema/novo-sistema (-> base (assoc :env "production")
+                                         (assoc-in [:tempo-real :backplane] :memoria))))
+        "backplane :memoria nao usa o Valkey")))
 
 ;; `idp-para` e' privada (defn- em sistema.clj) — acessada via `#'sistema/idp-para`, convencao do proprio
 ;; ns p/ testar a selecao de impl sem expor a fn no API publica do host.

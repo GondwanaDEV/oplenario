@@ -288,13 +288,22 @@
         ([^bytes b] (conta! (.read in b 0 (alength b))))
         ([^bytes b off len] (conta! (.read in b (int off) (int len))))))))
 
+(def max-bytes-do-campo
+  "Teto, em BYTES, de UM campo de texto aceito junto do arquivo (o motivo de uma substituicao): texto curto, nunca um segundo
+  arquivo disfarcado de campo."
+  4096)
+
 (defn- ler-arquivos-do-multipart
   "As partes de ARQUIVO do corpo `multipart/form-data`, ate' 2 (so' para saber se passou de UM; os campos de formulario sao
-  ignorados mas CONTADOS: mais de `max-partes-do-envio` partes e' `:partes/demais`). O 1o arquivo e' lido para memoria com
-  teto de `max-bytes` (`:corpo/grande` se passar) e vem como {:nome :tipo-midia :conteudo}; ao ver o cabecalho do 2o arquivo a
-  leitura PARA (o corpo dele nao e' lido). O corpo inteiro e' limitado em `limite-do-corpo` pelo que e' lido. O encoding do
-  cabecalho da parte e' UTF-8, explicito."
-  [req max-bytes limite-do-corpo]
+  ignorados mas CONTADOS: mais de `max-partes-do-envio` partes e' `:partes/demais`) -> {:arquivos [...] :campos {...}}.
+  O 1o arquivo e' lido para memoria com teto de `max-bytes` (`:corpo/grande` se passar) e vem como {:nome :tipo-midia
+  :conteudo}; ao ver o cabecalho do 2o arquivo a leitura PARA (o corpo dele nao e' lido). O corpo inteiro e' limitado em
+  `limite-do-corpo` pelo que e' lido. O encoding do cabecalho da parte e' UTF-8, explicito.
+
+  `campos-aceitos` (conjunto de nomes, STRING) = os campos de TEXTO que o modulo quer ler junto do arquivo; so' esses sao
+  lidos (UTF-8, ate' `max-bytes-do-campo` — acima disso `:campo/grande`) e vao em `:campos` como `{:nome \"texto\"}`. Qualquer
+  outro campo segue ignorado. Um campo que vem DEPOIS do 2o arquivo nao e' lido (a leitura ja' parou)."
+  [req max-bytes limite-do-corpo campos-aceitos]
   (let [corpo (fluxo-limitado (:body req) limite-do-corpo)
         contexto (reify RequestContext
                    (getContentType [_] (get-in req [:headers "content-type"]))
@@ -305,20 +314,32 @@
         parser (doto ^AbstractFileUpload (proxy [AbstractFileUpload] [])
                  (.setMaxPartHeaderSize (int max-bytes-do-cabecalho-da-parte)))
         it (.getItemIterator parser contexto)]
-    (loop [arquivos [] partes 0]
+    (loop [arquivos [] campos {} partes 0]
       (if (.hasNext it)
         (let [^FileItemInput item (.next it)
               partes (inc partes)]
           (when (> partes (long max-partes-do-envio))
             (throw (ex-info "partes demais no envio" {:tipo :partes/demais})))
           (cond
-            (.isFormField item) (recur arquivos partes)
-            (>= (count arquivos) 1) (conj arquivos nil)   ; o 2o arquivo: nao precisa ler nada
+            (.isFormField item)
+            (recur arquivos
+                   (if (contains? campos-aceitos (.getFieldName item))
+                     (assoc campos (keyword (.getFieldName item))
+                            (let [^bytes texto (try (ler-limitado (.getInputStream item) max-bytes-do-campo)
+                                                    (catch clojure.lang.ExceptionInfo e
+                                                      (if (= :corpo/grande (:tipo (ex-data e)))
+                                                        (throw (ex-info "campo grande demais" {:tipo :campo/grande}))
+                                                        (throw e))))]
+                              (String. texto java.nio.charset.StandardCharsets/UTF_8)))
+                     campos)
+                   partes)
+            (>= (count arquivos) 1) {:arquivos (conj arquivos nil) :campos campos}   ; o 2o arquivo: nao precisa ler nada
             :else (recur (conj arquivos {:nome (arquivo/nome-de-arquivo (nome-do-arquivo-da-parte item))
                                          :tipo-midia (arquivo/tipo-de-midia (.getContentType item))
                                          :conteudo (ler-limitado (.getInputStream item) max-bytes)})
+                         campos
                          partes)))
-        arquivos))))
+        {:arquivos arquivos :campos campos}))))
 
 (defn- liberar-vaga!
   "Devolve a vaga de envio do `ctx` UMA vez (o flag impede devolver em dobro: a recusa dentro do :enter e o :leave), e tira
@@ -355,8 +376,12 @@
   passa em qualquer locale da JVM.
 
   `:mensagem-do-teto` (opcional) troca o texto do 413 para o modulo que nao chama o arquivo de \"anexo\" (os documentos
-  das contas); sem ela, \"O anexo passa de N MB.\"."
-  [{:keys [max-bytes mensagem-do-teto]}]
+  das contas); sem ela, \"O anexo passa de N MB.\".
+
+  `:campos` (opcional, conjunto de nomes STRING) = campos de TEXTO lidos junto do arquivo (ate' `max-bytes-do-campo` cada),
+  entregues em `(:request :campos-do-envio)` como `{:nome \"texto\"}` (sempre um mapa, vazio se nao vieram). Campo grande
+  demais -> 400. So' os nomes pedidos sao lidos: o resto do formulario segue ignorado."
+  [{:keys [max-bytes mensagem-do-teto campos]}]
   (let [mb (quot (long max-bytes) (* 1024 1024))
         grande (or mensagem-do-teto (str "O anexo passa de " mb " MB."))
         limite-do-corpo (+ (long max-bytes) folga-do-envelope)
@@ -382,16 +407,19 @@
                   :else
                   (let [ctx (assoc ctx ::vaga (java.util.concurrent.atomic.AtomicBoolean. true) ::quem quem)]
                     (try
-                      (let [arquivos (ler-arquivos-do-multipart req max-bytes limite-do-corpo)]
+                      (let [{:keys [arquivos campos]} (ler-arquivos-do-multipart req max-bytes limite-do-corpo (or campos #{}))]
                         (cond
                           (not= 1 (count arquivos)) (recusa ctx 400 malformado)
                           (nil? (first arquivos)) (recusa ctx 400 malformado)
                           (zero? (alength ^bytes (:conteudo (first arquivos)))) (recusa ctx 400 "O arquivo está vazio.")
-                          :else (assoc-in ctx [:request :anexo] (first arquivos))))
+                          :else (-> ctx
+                                    (assoc-in [:request :anexo] (first arquivos))
+                                    (assoc-in [:request :campos-do-envio] campos))))
                       (catch Exception e
                         (cond
                           (corpo-grande? e) (recusa ctx 413 grande)
                           (= :partes/demais (:tipo (ex-data e))) (recusa ctx 400 malformado)
+                          (= :campo/grande (:tipo (ex-data e))) (recusa ctx 400 "O texto enviado com o arquivo é grande demais.")
                           (= :cabecalho/grande (:tipo (ex-data e))) (recusa ctx 400 "O envio do arquivo veio malformado.")
                           (instance? clojure.lang.ExceptionInfo e) (recusa ctx 400 malformado)
                           :else (recusa ctx 400 "O envio do arquivo veio malformado.")))

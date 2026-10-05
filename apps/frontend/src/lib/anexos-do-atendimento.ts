@@ -74,6 +74,28 @@ export function rotuloDoTipo(tipoMidia: string): string {
   return ROTULO_DO_TIPO[tipoMidia] ?? tipoMidia;
 }
 
+/** A lista na ordem de chegada, mas com cada anexo SUBSTITUÍDO seguido logo do que o trocou (e assim por diante, se o novo
+ *  também foi trocado): "Substituído em <data>" e, logo abaixo, o arquivo certo. Defensivo: um `substituidoPor` que não está na
+ *  lista não reordena nada, e um ciclo (que o banco não deixa existir) não trava a tela. */
+export function ordenarComSubstituicoes<T extends { id: string; substituidoPor?: string | null }>(anexos: T[]): T[] {
+  const porId = new Map(anexos.map((a) => [a.id, a]));
+  const sucessores = new Set(anexos.filter((a) => a.substituidoPor && porId.has(a.substituidoPor)).map((a) => a.substituidoPor as string));
+  const vistos = new Set<string>();
+  const saida: T[] = [];
+  for (const a of anexos) {
+    if (sucessores.has(a.id)) continue; // entra depois de quem ele substituiu
+    let atual: T | undefined = a;
+    while (atual && !vistos.has(atual.id)) {
+      vistos.add(atual.id);
+      saida.push(atual);
+      atual = atual.substituidoPor ? porId.get(atual.substituidoPor) : undefined;
+    }
+  }
+  // o que ficou de fora (so' num ciclo): entra no fim, na ordem de chegada, em vez de sumir da tela
+  for (const a of anexos) if (!vistos.has(a.id)) saida.push(a);
+  return saida;
+}
+
 export type FaseDoAnexo = "esperando" | "enviando" | "ok" | "erro";
 export type ItemDeEnvio = { arquivo: File; fase: FaseDoAnexo; mensagem?: string };
 

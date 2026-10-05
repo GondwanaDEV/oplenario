@@ -28,6 +28,7 @@
             [oplenario.participacao.db.resposta-esic :as db-resposta]
             [oplenario.participacao.db.resposta-ouvidoria :as db-resposta-ouvidoria]
             [oplenario.participacao.db.resposta-titular :as db-resposta-titular]
+            [oplenario.participacao.logic.anexo :as logic-anexo]
             [oplenario.participacao.db.solicitacao-titular :as db-solicitacao]
             [oplenario.participacao.diplomat.producers :as producers]
             [oplenario.participacao.logic :as logic])
@@ -207,8 +208,21 @@
     retirada que ficou (a primeira, se ja' estava retirado: idempotente, sem segunda linha). nil = o anexo nao existe neste
     protocolo desta Casa. `m` = {:objeto-tipo :objeto-id :anexo-id :retirado-em :retirado-por :motivo}. O efeito no object
     storage e' do controller.")
+  (substituir-anexo! [this ente-id m]
+    "SERVIDOR — UMA tx (ADR-0022, \"Substituir um anexo\"): serializa os anexos do protocolo (trava consultiva), le o anexo
+    antigo e, na ordem: (1) nao existe neste protocolo desta Casa -> nil; (2) `logic.anexo/motivo-de-nao-substituir` (so' o da
+    Casa, vigente, nunca trocado) -> :conflito/anexo-nao-substituivel (com `:motivo`); (3) ja' ha' um anexo VIGENTE da Casa
+    com o mesmo sha256 (inclusive o proprio antigo) -> :conflito/anexo-igual; (4) grava a RETIRADA do antigo (com o motivo) e o
+    anexo NOVO apontando para ele (`substitui-anexo-id`), ambos no mesmo instante `:em`. A vaga do antigo e' do novo: o retirado
+    ja' nao conta no limite, entao substituir cabe mesmo com 5 anexos. Sem janela de 10 minutos. As recusas lancam ANTES de
+    qualquer escrita (a tx volta): o chamador pode tirar o blob novo que subiu antes. `m` = {:objeto-tipo :objeto-id
+    :anexo-id (o antigo) :motivo :retirado-por :em :novo {:id :nome :tipo-midia :bytes :sha256 :chave-objeto :enviado-por}}
+    (o `:origem` do novo e' sempre `casa`). Devolve {:antigo (lido de volta, com a retirada e `:substituido-por`) :novo}.")
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     "O anexo do protocolo (objeto-tipo + objeto-id), ou nil.")
+  (chaves-de-anexos [this ente-id]
+    "Toda chave de blob que a Casa tem em `participacao.anexo`: [{:chave :retirado?}]. O retirado nao tem blob
+    de proposito. Para a reconciliacao banco x object storage (`oplenario.reconciliar-anexos`); so' leitura.")
   (complementar! [this ente-id m]
     "SERVIDOR — UMA tx: grava o COMPLEMENTO DA RESPOSTA (append-only, ADR-0022) de um protocolo ja' respondido. Sem CAS e sem
     prazo: nao muda estado nem prazo, e ter resposta e' monotono (uma resposta nunca some), entao a conferencia previa do
@@ -642,8 +656,24 @@
         (when (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)
           (db-anexo/retirar! tx (assoc m :ente-id ente-id))
           (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)))))
+  (substituir-anexo! [this ente-id {:keys [objeto-tipo objeto-id anexo-id motivo retirado-por em novo]}]
+    (transacao this ente-id
+      (fn [tx]
+        (db-anexo/travar! tx ente-id objeto-tipo objeto-id)
+        (when-let [antigo (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)]
+          (when-let [por-que (logic-anexo/motivo-de-nao-substituir antigo)]
+            (throw (ex-info "o anexo nao pode ser substituido" {:tipo :conflito/anexo-nao-substituivel :motivo por-que})))
+          (when (db-anexo/achar-igual tx ente-id objeto-tipo objeto-id "casa" (:sha256 novo))
+            (throw (ex-info "o arquivo ja' esta anexado a este protocolo" {:tipo :conflito/anexo-igual})))
+          (db-anexo/retirar! tx {:ente-id ente-id :anexo-id anexo-id :retirado-em em :retirado-por retirado-por :motivo motivo})
+          (let [inserido (db-anexo/inserir! tx (assoc novo :ente-id ente-id :objeto-tipo objeto-tipo :objeto-id objeto-id
+                                                      :origem "casa" :enviado-em em :substitui-anexo-id anexo-id))]
+            {:antigo (db-anexo/buscar tx ente-id objeto-tipo objeto-id anexo-id)
+             :novo (db-anexo/buscar tx ente-id objeto-tipo objeto-id (:id inserido))})))))
   (anexo-do-atendimento [this ente-id objeto-tipo objeto-id anexo-id]
     (transacao this ente-id #(db-anexo/buscar % ente-id objeto-tipo objeto-id anexo-id)))
+  (chaves-de-anexos [this ente-id]
+    (transacao this ente-id #(db-anexo/chaves-da-casa % ente-id)))
   (complementar! [this ente-id m]
     (transacao this ente-id #(db-complemento/inserir! % (assoc m :ente-id ente-id))))
   (prorrogar-pedido! [this ente-id m]

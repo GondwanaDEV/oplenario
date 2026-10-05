@@ -9,6 +9,7 @@ export interface AnexoOut {
   enviadoEm: string;
   retiradoEm?: string;
   motivoDaRetirada?: string;
+  substituidoPor?: string;
 }
 
 export interface ComplementoOut {

@@ -6,23 +6,80 @@
     qualquer pessoa: os proprios);
   - `GET /auditoria/integridade` e `GET /auditoria/exportar.csv` — so' o `auditor`;
   - `GET /portal/casa/:ente/integridade` — os selos do dia, publicos (a ancora visivel da corrente)."
-  (:require [oplenario.auditoria.adapters.in.filtro :as in-filtro]
+  (:require [clojure.tools.logging :as log]
+            [io.pedestal.interceptor.chain :as chain]
+            [oplenario.auditoria.adapters.in.filtro :as in-filtro]
             [oplenario.auditoria.adapters.out.trilha :as out]
             [oplenario.auditoria.controllers :as controllers]
+            [oplenario.auditoria.logic :as logic]
             [oplenario.http :as http]
             [oplenario.interceptors :as it]))
 
 (set! *warn-on-reflection* true)
 
 (defn interceptor
-  "O interceptor da trilha. `seams` = {:ancorar!}. Nunca muda a resposta; a chave `:auditoria` que um handler deixa na
-  resposta (o resumo do efeito) e' consumida aqui e nao vai para o fio."
+  "O interceptor GLOBAL da trilha. `seams` = {:ancorar!}. Nunca muda a resposta; a chave `:auditoria` que um handler
+  deixa na resposta (o resumo do efeito) e' consumida aqui e nao vai para o fio.
+
+  No :enter ele so' deixa no contexto COMO gravar a tentativa: os globais rodam antes do router e da autenticacao, e a
+  tentativa precisa da rota e do ator — quem a grava e' `tentativa`, que `com-tentativa` poe logo antes do handler de
+  toda rota de escrita. No :leave grava o desfecho, apontando a tentativa quando houve."
   [repo-auditoria seams]
   {:name  ::trilha
+   :enter (fn [ctx]
+            (assoc ctx
+                   ::exigir-tentativa? (true? (:exigir-tentativa? seams))
+                   ::registrar-tentativa!
+                   (fn [req acao] (controllers/registrar-tentativa! repo-auditoria seams req acao))))
    :leave (fn [ctx]
             (let [acao (get-in ctx [:route :route-name])]
-              (controllers/registrar-requisicao! repo-auditoria seams (:request ctx) (:response ctx) acao)
+              (controllers/registrar-requisicao! repo-auditoria seams (:request ctx) (:response ctx) acao
+                                                 (::tentativa ctx))
               (update ctx :response #(some-> % (dissoc :auditoria)))))})
+
+(def tentativa
+  "O interceptor da TENTATIVA (ADR-0017, adendo de 04/10/2026): logo antes do handler de uma escrita — depois da
+  autenticacao, da authz da rota e da validacao da borda —, grava na corrente que o ato VAI comecar, em transacao
+  propria ja' commitada. Se o processo cair ou o desfecho nao for gravado, a tentativa fica na corrente sem desfecho, e
+  a leitura e a conferencia a acusam: o ato nao some.
+
+  Se a tentativa NAO puder ser gravada (a trilha esta' fora):
+  - PADRAO: `log/error` com a rota e a Casa, e o handler RODA — a trilha fora nao para a Casa (a sessao ao vivo nao
+    pode cair porque a auditoria caiu). O ato so' fica fora da trilha se a propria trilha estiver fora, e isso fica no
+    log.
+  - com `:exigir-tentativa?` (AUDITORIA_EXIGIR_TENTATIVA=true): o pedido e' recusado com 503 e o handler nao roda.
+  Sem o interceptor global da trilha (testes de borda de um modulo so'), nao faz nada."
+  {:name  ::tentativa
+   :enter (fn [ctx]
+            (if-let [registrar! (::registrar-tentativa! ctx)]
+              (try
+                (if-let [n (registrar! (:request ctx) (get-in ctx [:route :route-name]))]
+                  (assoc ctx ::tentativa n)
+                  ctx)
+                (catch Exception e
+                  (let [onde {:acao (get-in ctx [:route :route-name])
+                              :ente-id (get-in ctx [:request :ator :ente-id])}]
+                    (if (::exigir-tentativa? ctx)
+                      (do (log/error e "auditoria: tentativa NAO gravada; o pedido foi RECUSADO" onde)
+                          (chain/terminate
+                           (assoc ctx :response
+                                  (http/json-resposta
+                                   503 {:erro "o registro de auditoria esta indisponivel; nada foi feito"}))))
+                      (do (log/error e "auditoria: tentativa NAO gravada; o ato SEGUE sem rastro previo na trilha" onde)
+                          ctx)))))
+              ctx))})
+
+(defn com-tentativa
+  "Poe `tentativa` logo antes do handler de TODA rota de escrita (table syntax). Feito no HOST sobre as rotas montadas,
+  nao rota a rota: a escrita nova nasce com a tentativa (o teste estrutural confere a tabela inteira)."
+  [rotas]
+  (into #{}
+        (map (fn [[caminho metodo cadeia & resto :as r]]
+               (if (logic/escrita? metodo)
+                 (let [v (if (vector? cadeia) cadeia [cadeia])]
+                   (into [caminho metodo (conj (pop v) tentativa (peek v))] resto))
+                 r)))
+        rotas))
 
 (def limite-da-pagina 50)
 

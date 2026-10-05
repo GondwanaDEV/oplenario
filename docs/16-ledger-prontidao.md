@@ -2728,3 +2728,48 @@ sem causa confirmada: `caixa.test.tsx`, `notificacoes/page.test.tsx` (2 casos), 
 **O instrumento fica no repo, opt-in, não é gate:** `docker compose exec frontend npm run test:atraso -- <arquivo>`
 (`vitest.atraso.config.ts` + `vitest.atraso.setup.ts`; `ATRASO_MS`=40, `ATRASO_MOCK`=1, `ATRASO_PINTURA`=1). Os três
 falsos vermelhos conhecidos estão no cabeçalho do setup. Rodar antes de mergear teste novo de tela assíncrona.
+
+## Retriagem do exploratório de 12/09 (04/10/2026) — o que segue aberto no código de hoje
+
+Só leitura do código da `main` (`08d71a40`); nada foi rodado. "Fechado" quer dizer "o código atual não tem o defeito",
+não "reproduzi e passou".
+
+**Placar:** 84 achados · 43 conferidos · **19 abertos** · 24 fechados · 41 não conferidos (36 deles médios ou baixos, só
+lidos no ledger).
+
+| # | Achado | Gravidade | Evidência | Só código? |
+|---|---|---|---|---|
+| 1 | Um único papel, `secretario`, abre a votação, vota, encerra e emite o autógrafo; a simbólica aceita o `resultado` do corpo | crítico | `legislativo/diplomat/http/in.clj:1278` e `:1401`; `legislativo/controllers.clj:588-590` | decisão do fundador |
+| 2 | Promulgar/publicar a norma não tem rota (`promulgar-norma!` sem chamador) | crítico | `legislativo/db/norma.clj:21`; `legislativo/components/repositorio.clj:1036` | parte; o rito de sanção por LOM é `[GAP]` |
+| 3 | Gerar a remessa ao TCE não tem rota nem agendador | crítico | `compliance/diplomat/http/in.clj:89-97` | parte; o layout do SIM é `[GAP]` |
+| 4 | Convocação oficial da sessão não existe | crítico | `paineis/mesa/proxima-sessao-rail.tsx:30` | espera o jurídico |
+| 5 | A rota da Mesa aceita voto de quem está ausente justificado | alto | `legislativo/controllers.clj:80-98` contra `:111-163` | sim; confirmar se é regra da Casa |
+| 6 | `votos.vereador_id` sem FK nem CHECK | alto | `migrations/20260620000021-legislativo-votacao.up.sql:85` | sim |
+| 7 | A mesma proposição entra duas vezes na pauta | alto | `sessoes/controllers.clj:469-488`; `sessoes/db/pauta.clj:119` | sim |
+| 8 | Placar nominal do telão mostra prefixo de UUID, não o nome | alto | `sessoes/[id]/plenario/page.tsx:377` | sim |
+| 9 | "Proposições em tramitação" soma aprovadas e arquivadas | alto | `paineis/adapters/out/mesa.clj:27`; `paineis/db/tramitacao.clj:90-104` | sim |
+| 10 | Não há como revogar o acesso de ninguém | alto | `identidade/diplomat/http/in.clj:170-186` | sim |
+| 11 | Duas sessões abertas: o cockpit vai para a mais antiga | alto | `paineis/db/sli_sessao.clj:136-139` | sim para o cockpit |
+| 12 | Não existe página pública de votações | alto | `transparencia/diplomat/http/in.clj:220-264` | parte |
+| 13 | Perfil público do vereador só abre por UUID; sem lista | alto | `(publico)/…/vereadores/[vereadorId]/page.tsx` | sim |
+| 14 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |
+| 15 | Responder um pedido não notifica o cidadão | alto | `participacao/events/prazo.clj` | espera SMTP/push |
+| 16 | `secretario` não é papel concedível pela tela | alto | `identidade/wire/in/acesso.clj:7` | decisão do fundador |
+| 17 | Dashboard da Mesa não mostra a sessão em curso; "próxima sessão" sem fuso | médio | `paineis/mesa/proxima-sessao-rail.tsx:25` e `:34` | sim |
+| 18 | Remessas ao TCE não aparecem no painel | médio | `paineis/diplomat/consumers.clj:18-31` | sim |
+| 19 | A raiz `/` ainda diz "Front-end em construção" | baixo | `frontend/src/app/page.tsx:11-25` | sim |
+
+**Fechados com prova** (críticos e altos): denominador do quórum vindo do corpo e o 500 da maioria absoluta
+(`2e442515`); voto da Mesa com UUID fora do roster (`b8e8aaa3`); presidente com 403 no Dashboard (`8d4e8c31`); 403
+mostrado como falha passageira (`ba51c488`); conceder acesso pela tela (ADR-0005, `69ebeee0`, `891ee9cb`); acompanhar
+e deixar de acompanhar (`9c281526`); resposta de e-SIC, LGPD e ouvidoria lida pelo dono (`02b2193a`, `f0ac7cde`);
+balcão (`f4efd695`, `bbfd811e`); gov.br (`6adf217d`, `1170955e`); dados abertos (`bd7b9551`); cockpit pedindo presença
+a quem já estava presente (`50358241`, `1dc62ddd`); agendar, pauta e condução; ata e livro de atas (`464638fe`,
+`fb901214`).
+
+**Não conferidos:** "aceitar a remessa não move o placar de compliance" (crítico, exige rodar); "aguardando pauta" no
+portal com matéria aprovada; obrigação de compliance sem ligação com a matéria; tramitação pública; itens permanentes
+do art. 8 §1º da LAI; e 36 dos 43 médios e baixos.
+
+**Correção de registro:** a frase "os 10 críticos seguem de pé" deste ledger valia até 15/09. Em 04/10, 6 dos 9
+críticos conferidos estão fechados.

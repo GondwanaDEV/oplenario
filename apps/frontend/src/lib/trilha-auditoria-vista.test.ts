@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  FILTRO_INICIAL, lacre, objeto, queryDoFiltro, quem, seloCurto, verbo, type RegistroTrilha,
+  CLASSES, FILTRO_INICIAL, decisaoEmPalavras, lacre, objeto, queryDoFiltro, quem, seloCurto, verbo, type RegistroTrilha,
 } from "./trilha-auditoria-vista";
 
 const base: RegistroTrilha = {
@@ -57,5 +57,30 @@ describe("trilha de auditoria — a lógica pura", () => {
     expect([q.titulo, q.quebrada]).toEqual(["Cadeia quebrada", true]);
     expect(q.texto).toMatch(/nº 4/);
     expect(seloCurto("a7f39c21ffff")).toBe("a7f3·9c21");
+  });
+
+  it("a escrita iniciada sem desfecho registrado aparece em palavras — nunca como 'Não concluído' nem como enum", () => {
+    const orfa: RegistroTrilha = { ...base, decisao: "sem_desfecho", recurso: { tipo: "proposicao", id: "30000000-0000", rotulo: null } };
+    expect(verbo(orfa)).toEqual({ rotulo: "Sem desfecho", tom: "negado" });
+    expect(objeto(orfa).detalhe).toMatch(/ação iniciada, desfecho não registrado/);
+    expect(decisaoEmPalavras("sem_desfecho")).toMatch(/^Ação iniciada, desfecho não registrado/);
+    expect(decisaoEmPalavras("falhou")).toBe("Não concluído");
+    expect(decisaoEmPalavras("permitido")).toBe("Permitido");
+    expect(decisaoEmPalavras("algo_novo")).toBe("Não reconhecida (algo_novo)");
+    expect(CLASSES.map((c) => c.valor)).toContain("sem_desfecho");
+    expect(queryDoFiltro({ ...FILTRO_INICIAL, periodo: "tudo", classe: "sem_desfecho" }, new Date())).toBe("classe=sem_desfecho");
+  });
+
+  it("o lacre acusa o desfecho faltando mesmo com a cadeia íntegra", () => {
+    const um = lacre({ integra: true, total: 9, cabeca: "x", quebraEm: null, selosDoDia: [], semDesfecho: 1, primeiroSemDesfecho: 4 }, "pronto");
+    expect(um.titulo).toBe("Cadeia íntegra, com desfecho faltando");
+    expect(um.texto).toMatch(/Uma ação foi iniciada e o desfecho não foi registrado \(a mais antiga é o registro nº 4\)/);
+    expect(um.quebrada).toBe(false);
+    const tres = lacre({ integra: true, total: 9, cabeca: "x", quebraEm: null, selosDoDia: [], semDesfecho: 3, primeiroSemDesfecho: 2 }, "pronto");
+    expect(tres.texto).toMatch(/3 ações foram iniciadas/);
+    expect(lacre({ integra: true, total: 9, cabeca: "x", quebraEm: null, selosDoDia: [], semDesfecho: 0, primeiroSemDesfecho: null }, "pronto").titulo)
+      .toBe("Cadeia íntegra");
+    expect(lacre({ integra: false, total: 9, cabeca: "x", quebraEm: 4, selosDoDia: [], semDesfecho: 2 }, "pronto").titulo)
+      .toBe("Cadeia quebrada");
   });
 });

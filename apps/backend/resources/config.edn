@@ -10,6 +10,9 @@
  :http   {:port 8888}
  :db     {:jdbc-url "jdbc:postgresql://localhost:5432/oplenario" :user "oplenario" :password "dev"
           :pool-max-size 10} ; dimensionar contra max_connections do PG / nº de réplicas (deploy)
+ ;; Valkey: a senha NAO tem default aqui — vem de VALKEY_PASSWORD (ou embutida na VALKEY_URI); usuario de ACL
+ ;; opcional em VALKEY_USERNAME; TLS = VALKEY_URI com `rediss://`. VALKEY_EXIGIR_SENHA=true faz o boot recusar
+ ;; o backplane :valkey sem senha fora de dev/test (sem ela, so' avisa em nivel error).
  :valkey {:uri "redis://localhost:6379"}
  ;; backplane do tempo real (§22.6 eixo G): :memoria (1 no / dev / teste) | :valkey (multi-no / prod).
  ;; Override por TEMPO_REAL_BACKPLANE. Prod multi-replica DEVE usar :valkey (a impl em memoria nao compartilha
@@ -51,6 +54,9 @@
             :sessao {:absoluta-h 8 :ociosa-min 15}}
  ;; ADR-0008: fronteira com o satelite de IA. Segredo SO' por ambiente (OPLENARIO_IA_SEGREDO); nil = desligada.
  :integracao-ia {:segredo nil :url nil}
+ ;; ADR-0017 (adendo de 04/10/2026): se a TENTATIVA da trilha nao gravar antes de uma escrita, o padrao e' logar e
+ ;; deixar o ato acontecer (a trilha fora nao para a sessao). AUDITORIA_EXIGIR_TENTATIVA=true troca para recusar com 503.
+ :auditoria {:exigir-tentativa false}
  ;; URL por modulo p/ os http_client (local agora, remoto apos extracao — §22.10)
  :modulos {:cadastros {:base-url "http://localhost:8888"} :identidade {:base-url "http://localhost:8888"}
            :legislativo {:base-url "http://localhost:8888"} :sessoes {:base-url "http://localhost:8888"}

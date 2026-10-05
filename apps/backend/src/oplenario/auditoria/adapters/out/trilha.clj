@@ -31,9 +31,14 @@
    :papeis (vec (:papeis r))
    :via    (:via-agente r)})
 
+(defn- decisao
+  "A tentativa que chega aqui e' a que NAO tem desfecho (a leitura esconde a que tem): sai como `sem_desfecho`."
+  [r]
+  (if (= logic/iniciado (:decisao r)) "sem_desfecho" (:decisao r)))
+
 (defn registro->wire [r]
   {:seq (long (:seq r)) :em (str (:ocorrido-em r)) :ator (ator r) :acao (:acao r) :classe (:classe r)
-   :decisao (:decisao r)
+   :decisao (decisao r)
    :recurso (when (or (:recurso-tipo r) (:recurso-id r) (:rotulo r))
               {:tipo (:recurso-tipo r) :id (:recurso-id r) :rotulo (:rotulo r)})
    :campos (vec (:campos r)) :canal (:canal r) :ip (ip-truncado (:ip r))
@@ -50,10 +55,12 @@
 
 (defn- selos [xs] (mapv (fn [s] {:dia (str (:dia s)) :seq (long (:seq s)) :selo (:selo s)}) xs))
 
-(defn integridade->wire [{:keys [integra total cabeca quebra-em selos-do-dia]}]
+(defn integridade->wire [{:keys [integra total cabeca quebra-em selos-do-dia sem-desfecho]}]
   (validado wire/IntegridadeOut "IntegridadeOut"
             {:integra (boolean integra) :total (long total) :cabeca cabeca :quebra-em (some-> quebra-em long)
-             :selos-do-dia (selos selos-do-dia)}))
+             :selos-do-dia (selos selos-do-dia)
+             :sem-desfecho (long (or (:total sem-desfecho) 0))
+             :primeiro-sem-desfecho (some-> (:primeiro sem-desfecho) long)}))
 
 (defn selos-publicos->wire [xs]
   (validado wire/SelosPublicosOut "SelosPublicosOut" {:selos-do-dia (selos xs)}))
@@ -62,7 +69,9 @@
 
 (def colunas
   [["seq" :seq] ["quando" #(str (:ocorrido-em %))] ["quem" logic/quem] ["tipo_de_ator" :ator-tipo]
-   ["papeis" #(str/join " " (:papeis %))] ["acao" :acao] ["classe" :classe] ["decisao" :decisao]
+   ["papeis" #(str/join " " (:papeis %))] ["acao" :acao] ["classe" :classe]
+   ;; a tentativa sem desfecho sai em palavras: o ato pode ter acontecido e o registro dele nao foi gravado
+   ["decisao" #(if (= logic/iniciado (:decisao %)) "sem desfecho registrado" (:decisao %))]
    ["recurso_tipo" :recurso-tipo] ["recurso_id" :recurso-id] ["rotulo" :rotulo]
    ["campos" #(str/join " " (:campos %))] ["canal" :canal] ["ip" #(ip-truncado (:ip %))]
    ["selo_anterior" :selo-anterior] ["selo" :selo]])

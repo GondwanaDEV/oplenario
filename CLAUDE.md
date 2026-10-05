@@ -157,7 +157,9 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
 - Identidade: e-SIC e LGPD mostram nome + CPF mascarado no SQL; a ouvidoria mostra só identificada/anônima (Lei 13.460
   art. 10 §7). Nenhuma rota do balcão é ferramenta do agente (dado pessoal → `[GAP]` do fornecedor de IA).
 - Junto: "Denunciar" no comentário da ficha pública (6.3) e "Reportar erro" na resposta do assistente (8.4, só categoria,
-  sem texto).
+  sem texto). O botão também está no copiloto do relator, no do requerimento, no rascunho da ata, no do resumo cidadão
+  e na nota técnica do agente institucional (`/conferencias`, `/juridico/notas`; o satélite manda `execucao-ia` em
+  `registrar_nota_tecnica`, ADR-0013; nota anterior fica sem botão) (04/10/2026).
 - **Indeferir, ciência da prorrogação e anexos ENTREGUES (04/10/2026,
   [ADR-0022](docs/adr/0022-indeferir-ciencia-da-prorrogacao-e-anexos-no-balcao.md), aceita):**
   - indeferir e-SIC e LGPD com fundamentação obrigatória: ato próprio, conta como prazo cumprido, e o recurso do e-SIC
@@ -182,10 +184,12 @@ cidadão protocola no portal — antes só havia as rotas de escrita, sem lista 
 - **Login e gate (04/10/2026):** `?redirect=/.//host` não escapa mais da origem depois do login, e o middleware cobre
   todas as páginas autenticadas; `middleware.test.ts` mede a lista contra as páginas em disco, então página nova sem
   entrada no gate reprova.
+- **Substituir anexo e reconciliação (04/10/2026, ADR-0022):**
+  - a secretaria troca um anexo da Casa por outro num só ato, com motivo, a qualquer tempo
+    (`POST /atendimento/…/anexos/:anexo/substituir`); o antigo vira "Substituído em…" e o novo ocupa a vaga;
+  - `reconciliar-anexos [--ente] [--apagar-orfaos]` compara banco e object storage (balcão e comunicados): por padrão só
+    relata; com a opção apaga só blob sem linha com mais de 24 h. Uso em `docs/27`, seção 8. Nunca rodou em produção.
 - **Falta:**
-  - o botão de reportar na nota técnica (`/conferencias`, `/juridico/notas`): o satélite não envia o id da execução e
-    cobrir isso muda a ferramenta `registrar_nota_tecnica` (ADR-0013). Copiloto do relator, do requerimento, rascunho
-    da ata e do resumo cidadão já têm o botão (04/10/2026);
   - antivírus nos anexos;
   - a prova de que o requerente viu a prorrogação, que espera o e-mail;
   - o manifestante anônimo não tem canal para receber a justificativa da prorrogação.
@@ -254,8 +258,13 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
 - **quem vê** (`/auditoria`): o `auditor` (controle interno, servidor, concedido pelo `admin_ente` em `/administracao`)
   vê a Casa inteira, confere a cadeia e exporta CSV; o `admin_ente` vê os acessos; cada pessoa vê a sua;
 - **a âncora pública:** o selo do dia, ancorado na atuação da Operação e publicado em Dados abertos do portal;
-- **falta:** o registro não está na tx do ato (é gravado logo depois) e o resumo legível por ação ainda é incremental —
-  ver *Materialização* na ADR.
+- **tentativa antes, desfecho depois (04/10/2026, adendo da ADR-0017):** toda escrita grava uma "tentativa" antes do
+  handler e o desfecho depois; ato cujo desfecho não gravou aparece como "ação iniciada, desfecho não registrado" na
+  tela, no CSV e na conferência. Por padrão a trilha fora do ar NÃO para a Casa (erro no log, o ato segue);
+  `AUDITORIA_EXIGIR_TENTATIVA=true` troca para 503. Custa uma gravação a mais na corrente por escrita (21 escritas
+  simultâneas: 132–184 ms contra 80–152 ms, medido com handler de teste, não com o voto real);
+- **falta:** o resumo legível por ação ainda é incremental; login, jobs e consumidores do outbox não passam pela
+  tentativa — ver *Materialização* na ADR.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
@@ -318,6 +327,22 @@ dinâmico (2757 testes), 8 corridas consertadas sem afrouxar asserção. **Teste
 `docker compose exec frontend npm run test:atraso -- <arquivo>` antes do merge** (opt-in, não é gate; os falsos
 vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.ts`). Detalhe em `docs/16`, seção
 "Testes do frontend que dependiam de tempo".
+
+**Tempo real e relay (04/10/2026):**
+- A mensagem do canal no Valkey deixou de ser Nippy: é EDN de dado puro com allowlist (`tempo_real/codec.clj`). Antes,
+  quem escrevesse no Valkey escolhia a classe que o backend instanciava.
+- Senha por `VALKEY_PASSWORD` e TLS por `rediss://`. Sem senha em produção o sistema SOBE e registra erro a cada boot.
+  **Passo do operador, pendente:** pôr a senha no Dokploy, conferir que o aviso sumiu e só então ligar
+  `VALKEY_EXIGIR_SENHA=true` (`docs/27`, seção 7).
+- Relay: evento sem Casa não trava mais o barramento no consumidor `integracao_ia` (`paineis` e `legislativo` já
+  tinham a guarda).
+- Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
+  por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
+
+**Exploratório de 12/09 retriado em 04/10/2026:** 84 achados · 43 conferidos no código · 19 abertos · 24 fechados · 41
+não conferidos. Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
+o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda); promulgar norma e gerar remessa ao
+TCE sem rota; convocação oficial inexistente.
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

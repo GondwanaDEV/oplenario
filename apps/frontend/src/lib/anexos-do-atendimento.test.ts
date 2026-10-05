@@ -9,6 +9,7 @@ import {
   extensaoDe,
   mensagemDeErroDoAnexoDoRequerente,
   motivoDeRecusa,
+  ordenarComSubstituicoes,
   resumoDoEnvio,
   rotuloDoTipo,
   type ItemDeEnvio,
@@ -124,5 +125,34 @@ describe("dicaDosAnexosDaResposta — quem baixa o arquivo depende de a manifest
     const d = dicaDosAnexosDaResposta(true);
     expect(d).toMatch(/só no registro da Casa/);
     expect(d).not.toMatch(/quem pediu os baixa|baixa no protocolo/);
+  });
+});
+
+describe("ordenarComSubstituicoes", () => {
+  const a = (id: string, substituidoPor?: string) => ({ id, substituidoPor: substituidoPor ?? null });
+
+  it("sem troca: a ordem de chegada, intacta", () => {
+    expect(ordenarComSubstituicoes([a("1"), a("2"), a("3")]).map((x) => x.id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("o substituto vem logo abaixo do substituído, não no fim da lista", () => {
+    // chegada: 1 (errado), 2, 3, 4 (o certo, que trocou o 1)
+    expect(ordenarComSubstituicoes([a("1", "4"), a("2"), a("3"), a("4")]).map((x) => x.id)).toEqual(["1", "4", "2", "3"]);
+  });
+
+  it("a cadeia segue: o novo também trocado fica junto, em fila", () => {
+    // 1 foi trocado por 4, que foi trocado por 5
+    expect(ordenarComSubstituicoes([a("1", "4"), a("2"), a("4", "5"), a("5")]).map((x) => x.id)).toEqual(["1", "4", "5", "2"]);
+  });
+
+  it("substituto que não está na lista não some nem reordena; ciclo (impossível no banco) não trava", () => {
+    expect(ordenarComSubstituicoes([a("1", "9"), a("2")]).map((x) => x.id)).toEqual(["1", "2"]);
+    expect(ordenarComSubstituicoes([a("1", "2"), a("2", "1")]).map((x) => x.id).sort()).toEqual(["1", "2"]);
+  });
+
+  it("não muda a lista de entrada", () => {
+    const entrada = [a("1", "3"), a("2"), a("3")];
+    ordenarComSubstituicoes(entrada);
+    expect(entrada.map((x) => x.id)).toEqual(["1", "2", "3"]);
   });
 });

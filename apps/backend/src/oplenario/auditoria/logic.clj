@@ -11,7 +11,12 @@
   Leitura comum nao entra. Ator sem Casa (operador, anonimo) nao entra: o operador tem a corrente dele (ADR-0016).
 
   O handler pode enriquecer o registro devolvendo `:auditoria` no mapa de resposta (a chave nao vai para o fio):
-  `{:rotulo :campos :recurso-tipo :recurso-id :classe :ator}`. E' o \"resumo do efeito\" (ADR-0017 1-C)."
+  `{:rotulo :campos :recurso-tipo :recurso-id :classe :ator}`. E' o \"resumo do efeito\" (ADR-0017 1-C).
+
+  A ESCRITA tem dois registros (ADR-0017, adendo de 04/10/2026): a TENTATIVA (`decisao` = `iniciado`), gravada e
+  commitada ANTES do handler, e o DESFECHO, gravado depois, que aponta a tentativa em `detalhe.tentativa` (o seq dela;
+  o `detalhe` entra no selo). Tentativa sem desfecho = o ato pode ter acontecido e o registro dele nao foi gravado: a
+  leitura e a conferencia a acusam, em vez de o ato sumir."
   (:require [clojure.string :as str]
             [jsonista.core :as json]
             [oplenario.kernel.segredo :as segredo])
@@ -67,32 +72,50 @@
   (cond (:via ator) "agente"
         :else (let [c (get-in req [:headers "x-oplenario-canal"])] (if (canais c) c "web"))))
 
+(def iniciado
+  "A `decisao` da TENTATIVA: o ato foi iniciado e o desfecho ainda nao foi registrado."
+  "iniciado")
+
+(defn- base
+  "O que a tentativa e o desfecho tem em comum: quem, o que, sobre o que e de onde."
+  [req ator acao]
+  (merge {:ente-id       (:ente-id ator)
+          :ator-tipo     (ator-tipo ator)
+          :identidade-id (:identidade-id ator)
+          :papeis        (vec (sort (map name (:papeis ator))))
+          :via-agente    (some-> ator :via :agente name)
+          :acao          (str (namespace acao) "/" (name acao))
+          :canal         (canal-de req ator)
+          :ip            (ip-de req)
+          :campos        []
+          :detalhe       (cond-> {:metodo (some-> (:request-method req) name str/upper-case)}
+                           (:via ator) (assoc :execucao (some-> ator :via :execucao-id str)))}
+         (recurso-do-caminho (:path-params req))))
+
+(defn registro-da-tentativa
+  "Da requisicao que VAI chegar ao handler -> o registro da tentativa (sem selo, sem seq), ou nil. So' a ESCRITA de um
+  ator da Casa tem tentativa: e' ela que pode deixar um ato sem registro. A negacao antes do handler, a leitura e a
+  entrada nao tem ato a perder e seguem com um registro so'."
+  [req acao]
+  (let [ator (:ator req)]
+    (when (and (:ente-id ator) acao (escrita? (:request-method req)))
+      (assoc (base req ator acao) :classe "escrita" :decisao iniciado :status-http nil))))
+
 (defn registro-da-requisicao
-  "Da requisicao/resposta ja' respondida -> o registro a gravar (sem selo, sem seq), ou nil se nao entra na trilha."
-  [req resp acao]
-  (let [marca  (:auditoria resp)
-        ator   (or (:ator req) (:ator marca))
-        ente   (:ente-id ator)
-        metodo (:request-method req)
-        status (:status resp)
-        cl     (classe metodo status acao (:classe marca))]
-    (when (and ente acao cl)
-      (merge {:ente-id       ente
-              :ator-tipo     (ator-tipo ator)
-              :identidade-id (:identidade-id ator)
-              :papeis        (vec (sort (map name (:papeis ator))))
-              :via-agente    (some-> ator :via :agente name)
-              :acao          (str (namespace acao) "/" (name acao))
-              :classe        cl
-              :decisao       (decisao status)
-              :status-http   status
-              :canal         (canal-de req ator)
-              :ip            (ip-de req)
-              :campos        (vec (sort (map name (:campos marca))))
-              :detalhe       (cond-> {:metodo (some-> metodo name str/upper-case)}
-                               (:via ator) (assoc :execucao (some-> ator :via :execucao-id str)))}
-             (recurso-do-caminho (:path-params req))
-             (select-keys marca [:recurso-tipo :recurso-id :rotulo])))))
+  "Da requisicao/resposta ja' respondida -> o registro a gravar (sem selo, sem seq), ou nil se nao entra na trilha.
+  `tentativa` (opcional) = o seq da tentativa gravada antes do handler: o desfecho a aponta em `detalhe.tentativa`."
+  ([req resp acao] (registro-da-requisicao req resp acao nil))
+  ([req resp acao tentativa]
+   (let [marca  (:auditoria resp)
+         ator   (or (:ator req) (:ator marca))
+         status (:status resp)
+         cl     (classe (:request-method req) status acao (:classe marca))]
+     (when (and (:ente-id ator) acao cl)
+       (cond-> (merge (base req ator acao)
+                      {:classe cl :decisao (decisao status) :status-http status
+                       :campos (vec (sort (map name (:campos marca))))}
+                      (select-keys marca [:recurso-tipo :recurso-id :rotulo]))
+         tentativa (assoc-in [:detalhe :tentativa] (long tentativa)))))))
 
 ;; ---- o selo encadeado ----
 

@@ -33,6 +33,8 @@
     :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
     ;; retirar um anexo e' CONTENCAO de incidente de conteudo: a Casa suspensa continua podendo tirar o que nao devia estar la'
     :participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd
+    ;; substituir um anexo (ADR-0022) e' retirar o errado e por o certo no lugar: a mesma contencao, num so' ato
+    :participacao/substituir-anexo-esic :participacao/substituir-anexo-ouvidoria :participacao/substituir-anexo-lgpd
     :transparencia/seguir :transparencia/deixar-de-seguir
     ;; os servidores respondendo aos protocolos do cidadao (prazo legal correndo)
     :participacao/responder-pedido :participacao/decidir-recurso :participacao/responder-manifestacao

@@ -242,8 +242,9 @@ Decidido em 29/09/2026: as cinco recomendações, sem correção.
    - O registro é gravado logo depois do ato, na mesma requisição e antes da resposta sair, numa transação própria.
    - Falhar aqui não desfaz o ato nem muda a resposta: vira `log/error` "registro NAO gravado", que é alerta de
      operação.
-   - O custo aceito: um ato pode existir sem registro se o banco cair entre as duas transações. Fechar isso é o
-     outbox transacional (fatia seguinte, se o uso pedir).
+   - ~~O custo aceito: um ato pode existir sem registro se o banco cair entre as duas transações.~~ **Fechado em
+     04/10/2026** pela tentativa gravada antes do handler — ver o **Adendo** no fim. O registro continua fora da
+     transação do ato; o que acabou foi a perda silenciosa.
 2. **O selo do dia é preguiçoso.** Não há agendador em produção. O dia fecha quando chega o primeiro registro do dia
    seguinte, e uma Casa sem atos num dia não gera selo daquele dia (não há o que selar). O mesmo gatilho anula os IPs
    antigos e cria as partições.
@@ -256,3 +257,95 @@ Decidido em 29/09/2026: as cinco recomendações, sem correção.
    verificador offline (script sobre o CSV exportado) fica para quando um cliente pedir.
 6. **A atuação da Operação** aparece como lista à parte na tela do auditor, com o selo da corrente da Operação, e não
    misturada aos registros da Casa: são correntes diferentes.
+
+## Adendo (04/10/2026) — a tentativa antes, o desfecho depois
+
+**O problema.** O registro era gravado depois do ato, em outra transação. Se o processo caísse ou a gravação falhasse
+entre as duas, o ato existia e a trilha não tinha linha nenhuma, sem sinal.
+
+**O que foi medido antes de escolher:**
+
+| Pergunta | Resposta | Onde |
+|---|---|---|
+| Quando o interceptor grava? | No `:leave`, depois do handler, antes de a resposta sair | `auditoria/diplomat/http/in.clj` |
+| Em que transação? | Própria (`com-tenant*`), nunca a do ato | `auditoria/components/repositorio.clj` |
+| E se falhar? | `log/error`; a resposta segue 2xx | `auditoria/controllers.clj` |
+| Quantas rotas de escrita? | 163 de 314 (137 POST, 11 PATCH, 9 PUT, 6 DELETE) | tabela de `rotas/montar` |
+| Há um ponto único de transação por pedido? | Não: 108 aberturas (`com-tenant*`/`with-transaction`) em 31 arquivos, dentro dos repositórios; um pedido abre várias | `src/oplenario/**` |
+
+**As duas formas:**
+
+- **A. Mesma transação.** Sem ponto único de abertura, exigiria passar a transação do interceptor para cada método de
+  repositório (os 108 sítios) ou trocar todos por uma transação por pedido. Além disso, o lock da corrente ficaria
+  preso até o fim da transação de domínio: as escritas de uma Casa passariam a se serializar pelo ato inteiro, e não
+  pelo instante do selo, com risco de deadlock contra os locks do domínio. **Descartada.**
+- **B. Tentativa antes, desfecho depois (escolhida).** Não toca nenhum controller e não entra em transação de domínio.
+
+**Como ficou:**
+
+- Logo antes do handler de toda rota de escrita — depois da autenticação, da autorização da rota e da validação da
+  borda —, o interceptor `tentativa` grava na corrente um registro com `decisao = iniciado`, em transação própria já
+  commitada.
+- Depois do handler, o desfecho é gravado como antes e aponta a tentativa em `detalhe.tentativa` (o `seq` dela).
+  O `detalhe` já entrava no selo: **o formato do selo não mudou**, e registros antigos e novos conferem na mesma
+  corrente.
+- **Se a tentativa não puder ser gravada, o padrão é não bloquear:** fica um `log/error` com a rota e a Casa (sem
+  conteúdo) e o handler roda, como era antes do adendo.
+  - Por quê: o produto vende disponibilidade na janela da sessão. Recusar toda escrita porque a trilha caiu seria um
+    modo novo de derrubar o plenário no meio de uma votação.
+  - `AUDITORIA_EXIGIR_TENTATIVA=true` liga o modo que recusa: 503 e o handler não roda (o fail-closed do Eixo 5b).
+    Só o valor exato `true` liga; ausente ou qualquer outro valor não bloqueia.
+- **A faxina do dia novo** (anular IPs de mais de 6 meses, criar partições) saiu da transação do registro: roda depois
+  do commit, em transação própria e fora do lock da corrente. Se falhar, vai para o log; o registro, o selo do dia e o
+  pedido seguem. O selo do dia continua na mesma transação do registro que fecha o dia.
+- **Sem lista de rotas:** `rotas/montar` passa a tabela inteira por `com-tentativa`, e
+  `auditoria/toda_escrita_tem_tentativa_test` confere as 163 e nomeia a rota que ficar de fora.
+- **Leitura:** a tentativa com desfecho não é linha da tela (um ato, uma linha). A sem desfecho aparece como "Sem
+  desfecho — ação iniciada, desfecho não registrado", tem filtro próprio, sai no CSV como `sem desfecho registrado`
+  e é contada na conferência da cadeia ("Cadeia íntegra, com desfecho faltando").
+- A tentativa só é acusada 2 minutos depois de gravada: antes disso o pedido ainda pode estar em curso.
+- Migration `20261004000188`: o `CHECK` de `decisao` aceita `iniciado` e há um índice parcial do apontamento. Feito
+  na tabela-mãe, vale para as partições que existem e para as futuras.
+
+**Custo por escrita:** uma gravação a mais na corrente (o lock da Casa, uma leitura da cabeça e um `INSERT`, numa
+transação curta). A gravação que já existia passou de quatro comandos para três (a cabeça e o relógio vêm na mesma
+consulta). Leitura, negação antes do handler, entrada e leitura sensível continuam com um registro só.
+
+**Contenção medida** (`janela_de_perda_test`, 21 escritas simultâneas da mesma Casa, pool de 10 conexões, handler com
+transação de tenant própria de ~5 ms; três rodadas, depois de aquecer):
+
+| | Tempo total das 21 | Maior tempo de uma escrita |
+|---|---|---|
+| Sem a tentativa (como era) | 80 a 152 ms | 78 a 132 ms |
+| Com a tentativa | 144 a 184 ms | 132 a 167 ms |
+
+- Todas concluíram, sem deadlock nem timeout; a corrente ficou íntegra, com 21 tentativas e 21 desfechos.
+- A tentativa custou entre nada e 1,8 vez o tempo, conforme a rodada: cerca de 60 a 80 ms a mais para os 21 votos.
+- Se pesar em produção, o plano B já está no Eixo 5b-ii (selar depois, com um selador único fora do caminho do
+  voto). Não foi implementado.
+
+**A garantia:** o ato só fica fora da trilha se a própria trilha estiver fora no momento do ato, e isso fica no log.
+
+**O que ela cobre:**
+
+- queda do processo ou do banco entre o ato e o registro;
+- falha na gravação do desfecho;
+- toda rota de escrita de ator da Casa, inclusive as do agente.
+
+**O que ela NÃO cobre:**
+
+- **A trilha fora antes do ato** (modo padrão): a tentativa não grava, o ato acontece e, se o desfecho também não
+  gravar, não há linha na corrente — só o `log/error`. Quem precisa que isso nunca aconteça liga
+  `AUDITORIA_EXIGIR_TENTATIVA=true` e aceita que a trilha fora para a Casa.
+- **Não diz se o ato aconteceu.** A tentativa sem desfecho também aparece quando o processo cai antes de o ato
+  commitar. Ela aponta onde conferir (ação, recurso, quem, quando); a conferência é do auditor.
+- **A entrada (login):** o handler do mint não tem ator antes de rodar; segue com um registro só, gravado depois.
+- **Um pedido que dure mais de 2 minutos** aparece como sem desfecho até terminar.
+- **O que não passa por HTTP** (consumidores do outbox, jobs) não era auditado e continua não sendo.
+- **Quem escreve direto no banco** continua fora, como antes: é o que o selo e a âncora cobrem.
+
+**Pendências da trilha depois deste adendo:**
+
+- o resumo legível por ação (item 3 acima);
+- step-up (item 4) e o verificador offline (item 5);
+- a entrada sem tentativa (acima).
