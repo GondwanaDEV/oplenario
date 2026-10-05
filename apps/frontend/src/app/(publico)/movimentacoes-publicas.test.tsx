@@ -63,6 +63,29 @@ describe("MovimentacoesPublicas", () => {
     expect(within(lista).getAllByRole("listitem")[0].getAttribute("aria-current")).toBe("step");
   });
 
+  it("a votação não é 'Etapa atual': a marca fica na etapa mais recente que não é votação", async () => {
+    mockar({
+      status: 200,
+      corpo: corpo({
+        movimentacoes: [
+          { "ocorrido-em": "2026-09-23T15:36:29Z", etapa: "Aprovada em 1º turno", abertura: false, votacao: true },
+          { "ocorrido-em": "2026-09-23T12:00:00Z", etapa: "Em Pauta", abertura: false, votacao: false },
+          { "ocorrido-em": "2026-09-01T12:00:00Z", etapa: "Protocolada", abertura: true, votacao: false },
+        ],
+        "movimentacoes-total": 3,
+      }),
+    });
+    render(<MovimentacoesPublicas ente={ENTE} proposicaoId="p1" />);
+    const lista = await screen.findByRole("list", { name: /da mais recente para a mais antiga/i });
+    const itens = within(lista).getAllByRole("listitem");
+    expect(within(lista).getAllByText("Etapa atual")).toHaveLength(1);
+    expect(within(itens[1]).getByText("Etapa atual")).toBeTruthy();
+    expect(itens[1].getAttribute("aria-current")).toBe("step");
+    expect(itens[0].getAttribute("aria-current")).toBeNull();
+    expect(within(itens[0]).queryByText("Etapa atual")).toBeNull();
+    expect(within(itens[0]).getByText("Aprovada em 1º turno")).toBeTruthy();
+  });
+
   it("histórico completo e sem corte: nenhum aviso de recorte", async () => {
     mockar({ status: 200, corpo: corpo() });
     render(<MovimentacoesPublicas ente={ENTE} proposicaoId="p1" />);

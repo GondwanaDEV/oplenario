@@ -23,7 +23,10 @@
    ;; docs/16, retriagem linha 18: o ultimo ato DEPOIS do plenario, a partir do autografo (autografo_enviado,
    ;; sancionado, sancao_tacita, vetado, veto_mantido, veto_derrubado, promulgada, publicada); nil = a materia nao saiu
    ;; do plenario e a situacao vem do rito. Opcional: quem constroi a linha sem ele (testes antigos) segue valido.
-   [:desfecho {:optional true} [:maybe :string]]])
+   [:desfecho {:optional true} [:maybe :string]]
+   ;; o NOME que o rito da Casa da' ao estado atual (`template_estado.nome`), o mesmo da faixa da ficha; nil = materia
+   ;; sem rito ou estado que o rito nao declara (a tela usa o rotulo fixo). Opcional pelo mesmo motivo de `desfecho`.
+   [:rotulo-estado {:optional true} [:maybe :string]]])
 
 (def ListaProposicoesOut
   "O envelope da resposta de GET /legislativo/proposicoes — a pagina de itens (ProposicaoResumoOut) mais os

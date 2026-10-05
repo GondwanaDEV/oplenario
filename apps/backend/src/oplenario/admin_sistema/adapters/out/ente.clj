@@ -101,6 +101,18 @@
                                      :operador (:operador-nome a) :detalhe (or (:detalhe a) {}) :selo (:selo a)})
                             atuacao)}))
 
+(defn sem-desfecho->wire
+  "`r` = o que `controllers/atos-sem-desfecho` devolve. Allowlist campo a campo; `truncado` e' calculado aqui para o
+  total e a lista nunca discordarem sem que isso fique dito."
+  [{:keys [tolerancia-segundos limite total atos]}]
+  (validado wire/AtosSemDesfechoOut "AtosSemDesfechoOut"
+            {:tolerancia-segundos tolerancia-segundos :limite limite :total total
+             :truncado (> total (count atos))
+             :atos (mapv (fn [a] {:id (str (:id a)) :em (str (:em a)) :acao (:acao a) :operador (:operador a)
+                                  :origem (some-> (:origem a) str) :ente-id (->str (:ente-id a))
+                                  :casa-nome (:casa-nome a)})
+                         atos)}))
+
 (defn provisionada->wire [{c :casa convite :convite}]
   (validado wire/ProvisionadaOut "ProvisionadaOut" {:casa (casa c) :convite (name convite)}))
 

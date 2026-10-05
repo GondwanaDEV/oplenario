@@ -3,7 +3,7 @@
 // livre/template-driven) — nenhum vocabulário novo de estado é inventado aqui.
 
 import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
-import { categoriaDoDesfecho } from "./desfecho-vista";
+import { categoriaDoDesfecho, situacaoDoDesfecho } from "./desfecho-vista";
 import type { ProposicaoDetalheOut, ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
 // `ProposicaoDetalheOut["tipo"]` é a união gerada de `logic/tipos` do backend (km/enum-de): sigla e espécie
@@ -101,7 +101,11 @@ export function categorizarSituacao(estado: string): CategoriaSituacao {
 export function derivarProposicoesVista(itens: ProposicaoResumoOut[]): LinhaProposicaoVista[] {
   return itens.map((item) => {
     // docs/16 linha 18: a partir do autógrafo, o desfecho diz a situação ("Sancionada", "Virou lei"), não o rito
-    const { estagios, rotuloSituacao } = derivarTramitacao(item.estado, item.desfecho);
+    const { estagios, rotuloSituacao: rotuloFixo } = derivarTramitacao(item.estado, item.desfecho);
+    // o mesmo que a ficha diz: a partir do autógrafo, o desfecho; senão o nome que o rito da Casa dá à etapa
+    // (`rotuloEstado`, lido do rito na própria consulta da lista); sem ele, o rótulo fixo
+    const nomeDaCasa = item.rotuloEstado?.trim();
+    const rotuloSituacao = situacaoDoDesfecho(item.desfecho) || !nomeDaCasa ? rotuloFixo : nomeDaCasa;
     return {
       id: item.id,
       numero: formatarNumeroProposicao(item.tipo, item.sequencial, item.ano),

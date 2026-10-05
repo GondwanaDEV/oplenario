@@ -354,4 +354,7 @@
  :sessoes/minhas-inscricoes {:categoria :so-tela
                              :motivo "a lista da propria cidada para acompanhar as inscricoes; agente do cidadao e' pos-V1 (docs/26 §4)"}
  :sessoes/desistir-da-inscricao {:categoria :so-tela
-                                 :motivo "desistir da fala e' da propria cidada, na area dela; agente do cidadao e' pos-V1"}}
+                                 :motivo "desistir da fala e' da propria cidada, na area dela; agente do cidadao e' pos-V1"}
+ ;; ---------- ADR-0017 (adendo de 05/10/2026): a conferencia da Operacao no console ----------
+ :admin-sistema/atos-sem-desfecho {:categoria :supratenant
+                                   :motivo "os atos da Operacao iniciados sem desfecho registrado, so' leitura no console do operador (nome do operador e da Casa, nunca dado de dentro dela); rota do operador nao e' ferramenta do agente"}}

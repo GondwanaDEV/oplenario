@@ -6,11 +6,14 @@
 
 (def MovimentacaoOut
   "Uma movimentacao. `etapa` = o nome da etapa no rito da Casa (`nil` = o rito nao declara o estado de destino: a
-  tela diz isso, nunca exibe a chave). `abertura` = a primeira linha, o protocolo."
+  tela diz isso, nunca exibe a chave). `abertura` = a primeira linha, o protocolo. `votacao` = a linha e' uma votacao
+  em plenario (aprovada/rejeitada, de turno ou a redacao final): votar nao muda a etapa da materia, entao a tela nao a
+  marca como 'Etapa atual'."
   [:map {:closed true}
    [:ocorrido-em :string]
    [:etapa [:maybe :string]]
-   [:abertura :boolean]])
+   [:abertura :boolean]
+   [:votacao :boolean]])
 
 (def MovimentacoesOut
   "Resposta de GET /portal/casa/:ente/materias/:proposicao_id/movimentacoes — da mais recente para a mais antiga.

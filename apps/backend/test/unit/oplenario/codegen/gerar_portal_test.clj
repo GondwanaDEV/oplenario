@@ -67,8 +67,9 @@
 
 (deftest movimentacoes-out-publica-so-data-etapa-e-os-sinais-de-completude
   ;; "Por onde a materia passou": a tela le data + etapa por movimentacao, o total (par do teto) e se o historico
-  ;; esta' completo — nenhum campo de quem despachou chega tipado ao front.
+  ;; esta' completo — nenhum campo de quem despachou chega tipado ao front. `votacao` diz se a linha e' votacao (a
+  ;; tela nao a marca como etapa atual); a chave da etapa nao chega.
   (let [out (gerar-portal/gerar-tudo)]
-    (is (str/includes? out "export interface MovimentacaoOut {\n  ocorridoEm: string;\n  etapa: string | null;\n  abertura: boolean;\n}\n"))
+    (is (str/includes? out "export interface MovimentacaoOut {\n  ocorridoEm: string;\n  etapa: string | null;\n  abertura: boolean;\n  votacao: boolean;\n}\n"))
     (is (str/includes? out "export interface MovimentacoesOut {\n  movimentacoes: MovimentacaoOut[];\n  movimentacoesTotal: number;\n  historicoCompleto: boolean;\n  historicoDesde: string | null;\n}\n")
         "referencia nomeada, e o total/o sinal de historico que comeca no meio sao obrigatorios")))

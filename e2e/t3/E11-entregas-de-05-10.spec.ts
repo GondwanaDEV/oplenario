@@ -377,7 +377,7 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
     const ctx = await pwRequest.newContext();
     const { materias } = await portalJson<{ materias: { "proposicao-id": string }[] }>(ctx, "materias");
     // uma matéria com mais de uma movimentação, achada pela API pública (a ficha tem de mostrar o que o servidor entrega)
-    type Mov = { movimentacoes: { etapa: string | null }[]; "movimentacoes-total": number };
+    type Mov = { movimentacoes: { etapa: string | null; votacao?: boolean }[]; "movimentacoes-total": number };
     let alvo: { id: string; mov: Mov } | null = null;
     for (const m of materias.slice(0, 40)) {
       const mov = await portalJson<Mov>(ctx, `materias/${m["proposicao-id"]}/movimentacoes`);
@@ -398,7 +398,14 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
       await expect(linha).toHaveCount(mov.movimentacoes.length, { timeout: 10_000 });
       await expect(linha.first()).toContainText(mov.movimentacoes[0].etapa!, { timeout: 5_000 });
     }).toPass({ timeout: 120_000 });
-    await expect(linha.first()).toContainText("Etapa atual");
+    // "Etapa atual" fica na etapa mais recente que não é votação (votar não muda a etapa da matéria)
+    const atual = mov.movimentacoes.findIndex((m) => !m.votacao);
+    if (atual >= 0) {
+      await expect(linha.nth(atual)).toContainText("Etapa atual");
+      await expect(page.getByText("Etapa atual")).toHaveCount(1);
+    } else {
+      await expect(page.getByText("Etapa atual")).toHaveCount(0);
+    }
     semUuidNemEnumCru(await textoVisivel(page), "ficha pública da matéria");
     await ctx.dispose();
   });

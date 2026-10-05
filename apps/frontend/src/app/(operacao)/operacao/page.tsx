@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { comToken } from "@/lib/nav";
 import { type Casa, type Pedido, rotuloEstadoCasa, rotuloMotivo, useCasas } from "@/lib/use-operacao";
+import AtosSemDesfecho from "./atos-sem-desfecho";
 import { atividade, haQuanto } from "./quando";
 
 export default function CamarasNaPlataforma() {
@@ -55,6 +56,8 @@ export default function CamarasNaPlataforma() {
       </div>
 
       {(dados?.pendentes?.length ?? 0) > 0 && <FilaDoSegundoOperador pedidos={dados!.pendentes!} token={token} />}
+
+      <AtosSemDesfecho />
 
       <div className="op-barra">
         <label className="op-filtro">

@@ -14,8 +14,9 @@
    :total 2 :completo? true :desde t0})
 
 (deftest projeta-so-o-publico
-  (is (= {:movimentacoes [{:ocorrido-em "2026-09-01T12:00:00Z" :etapa "Em análise nas comissões" :abertura false}
-                          {:ocorrido-em "2026-08-01T09:30:00Z" :etapa "Recebida pela Mesa" :abertura true}]
+  (is (= {:movimentacoes [{:ocorrido-em "2026-09-01T12:00:00Z" :etapa "Em análise nas comissões" :abertura false
+                           :votacao false}
+                          {:ocorrido-em "2026-08-01T09:30:00Z" :etapa "Recebida pela Mesa" :abertura true :votacao false}]
           :movimentacoes-total 2 :historico-completo true :historico-desde "2026-08-01T09:30:00Z"}
          (a/movimentacoes->wire dominio))))
 
@@ -28,7 +29,17 @@
   (let [r (a/movimentacoes->wire
            (assoc-in dominio [:movimentacoes 0] {:ocorrido-em t1 :etapa "X" :inicial false
                                                  :ator-id (random-uuid) :gatilho "despachar" :etapa-chave "x_chave"}))]
-    (is (= #{:ocorrido-em :etapa :abertura} (set (keys (first (:movimentacoes r))))))))
+    (is (= #{:ocorrido-em :etapa :abertura :votacao} (set (keys (first (:movimentacoes r))))))))
+
+(deftest a-votacao-e-marcada-e-a-chave-nao-sai
+  (let [linha #(-> (a/movimentacoes->wire (assoc-in dominio [:movimentacoes 0]
+                                                    {:ocorrido-em t1 :etapa "X" :inicial false :etapa-chave %}))
+                   :movimentacoes first)]
+    (doseq [k ["ato:aprovada" "ato:rejeitada" "ato:aprovada:turno_1" "ato:rejeitada:turno_2" "ato:aprovada:redacao_final"]]
+      (is (true? (:votacao (linha k))) k)
+      (is (not (contains? (linha k) :etapa-chave)) "a chave nunca sai"))
+    (doseq [k ["ato:autografo_enviado" "ato:sancionado" "ato:promulgada" "em_pauta" "aprovada_em_plenario" nil]]
+      (is (false? (:votacao (linha k))) (str "nao e' votacao: " k)))))
 
 (deftest total-ausente-e-bug-de-servidor-nao-zero-silencioso
   (is (thrown? clojure.lang.ExceptionInfo (a/movimentacoes->wire (dissoc dominio :total)))))

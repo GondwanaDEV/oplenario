@@ -167,6 +167,19 @@ describe("derivarFicha", () => {
     });
   });
 
+  // o chip diz o mesmo que "Por onde a matéria passou": a etapa atual com o nome que o rito da Casa lhe deu
+  it("com a etapa atual projetada, o chip usa o nome da Casa; o desfecho a partir do autógrafo ainda vence", () => {
+    expect(derivarFicha(ficha({ estado: "em_comissoes" }), null, "Análise nas comissões").situacao).toBe(
+      "Análise nas comissões",
+    );
+    expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "vetado" }), null, "Na Ordem do Dia").situacao).toBe(
+      "Vetada",
+    );
+    // sem etapa nomeada (rito sem nome, histórico indisponível): o rótulo fixo
+    expect(derivarFicha(ficha({ estado: "em_comissoes" }), null, null).situacao).toBe("Em comissões");
+    expect(derivarFicha(ficha({ estado: "em_comissoes" }), null, "  ").situacao).toBe("Em comissões");
+  });
+
   it("autorTexto ausente -> null honesto, nunca undefined/inventado", () => {
     const vista = derivarFicha(ficha({ autorTexto: undefined, autorTipo: undefined }), []);
     expect(vista.autorTexto).toBeNull();

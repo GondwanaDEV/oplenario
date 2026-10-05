@@ -8,7 +8,8 @@
 // FORA (Global Constraint "sem dado falso").
 
 import { formatarNumeroProposicao, formatarEspecieProposicao, categorizarSituacao } from "@/lib/proposicoes-vista";
-import { derivarTramitacao, descreverFaixa, faixaDoRito } from "@/lib/tramitacao-vista";
+import { derivarTramitacao, descreverFaixa, faixaDoRito, rotularSituacaoPeloRito } from "@/lib/tramitacao-vista";
+import { categoriaDoDesfecho } from "@/lib/desfecho-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { formatarData } from "@/lib/formatar-data";
 import type { CoautorOut, ProposicaoDetalheOut, RitoDaMateriaOut } from "@/lib/contrato-legislativo.gen";
@@ -17,19 +18,24 @@ export function FichaCabecalho({
   proposicao,
   coautores = [],
   rito,
+  desfecho,
 }: {
   proposicao: ProposicaoDetalheOut;
   /** O rito da Casa para esta matéria (rota da ficha): ordem e rótulo das etapas. Sem ele, a faixa ilustrativa. */
   rito?: RitoDaMateriaOut | null;
   /** fatia 2c: quem subscreveu o requerimento coletivo (assinou antes do protocolo). */
   coautores?: CoautorOut[];
+  /** O último ato depois do plenário (da rota de pós-aprovação): a partir do autógrafo é ele que diz a situação. */
+  desfecho?: string | null;
 }) {
   const numero = formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano);
   const especie = formatarEspecieProposicao(proposicao.tipo);
   // a ordem e os nomes das etapas vêm do rito da Casa; sem rito (ou sem a etapa atual nele), o mapa ilustrativo
-  const { estagios: estagiosFixos, rotuloSituacao } = derivarTramitacao(proposicao.estado);
+  const { estagios: estagiosFixos } = derivarTramitacao(proposicao.estado);
   const estagios = faixaDoRito(rito)?.estagios ?? estagiosFixos;
-  const categoria = categorizarSituacao(proposicao.estado);
+  // o chip diz o mesmo que a faixa: o nome da Casa para a etapa atual; a partir do autógrafo, o desfecho
+  const rotuloSituacao = rotularSituacaoPeloRito(proposicao.estado, rito, desfecho);
+  const categoria = categoriaDoDesfecho(desfecho) ?? categorizarSituacao(proposicao.estado);
 
   return (
     <>

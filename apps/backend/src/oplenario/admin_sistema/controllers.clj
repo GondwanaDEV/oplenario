@@ -271,6 +271,44 @@
      :atuacao (repo/atuacao-do-ente repo-op ente-id 50)}))
 
 ;; ---------------------------------------------------------------------------------------------
+;; ADR-0017 (adendo de 05/10/2026) x ADR-0016: os atos da Operacao iniciados cujo desfecho nao foi registrado.
+;; ---------------------------------------------------------------------------------------------
+
+(def tolerancia-sem-desfecho-segundos
+  "Uma tentativa mais nova que isto ainda pode estar em curso (o desfecho vem depois do efeito, e o efeito pode demorar:
+  entrar no console, reaplicar o login de uma Casa no Keycloak, definir o orcamento). Passou, e nenhum desfecho aponta
+  a tentativa: o console acusa. Dois minutos cobrem o efeito mais lento desses atos com folga."
+  120)
+
+(def limite-sem-desfecho
+  "O teto da lista do console (as mais recentes). O TOTAL sai sempre; a lista que passa disto sai truncada e o wire diz
+  `truncado`."
+  50)
+
+(defn atos-sem-desfecho
+  "Os atos da Operacao iniciados cujo desfecho a corrente nao registrou, mais recente primeiro, para o console (so'
+  leitura). Cada ato leva o NOME do operador e o da Casa (nunca so' o UUID). Vale para a entrada no console, a
+  definicao do orcamento de IA e a reaplicacao do login: o que `atuacao/acoes-de-tentativa` abre como par.
+  -> {:tolerancia-segundos :limite :total :atos [{:id :em :acao :operador :origem :ente-id :casa-nome}]}."
+  ([repo-op agora] (atos-sem-desfecho repo-op agora limite-sem-desfecho))
+  ([repo-op agora limite]
+     (let [{:keys [total registros]} (repo/conferir-sem-desfecho
+                                      repo-op (.minusSeconds ^java.time.Instant agora tolerancia-sem-desfecho-segundos)
+                                      limite)
+           operadores (into {} (map (fn [id] [id (:nome (repo/operador-por-id repo-op id))]))
+                            (distinct (keep :operador-id registros)))
+           casas (into {} (map (fn [id] [id (:nome (repo/casa-por-id repo-op id))]))
+                       (distinct (keep :ente-id registros)))]
+       {:tolerancia-segundos tolerancia-sem-desfecho-segundos
+        :limite limite
+        :total total
+        :atos (mapv (fn [r] {:id (:id r) :em (:em r) :acao (:acao r)
+                             :operador (get operadores (:operador-id r))
+                             :origem (get-in r [:detalhe :origem])
+                             :ente-id (:ente-id r) :casa-nome (get casas (:ente-id r))})
+                    registros)})))
+
+;; ---------------------------------------------------------------------------------------------
 ;; ADR-0018 (fatia 2): ENCERRAR (Eixo 4). A sequencia, por etapas:
 ;;   1. a EXPORTACAO completa (9.6) — o admin_ente gera quando quiser (portabilidade); o operador manda gerar durante o
 ;;      encerramento. Gera em segundo plano. Quem BAIXA e' so' o admin_ente da Casa: a Operacao e' operadora (LGPD) e ve

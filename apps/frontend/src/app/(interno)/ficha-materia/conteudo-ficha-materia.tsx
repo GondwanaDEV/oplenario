@@ -20,6 +20,7 @@ import { useFichaMateria } from "@/lib/use-ficha-materia";
 import { usePosAprovacao } from "@/lib/use-pos-aprovacao";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { derivarDadosMateria } from "@/lib/ficha-materia-vista";
+import { desfechoDaPosAprovacao } from "@/lib/desfecho-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { dicaDaMateria, useDicaDaClara } from "../clara/dica";
@@ -69,7 +70,9 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
     ficha.proposicao.sequencial,
     ficha.proposicao.ano,
   );
-  const dadosMateria = derivarDadosMateria(ficha);
+  // a partir do autógrafo, o desfecho diz a situação no chip e no rail (enquanto a leitura não chega, vale o rito)
+  const desfecho = desfechoDaPosAprovacao(posAprovacao);
+  const dadosMateria = derivarDadosMateria(ficha, desfecho);
 
   return (
     <>
@@ -81,7 +84,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
           <b>{numero}</b>
         </nav>
 
-        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} rito={ficha.rito} />
+        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} rito={ficha.rito} desfecho={desfecho} />
 
         <div className="corpo">
           <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} posAprovacao={posAprovacao} onTramitou={recarregar} />
