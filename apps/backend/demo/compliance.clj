@@ -41,10 +41,10 @@
             [oplenario.compliance.components.repositorio :as repo-compliance]
             [oplenario.compliance.components.serializador-remessa :as ser]
             [oplenario.compliance.gerador-remessa :as ger]
+            [oplenario.gatilho-compliance :as gatilho]
             [oplenario.motor.components.repositorio :as repo-motor]
             [oplenario.motor.nucleo :as nuc])
-  (:import (java.nio.charset StandardCharsets)
-           (java.time LocalDate)
+  (:import (java.time LocalDate)
            (java.util UUID)))
 
 (set! *warn-on-reflection* true)
@@ -113,7 +113,8 @@
   ente⋈template⋈objeto_tipo⋈objeto_id, entao um id aleatorio faria cada corrida da semente materializar
   uma obrigacao NOVA e o placar crescer sem limite."
   ^UUID [ente chave]
-  (UUID/nameUUIDFromBytes (.getBytes (str ente "|SIM|" chave) StandardCharsets/UTF_8)))
+  ;; a derivacao e' UMA so': o gatilho do host reavalia a obrigacao da remessa aceita por este mesmo id
+  (gatilho/objeto-da-remessa ente "SIM" chave))
 
 (defn- semear-catalogo!
   "O catalogo do motor: versao do registry + a definicao do template + os prazos por competencia (esfera

@@ -72,7 +72,9 @@
           (controllers/submeter-remessa repo a id))
         "submeter rascunho -> :conflito/remessa (handler -> 409), nao nil silencioso")
     (let [e (try (controllers/submeter-remessa repo a id) (catch clojure.lang.ExceptionInfo ex ex))]
-      (is (= :conflito/remessa (:tipo (ex-data e))) "marca :conflito/remessa p/ o 409 da borda"))))
+      (is (= :conflito/remessa (:tipo (ex-data e))) "marca :conflito/remessa p/ o 409 da borda")
+      (is (= "rascunho" (:estado-atual (ex-data e))) "o conflito carrega o estado ATUAL da remessa...")
+      (is (= "validada" (:esperado (ex-data e))) "...e o estado em que ela precisava estar"))))
 
 ;; ---------- desambiguacao: remessa inexistente -> nil (404) ----------
 
