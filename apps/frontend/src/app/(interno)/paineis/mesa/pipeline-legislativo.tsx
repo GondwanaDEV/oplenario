@@ -6,6 +6,7 @@
 
 import Link from "next/link";
 import { BarraSegmentada } from "@/lib/charts/barra-segmentada";
+import { corPorPosicao } from "@/lib/charts/cor-por-posicao";
 import { TabuleiroEstagios } from "@/lib/charts/tabuleiro-estagios";
 import { derivarRef } from "@/lib/materia-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
@@ -18,14 +19,6 @@ import { derivarTramitacao } from "@/lib/tramitacao-vista";
 // aqui mantem UMA fonte de rotulo por conceito, em vez de um segundo mapa a divergir com o tempo.
 const rotularEstagio = (estado: string) => derivarTramitacao(estado).rotuloSituacao;
 
-const CORES_ESTAGIO: Record<string, string> = {
-  protocolada: "#2C5638",
-  em_comissao: "#3F6E92",
-  primeiro_turno: "#C0693F",
-  segundo_turno: "#4E8259",
-  sancao: "#CFA65C",
-};
-
 export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista["pipeline"]; token?: string | null }) {
   if (vista.estado === "indisponivel") {
     return (
@@ -35,7 +28,11 @@ export function PipelineLegislativo({ vista, token = null }: { vista: MesaVista[
       </section>
     );
   }
-  const segmentos = vista.porEstado.map((e) => ({ rotulo: rotularEstagio(e.estado), n: e.n, cor: CORES_ESTAGIO[e.estado] ?? "#888" }));
+  // A cor vem da POSIÇÃO do estágio (a ordem que a rota devolve), nunca do nome: o estado é texto livre por Casa
+  // e 5 chaves fixas deixavam o gráfico cinza (uma delas, `em_comissao`, nem existe).
+  const segmentos = vista.porEstado.map((e, i, todos) => ({
+    rotulo: rotularEstagio(e.estado), n: e.n, cor: corPorPosicao(i, todos.length),
+  }));
   return (
     <section className="bloco" aria-labelledby="pipeline-titulo">
       <div className="bloco-cabeca">
