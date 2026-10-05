@@ -55,25 +55,23 @@ export type FichaVista = {
 export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
 /**
- * A faixa e o selo da ficha pública. Precedência:
- *  1. o desfecho depois do plenário (do autógrafo em diante) decide os dois — o rito não sabe do Executivo nem da lei;
- *  2. senão, o RITO da Casa (a rota devolve as etapas em ordem, com o nome que a Casa deu): a faixa e o selo dizem a
- *     mesma etapa com o mesmo nome. Só vale quando o rito declara a etapa atual E ela é a do estado da matéria: o
- *     portal guarda o último rito junto com o estado, mas um rito de outra etapa (corrida entre eventos) apontaria a
- *     etapa errada, então não se confia nele;
- *  3. senão, o mapa fixo por nome de estado (matéria sem evento com rito, ou rito incoerente) — o comportamento anterior.
+ * A faixa "Onde este projeto está" pelo RITO da Casa (a rota devolve as etapas em ordem, com o nome que a Casa deu), ou
+ * null quando o rito não vale e a tela usa o mapa fixo por nome de estado (o comportamento anterior):
+ *  - o desfecho depois do plenário (do autógrafo em diante) decide a faixa — o rito não sabe do Executivo nem da lei;
+ *  - sem rito (matéria sem evento com rito), ou rito que não declara a etapa atual: mapa fixo;
+ *  - a etapa atual do rito tem de ser a do estado da matéria: o portal guarda o último rito junto com o estado, mas um
+ *    rito de outra etapa (corrida entre eventos) apontaria a etapa errada, então não se confia nele.
+ * Só a FAIXA vem daqui. O selo de situação (nome da etapa) segue o caminho próprio dele.
  */
-function faixaESelo(ficha: FichaOut): { estagios: EstagioTramitacao[]; rotuloSituacao: string } {
-  const fixa = derivarTramitacao(ficha.estado, ficha.desfecho);
-  if (situacaoDoDesfecho(ficha.desfecho)) return fixa;
+function faixaPeloRito(ficha: FichaOut): EstagioTramitacao[] | null {
+  if (situacaoDoDesfecho(ficha.desfecho)) return null;
   const rito = ficha.rito?.atual?.chave === ficha.estado ? ficha.rito : null;
-  const daCasa = faixaDoRito(rito);
-  if (!daCasa || !rito?.atual) return fixa;
-  return { estagios: daCasa.estagios, rotuloSituacao: rito.atual.rotulo };
+  return faixaDoRito(rito)?.estagios ?? null;
 }
 
 export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | null): FichaVista {
-  const { estagios, rotuloSituacao } = faixaESelo(ficha);
+  const { estagios: estagiosFixos, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
+  const estagios = faixaPeloRito(ficha) ?? estagiosFixos;
   return {
     ref: derivarRef(ficha),
     titulo: ficha.ementa,

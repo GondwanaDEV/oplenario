@@ -69,7 +69,7 @@ describe("derivarFicha", () => {
       proximas: [etapa("plenario_unico", "Plenário único")],
     });
 
-    it("a faixa e o selo dizem a etapa com o nome da Casa, na ordem do rito", () => {
+    it("a faixa diz as etapas na ordem do rito, com o nome da Casa", () => {
       const vista = derivarFicha(
         ficha({ estado: "instrucao", rito: rito(etapa("instrucao", "Instrução")) }),
         [],
@@ -79,16 +79,23 @@ describe("derivarFicha", () => {
         { chave: "instrucao", rotulo: "Instrução", situacao: "ativo" },
         { chave: "plenario_unico", rotulo: "Plenário único", situacao: "pendente" },
       ]);
-      expect(vista.situacao).toBe("Instrução");
     });
 
-    it("a mesma etapa não tem dois nomes: o selo é o nome da Casa, não o rótulo fixo do estado", () => {
+    it("estado que o mapa fixo conhece, com rito: a faixa é a da Casa, não as 5 etapas ilustrativas", () => {
       const vista = derivarFicha(
         ficha({ estado: "em_pauta", rito: rito(etapa("em_pauta", "Na Ordem do Dia")) }),
         [],
       );
-      expect(vista.situacao).toBe("Na Ordem do Dia");
       expect(vista.estagios.find((e) => e.situacao === "ativo")?.rotulo).toBe("Na Ordem do Dia");
+      expect(vista.estagios.map((e) => e.rotulo)).not.toContain("1º turno");
+    });
+
+    it("o selo de situação não muda nesta camada: segue o rótulo de estado (o nome da etapa é de outro caminho)", () => {
+      const vista = derivarFicha(
+        ficha({ estado: "em_pauta", rito: rito(etapa("em_pauta", "Na Ordem do Dia")) }),
+        [],
+      );
+      expect(vista.situacao).toBe("Em pauta");
     });
 
     it("rito sem ordem única: só o entorno, com as próximas possíveis como ramos", () => {
@@ -114,6 +121,7 @@ describe("derivarFicha", () => {
     });
 
     it("desfecho depois do plenário (autógrafo em diante) continua vencendo o rito, na faixa e no selo", () => {
+      // (o selo vem do desfecho como sempre; a faixa também, e o rito é ignorado)
       const vista = derivarFicha(
         ficha({ estado: "em_pauta", desfecho: "sancionado", rito: rito(etapa("em_pauta", "Na Ordem do Dia")) }),
         [],
@@ -122,12 +130,12 @@ describe("derivarFicha", () => {
       expect(vista.estagios.map((e) => e.rotulo)).toEqual(["Protocolo", "Comissões", "1º turno", "2º turno", "Sanção"]);
     });
 
-    it("a votação em plenário (aprovada/rejeitada) não decide a situação: o rito segue valendo", () => {
+    it("a votação em plenário (aprovada/rejeitada) não decide a faixa: o rito segue valendo", () => {
       const vista = derivarFicha(
         ficha({ estado: "em_pauta", desfecho: "aprovada", rito: rito(etapa("em_pauta", "Na Ordem do Dia")) }),
         [],
       );
-      expect(vista.situacao).toBe("Na Ordem do Dia");
+      expect(vista.estagios.find((e) => e.situacao === "ativo")?.rotulo).toBe("Na Ordem do Dia");
     });
 
     it("rito de outra etapa que não a do estado (corrida entre eventos): cai no mapa fixo, nunca aponta a etapa errada", () => {

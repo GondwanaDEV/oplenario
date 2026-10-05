@@ -61,7 +61,7 @@ describe("SecaoFicha", () => {
     expect(screen.getByText(/matéria não encontrada/i)).toBeTruthy();
   });
 
-  it("com o rito da Casa -> a faixa segue a ordem do rito e o selo diz a mesma etapa com o nome da Casa", async () => {
+  it("com o rito da Casa -> a faixa 'Onde este projeto está' segue a ordem do rito, com o nome que a Casa deu", async () => {
     const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
     const comRito = {
       ...fichaFake,
@@ -82,7 +82,6 @@ describe("SecaoFicha", () => {
         name: "Tramitação de PL 042/2026: concluídos Entrada na Mesa; atual Em instrução; pendente Plenário único.",
       }),
     ).toBeTruthy();
-    expect(document.querySelector(".ficha-cab .estado-chip")?.textContent).toBe("Em instrução");
   });
 
   it("dado real -> cabeçalho (ref+ementa+autoria) + faixa de tramitação + permalink", async () => {
