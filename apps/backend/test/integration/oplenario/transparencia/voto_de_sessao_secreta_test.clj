@@ -216,3 +216,37 @@
     (let [pa (:json (get-json svc (str "/portal/casa/" (:ente a) "/vereadores/" helena)))]
       (is (= [(str (:na-publica a))] (mapv :votacao-id (:votos pa)))
           "o perfil na Casa A so' mostra voto da Casa A (mesmo vereador-id nas duas Casas)"))))
+
+(defn- anular! [ente votacao-id]
+  (let [lv (tenancy/com-tenant* *ds* ente
+             (fn [tx] (:votacoes/lock_version
+                       (jdbc/execute-one! tx ["SELECT lock_version FROM legislativo.votacoes WHERE ente_id = ? AND id = ?"
+                                              ente votacao-id]))))]
+    (repo-leg/anular-votacao! *leg* ente {:id votacao-id :lock-version lv :updated-by (random-uuid)})))
+
+(deftest o-voto-de-votacao-anulada-em-sessao-publica-nao-sai
+  ;; ledger docs/16: a anulacao desfaz a votacao (correcao = nova votacao). O voto ja' projetado nao pode seguir no
+  ;; CSV, no catalogo nem no perfil. Regra da LEITURA: anular depois da projecao esconde na proxima leitura.
+  (let [ente (random-uuid)
+        sessao (sessao! ente "ordinaria")
+        valida (votacao-nominal! ente sessao "sim" "nao")
+        anulada (votacao-nominal! ente sessao "nao" "sim")
+        _ (outbox/drenar! *ds* (consumers/registrar {}))
+        svc (servico #{ente})
+        csv #(:body (pt/response-for svc :get (str "/portal/casa/" ente "/dados-abertos/votos-nominais.csv")))]
+    (testing "controle positivo: antes de anular, as duas votacoes saem"
+      (is (= #{(str valida) (str anulada)} (ids-do-csv (csv)))))
+    (anular! ente anulada)
+    (is (= 4 (linhas-projetadas ente)) "a anulacao nao apaga o read-model: quem esconde e' a leitura")
+    (testing "o CSV so' tem a votacao valida"
+      (is (= #{(str valida)} (ids-do-csv (csv)))))
+    (testing "o catalogo conta so' as 2 linhas da valida"
+      (let [por-chave (into {} (map (juxt :chave identity))
+                            (:datasets (:json (get-json svc (str "/portal/casa/" ente "/dados-abertos")))))]
+        (is (= 2 (get-in por-chave ["votos-nominais" :linhas])))))
+    (testing "o perfil nao lista nem conta o voto anulado"
+      (let [{:keys [json]} (get-json svc (str "/portal/casa/" ente "/vereadores/" helena))]
+        (is (= [(str valida)] (mapv :votacao-id (:votos json))))
+        (is (= 1 (:votos-total json)))
+        (is (= {:sim 1 :nao 0 :abstencao 0} (:votos-por-opcao json))
+            "helena votou nao na anulada: nao pode aparecer nos numeros")))))

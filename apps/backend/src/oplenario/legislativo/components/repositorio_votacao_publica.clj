@@ -10,7 +10,7 @@
      do mesmo predicado, sem pagina. `materia-id` (nil = todas) restringe as votacoes dessa proposicao (so' restringe:
      nunca amplia o conjunto de sessoes). Quem chama decide QUAIS sessoes sao publicas.")
   (ids-das-votacoes-das-sessoes [this ente-id sessao-ids]
-    "#{votacao-id} de TODAS as votacoes (em qualquer estado) das sessoes dadas — o conjunto contra o qual a leitura
+    "#{votacao-id} das votacoes NAO anuladas (aberta ou encerrada) das sessoes dadas — o conjunto contra o qual a leitura
      publica de VOTO POR VEREADOR confere uma votacao antes de publica-la (o voto projetado em `transparencia` nao
      carrega a sessao). Sem sessoes -> conjunto vazio. Quem chama decide QUAIS sessoes sao publicas.")
   (votacao-encerrada [this ente-id votacao-id]
