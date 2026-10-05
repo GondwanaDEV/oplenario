@@ -100,7 +100,8 @@ MODELO_OPENROUTER_PADRAO = "openai/gpt-oss-120b"  # provisório (05/10/2026), AD
 # avaliação (`oplenario-ia-avaliar`, R-IA-4) — a avaliação em si monta a `Config` direto e roda qualquer slug fixo.
 MODELOS_OPENROUTER: dict[str, int] = {
     MODELO_OPENROUTER_PADRAO: 4000,
-    "qwen/qwen3.8-27b:free": 8000,  # gratuito: limite diário de requisições do OpenRouter, não serve a produção
+    # `qwen/qwen3.8-27b:free` saiu (05/10/2026, 17h UTC): o OpenRouter tirou a variante gratuita (404 "This model is
+    # unavailable for free"), só resta a paga
 }
 MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(MODELOS_OPENROUTER)
 
@@ -112,12 +113,11 @@ MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(MODELOS_OPENROUTER)
 # openrouter --politica excecao-gratuita --modelo <slug>` (R-IA-4) — a avaliação aprova, a lista só registra;
 # (3) slug fixo (`modelo_openrouter_fixo`). Os provedores gratuitos desses modelos em geral NÃO cumprem ZDR nem "sem
 # coleta": é por isso que a exceção existe, e por isso ela nunca vale com a política `zdr` (lá, só a lista acima).
-# Os três da triagem ao vivo de 05/10/2026 (ADR-0023, "Exceção temporária"), na ordem de uso: o primeiro é o padrão
-# sem `OPLENARIO_IA_MODELO`, os outros dois vão em `OPLENARIO_IA_MODELOS_RESERVA`. A avaliação completa ainda não
-# rodou (a conta bateu o limite diário do nível gratuito no meio da triagem).
+# Da triagem ao vivo de 05/10/2026 (ADR-0023, "Exceção temporária"), na ordem de uso: o primeiro é o padrão sem
+# `OPLENARIO_IA_MODELO`, o outro vai em `OPLENARIO_IA_MODELOS_RESERVA`. Ordem provisória: a avaliação completa ainda
+# não rodou. O `qwen/qwen3.8-27b:free` saiu (o OpenRouter tirou a variante gratuita, 404).
 MODELOS_OPENROUTER_GRATUITOS_EXCECAO: dict[str, int] = {
     "nvidia/nemotron-3-super-120b-a12b:free": 4000,
-    "qwen/qwen3.8-27b:free": 8000,
     "nvidia/nemotron-3-ultra-550b-a55b:free": 4000,
 }
 
