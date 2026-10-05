@@ -313,8 +313,9 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   tentativa/desfecho, sem mudar o selo. `ia-orcamento` sem a tentativa não roda; o login do operador nunca é trancado
   pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
   `tentativas-sem-desfecho` existe como função de repositório, sem tela;
-- **falta:** a ADR diz que o login do cidadão não entra na trilha, mas o código o registra (agora com duas linhas por
-  entrada): decidir se corrige o texto ou tira o registro; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
+- **o login do cidadão fica na trilha (decidido em 05/10/2026):** pseudonimizado, com o par tentativa/desfecho; a
+  ADR-0017 foi corrigida (adendo "Eixo 4c"), o código não mudou;
+- **falta:** definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
   reabre e a reativação não restaura): decidir a regra.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
