@@ -74,6 +74,26 @@ describe("ConteudoFichaMateria", () => {
     ).toContain("token=tok-de-teste");
   });
 
+  it("o rito da Casa que a rota devolve chega à faixa 'Onde está a matéria' (o nome do estado não decide a posição)", async () => {
+    const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
+    const comRito = {
+      ...respostaFake,
+      proposicao: { ...respostaFake.proposicao, estado: "instrucao" },
+      rito: {
+        "ordem-unica": true,
+        etapas: [etapa("entrada", "Entrada"), etapa("instrucao", "Instrução"), etapa("plenario_unico", "Plenário único")],
+        atual: etapa("instrucao", "Instrução"),
+        anteriores: null,
+        proximas: [etapa("plenario_unico", "Plenário único")],
+      },
+    };
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => comRito }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByRole("img", { name: /Tramitação de/ })).toBeTruthy());
+    const faixa = screen.getByRole("img", { name: /Tramitação de/ }).getAttribute("aria-label") ?? "";
+    expect(faixa).toContain("concluídos Entrada; atual Instrução; pendente Plenário único");
+  });
+
   it("ordem de heading não pula nível: h1 (ementa) -> h2 (conteúdo/rail) -> h3 (cards)", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => respostaFake }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");

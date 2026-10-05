@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { derivarTramitacao, descreverFaixa, rotularEstado } from "./tramitacao-vista";
+import { derivarTramitacao, descreverFaixa, faixaDoRito, rotularEstado } from "./tramitacao-vista";
+import type { RitoDaMateriaOut } from "./contrato-legislativo.gen";
 
 // Task 0.5 (Fatia A2.0, Portal do Cidadão). Vocabulário real confirmado por grep — ver o mapa documentado
 // no topo de tramitacao-vista.ts: `estado` de proposicao é :string LIVRE, template-driven POR CÂMARA
@@ -142,5 +143,129 @@ describe("rotularEstado", () => {
   it("humaniza o que não conhece, sem a chave crua", () => {
     expect(rotularEstado("sancionado")).toBe("Sancionado");
     expect(rotularEstado("em_revisao_redacao")).toBe("Em revisao redacao");
+  });
+});
+
+// A faixa "Onde está a matéria" vem do RITO da Casa (rota da ficha), não de uma lista de nomes no front. O vocabulário
+// das fixtures é o de uma Casa fora da demo: nenhum nome abaixo consta do mapa fixo de `derivarTramitacao`.
+const etapa = (chave: string, rotulo: string, terminal = false) => ({ chave, rotulo, terminal });
+
+const ritoEmLinha = (atual: string): RitoDaMateriaOut => {
+  const linha = [etapa("entrada", "Entrada"), etapa("instrucao", "Instrução"), etapa("plenario_unico", "Plenário único")];
+  const rejeitada = etapa("rejeitada", "Rejeitada", true);
+  const a = [...linha, rejeitada].find((e) => e.chave === atual) ?? null;
+  return {
+    ordemUnica: true,
+    etapas: atual === "rejeitada" ? [...linha, rejeitada] : linha,
+    atual: a,
+    anteriores: null,
+    proximas: [],
+  };
+};
+
+describe("faixaDoRito", () => {
+  it("com ordem única: as etapas são as do rito, na ordem dele, com o nome que a Casa deu", () => {
+    const f = faixaDoRito(ritoEmLinha("instrucao"));
+    expect(f?.estagios).toEqual([
+      { chave: "entrada", rotulo: "Entrada", situacao: "concluido" },
+      { chave: "instrucao", rotulo: "Instrução", situacao: "ativo" },
+      { chave: "plenario_unico", rotulo: "Plenário único", situacao: "pendente" },
+    ]);
+  });
+
+  it("estado que o mapa fixo do front não conhece: a faixa MARCA a etapa (antes era um bloco neutro sem posição)", () => {
+    expect(derivarTramitacao("instrucao").estagios).toEqual([{ rotulo: "Em tramitação", situacao: "ativo" }]);
+    const f = faixaDoRito(ritoEmLinha("instrucao"));
+    expect(f?.estagios.map((e) => e.situacao)).toEqual(["concluido", "ativo", "pendente"]);
+  });
+
+  it("nunca usa as etapas ilustrativas do design system (Protocolo, 1º turno, Sanção…) quando o rito é da Casa", () => {
+    const rotulos = faixaDoRito(ritoEmLinha("plenario_unico"))?.estagios.map((e) => e.rotulo) ?? [];
+    for (const antigo of ["Protocolo", "Comissões", "1º turno", "2º turno", "Sanção"]) {
+      expect(rotulos).not.toContain(antigo);
+    }
+  });
+
+  it("desfecho (terminal) como etapa atual: o processo acabou — tudo concluído, a faixa fecha no desfecho", () => {
+    const f = faixaDoRito(ritoEmLinha("rejeitada"));
+    expect(f?.estagios.map((e) => e.rotulo)).toEqual(["Entrada", "Instrução", "Plenário único", "Rejeitada"]);
+    expect(f?.estagios.every((e) => e.situacao === "concluido")).toBe(true);
+  });
+
+  it("sem ordem única: só o entorno — anteriores concluídas, atual, próximas possíveis marcadas como alternativa", () => {
+    const rito: RitoDaMateriaOut = {
+      ordemUnica: false,
+      etapas: [],
+      atual: etapa("b", "Análise B"),
+      anteriores: [etapa("a", "Recebida")],
+      proximas: [etapa("c", "Via C"), etapa("d", "Via D")],
+    };
+    expect(faixaDoRito(rito)?.estagios).toEqual([
+      { chave: "a", rotulo: "Recebida", situacao: "concluido" },
+      { chave: "b", rotulo: "Análise B", situacao: "ativo" },
+      { chave: "c", rotulo: "Via C", situacao: "pendente", alternativa: true },
+      { chave: "d", rotulo: "Via D", situacao: "pendente", alternativa: true },
+    ]);
+  });
+
+  it("sem ordem única e sem histórico confiável (anteriores nulo): não afirma por onde passou", () => {
+    const rito: RitoDaMateriaOut = {
+      ordemUnica: false,
+      etapas: [],
+      atual: etapa("b", "Análise B"),
+      anteriores: null,
+      proximas: [etapa("c", "Via C")],
+    };
+    expect(faixaDoRito(rito)?.estagios.map((e) => [e.rotulo, e.situacao])).toEqual([
+      ["Análise B", "ativo"],
+      ["Via C", "pendente"],
+    ]);
+  });
+
+  it("uma só próxima possível não é 'alternativa': é o passo seguinte", () => {
+    const rito: RitoDaMateriaOut = {
+      ordemUnica: false,
+      etapas: [],
+      atual: etapa("b", "Análise B"),
+      anteriores: [],
+      proximas: [etapa("c", "Via C")],
+    };
+    expect(faixaDoRito(rito)?.estagios[1]).toEqual({ chave: "c", rotulo: "Via C", situacao: "pendente" });
+  });
+
+  it("sem rito, ou rito que não declara a etapa atual: null — quem chama mantém o comportamento anterior", () => {
+    expect(faixaDoRito(null)).toBeNull();
+    expect(faixaDoRito(undefined)).toBeNull();
+    expect(faixaDoRito({ ...ritoEmLinha("instrucao"), atual: null })).toBeNull();
+  });
+
+  it("ordem única mas atual fora da linha (resposta incoerente): null, nunca marca a etapa errada", () => {
+    expect(faixaDoRito({ ...ritoEmLinha("instrucao"), atual: etapa("outra", "Outra") })).toBeNull();
+  });
+
+  it("não lança com listas vazias", () => {
+    expect(() => faixaDoRito({ ordemUnica: true, etapas: [], atual: etapa("x", "X"), anteriores: null, proximas: [] })).not.toThrow();
+  });
+});
+
+describe("descreverFaixa com o rito da Casa", () => {
+  it("lê concluídas, atual e pendente pelo nome da Casa", () => {
+    const f = faixaDoRito(ritoEmLinha("instrucao"));
+    expect(descreverFaixa("PL 5/2026", f?.estagios ?? [])).toBe(
+      "Tramitação de PL 5/2026: concluídos Entrada; atual Instrução; pendente Plenário único.",
+    );
+  });
+
+  it("alternativas viram 'próximas possíveis', nunca 'pendente' em fila", () => {
+    const f = faixaDoRito({
+      ordemUnica: false,
+      etapas: [],
+      atual: etapa("b", "Análise B"),
+      anteriores: [etapa("a", "Recebida")],
+      proximas: [etapa("c", "Via C"), etapa("d", "Via D")],
+    });
+    expect(descreverFaixa("PL 5/2026", f?.estagios ?? [])).toBe(
+      "Tramitação de PL 5/2026: concluídos Recebida; atual Análise B; próximas possíveis Via C, Via D.",
+    );
   });
 });

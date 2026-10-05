@@ -121,3 +121,15 @@
     (is (m/validate wire/FichaMateriaOut out))
     (is (= ["Comissão de Finanças" nil] (mapv :comissao-nome (:pareceres out)))
         "linha sem nome resolvido sai nil — nunca o comissao-id como substituto")))
+
+(deftest ficha->wire-projeta-o-rito-e-sem-rito-nao-inventa
+  (let [ente (random-uuid)
+        base {:tramitacao [] :tramitacao-truncado false :apensadas [] :apensadas-truncado false
+              :emendas [] :emendas-truncado false :pareceres [] :pareceres-truncado false}
+        rito {:ordem-unica true :etapas [{:chave "entrada" :rotulo "Entrada" :terminal false}]
+              :atual {:chave "entrada" :rotulo "Entrada" :terminal false} :anteriores nil :proximas []}
+        com (adapters/ficha->wire (header ente) (assoc base :rito rito))
+        sem (adapters/ficha->wire (header ente) base)]
+    (is (m/validate wire/FichaMateriaOut com))
+    (is (= rito (:rito com)))
+    (is (nil? (:rito sem)) "produtor sem rito: o campo sai nil, nunca uma faixa fabricada")))
