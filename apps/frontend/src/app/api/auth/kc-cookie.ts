@@ -54,22 +54,3 @@ export function baseUrlPinado(baseUrl: string): boolean {
     return false;
   }
 }
-
-// O cookie companheiro `sessao_kc` (JSON com os 3 valores públicos de descoberta) lido e validado: forma
-// (validarDescobertaKc) E host-pin (baseUrlPinado). `null` = ausente, quebrado, forjado ou de outro Keycloak —
-// o chamador cai no caminho seguro (logout local; "página de conta indisponível"), nunca monta URL a partir de
-// um valor não confiável. Fonte única do logout (RP-logout) e da página de conta.
-export function lerSessaoKc(raw: string | undefined): { baseUrl: string; realm: string; clientId: string } | null {
-  if (!raw) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const payload = validarDescobertaKc(parsed as Record<string, unknown>);
-  if (!payload) return null;
-  if (!baseUrlPinado(payload.baseUrl)) return null; // origin não bate com o KC oficial
-  return payload;
-}

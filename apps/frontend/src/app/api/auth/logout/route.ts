@@ -21,7 +21,7 @@
 // `KEYCLOAK_PUBLIC_URL` (`baseUrlPinado`, ../kc-cookie) — sem bater, trata como cookie ausente (logout local).
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAppOrigin } from "../appOrigin";
-import { lerSessaoKc } from "../kc-cookie";
+import { baseUrlPinado, validarDescobertaKc } from "../kc-cookie";
 
 // Defesa em profundidade antes de interpolar o valor do cookie no header `cookie` enviado ao
 // backend (o cookie é HttpOnly, mas isso só bloqueia acesso via JS — não impede um Cookie header
@@ -34,8 +34,22 @@ const SEGREDO_VALIDO = /^[A-Za-z0-9_-]{1,128}$/;
 // callback) — não interpolamos valores de cookie numa URL de redirect sem validar primeiro. Depois da
 // validação de forma, `baseUrlPinado` aplica o host-pin (defesa adicional): mesmo um baseUrl bem-formado
 // só é aceito se o origin bater com `KEYCLOAK_PUBLIC_URL` (quando a env está setada).
-// `lerSessaoKc` (forma + host-pin do cookie) mora em `../kc-cookie`: a página de conta usa a mesma leitura.
-type SessaoKcPayload = NonNullable<ReturnType<typeof lerSessaoKc>>;
+type SessaoKcPayload = NonNullable<ReturnType<typeof validarDescobertaKc>>;
+
+function lerSessaoKc(raw: string | undefined): SessaoKcPayload | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const payload = validarDescobertaKc(parsed as Record<string, unknown>);
+  if (!payload) return null;
+  if (!baseUrlPinado(payload.baseUrl)) return null; // origin não bate com o KC oficial -> logout local
+  return payload;
+}
 
 function urlLogoutLocal(request: NextRequest): URL {
   return new URL("/entrar", resolveAppOrigin(request));
