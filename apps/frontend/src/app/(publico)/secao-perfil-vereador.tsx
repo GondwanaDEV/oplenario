@@ -110,10 +110,13 @@ export function SecaoPerfilVereador({ ente, vereadorId }: { ente: string; veread
 
   return (
     <>
-      {/* trilha honesta: o pai de um perfil NÃO é a lista de matérias, e não existe índice público de
-          vereadores — a única subida verdadeira é a home do portal. */}
+      {/* trilha: Início › Vereadores (a lista dos que estão em exercício) › o nome. O perfil também abre por link
+          direto de quem já saiu da lista (licença, fim de mandato): nesse caso a lista é o índice dos atuais, e a
+          trilha continua verdadeira — sobe um nível, não afirma que a pessoa está nela. */}
       <nav className="migalha" aria-label="Trilha">
         <a href={hrefPortal}>Início</a>
+        <span aria-hidden="true">›</span>
+        <a href={`${hrefPortal}/vereadores`}>Vereadores</a>
         <span aria-hidden="true">›</span>
         <span>{identidade.nome}</span>
       </nav>

@@ -52,6 +52,13 @@
     (is (str/includes? out "acervoComEloDeAutoriaDesde: string;")
         "as DUAS constantes de recorte de projecao chegam ao front, nao so' a de acervo")))
 
+(deftest vereadores-out-so-publica-o-que-identifica-o-parlamentar-na-lista
+  ;; a lista publica dos vereadores em exercicio (rota anonima): a tela le estes cinco campos e nenhum outro.
+  (let [out (gerar-portal/gerar-tudo)]
+    (is (str/includes? out "export interface VereadorDaListaOut {\n  vereadorId: string;\n  nomeParlamentar: string | null;\n  nomeCivil: string;\n  partido: string | null;\n  cargoMesa: string | null;\n}\n"))
+    (is (str/includes? out "export interface VereadoresOut {\n  vereadores: VereadorDaListaOut[];\n}\n")
+        "referencia nomeada, nao o objeto inlinado")))
+
 (deftest encarregado-out-nao-vaza-campos-internos
   ;; EncarregadoOut = EncarregadoPublicoOut (renomeado no manifesto do portal) — so nome/rotulo/email,
   ;; nenhum id/ente-id interno (a rota e' publica e anonima).
