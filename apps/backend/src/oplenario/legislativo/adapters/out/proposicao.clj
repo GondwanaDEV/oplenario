@@ -75,9 +75,12 @@
      :assinatura-algoritmo (:assinatura-algoritmo r)}))
 
 (defn- historico-item->wire [l]
-  {:de-estado (:de-estado l) :para-estado (:para-estado l) :gatilho (:gatilho l)
-   :ocorrido-em (->str (:ocorrido-em l))
-   :recebimento (recebimento->wire (:recebimento l))})
+  (cond-> {:de-estado (:de-estado l) :para-estado (:para-estado l) :gatilho (:gatilho l)
+           :ocorrido-em (->str (:ocorrido-em l))
+           :recebimento (recebimento->wire (:recebimento l))}
+    ;; o nome do estado no rito da Casa so' sai quando o rito o declara (mesma forma de ficha-materia)
+    (:de-nome l) (assoc :de-nome (:de-nome l))
+    (:para-nome l) (assoc :para-nome (:para-nome l))))
 
 (defn- pendente->wire [p]
   (when p

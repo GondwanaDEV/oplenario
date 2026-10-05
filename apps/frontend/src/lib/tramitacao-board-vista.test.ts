@@ -113,6 +113,29 @@ describe("derivarBoard", () => {
     expect(concluidas.itens.map((i) => i.proposicaoId)).toEqual(["8", "9", "10"]);
   });
 
+  it("o cartão diz o nome que o rito da Casa dá à etapa; sem ele, o rótulo fixo", () => {
+    const colunas = derivarBoard([
+      item({ proposicaoId: "casa", estado: "em_comissoes", rotuloEstado: "Em análise nas comissões" }),
+      item({ proposicaoId: "fixo", estado: "em_comissoes", rotuloEstado: null }),
+      item({ proposicaoId: "branco", estado: "em_comissoes", rotuloEstado: "  " }),
+    ]);
+    const situacoes = Object.fromEntries(colunas.flatMap((c) => c.itens).map((i) => [i.proposicaoId, i.situacao]));
+    expect(situacoes).toEqual({
+      casa: "Em análise nas comissões",
+      fixo: derivarTramitacao("em_comissoes").rotuloSituacao,
+      branco: derivarTramitacao("em_comissoes").rotuloSituacao,
+    });
+    // a coluna continua vindo da chave do estado, não do nome
+    expect(colunas.find((c) => c.chave === "comissoes")!.itens).toHaveLength(3);
+  });
+
+  it("a partir do autógrafo o desfecho vence o nome da Casa", () => {
+    const [cartao] = derivarBoard([
+      item({ proposicaoId: "lei", estado: "aguardando_pauta", rotuloEstado: "Aguardando a Ordem do Dia", desfecho: "publicada" }),
+    ]).flatMap((c) => c.itens);
+    expect(cartao.situacao).toBe("Virou lei");
+  });
+
   it("a partir do autógrafo a coluna vem do desfecho: lei em Concluídas, veto por apreciar em Em Plenário (docs/16 linha 18)", () => {
     const colunas = derivarBoard(
       [

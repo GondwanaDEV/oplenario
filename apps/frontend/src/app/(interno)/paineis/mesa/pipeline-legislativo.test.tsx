@@ -68,3 +68,27 @@ describe("PipelineLegislativo — carga por estágio", () => {
     expect(container.querySelectorAll(".dist-legenda i")).toHaveLength(1);
   });
 });
+
+describe("PipelineLegislativo — o nome que o rito da Casa dá ao estágio", () => {
+  it("usa o nome da Casa quando vem, e o rótulo fixo quando falta", () => {
+    const v = vista(["em_comissoes", "aguardando_pauta"]);
+    if (v.estado !== "disponivel") throw new Error("fixture");
+    v.porEstado = [
+      { estado: "em_comissoes", n: 2, rotuloEstado: "Em análise nas comissões" },
+      { estado: "aguardando_pauta", n: 1 },
+    ];
+    const { container, getAllByText } = render(<PipelineLegislativo vista={v} />);
+    expect(getAllByText("Em análise nas comissões").length).toBeGreaterThan(0);
+    expect(container.querySelector('[aria-label="Em análise nas comissões: 2"]')).not.toBeNull();
+    // sem nome da Casa, o rótulo fixo de sempre (nunca a chave)
+    expect(container.textContent).not.toMatch(/aguardando_pauta/);
+  });
+
+  it("no tabuleiro degradado (sem itens) o nome da Casa também aparece", () => {
+    const v = vista(["em_comissoes"], false);
+    if (v.estado !== "disponivel") throw new Error("fixture");
+    v.porEstado = [{ estado: "em_comissoes", n: 2, rotuloEstado: "Em análise nas comissões" }];
+    const { getAllByText } = render(<PipelineLegislativo vista={v} />);
+    expect(getAllByText("Em análise nas comissões").length).toBeGreaterThan(0);
+  });
+});

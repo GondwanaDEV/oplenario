@@ -14,7 +14,9 @@
 (defn- item->wire [i]
   (cond-> {:proposicao-id (->str (:proposicao-id i)) :tipo (:tipo i) :ano (:ano i) :sequencial (:sequencial i)
            :urn-lex (:urn-lex i) :ementa (:ementa i) :autor-tipo (:autor-tipo i) :autor-texto (:autor-texto i)
-           :estado (:estado i) :transicionou-em (->str (:transicionou-em i))}
+           :estado (:estado i) :transicionou-em (->str (:transicionou-em i))
+           ;; o nome da etapa no rito da Casa (nil = a tela usa o rotulo fixo), mesmo campo da lista interna
+           :rotulo-estado (:rotulo-estado i)}
     ;; docs/16 linha 18: so' sai quando ha' (a chave e' opcional; ausente = o rito diz a coluna)
     (:desfecho i) (assoc :desfecho (:desfecho i))))
 

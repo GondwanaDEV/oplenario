@@ -8,6 +8,7 @@ import {
   derivarPareceres,
   derivarEmendas,
 } from "./ficha-materia-vista";
+import { derivarTramitacao } from "./tramitacao-vista";
 import type { FichaMateriaOut } from "./contrato-legislativo.gen";
 
 // Onda B Slice 3 (Ficha da Matéria) — view-model puro, mesma disciplina fail-closed de tramitacao-vista.ts
@@ -159,6 +160,17 @@ describe("derivarTimelineTramitacao", () => {
 
   it("lista vazia -> array vazio, sem lançar", () => {
     expect(derivarTimelineTramitacao([])).toEqual([]);
+  });
+
+  it("usa o nome que o rito da Casa dá a cada estado; sem ele, o rótulo fixo", () => {
+    const r = derivarTimelineTramitacao([
+      {
+        deEstado: "recebida_na_mesa", paraEstado: "em_comissoes", gatilho: "g", ocorridoEm: "2026-01-01T00:00:00Z",
+        recebimento: null, deNome: "Recebida pela Mesa Diretora", paraNome: null,
+      },
+    ]);
+    expect(r[0].rotuloDe).toBe("Recebida pela Mesa Diretora");
+    expect(r[0].rotuloPara).toBe(derivarTramitacao("em_comissoes").rotuloSituacao);
   });
 
   it("de-estado/para-estado fora do vocabulário ilustrativo -> rótulo HUMANIZADO, sem lançar", () => {

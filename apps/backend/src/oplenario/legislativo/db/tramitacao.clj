@@ -371,14 +371,24 @@
   ([tx ente-id proposicao-id limite]
    ;; :contexto incluido (o payload do gatilho — quem/refs externas) p/ a visao de auditoria nao
    ;; perder a carga da transicao (e' persistido por registrar-transicao!).
-   (let [base {:select [:id :proposicao_id :template_id :de_estado :para_estado :gatilho :contexto :ator_id :ocorrido_em]
-               :from [:legislativo.proposicao_transicao_historico]
-               :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}
+   ;; `de_nome`/`para_nome`: o NOME que o rito que regeu a transicao (`template_id` da propria linha) da' a cada
+   ;; estado — a aba Tramitacao da ficha diz o mesmo que a faixa e a lista. UNIQUE (ente_id, template_id, chave):
+   ;; o LEFT JOIN nao multiplica linha; estado que o rito nao declara sai NULL e a tela usa o rotulo fixo.
+   (let [base {:select [:h.id :h.proposicao_id :h.template_id :h.de_estado :h.para_estado :h.gatilho :h.contexto
+                        :h.ator_id :h.ocorrido_em [:de.nome :de_nome] [:para.nome :para_nome]]
+               :from [[:legislativo.proposicao_transicao_historico :h]]
+               :left-join [[:legislativo.template_estado :de]
+                           [:and [:= :de.ente_id :h.ente_id] [:= :de.template_id :h.template_id]
+                            [:= :de.chave :h.de_estado]]
+                           [:legislativo.template_estado :para]
+                           [:and [:= :para.ente_id :h.ente_id] [:= :para.template_id :h.template_id]
+                            [:= :para.chave :h.para_estado]]]
+               :where [:and [:= :h.ente_id ente-id] [:= :h.proposicao_id proposicao-id]]}
          linhas (comum/linhas->kebab
                   (jdbc/execute! tx
                     (sql/format (if limite
-                                  (assoc base :order-by [[:ocorrido_em :desc]] :limit limite)
-                                  (assoc base :order-by [[:ocorrido_em :asc]])))))]
+                                  (assoc base :order-by [[:h.ocorrido_em :desc]] :limit limite)
+                                  (assoc base :order-by [[:h.ocorrido_em :asc]])))))]
      (if limite (vec (reverse linhas)) linhas))))
 
 (defn transicionar!

@@ -24,7 +24,10 @@
   [:map {:closed true}
    [:total :int]
    [:em-tramitacao :int]
-   [:por-estado [:sequential [:map {:closed true} [:estado :string] [:n :int]]]]])
+   ;; `rotulo-estado`: o nome que o rito da Casa da' ao estado, so' quando as materias do estado concordam; nil =
+   ;; a tela usa o rotulo fixo
+   [:por-estado [:sequential [:map {:closed true} [:estado :string] [:n :int]
+                              [:rotulo-estado {:optional true} [:maybe :string]]]]]])
 
 (def PendenciasResumoOut
   "Rollup do painel 'o que vence' (§16.11): contagens das pendencias de atendimento ao cidadao. `abertas` =
