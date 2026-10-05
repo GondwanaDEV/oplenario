@@ -2746,6 +2746,24 @@ quer dizer "o código atual não tem o defeito", não "reproduzi e passou". Os 8
 
 Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as linhas 5, 18–21, 24–37 e 39–49).
 
+**Depois da terceira rodada de 05/10/2026: 84 achados · 13 abertos · 71 fechados.** Fecharam as linhas 18 e 30 (#158 e #159):
+- **Linha 18:** a ficha pública mostra, no topo, o resultado da última votação em plenário ("a matéria foi aprovada
+  em …", com link para a votação; #158) e, a partir do autógrafo, o selo vem do último ato
+  (`proposicao.desfecho-registrado` → `transparencia.materia.desfecho`: "Sancionada", "Virou lei"; #159). Fica de pé
+  como **resíduo** (decisão do fundador), como a linha 1: encerrar a votação mover o rito.
+- **Linha 30:** na ficha interna, a aba Tramitação lê `GET /proposicoes/:id/pos-aprovacao` e junta, pelo instante, o
+  autógrafo, a resposta do Executivo, a apreciação do veto e a promulgação e publicação da norma (#158); na pública, os
+  mesmos atos entram em "Por onde a matéria passou" (#159).
+
+Fechado também o registro da segunda rodada sobre o voto de votação **anulada**: o conjunto de votações com voto
+público (`legislativo/db/votacao_publica.clj`, `ids-das-sessoes`) exclui a anulada, e o voto dela deixa de sair no CSV
+de dados abertos, na contagem do catálogo e no perfil público (teste em `voto_de_sessao_secreta_test`). Era latente:
+nenhuma rota leva uma votação a `anulada` hoje (`anular-votacao!` não tem borda); a regra fica pronta para quando a
+correção de votação ganhar rota.
+
+**Abertos (13):** linhas 3, 4, 6 (três achados), 16, 17, 19, 21, 40, 42, 43 e 47. As linhas 1 e 18 seguem de pé como
+resíduo (decisão do fundador).
+
 **Depois da segunda rodada de 05/10/2026: 84 achados · 15 abertos · 69 fechados.** Dos 39 que estavam abertos
 depois da primeira rodada, 24 fecharam: 22 nas frentes da tabela abaixo, a linha 12 (cockpit com duas sessões, #155)
 e a linha 2 (promulgar e publicar a norma, #139). As linhas ficam na tabela principal, com a numeração de antes.
@@ -2781,10 +2799,11 @@ resíduo (decisão do fundador).
 
 O que a segunda rodada deixou registrado:
 - Linha 30 (autógrafo, sanção e promulgação na linha do tempo da ficha) não foi feita: a rota da ficha não devolve
-  esses atos.
+  esses atos. **Fechada na terceira rodada (#158), pela rota do pós-aprovação.**
 - "Minha atuação" do vereador usa a rota do perfil público; ele também deixa de ver ali o próprio voto de sessão
   secreta. Se deve ver, falta rota autenticada própria.
 - Voto de votação anulada em sessão pública continua saindo nas leituras públicas de voto por vereador (não mudou).
+  **Fechado na terceira rodada.**
 - A faixa "Onde está a matéria" segue dependendo do nome do estado; nenhuma rota devolve ordem ou categoria das etapas
   do rito. Na ficha pública, matéria aprovada aparece com todas as etapas concluídas, inclusive "Sanção".
 - Decisões embutidas, a confirmar: `em_pauta` conta como "Em Plenário" e não como "pronta para pauta" (a Central caiu
