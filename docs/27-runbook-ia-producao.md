@@ -217,6 +217,11 @@ login funciona, só não está escondido.
    - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, ou se o Keycloak
      ficar 4 min seguidos fora do ar, **volta o compose anterior**, reimplanta e falha.
 
+   **O servidor sem login no GHCR** (o pacote é privado e o compose baixa com o login do servidor, não com o das
+   aplicações): rodar antes o workflow **`registrar-ghcr-dokploy.yaml`** (confirmação `cadastrar-ghcr`). Ele cadastra o
+   `ghcr.io` em Settings → Registry do Dokploy com o mesmo login que a aplicação da API já usa (testa o login antes;
+   já cadastrado = nada a fazer).
+
    **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No compose do Keycloak das Casas no Dokploy, a
    imagem passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest` (o servidor precisa de login no GHCR).
    Reimplante e espere o healthcheck.
