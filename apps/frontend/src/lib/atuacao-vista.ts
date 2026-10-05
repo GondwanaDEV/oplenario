@@ -1,10 +1,15 @@
 // View-model puro da tela "Minha atuação" do app do vereador (Onda E, `vereador-estatisticas`) — porte
 // HONESTO de produto/design-system/o-plenario/telas/vereador-estatisticas.html. Zero React, zero fetch.
 //
-// FONTE: os números são os MESMOS do perfil público do vereador (GET /portal/casa/{ente}/vereadores/{id},
-// `PerfilVereadorOut`) — autoria, "viraram lei", presença e votos nominais — mais a contagem de pareceres
-// em que ele é relator, que vem do painel dele (GET /meu/painel). Uma fonte só para o que o cidadão também
-// vê: o vereador nunca enxerga aqui um número diferente do que está publicado sob o nome dele.
+// FONTE: autoria, "viraram lei" e presença são os MESMOS do perfil público do vereador
+// (GET /portal/casa/{ente}/vereadores/{id}, `PerfilVereadorOut`), mais a contagem de pareceres em que ele é
+// relator, que vem do painel dele (GET /meu/painel). Uma fonte só para o que o cidadão também vê: o
+// vereador nunca enxerga aqui um número diferente do que está publicado sob o nome dele.
+//
+// OS VOTOS SÃO A EXCEÇÃO, e é de propósito: vêm de GET /meu/votos (`MeusVotosOut`), rota autenticada que só
+// devolve os votos nominais do próprio ator. O perfil público só conta voto de sessão pública; o vereador
+// também vê aqui o que votou em sessão secreta ou fechada ao público, marcado como "só você vê". Voto de
+// votação secreta não existe por vereador (o sigilo é do schema) e nunca aparece.
 //
 // O QUE O DESIGN TEM E ESTA TELA NÃO (porque o dado não existe, e inventar seria pior que omitir):
 //   • os 5 grupos fixos de situação ("Em comissão", "Aprovadas, aguardam sanção"…) — o estado da
@@ -17,10 +22,11 @@
 //   • o seletor de período (Legislatura/2026/Este mês) — o perfil não é recortável por período.
 
 import type { PerfilVereadorOut } from "./contrato-portal.gen";
-import type { MeuPainelOut } from "./contrato-legislativo.gen";
-import { derivarPresenca, type PresencaVista } from "./perfil-vereador-vista";
+import type { MeuPainelOut, MeusVotosOut, MeuVotoOut } from "./contrato-legislativo.gen";
+import { derivarPresenca, VOTO_CLASSE, VOTO_ROTULO, type PresencaVista } from "./perfil-vereador-vista";
+import { derivarRef } from "./materia-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
-import { formatarDataSimples } from "./formatar-data";
+import { formatarData, formatarDataSimples } from "./formatar-data";
 
 export type CartaoAtuacao = { valor: string; rotulo: string };
 
@@ -31,6 +37,16 @@ export type SituacaoAtuacao = {
   largura: number; // 0–100, proporção dentro das matérias listadas
 };
 
+export type LinhaVotoAtuacao = {
+  votacaoId: string; // React key
+  titulo: string; // a ementa da matéria, ou o rótulo de quando não há proposição identificada
+  subtitulo: string; // "PL 022/2026 · 18/05/2026" — só a data quando o título já é o rótulo
+  voto: string; // valor CRU do wire (sim|nao|abstencao) — chaveia a FORMA do chip, nunca o texto
+  votoRotulo: string; // "A favor" | "Contra" | "Absteve-se" | valor cru (fail-closed)
+  votoClasse: string; // "chip-ok" | "chip-risco" | "chip-neutro"
+  aviso: string | null; // o que o portal faz com este voto, quando não é "publica"; null quando é público
+};
+
 export type AtuacaoVista = {
   cartoes: CartaoAtuacao[];
   situacoes: SituacaoAtuacao[];
@@ -39,6 +55,8 @@ export type AtuacaoVista = {
   presenca: PresencaVista;
   votos: { sim: number; nao: number; abstencao: number };
   votosVazio: string | null;
+  linhasVotos: LinhaVotoAtuacao[];
+  votosTruncamento: string | null; // só quando a lista truncou
   notas: string[];
 };
 
@@ -51,8 +69,16 @@ const notaAcervo = (dataFmt: string) =>
   `Proposições e leis contam a partir de ${dataFmt}, quando o acervo passou a registrar a autoria; ` +
   `matérias protocoladas antes disso não entram nestes números.`;
 const NOTA_FONTE =
-  "São os mesmos números do seu perfil público no portal da Casa, a partir dos registros oficiais de " +
-  "presença e das votações nominais. Votações secretas não entram na contagem individual.";
+  "Proposições, leis e presença são os mesmos números do seu perfil público no portal da Casa. Os votos " +
+  "vêm do registro das votações nominais e incluem os de sessão fechada ao público, que o portal não mostra. " +
+  "Votações secretas não entram: o sistema não guarda quem votou.";
+const VOTO_SEM_MATERIA = "Votação sem proposição identificada";
+// O que o portal faz com o voto (campo `portal` do wire). "publico" não ganha aviso.
+const AVISO_SESSAO_FECHADA = "Sessão fechada ao público — só você vê este voto.";
+const AVISO_SEM_SESSAO = "Votação fora de sessão — não aparece no portal, só você vê este voto.";
+const AVISO_ANULADA = "Votação anulada — este voto não entra nos números acima.";
+const truncamentoVotos = (mostrados: number, total: number) =>
+  `Mostrando os ${mostrados} votos mais recentes, de ${total} no total.`;
 
 /** Valor do cartão de presença: a fração quando há denominador, travessão quando não há número a exibir
  *  (o texto que explica o porquê vai na seção de presença, não no cartão). Nunca percentual. */
@@ -82,10 +108,39 @@ export function agruparPorSituacao(materias: PerfilVereadorOut["materias"]): Sit
     .sort((a, b) => b.quantidade - a.quantidade || a.rotulo.localeCompare(b.rotulo, "pt-BR"));
 }
 
-export function derivarAtuacao(perfil: PerfilVereadorOut, painel: MeuPainelOut): AtuacaoVista {
+/** O aviso do voto. Anulada vence: a votação foi desfeita, e dizer onde ela apareceria seria ruído. */
+function avisoDoVoto(v: MeuVotoOut): string | null {
+  if (v.anulada) return AVISO_ANULADA;
+  if (v.portal === "sessao-fechada") return AVISO_SESSAO_FECHADA;
+  if (v.portal === "sem-sessao") return AVISO_SEM_SESSAO;
+  return null; // "publico": o cidadão também vê este voto no portal
+}
+
+export function linhaDeVoto(v: MeuVotoOut): LinhaVotoAtuacao {
+  // a linha NUNCA é omitida quando a matéria é desconhecida: omitir voto é editar o histórico de uma pessoa.
+  const { materiaTipo: tipo, materiaAno: ano, materiaSequencial: sequencial } = v;
+  const ref = tipo !== null && ano !== null && sequencial !== null ? derivarRef({ tipo, ano, sequencial }) : null;
+  const quando = formatarData(v.registradoEm);
+  return {
+    votacaoId: v.votacaoId,
+    titulo: v.materiaEmenta ?? ref ?? VOTO_SEM_MATERIA,
+    // título e referência caem juntos quando não há matéria: a sublinha vira só a data (não repete o fallback)
+    subtitulo: ref !== null ? `${ref} · ${quando}` : quando,
+    voto: v.voto,
+    votoRotulo: VOTO_ROTULO[v.voto] ?? v.voto,
+    votoClasse: VOTO_CLASSE[v.voto] ?? "chip-neutro",
+    aviso: avisoDoVoto(v),
+  };
+}
+
+export function derivarAtuacao(
+  perfil: PerfilVereadorOut,
+  painel: MeuPainelOut,
+  meusVotos: MeusVotosOut,
+): AtuacaoVista {
   const presenca = derivarPresenca(perfil.presenca, perfil.presencaProjetadaDesde);
   const situacoes = agruparPorSituacao(perfil.materias);
-  const votos = perfil.votosPorOpcao;
+  const votos = meusVotos.votosPorOpcao;
   return {
     cartoes: [
       { valor: String(perfil.materiasTotal), rotulo: "proposições de autoria" },
@@ -101,7 +156,12 @@ export function derivarAtuacao(perfil: PerfilVereadorOut, painel: MeuPainelOut):
         : null,
     presenca,
     votos: { sim: votos.sim, nao: votos.nao, abstencao: votos.abstencao },
-    votosVazio: perfil.votosTotal === 0 ? VAZIO_VOTOS : null,
+    votosVazio: meusVotos.votosTotal === 0 ? VAZIO_VOTOS : null,
+    linhasVotos: meusVotos.votos.map(linhaDeVoto),
+    votosTruncamento:
+      meusVotos.votosTotal > meusVotos.votos.length
+        ? truncamentoVotos(meusVotos.votos.length, meusVotos.votosTotal)
+        : null,
     notas: [notaAcervo(formatarDataSimples(perfil.acervoComEloDeAutoriaDesde)), NOTA_FONTE],
   };
 }

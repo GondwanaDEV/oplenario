@@ -11,6 +11,7 @@
             [oplenario.legislativo.wire.out.documento-modelo :as documento-modelo]
             [oplenario.legislativo.wire.out.ficha-materia :as ficha]
             [oplenario.legislativo.wire.out.meu-painel :as meu-painel]
+            [oplenario.legislativo.wire.out.meus-votos :as meus-votos]
             [oplenario.legislativo.wire.out.norma :as norma]
             [oplenario.legislativo.wire.out.parecer :as parecer]
             [oplenario.legislativo.wire.out.pos-aprovacao :as pos-aprovacao]
@@ -65,6 +66,10 @@
    ["CienciaPendenteOut" meu-painel/CienciaPendenteOut]
    ["MeuPainelOut" meu-painel/MeuPainelOut]
    ["AcusarCienciaOut" meu-painel/AcusarCienciaOut]
+   ;; "Minha atuacao" (GET /meu/votos) — os votos do proprio vereador, inclusive de sessao nao publica
+   ["MeuVotoOut" meus-votos/MeuVotoOut]
+   ["MeusVotosPorOpcaoOut" meus-votos/MeusVotosPorOpcaoOut]
+   ["MeusVotosOut" meus-votos/MeusVotosOut]
    ;; Tela "tramitar a materia" (GET /legislativo/proposicoes/:id/tramitacao) — GatilhoPossivelOut ANTES de
    ;; TramitacaoOut (o composto o referencia por nome, mesma ordem-referencia-antes-do-composto de
    ;; ficha-materia/pos-aprovacao). O `:historico` de TramitacaoOut reusa HistoricoTramitacaoItemOut (ficha,
