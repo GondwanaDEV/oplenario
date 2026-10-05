@@ -78,9 +78,16 @@
   `cadastros` no instante da requisicao: NAO e' read-model, NAO e' replay-consistente (corrigir uma
   `vigencia_inicio` muda o numero publicado no mesmo segundo, sem evento e sem trilha) e NAO passa por
   este modulo como 'mandato' — aqui sao intervalos anonimos. `[]` significa 'sem periodo de exercicio
-  registrado' e devolve 0/0 declarado; NUNCA e' tratado como 'tudo'."
-  [repo-transparencia ente-id vereador-id janelas]
-  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id janelas))
+  registrado' e devolve 0/0 declarado; NUNCA e' tratado como 'tudo'.
+
+  `votacoes-publicas` e' o seam do host (fn [ente-id] -> #{votacao-id}): as votacoes cujo voto por vereador o portal
+  pode publicar — as de sessao publica (`oplenario.votacoes-publicas/ids-de-votacoes-publicas`). O read-model guarda
+  tambem o voto nominal de sessao secreta ou fechada ao publico, e este seam e' o que o impede de sair: lista, total
+  e numeros por opcao usam o MESMO conjunto. FAIL-CLOSED: a aridade sem o seam publica NENHUM voto."
+  ([repo-transparencia ente-id vereador-id janelas]
+   (perfil-parlamentar repo-transparencia ente-id vereador-id janelas (constantly #{})))
+  ([repo-transparencia ente-id vereador-id janelas votacoes-publicas]
+   (repo/perfil-parlamentar repo-transparencia ente-id vereador-id janelas (set (votacoes-publicas ente-id)))))
 
 ;; ---------- Slice 2: acompanhamento do cidadao (autenticado; consent-gated) ----------
 
@@ -114,18 +121,23 @@
 
 (defn catalogo-dados-abertos
   "O catalogo dos datasets abertos da Casa: cada um com o dicionario de colunas (da logic) e, do read-model, quantas
-  linhas tem e quando foi atualizado pela ultima vez. Rota PUBLICA (ente do path)."
-  [repo-transparencia ente-id]
-  (let [resumo (repo/resumo-dados-abertos repo-transparencia ente-id)]
+  linhas tem e quando foi atualizado pela ultima vez. Rota PUBLICA (ente do path). `votacoes-publicas` e' o seam do
+  host (fn [ente-id] -> #{votacao-id}): a contagem de votos nominais so' conta o que o CSV publica."
+  [repo-transparencia votacoes-publicas ente-id]
+  (let [resumo (repo/resumo-dados-abertos repo-transparencia ente-id (set (votacoes-publicas ente-id)))]
     (mapv (fn [d] (merge d (get resumo (keyword (:chave d))))) dados-abertos/datasets)))
 
 (defn dataset-csv
   "O CSV do dataset `arquivo` (\"proposicoes.csv\"...), ou nil se o arquivo nao existe. `nomes-dos-vereadores` e'
-  o seam do host (fn [ente-id] -> {vereador-id nome}) — so' chamado para o dataset que o usa."
-  [repo-transparencia nomes-dos-vereadores ente-id arquivo]
+  o seam do host (fn [ente-id] -> {vereador-id nome}) — so' chamado para o dataset que o usa. `votacoes-publicas` e'
+  o seam do host (fn [ente-id] -> #{votacao-id}) das votacoes de sessao publica: o CSV de votos nominais so' tem voto
+  delas (o de sessao secreta ou fechada ao publico nao sai) — tambem so' chamado para o dataset que o usa."
+  [repo-transparencia nomes-dos-vereadores votacoes-publicas ente-id arquivo]
   (when-let [d (get dados-abertos/por-arquivo arquivo)]
-    (let [linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d))
-          nomes (if (= "votos-nominais" (:chave d)) (nomes-dos-vereadores ente-id) {})]
+    (let [votos? (= "votos-nominais" (:chave d))
+          linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d)
+                                            (if votos? (set (votacoes-publicas ente-id)) #{}))
+          nomes (if votos? (nomes-dos-vereadores ente-id) {})]
       {:dataset d :csv (dados-abertos/->csv d linhas nomes)})))
 
 ;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------

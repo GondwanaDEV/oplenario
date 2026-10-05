@@ -45,8 +45,9 @@
    {:chave "votos-nominais"
     :arquivo "votos-nominais.csv"
     :titulo "Votações nominais"
-    :descricao (str "Cada voto nominal registrado em plenário: quem votou, como e em qual matéria. Votações "
-                    "secretas não têm voto individual e não entram.")
+    :descricao (str "Cada voto nominal registrado em plenário em sessão pública: quem votou, como e em qual matéria. "
+                    "Votações secretas não têm voto individual e não entram; votos de sessão secreta ou fechada ao "
+                    "público também não.")
     :colunas [["votacao_id" "Identificador da votação." :votacao-id]
               ["ocorrido_em" "Instante do voto (ISO 8601, UTC)." :ocorrido-em]
               ["proposicao_id" "A proposição votada (vazio se a matéria não foi publicada)." :proposicao-id]
