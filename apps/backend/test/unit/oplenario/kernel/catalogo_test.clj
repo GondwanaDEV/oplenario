@@ -2,6 +2,7 @@
   "ADR-0009 — o formato do catalogo de acoes e a mecanica generica de execucao (papel, entrada, saida); ADR-0010 — o
   ator de agente; ADR-0012 — ato por agente vira proposta, e a leitura de terceiro contamina a execucao."
   (:require [clojure.test :refer [deftest is testing]]
+            [oplenario.kernel.canonico :as canonico]
             [oplenario.kernel.catalogo :as catalogo]))
 
 (def ^:private eco
@@ -108,14 +109,16 @@
   (merge {:agente "assistente" :execucao-id (random-uuid) :publico :secretaria :classes classes :institucional? false}
          extra))
 
-(defn- gravador []
-  (let [a (atom [])] [a (fn [_ e desfecho] (swap! a conj [(:nome e) desfecho]))]))
+(defn- gravador
+  "O seam de audit (ADR-0010; desde a ADR-0024 recebe tambem o SHA-256 da saida, que este gravador ignora)."
+  []
+  (let [a (atom [])] [a (fn [_ e desfecho _] (swap! a conj [(:nome e) desfecho]))]))
 
 (deftest classe-precisa-estar-concedida
   (let [leitura (catalogo/entrada eco)
         rascunho (catalogo/entrada (assoc eco :classe :rascunho))
         [_ reg] (gravador)]
-    (is (= {:n 1} (catalogo/executar leitura {} (assoc secretaria :via (via #{:leitura})) {:n 1})))
+    (is (= {:n 1} (catalogo/executar leitura {:registrar-chamada reg} (assoc secretaria :via (via #{:leitura})) {:n 1})))
     (is (= :autorizacao/negado
            (tipo-do-erro #(catalogo/executar rascunho {:registrar-chamada reg}
                                              (assoc secretaria :via (via #{:leitura})) {:n 1})))
@@ -175,13 +178,17 @@
     (is (= [["eco_de_teste" "ok"] ["eco_de_teste" "nao_encontrado"] ["eco_de_teste" "invalido"]
             ["eco_de_teste" "negado"]]
            @a))
-    (testing "leitura por agente segue a regra das telas: sem audit por chamada"
-      (let [[b reg2] (gravador)]
+    (testing "ADR-0024: a LEITURA por agente tambem vai ao audit, com o SHA-256 do JSON canonico da saida"
+      (let [b (atom [])
+            reg2 (fn [_ e desfecho sha] (swap! b conj [(:nome e) desfecho sha]))]
         (catalogo/executar (catalogo/entrada eco) {:registrar-chamada reg2} ator {:n 1})
-        (is (empty? @b))))
-    (testing "sem o seam de audit, a escrita por agente nao roda"
+        (catalogo/executar (catalogo/entrada eco) {:registrar-chamada reg2} ator {:n 500})
+        (is (= [["eco_de_teste" "ok" (canonico/sha256 {:n 1})] ["eco_de_teste" "nao_encontrado" nil]] @b))))
+    (testing "sem o seam de audit, a chamada por agente nao roda — escrita ou leitura"
       (is (thrown-with-msg? clojure.lang.ExceptionInfo #"sem registro de audit"
-                            (catalogo/executar rascunho {} ator {:n 1}))))))
+                            (catalogo/executar rascunho {} ator {:n 1})))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"sem registro de audit"
+                            (catalogo/executar (catalogo/entrada eco) {} ator {:n 1}))))))
 
 ;; ---------- ADR-0012 / Eixo 4.5: leitura de conteudo de TERCEIRO contamina a execucao ----------
 
@@ -192,9 +199,10 @@
   (let [e (catalogo/entrada pedido-esic)
         marcas (atom [])
         marcar (fn [ator e ms] (swap! marcas conj [(get-in ator [:via :execucao-id]) (:nome e) ms]))
-        ator (assoc secretaria :via (via #{:leitura}))]
-    (catalogo/executar e {:marcar-terceiro marcar} ator {:n 3})
-    (catalogo/executar e {:marcar-terceiro marcar} ator {:n 4})
+        ator (assoc secretaria :via (via #{:leitura}))
+        [_ reg] (gravador)]
+    (catalogo/executar e {:marcar-terceiro marcar :registrar-chamada reg} ator {:n 3})
+    (catalogo/executar e {:marcar-terceiro marcar :registrar-chamada reg} ator {:n 4})
     (is (= [[(get-in ator [:via :execucao-id]) "eco_de_teste" [{:origem "e-SIC" :referencia "nº 3/2026"}]]] @marcas)
         "so' o que de fato trouxe conteudo de terceiro marca")
     (is (= "terceiro" (catalogo/origem e {:n 3})))
@@ -204,4 +212,5 @@
       (catalogo/executar e {:marcar-terceiro marcar} secretaria {:n 5})
       (is (= 1 (count @marcas))))
     (testing "conteudo de terceiro sem onde marcar nao vai ao agente (fail-closed)"
-      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"terceiro" (catalogo/executar e {} ator {:n 3}))))))
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"terceiro"
+                            (catalogo/executar e {:registrar-chamada reg} ator {:n 3}))))))

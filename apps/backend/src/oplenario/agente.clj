@@ -24,6 +24,7 @@
             [oplenario.identidade.components.repositorio :as repo-id]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.integracao-ia.diplomat.http.out :as plataforma-ia]
+            [oplenario.integracao-ia.logic :as logic-ia]
             [oplenario.interceptors :as it]
             [oplenario.kernel.autorizacao :as authz]))
 
@@ -38,10 +39,14 @@
 (defn- invalido! [msg] (throw (ex-info msg {:tipo :validacao/invalido})))
 
 (defn pedido
-  "O corpo JSON (chaves string) -> {:pergunta :publico}, ou `:validacao/invalido`. O publico e' conferido contra os
-  papeis do ator (`:autorizacao/negado`)."
+  "O corpo JSON (chaves string) -> {:pergunta :publico :conversa-id}, ou `:validacao/invalido`. O publico e' conferido
+  contra os papeis do ator (`:autorizacao/negado`). `conversa` (opcional, uuid) continua uma conversa do historico
+  (ADR-0024); sem ela, a pergunta abre uma conversa nova."
   [ator corpo]
   (let [pergunta (some-> (get corpo "pergunta") str str/trim)
+        conversa (get corpo "conversa")
+        conversa-id (when (some? conversa)
+                      (or (and (string? conversa) (parse-uuid conversa)) (invalido! "conversa deve ser um uuid")))
         pedido-publico (get corpo "publico")
         possiveis (keep publico-por-papel (sort (:papeis ator)))
         publico (if pedido-publico
@@ -50,46 +55,87 @@
                   (first (sort-by #(if (= :secretaria %) 0 1) possiveis)))]
     (when-not (and pergunta (<= 2 (count pergunta) 1000)) (invalido! "pergunta de 2 a 1000 caracteres"))
     (when-not publico (authz/negar! :sem-publico {}))
-    {:pergunta pergunta :publico publico}))
+    {:pergunta pergunta :publico publico :conversa-id conversa-id}))
 
 (defn- evento [nome dado] (str "event: " nome "\ndata: " (json/write-value-as-string dado) "\n\n"))
 
+(def mensagem-sem-registro
+  "A resposta que nao pode ser guardada nao sai (ADR-0024, falha fechada): para a pessoa, e' a IA indisponivel."
+  mensagem-indisponivel)
+
+(defn- executar-na-ia
+  "Chama o satelite com a credencial da execucao. IA fora -> {:indisponivel ...} (R-IA-1), nunca excecao."
+  [ia ente-id pergunta credencial execucao-id]
+  (try
+    (plataforma-ia/executar-agente ia ente-id {:pergunta pergunta :credencial credencial
+                                               :correlation_id (str execucao-id)})
+    (catch clojure.lang.ExceptionInfo e
+      (if (= :ia/indisponivel (:tipo (ex-data e)))
+        (do (log/warn "agente indisponivel" (:motivo (ex-data e)))
+            {:passos [] :resposta nil :indisponivel {:mensagem mensagem-indisponivel}})
+        (throw e)))))
+
+(defn- registrar!
+  "Grava a interacao no historico. true se gravou; sem repositorio ou com erro de banco, false (e o erro vai ao log)."
+  [repo-integracao-ia i]
+  (if-not repo-integracao-ia
+    (do (log/error "historico da Clara sem repositorio: a resposta nao sai") false)
+    (try (repo-ia/registrar-interacao-assistente! repo-integracao-ia i) true
+         (catch Exception e
+           (log/error e "historico da Clara: a interacao nao gravou, a resposta nao sai" {:interacao (:id i)})
+           false))))
+
 (defn conversa
-  "Executa uma pergunta e devolve os eventos SSE (string). A credencial vive so' durante esta chamada."
-  [{:keys [repo-identidade ia repo-integracao-ia]} ator {:keys [pergunta publico]}]
+  "Executa uma pergunta e devolve {:corpo <eventos SSE> :interacao <a linha gravada, ou nil>}. A credencial vive so'
+  durante esta chamada. ADR-0024: a pergunta e o que voltou vao ao historico ANTES de a resposta sair; se o historico
+  nao grava, sai `indisponivel` (falha fechada) e nada da resposta chega a tela."
+  [{:keys [repo-identidade ia repo-integracao-ia]} ator {:keys [pergunta publico conversa-id]}]
+  (when (and conversa-id repo-integracao-ia
+             (not (repo-ia/conversa-da-pessoa? repo-integracao-ia (:ente-id ator) (:identidade-id ator) conversa-id)))
+    (invalido! "conversa desconhecida"))
   (let [{:keys [execucao-id credencial]}
         (auten/emitir-credencial-agente! repo-identidade ator {:agente agente-da-casa :publico publico
                                                                :classes #{:leitura :ato}})]
     (try
-      (let [r (plataforma-ia/executar-agente ia (:ente-id ator) {:pergunta pergunta :credencial credencial
-                                                                  :correlation_id (str execucao-id)})]
-        (str (apply str (for [p (:passos r)]
-                          (evento "passo" {:ferramenta (:ferramenta p) :argumentos (:argumentos p) :ok (:ok p)})))
-             (apply str (for [p (when repo-integracao-ia
-                                  (repo-ia/propostas-da-execucao repo-integracao-ia (:ente-id ator) execucao-id))]
-                          (evento "proposta" {:id (str (:id p)) :titulo (:titulo p) :ritual (:ritual p)})))
-             (if-let [resp (:resposta r)]
-               (evento "resposta" (cond-> (select-keys resp [:texto :citacoes :paragrafos-sem-fonte :incerteza :modelo
-                                                             :contaminado])
-                                    (:execucao-id resp) (assoc :execucao-ia (str (:execucao-id resp)))))
-               (evento "indisponivel" {:mensagem (or (get-in r [:indisponivel :mensagem]) mensagem-indisponivel)}))
-             (evento "fim" {:execucao-id (str execucao-id)})))
-      (catch clojure.lang.ExceptionInfo e
-        (if (= :ia/indisponivel (:tipo (ex-data e)))
-          (do (log/warn "agente indisponivel" (:motivo (ex-data e)))
-              (str (evento "indisponivel" {:mensagem mensagem-indisponivel})
-                   (evento "fim" {:execucao-id (str execucao-id)})))
-          (throw e)))
+      (let [r (executar-na-ia ia (:ente-id ator) pergunta credencial execucao-id)
+            propostas (when repo-integracao-ia
+                        (repo-ia/propostas-da-execucao repo-integracao-ia (:ente-id ator) execucao-id))
+            i (logic-ia/interacao {:ente-id (:ente-id ator) :id (random-uuid) :conversa-id (or conversa-id (random-uuid))
+                                   :execucao-id execucao-id :identidade-id (:identidade-id ator)
+                                   :agente agente-da-casa :publico publico :pergunta pergunta
+                                   :resposta (:resposta r) :passos (:passos r) :propostas propostas
+                                   :ocorrido-em (java.time.Instant/now)})
+            fim (evento "fim" {:execucao-id (str execucao-id)
+                               :interacao-id (str (:id i)) :conversa-id (str (:conversa-id i))})]
+        (if-not (registrar! repo-integracao-ia i)
+          {:corpo (str (evento "indisponivel" {:mensagem mensagem-sem-registro})
+                       (evento "fim" {:execucao-id (str execucao-id)}))
+           :interacao nil}
+          {:corpo (str (apply str (for [p (:passos r)]
+                                    (evento "passo" {:ferramenta (:ferramenta p) :argumentos (:argumentos p) :ok (:ok p)})))
+                       (apply str (for [p propostas]
+                                    (evento "proposta" {:id (str (:id p)) :titulo (:titulo p) :ritual (:ritual p)})))
+                       (if-let [resp (:resposta r)]
+                         (evento "resposta" (cond-> (select-keys resp [:texto :citacoes :paragrafos-sem-fonte :incerteza
+                                                                       :modelo :contaminado])
+                                              (:execucao-id resp) (assoc :execucao-ia (str (:execucao-id resp)))))
+                         (evento "indisponivel" {:mensagem (or (get-in r [:indisponivel :mensagem]) mensagem-indisponivel)}))
+                       fim)
+           :interacao i}))
       (finally
         (repo-id/revogar-credencial-agente! repo-identidade execucao-id)))))
 
 (defn- perguntar-handler [deps]
   (fn [req]
     (let [ator (:ator req)
-          p (pedido ator (or (:json-params req) {}))]
-      {:status 200
-       :headers {"Content-Type" "text/event-stream; charset=utf-8" "Cache-Control" "no-store"}
-       :body (conversa deps ator p)})))
+          p (pedido ator (or (:json-params req) {}))
+          {:keys [corpo interacao]} (conversa deps ator p)]
+      (cond-> {:status 200
+               :headers {"Content-Type" "text/event-stream; charset=utf-8" "Cache-Control" "no-store"}
+               :body corpo}
+        ;; ADR-0024 item 4: a trilha (sem conteudo) aponta a interacao e ancora o hash dela
+        interacao (assoc :auditoria {:recurso-tipo "interacao_assistente" :recurso-id (str (:id interacao))
+                                     :conteudo-sha256 (:conteudo-sha256 interacao)})))))
 
 ;; ---------- feature 8.4: reportar erro da IA ----------
 

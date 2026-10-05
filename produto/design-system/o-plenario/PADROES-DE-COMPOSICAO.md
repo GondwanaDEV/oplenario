@@ -87,6 +87,7 @@ Padrões já provados que vivem inline numa ou mais telas. Marcados como `receit
 | **Botão gov.br oficial** | **entrar-govbr**, ficha pública (compor comentário) | 2 | ✅ **chassi.css** — `.govbr` (marca oficial, não tematiza); branco 7.33 / amarelo 4.88 AA |
 | **Faixa de legenda (closed-caption)** | **legendas-ao-vivo** | 1 | nova; banda fixa-escura tipo-TV (não tematiza), texto grande, controles de tamanho (LBI) |
 | **Folha de confirmação (sheet) 2-toques** | **assinatura-2-toques** | 1 | nova; scrim + sheet biométrica; revisar→confirmar; nota de validade jurídica |
+| **Painel da Clara, a assistente da Casa** (moldura de toda tela interna) | **assistente-da-casa** | 1 | nova; três tamanhos do MESMO componente: recolhido (botão "Pergunte à Clara" no canto, `Ctrl+/`), aberto (**janela** de 400px no canto inferior direito, abaixo do cabeçalho, até 680px de altura — nunca a tela toda —, que **empurra** o conteúdo; região, sem prender o foco: a tela segue usável e nada fica escondido atrás dela) e expandido (área abaixo do cabeçalho, histórico na lateral). No celular: aberto = **folha que sobe de baixo até 88%** da altura, com alça e véu (modal, toque fora fecha); expandido = tela cheia. Identidade da IA = cobalto (glifo do copiloto). Conversa guardada abre **somente leitura com o registro em cima** (quem, quando, modelo, fontes, link para a trilha). Fora das telas ao vivo (conduzir, chamada, telão, TV, `/votar`), que não estão no grupo interno |
 
 ---
 

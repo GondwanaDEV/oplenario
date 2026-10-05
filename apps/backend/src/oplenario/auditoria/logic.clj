@@ -130,7 +130,10 @@
                       {:classe cl :decisao (decisao status) :status-http status
                        :campos (vec (sort (map name (:campos marca))))}
                       (select-keys marca [:recurso-tipo :recurso-id :rotulo]))
-         tentativa (assoc-in [:detalhe :tentativa] (long tentativa)))))))
+         tentativa (assoc-in [:detalhe :tentativa] (long tentativa))
+         ;; ADR-0024: o hash do conteudo guardado fora da trilha (o historico da Clara) — o hash, nunca o conteudo
+         (some->> (:conteudo-sha256 marca) (re-matches #"[0-9a-f]{64}"))
+         (assoc-in [:detalhe :conteudo-sha256] (:conteudo-sha256 marca)))))))
 
 ;; ---- o selo encadeado ----
 

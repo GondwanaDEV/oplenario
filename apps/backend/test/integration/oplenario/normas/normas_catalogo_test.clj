@@ -37,7 +37,11 @@
                       :via {:agente "assistente-da-casa" :execucao-id (random-uuid) :publico :vereador
                             :classes #{:leitura} :institucional? false}})
 
-(defn- deps [& {:keys [ia]}] (cond-> {:repo-normas (repo)} ia (assoc :buscar-dispositivos-ia ia)))
+(defn- deps
+  "As dependencias da ferramenta. O seam de audit e' obrigatorio para chamada de agente (ADR-0024); aqui ele nao e' o
+  assunto, entao so' aceita a chamada."
+  [& {:keys [ia]}]
+  (cond-> {:repo-normas (repo) :registrar-chamada (fn [_ _ _ _])} ia (assoc :buscar-dispositivos-ia ia)))
 
 (deftest ler-o-artigo-inteiro-da-vigente
   (let [ente (random-uuid)

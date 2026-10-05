@@ -2,7 +2,8 @@
   "PURO (ADR-0008): as regras da fronteira core <-> IA — quais eventos de dominio viram eventos de INTEGRACAO
   (promocao explicita, §22.3.3), o sigilo fail-closed, os contratos versionados que a IA pode devolver e a
   comparacao do segredo de servico. Sem I/O."
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [oplenario.kernel.canonico :as canonico])
   (:import (java.nio.charset StandardCharsets)
            (java.security MessageDigest)))
 
@@ -205,3 +206,39 @@
     "ResumoFalhou"        {:situacao "falhou" :proposicao-id (:proposicao-id payload)
                            :categoria-erro (:categoria payload) :detalhe-erro (:detalhe payload)
                            :retentavel (:retentavel payload) :ocorrido-em ocorrido-em}))
+
+;; ---- ADR-0024: o historico auditavel da Clara ----
+
+(def campos-da-interacao
+  "O que entra no hash de uma interacao — tudo o que a linha guarda, menos o proprio hash. A conferencia recalcula
+  sobre os MESMOS campos lidos do banco."
+  [:ente-id :id :conversa-id :execucao-id :identidade-id :agente :publico :pergunta :desfecho :resposta :passos
+   :propostas :modelo :execucao-ia :ocorrido-em])
+
+(defn conteudo-sha256
+  "PURO: o SHA-256 do registro canonico da interacao (ids e instante como texto, chaves em ordem)."
+  [interacao]
+  (canonico/sha256 (into (sorted-map) (map (fn [k] [k (get interacao k)])) campos-da-interacao)))
+
+(defn interacao
+  "PURO: a pergunta e o que voltou da IA -> a linha do historico, ja' com o hash. `resposta` nil = `indisponivel`
+  (a pergunta sem resposta tambem fica). `ocorrido-em` (Instant) e' truncado ao microssegundo, a precisao do banco: o
+  hash precisa conferir com o que se le de volta."
+  [{:keys [ente-id id conversa-id execucao-id identidade-id agente publico pergunta resposta passos propostas
+           ocorrido-em]}]
+  (let [i {:ente-id ente-id :id id :conversa-id conversa-id :execucao-id execucao-id :identidade-id identidade-id
+           :agente agente :publico (name publico) :pergunta pergunta
+           :desfecho (if resposta "resposta" "indisponivel")
+           :resposta (when resposta
+                       (select-keys resposta [:texto :citacoes :paragrafos-sem-fonte :incerteza :contaminado]))
+           :passos (mapv #(select-keys % [:ferramenta :argumentos :ok]) passos)
+           :propostas (mapv #(-> (select-keys % [:id :titulo :ritual]) (update :id str)) propostas)
+           :modelo (:modelo resposta)
+           :execucao-ia (some-> (:execucao-id resposta) str)
+           :ocorrido-em (.truncatedTo ^java.time.Instant ocorrido-em java.time.temporal.ChronoUnit/MICROS)}]
+    (assoc i :conteudo-sha256 (conteudo-sha256 i))))
+
+(defn conferir-interacao
+  "PURO: a linha lida do banco ainda e' a que foi gravada? Recalcula o hash sobre os campos e compara."
+  [linha]
+  (= (:conteudo-sha256 linha) (conteudo-sha256 linha)))
