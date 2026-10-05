@@ -3,6 +3,8 @@ import { COMISSAO_SEM_NOME } from "./comissao-vista";
 import {
   derivarDadosMateria,
   derivarTimelineTramitacao,
+  derivarAtosPosAprovacao,
+  derivarLinhaDoTempo,
   derivarPareceres,
   derivarEmendas,
 } from "./ficha-materia-vista";
@@ -148,6 +150,124 @@ describe("derivarTimelineTramitacao", () => {
     ]);
     expect(r[0].rotuloDe).toBe("Xpto de");
     expect(r[0].rotuloPara).toBe("Xpto para");
+  });
+});
+
+describe("derivarAtosPosAprovacao (ledger docs/16, linha 30)", () => {
+  const autografo = {
+    id: "a1",
+    proposicaoId: "1",
+    numero: 7,
+    ano: 2026,
+    destinatarioTexto: "Prefeito Municipal",
+    enviadoEm: "2026-06-01T12:00:00Z",
+    prazoRespostaEm: "2026-06-21T02:59:59Z",
+  };
+  const executivo = (estado: string, extra: Record<string, unknown> = {}) => ({
+    id: "t1",
+    autografoId: "a1",
+    estado,
+    lockVersion: 1,
+    respondidoEm: "2026-06-10T12:00:00Z",
+    ...extra,
+  });
+
+  it("sem pós-aprovação ou sem autógrafo -> nenhum ato", () => {
+    expect(derivarAtosPosAprovacao(null)).toEqual([]);
+    expect(derivarAtosPosAprovacao({ autografo: null })).toEqual([]);
+  });
+
+  it("autógrafo com prazo: diz o número, o destinatário e o último dia do prazo no fuso da Casa", () => {
+    const [ato] = derivarAtosPosAprovacao({ autografo, tramitacaoExecutiva: executivo("aguardando", { respondidoEm: null }) });
+    expect(ato).toEqual({
+      ocorridoEm: "2026-06-01T12:00:00Z",
+      evento: "Autógrafo nº 007/2026 enviado ao Executivo",
+      quem: "Prefeito Municipal · resposta até 20/06/2026",
+    });
+  });
+
+  it("aguardando o Executivo -> só o autógrafo", () => {
+    expect(derivarAtosPosAprovacao({ autografo, tramitacaoExecutiva: executivo("aguardando", { respondidoEm: null }) })).toHaveLength(1);
+  });
+
+  it("sanção expressa e tácita", () => {
+    expect(derivarAtosPosAprovacao({ autografo, tramitacaoExecutiva: executivo("sancionado") })[1]).toEqual({
+      ocorridoEm: "2026-06-10T12:00:00Z",
+      evento: "Sancionada pelo Executivo",
+      quem: "Executivo",
+    });
+    expect(derivarAtosPosAprovacao({ autografo, tramitacaoExecutiva: executivo("sancao_tacita") })[1].evento).toBe(
+      "Sanção tácita: o Executivo não respondeu no prazo",
+    );
+  });
+
+  it("veto derrubado: o veto e a apreciação são dois atos, cada um na sua data", () => {
+    const atos = derivarAtosPosAprovacao({
+      autografo,
+      tramitacaoExecutiva: executivo("veto_derrubado", { vetoTipo: "parcial", apreciadoEm: "2026-07-01T15:00:00Z" }),
+    });
+    expect(atos.slice(1)).toEqual([
+      { ocorridoEm: "2026-06-10T12:00:00Z", evento: "Vetada pelo Executivo (veto parcial)", quem: "Executivo" },
+      { ocorridoEm: "2026-07-01T15:00:00Z", evento: "Veto derrubado pela Câmara", quem: "Plenário" },
+    ]);
+  });
+
+  it("estado do Executivo desconhecido -> não inventa ato (só o autógrafo)", () => {
+    expect(derivarAtosPosAprovacao({ autografo, tramitacaoExecutiva: executivo("xpto") })).toHaveLength(1);
+  });
+
+  it("norma promulgada e publicada, com o veículo", () => {
+    const atos = derivarAtosPosAprovacao({
+      autografo,
+      tramitacaoExecutiva: executivo("sancionado"),
+      norma: {
+        id: "n1",
+        proposicaoId: "1",
+        tipoNorma: "lei",
+        numero: 5,
+        ano: 2026,
+        urn: "urn:x",
+        ementa: "e",
+        estado: "publicada",
+        promulgadoEm: "2026-06-12T12:00:00Z",
+        publicadoEm: "2026-06-13T12:00:00Z",
+        veiculoPublicacao: "Diário Oficial do Município",
+        lockVersion: 2,
+      },
+    });
+    expect(atos.slice(2)).toEqual([
+      { ocorridoEm: "2026-06-12T12:00:00Z", evento: "Promulgada como Lei nº 5/2026", quem: "Câmara" },
+      { ocorridoEm: "2026-06-13T12:00:00Z", evento: "Lei nº 5/2026 publicada", quem: "Em Diário Oficial do Município" },
+    ]);
+  });
+});
+
+describe("derivarLinhaDoTempo", () => {
+  it("junta transições e atos pelo instante, do mais recente ao mais antigo (datas com e sem fuso)", () => {
+    const r = derivarLinhaDoTempo(
+      [
+        { deEstado: "em_pauta", paraEstado: "aprovada", gatilho: "aprovar", ocorridoEm: "2026-05-30T10:00:00Z", recebimento: null },
+        { deEstado: "protocolada", paraEstado: "em_pauta", gatilho: "incluir", ocorridoEm: "2026-06-20T10:00:00-03:00", recebimento: null },
+      ],
+      {
+        autografo: {
+          id: "a1",
+          proposicaoId: "1",
+          numero: 7,
+          ano: 2026,
+          destinatarioTexto: "Prefeito Municipal",
+          enviadoEm: "2026-06-01T12:00:00Z",
+        },
+      },
+    );
+    expect(r.map((i) => i.tipo)).toEqual(["transicao", "ato", "transicao"]);
+    expect(r[1]).toMatchObject({ tipo: "ato", evento: "Autógrafo nº 007/2026 enviado ao Executivo", quem: "Prefeito Municipal" });
+  });
+
+  it("sem pós-aprovação -> só as transições, como antes", () => {
+    const r = derivarLinhaDoTempo(fichaBase.tramitacao, null);
+    expect(r.every((i) => i.tipo === "transicao")).toBe(true);
+    expect(r).toHaveLength(fichaBase.tramitacao.length);
   });
 });
 
