@@ -128,3 +128,14 @@
       (is (nil? (controllers/publicar-norma *repo* ente (random-uuid)
                   {:veiculo-publicacao "DOM" :lock-version 0 :updated-by nil}))
           "norma inexistente -> nil (404 na borda)"))))
+
+(deftest promulgacao-simultanea-perde-no-banco-com-409-nao-500
+  ;; as duas passam pelo guard do controller ao mesmo tempo; aqui a segunda chega ao Repo direto, como chegaria
+  (let [ente (random-uuid)
+        {:keys [proposicao-id autografo tramitacao-id]} (ate-o-executivo! ente)
+        m {:proposicao-id proposicao-id :autografo-id (:id autografo) :texto-versao-id (:texto-versao-id autografo)
+           :tipo-norma "lei" :ementa "x" :ano 2026 :data-promulgacao hoje :uf "CE" :municipio-nome "Fortaleza"}]
+    (sancionar! ente tramitacao-id)
+    (repo/promulgar-norma! *repo* ente (assoc m :id (random-uuid)))
+    (is (= {:tipo :conflito/norma :msg "esta materia ja foi promulgada"}
+           (conflito #(repo/promulgar-norma! *repo* ente (assoc m :id (random-uuid))))))))

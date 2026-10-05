@@ -1039,12 +1039,15 @@
           {:autografo-id aut-id :numero numero :tramitacao-executiva-id tram-id}))))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
   ;; Duas promulgacoes da MESMA materia ao mesmo tempo passam as duas pelo guard do controller; o UNIQUE
-  ;; (proposicao) decide no banco e a perdedora vira 409, nunca 500 (mesmo predicado 23505 de registrar-voto!).
+  ;; (proposicao) ou (autografo) decide no banco e a perdedora vira 409, nunca 500. So' esses dois: colisao de
+  ;; numero ou de URN e' contador fora de sincronia (ver demo/reconciliar_contadores), nao "ja promulgada".
   (promulgar-norma! [this ente-id m]
     (try
       (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id)))
       (catch PSQLException e
-        (if (= "23505" (.getSQLState e))
+        (if (and (= "23505" (.getSQLState e))
+                 (#{"norma_ente_id_proposicao_id_key" "norma_ente_id_autografo_id_key"}
+                  (some-> (.getServerErrorMessage e) .getConstraint)))
           (throw (ex-info "esta materia ja foi promulgada"
                           {:tipo :conflito/norma :proposicao-id (:proposicao-id m)}))
           (throw e)))))
