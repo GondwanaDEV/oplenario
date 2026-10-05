@@ -29,7 +29,10 @@
   [rows em-tramitacao]
   {:total (reduce + 0 (map :n rows))
    :em-tramitacao (int em-tramitacao)
-   :por-estado (mapv (fn [r] {:estado (:estado r) :n (:n r)}) rows)})
+   :por-estado (mapv (fn [r] (cond-> {:estado (:estado r) :n (:n r)}
+                                   ;; o nome do estado no rito da Casa, so' quando ha' um so' (nil = rotulo fixo)
+                                   (:rotulo-estado r) (assoc :rotulo-estado (:rotulo-estado r))))
+                     rows)})
 
 (defn- pendencias->wire
   "Rollup 'o que vence': linhas {:estado :n} (GROUP BY estado; estados possiveis pendente/vencido/concluido)

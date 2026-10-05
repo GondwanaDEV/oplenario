@@ -534,10 +534,12 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     dá à etapa atual, o mesmo da faixa (sem rito verificável, o rótulo fixo); a partir do autógrafo o selo segue o
     desfecho, que a ficha agora lê da rota de pós-aprovação (`desfechoDaPosAprovacao`). A lista interna recebe
     `rotulo-estado` (`template_estado.nome`, um LEFT JOIN a mais na mesma consulta) e o chip da ficha pública usa a
-    etapa da movimentação mais recente ("Etapa atual" de "Por onde a matéria passou"). **Resta:** o quadro de
-    tramitação e o painel da Mesa seguem no rótulo fixo (`rotularEstado`), porque `paineis.tramitacao` não guarda o
-    nome da etapa: pede coluna nova, projeção do rótulo que `proposicao.protocolada`/`transicionou` já carregam e
-    reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
+    etapa da movimentação mais recente ("Etapa atual" de "Por onde a matéria passou"). O quadro de tramitação, o
+    painel da Mesa e a aba Tramitação também dizem o nome da Casa: `paineis.tramitacao.rotulo_estado` (mig
+    `20261005000400`) é projetado do `estado-nome`/`para-nome` dos eventos (destino sem nome no rito zera; as linhas
+    antigas foram reconstruídas na migration, só quando o quadro está no estado atual da matéria); o painel da Mesa
+    leva o nome por estado só quando as matérias do estado concordam; o histórico da ficha devolve `de-nome`/
+    `para-nome` (LEFT JOIN no `template_estado` do rito da transição). Sem nome, o rótulo fixo. **Resta:** a faixa do
     portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
     `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir

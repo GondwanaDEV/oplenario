@@ -35,7 +35,7 @@ export type ItemDoBoard = {
   ementa: string;
   autor: string;
   estado: string;
-  /** Situação em palavras — o MESMO rótulo da ficha (`rotularEstado`), não um segundo vocabulário do quadro. */
+  /** Situação em palavras — o MESMO da ficha e da lista: o desfecho, o nome do rito da Casa ou o rótulo fixo. */
   situacao: string;
 };
 
@@ -78,8 +78,10 @@ function paraItemDoBoard(item: ItemBoardOut): ItemDoBoard {
     ementa: item.ementa,
     autor: item.autorTexto ?? "—",
     estado: item.estado,
-    // a partir do autógrafo o desfecho diz a situação (docs/16 linha 18); antes, o rito
-    situacao: situacaoDoDesfecho(item.desfecho)?.rotuloSituacao ?? rotularEstado(item.estado),
+    // a partir do autógrafo o desfecho diz a situação (docs/16 linha 18); antes, o nome que o rito da Casa dá à
+    // etapa (`rotuloEstado`, projetado do evento, como na lista interna); sem ele, o rótulo fixo
+    situacao:
+      situacaoDoDesfecho(item.desfecho)?.rotuloSituacao ?? (item.rotuloEstado?.trim() || rotularEstado(item.estado)),
   };
 }
 

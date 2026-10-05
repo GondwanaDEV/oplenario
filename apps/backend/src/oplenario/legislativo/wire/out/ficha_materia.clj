@@ -20,6 +20,9 @@
    [:de-estado :string]
    [:para-estado :string]
    [:gatilho :string]
+   ;; o nome que o rito da Casa da' a cada estado (`template_estado.nome`); nil = a tela usa o rotulo fixo
+   [:de-nome {:optional true} [:maybe :string]]
+   [:para-nome {:optional true} [:maybe :string]]
    [:ocorrido-em :string]
    ;; fatia 2b: o MESMO recibo de carga da rota irma (TramitacaoHistoricoItemOut — os dois mudam juntos)
    [:recebimento [:maybe proposicao/RecebimentoOut]]])
