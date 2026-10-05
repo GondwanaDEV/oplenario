@@ -5,10 +5,6 @@
 .cid-nav a:hover { color: var(--texto); background: var(--surface-2); }
 .cid-nav a[aria-current="page"] { color: var(--marca); background: color-mix(in srgb, var(--marca) 8%, transparent); }
 
-/* O topo é `.envelope.topo-grade` no mesmo elemento, e o `padding: 0.7rem 0` do chassi (.topo-grade, que vem depois)
-   zerava a margem lateral do .envelope: marca e avatar encostavam na borda da tela. Aqui a margem lateral volta. */
-.topo-cidadao .topo-grade { padding-inline: clamp(1rem, 4vw, 2rem); }
-
 /* Telefone: o chassi (flex com quebra) punha marca, menu e quem-está-logado cada um numa linha — o topo tomava 173 px.
    Aqui, duas linhas: marca + tema/avatar em cima, o menu na largura toda embaixo. O nome sai da vista (as iniciais ficam
    no avatar) e continua para o leitor de tela. */

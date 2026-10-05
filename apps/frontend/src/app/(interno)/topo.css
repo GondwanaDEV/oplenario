@@ -38,3 +38,19 @@
   }
   .nav-interna::-webkit-scrollbar { display: none; } /* WebKit/Blink: idem */
 }
+
+/* Telefone: com a margem lateral de volta, o flex com quebra punha marca, rótulo da área, tema/quem e menu em quatro
+   linhas (196 px a 320 px). Aqui, duas, como no topo da cidadã: marca + tema/avatar em cima, o menu embaixo. O rótulo
+   da área e o nome saem da vista (o título da página diz a área; as iniciais ficam no avatar) e continuam para o
+   leitor de tela. */
+@media (max-width: 560px) {
+  .topo-interno .topo-grade { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem 0.8rem; padding-block: 0.6rem 0.3rem; }
+  .topo-interno .topo-sep { display: none; }
+  .topo-interno .topo-dir { grid-row: 1; grid-column: 2; margin-left: 0; gap: 0.5rem; }
+  .topo-interno .tema-btn { width: 44px; padding: 0; justify-content: center; }
+  .topo-interno .nav-interna { grid-column: 1 / -1; }
+  .topo-interno .area-tag,
+  .topo-interno .quem-mesa .quem {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+}
