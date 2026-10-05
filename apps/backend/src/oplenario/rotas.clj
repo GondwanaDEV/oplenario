@@ -626,6 +626,9 @@
              iid))
          :nome-da-identidade (fn [iid] (:nome (repo-identidade-comp/nome-por-id repo-identidade iid)))}]
     ;; ADR-0018 (fatia 2): a Casa ENCERRADA responde 410 tambem nas rotas publicas dela (o portal, a descoberta do login)
+    ;; ADR-0017 (adendo de 04/10/2026): a TENTATIVA entra logo antes do handler de TODA rota de escrita, por fora de tudo
+    ;; o que monta a tabela — a escrita nova nasce com ela, sem lista de rotas (`auditoria/toda_escrita_tem_tentativa_test`).
+    (auditoria-http/com-tentativa
     (restricao-casa/com-casa-encerrada
      (cond->
       (-> #{["/saude"             :get http/saude :route-name :saude]
@@ -935,4 +938,4 @@
         (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
         ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post]
         (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))}))
-     estado-da-casa)))
+     estado-da-casa))))

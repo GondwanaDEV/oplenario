@@ -19,7 +19,8 @@
    [:ator AtorOut]
    [:acao :string]
    [:classe [:enum "escrita" "negacao" "entrada" "leitura_sensivel"]]
-   [:decisao [:enum "permitido" "negado" "falhou"]]
+   ;; `sem_desfecho` = a escrita foi iniciada e o desfecho dela nao foi registrado (ADR-0017, adendo de 04/10/2026)
+   [:decisao [:enum "permitido" "negado" "falhou" "sem_desfecho"]]
    [:recurso [:maybe [:map {:closed true} [:tipo [:maybe :string]] [:id [:maybe :string]] [:rotulo [:maybe :string]]]]]
    [:campos [:vector :string]]
    [:canal :string]
@@ -47,7 +48,10 @@
    [:total :int]
    [:cabeca [:maybe :string]]
    [:quebra-em [:maybe :int]]
-   [:selos-do-dia [:vector SeloDoDiaOut]]])
+   [:selos-do-dia [:vector SeloDoDiaOut]]
+   ;; quantas escritas foram iniciadas e ficaram sem desfecho registrado, e o seq da mais antiga
+   [:sem-desfecho :int]
+   [:primeiro-sem-desfecho [:maybe :int]]])
 
 (def SelosPublicosOut
   [:map {:closed true} [:selos-do-dia [:vector SeloDoDiaOut]]])

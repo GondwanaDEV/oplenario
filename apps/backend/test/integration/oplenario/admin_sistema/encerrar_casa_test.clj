@@ -411,7 +411,11 @@
     (let [regs (tenancy/com-tenant* *ds* ente
                  #(jdbc/execute! % ["SELECT acao, classe, rotulo, recurso_tipo FROM auditoria.registro
                                      WHERE ente_id = ? ORDER BY seq" ente]))]
-      (is (= [["exportacao-da-casa/gerar" "escrita" "pediu a exportação completa da Câmara"]
+      ;; cada escrita deixa a TENTATIVA (antes do handler, sem rotulo) e o desfecho; a leitura sensivel, um registro so'
+      ;; (ADR-0017, adendo de 04/10/2026)
+      (is (= [["exportacao-da-casa/gerar" "escrita" nil]
+              ["exportacao-da-casa/gerar" "escrita" "pediu a exportação completa da Câmara"]
+              ["exportacao-da-casa/confirmar-recebimento" "escrita" nil]
               ["exportacao-da-casa/confirmar-recebimento" "escrita" "confirmou o recebimento da exportação completa"]
               ["exportacao-da-casa/baixar" "leitura_sensivel" "baixou a exportação completa da Câmara"]]
              (mapv (juxt :registro/acao :registro/classe :registro/rotulo) regs)))
