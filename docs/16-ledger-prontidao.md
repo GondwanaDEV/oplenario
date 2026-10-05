@@ -2768,6 +2768,33 @@ ainda não tinha voltado; a correção virou o #186. O merge automático só se 
 **Trilha 3:** passou a ter 11 specs (E1 a E8, E9 de autorização de leitura, E10 do balcão, E11 das entregas de 05/10).
 A E11 é a única que cria sessão e matéria próprias e as encerra no fim.
 
+## Quinta rodada de 05/10/2026 (PRs #210, #212, #214, #225) — o que entrou e o que ficou sem causa
+
+| PR | O que fez | Como foi verificado |
+|---|---|---|
+| #210 | `template_estado.ordem` com significado documentado (mig `20261005000261`, só comentário de coluna); salvar rito com ordem repetida é recusado | testes do backend com Postgres real |
+| #212 | `GET /operacao/atos-sem-desfecho` e o bloco em `/operacao` (tolerância 120 s, teto 50, `total` e `truncado`) | 6 testes de backend com mutação plantada; 18 de frontend. **Não visto em browser** |
+| #214 | faixa da ficha pública pelo rito da Casa (`transparencia.materia.rito`, mig `20261005000262`, sem reconstrução) | testes; conflito com o #209 resolvido unindo a etapa atual com a faixa pelo rito |
+| #225 | E11 revoga vereador sem mandato e exige 201 exato; E9 e a sonda esperam o estado pronto; E6 anexa evidência na falha | `t3-e2e` no CI |
+
+**Trabalho em dobro:** três PRs meus (#203, #205, #207) repetiam o que outra sessão já tinha aberto (#206, #208, #209),
+porque as duas partiram da mesma lista "Falta" do `CLAUDE.md`. Fechei os meus. Antes de despachar: `gh pr list --state
+open` e `git branch -r --sort=-committerdate`.
+
+**E6 sem causa:** "Você votou Sim" reprovou duas vezes em cerca de 40 execuções depois do conserto do cockpit (#162).
+A hipótese de corrida com a E5 foi refutada com o log (a E5 só abre votação depois de o E6 terminar). O #225 só
+instrumenta; não há conserto.
+
+**Duas hipóteses minhas erradas nesta rodada**, ambas aceitas sem evidência: o 404 da ficha pública era o `next dev`
+com a tabela de rotas incompleta (#211, #223), e não atraso da projeção; a falha do E6 não era a corrida com a E5.
+
+**Promoção:** o script que esperava o workflow de deploy ficou preso, porque a promoção não mudava nada que dispara
+deploy. As fumaças rodam direto com `gh workflow run`, sem esperar deploy que pode não existir.
+
+**Achados da quarta rodada, fechados por outra sessão:** a folha de presença com "Sessão 10000000" e a chave do cargo
+(#215); o 500 de `POST /identidade/acessos` em modo dev (#208); o chip e a faixa com rótulos de fontes diferentes
+(#209, #227).
+
 ## Retriagem do exploratório de 12/09 (04/10/2026, fechada em 05/10/2026) — o que segue aberto no código de hoje
 
 Leitura do código da `main` (`8278d3bc`); um único achado foi também executado (o crítico da remessa, abaixo). "Fechado"
