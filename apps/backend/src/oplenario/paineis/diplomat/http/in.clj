@@ -44,9 +44,8 @@
 
 (defn- minha-sessao-atual-handler
   "GET /meu/sessao-atual (Onda C3, papel 'vereador'). Reusa a MESMA leitura tenant-wide de `sli-sessoes`
-  (sem recurso unico p/ camada fina — mesmo escopo authz das demais rotas deste modulo) e projeta UMA sessao:
-  entre as vivas (aberta/suspensa), a de agora — `adapters/out/minha-sessao-atual` (a lista crua vem da mais
-  antiga para a mais nova, ordem do dashboard da Mesa, e nao serve ao cockpit). Sem sessao viva -> 200 {:sessao-id nil :situacao nil}
+  (sem recurso unico p/ camada fina — mesmo escopo authz das demais rotas deste modulo) e projeta so' a
+  PRIMEIRA entrada (ja' ordenada 'em curso primeiro'). Sem sessao viva -> 200 {:sessao-id nil :situacao nil}
   (nunca 404 — ausencia de sessao e' um ESTADO do cockpit do celular, nao um erro)."
   [repo-paineis]
   (fn [req]
