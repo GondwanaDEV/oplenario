@@ -529,7 +529,7 @@ function AcompanharManifestacao({ ente }: { ente: string }) {
           setResultado(r ? { estado: "achou", status: r.estado, dias: r.diasRestantes } : { estado: "nao" });
         }}
       >
-        <input type="text" value={protocolo} placeholder="OUV-2026-000000" aria-label="Número do protocolo"
+        <input type="text" value={protocolo} placeholder="OUV-2026-000001" aria-label="Número do protocolo"
           onChange={(e) => setProtocolo(e.target.value)} />
         <button className="btn btn-contorno btn-mini" type="submit">
           Ver

@@ -26,6 +26,8 @@
   (criar-usuario! [_ _ _] (throw (ex-info "idp-dev: criar-usuario indisponivel (carry Keycloak)" {})))
   (convidar! [_ _ente-id _identidade-id]
     (throw (ex-info "idp-dev nao envia convite (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))
+  (corrigir-email-do-convite! [_ _ _ _]
+    (throw (ex-info "idp-dev nao guarda e-mail (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))
   (resetar-mfa! [_ _ _] (throw (ex-info "idp-dev: reset-mfa indisponivel (carry Keycloak)" {})))
   ;; dev nao provisiona realm nenhum (provisionar-realm! lanca) -> nao ha' o que apagar: o realm "ja' inexistente"
   ;; do contrato. Nunca roda em producao (idp-para so' liga o idp-dev em dev/test).

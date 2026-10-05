@@ -543,7 +543,8 @@
         realm (str realm-prefixo ente-id)
         token (admin-token! config http-client)]
     (if-let [existente (buscar-usuario-por-identidade http-client token base-url realm identidade-id)]
-      {:keycloak-user-id (:id existente)}
+      ;; :existia? diz a quem chama que o e-mail informado NAO foi gravado (o usuario ja' tinha o dele)
+      {:keycloak-user-id (:id existente) :existia? true}
       (let [[primeiro ultimo] (nome->first-last nome)
             {:keys [status corpo headers]}
             (admin-req! http-client token :post (str "/admin/realms/" realm "/users")
@@ -558,7 +559,35 @@
         (when-not (= 201 status)
           (throw (ex-info "keycloak-idp: falha ao criar usuario (infra)" {:status status :corpo corpo})))
         (let [location (.firstValue headers "location")]
-          {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/")))})))))
+          {:keycloak-user-id (when (.isPresent location) (last (str/split (.get location) #"/"))) :existia? false})))))
+
+(defn- corrigir-email-do-convite-impl
+  "So' sem credencial (o convite nunca foi concluido): sem credencial nao ha' conta a tomar. Le o usuario INTEIRO e
+  devolve o registro completo com o e-mail novo — com o perfil de usuario declarado, um PUT parcial pode apagar os
+  atributos nao enviados (entre eles `identidade-id`, que o login usa). `emailVerified` volta a false: o resgate do
+  convite e' a verificacao do e-mail novo."
+  [{:keys [config http-client]} ente-id identidade-id email]
+  (let [{:keys [base-url realm-prefixo]} config
+        realm (str realm-prefixo ente-id)
+        token (admin-token! config http-client)
+        {kc-id :id} (or (buscar-usuario-por-identidade http-client token base-url realm identidade-id)
+                        (throw (ex-info "keycloak-idp: usuario inexistente no realm" {:tipo :idp/usuario-inexistente})))
+        caminho (str "/admin/realms/" realm "/users/" kc-id)
+        {creds :corpo st-c :status} (admin-req! http-client token :get (str caminho "/credentials") nil base-url)]
+    (when-not (= 200 st-c)
+      (throw (ex-info "keycloak-idp: falha ao listar credenciais (infra)" {:status st-c})))
+    (when (seq creds)
+      (throw (ex-info "keycloak-idp: a pessoa ja' tem credencial — o e-mail e' trocado por ela" {:tipo :idp/conta-ja-ativa})))
+    (let [{usuario :corpo st-u :status} (admin-req! http-client token :get caminho nil base-url)]
+      (when-not (= 200 st-u)
+        (throw (ex-info "keycloak-idp: falha ao ler o usuario (infra)" {:status st-u})))
+      (let [{:keys [status corpo]} (admin-req! http-client token :put caminho
+                                               (assoc usuario :email email :emailVerified false) base-url)]
+        (cond
+          (= 204 status) true
+          (= 409 status) (throw (ex-info "keycloak-idp: e-mail ja' usado por outro usuario do realm"
+                                         {:tipo :idp/email-em-uso}))
+          :else (throw (ex-info "keycloak-idp: falha ao trocar o e-mail (infra)" {:status status :corpo corpo})))))))
 
 (def ^:private tipos-credencial-mfa #{"otp" "webauthn" "webauthn-passwordless"})
 
@@ -637,6 +666,8 @@
   (provisionar-realm! [this ente-id] (provisionar-realm-impl this ente-id))
   (criar-usuario! [this ente-id usuario] (criar-usuario-impl this ente-id usuario))
   (convidar! [this ente-id identidade-id] (convidar-impl this ente-id identidade-id))
+  (corrigir-email-do-convite! [this ente-id identidade-id email]
+    (corrigir-email-do-convite-impl this ente-id identidade-id email))
   (resetar-mfa! [this ente-id identidade-id] (resetar-mfa-impl this ente-id identidade-id))
   (apagar-realm! [this ente-id] (apagar-realm-impl this ente-id)))
 

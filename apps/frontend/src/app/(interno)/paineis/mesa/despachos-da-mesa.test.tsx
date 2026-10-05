@@ -55,7 +55,22 @@ describe("DespachosDaMesa — a fila de relatores para de fingir completude", ()
     expect(container.querySelector(".aviso-corte")).not.toBeNull();
     // achado da revisão adversarial (MENOR): o selo do card imprimia `{itens.length} item(ns)` como se
     // fosse o tamanho da fila — a mesma forma de total nu que o aviso logo abaixo já corrige.
-    expect(container.querySelector(".selo-n")?.textContent).toBe("1+ item(ns)");
+    // "+" já diz "e talvez mais": o selo vai no plural, sem parênteses.
+    expect(container.querySelector(".selo-n")?.textContent).toBe("1+ itens");
+  });
+
+  it("selo do cabeçalho: singular com um item, plural com vários, sem parênteses", () => {
+    const um = render(
+      <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: false })} />,
+    );
+    expect(um.container.querySelector(".selo-n")?.textContent).toBe("1 item");
+    cleanup();
+    const dois = render(
+      <DespachosDaMesa
+        vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never, itemOrfao as never], truncado: false })}
+      />,
+    );
+    expect(dois.container.querySelector(".selo-n")?.textContent).toBe("2 itens");
   });
 
   it("truncado=false não mostra o aviso de corte", () => {
@@ -71,6 +86,24 @@ describe("DespachosDaMesa — a fila de relatores para de fingir completude", ()
     );
     expect(container.querySelectorAll(".fila-item").length).toBe(1);
     expect(getByText("Matéria indisponível")).toBeTruthy();
+  });
+
+  it("cada item da fila abre a matéria, onde o relator é designado (também o item órfão)", () => {
+    const { getAllByRole } = render(
+      <DespachosDaMesa
+        token="tk"
+        vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never, itemOrfao as never], truncado: false })}
+      />,
+    );
+    const hrefs = getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual(["/ficha-materia/p1?token=tk", "/ficha-materia/p2?token=tk"]);
+  });
+
+  it("o texto do link diz o que ele faz e qual matéria abre", () => {
+    const { getByRole } = render(
+      <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: false })} />,
+    );
+    expect(getByRole("link", { name: /Abrir PL 007\/2026 para designar o relator/ })).toBeTruthy();
   });
 
   it("item disponível segue mostrando a referência normal (sigla + número/ano)", () => {

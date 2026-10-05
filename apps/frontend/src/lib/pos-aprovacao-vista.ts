@@ -12,7 +12,8 @@
 // feito; publicada -> passo 5 feito. Sem norma, o passo 4 é o "atual" quando o desfecho do Executivo já permite
 // promulgar (mesmo conjunto de legislativo.logic/estados-executivo-promulgaveis).
 
-import { formatarData } from "./formatar-data";
+import { diaLocal } from "./calendario-vista";
+import { formatarData, formatarDataSimples } from "./formatar-data";
 import type { AutografoOut, NormaOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
 
 export type SituacaoEtapa = "feita" | "atual" | "futura";
@@ -148,4 +149,72 @@ export function derivarPrazoExecutivo(autografo: AutografoOut, agora: Date = new
   const diasTotal = Math.max(diasRestantes, Math.ceil((fimMs - inicioMs) / DIA_MS));
   const categoria: CategoriaPrazo = diasRestantes <= 2 ? "urgente" : diasRestantes <= 5 ? "atencao" : "tranquilo";
   return { estado: "em-curso", diasRestantes, diasTotal, categoria };
+}
+
+// ---------------------------------------------------------------------------
+// Prazo de sanção/veto informado ao GERAR o autógrafo
+// ---------------------------------------------------------------------------
+// O backend (wire/in/pos_aprovacao.clj, GerarAutografo) aceita `prazo-resposta-em` OPCIONAL, como instante
+// ISO-8601. O autógrafo é append-only (migration 0022: "o autografo nao muda"), então o prazo informado
+// NÃO se corrige depois — por isso a tela mostra a data por extenso antes do envio.
+// A secretaria escolhe um DIA (o último em que o Executivo pode responder); o instante enviado é o fim
+// desse dia no fuso da Casa (America/Fortaleza, UTC−3, sem horário de verão desde 2019 — mesmo fuso do
+// backend em kernel/tempo e de calendario-vista.FUSO_DA_CASA). Nenhum valor padrão: o prazo de sanção
+// é o da Lei Orgânica de cada Município ([GAP] aberto do projeto), a tela nunca o presume.
+
+const DIA_ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** `AAAA-MM-DD` -> instante ISO do último segundo desse dia na Casa. Só chamar com dia já validado. */
+export function instanteFimDoDia(dia: string): string {
+  return `${dia}T23:59:59-03:00`;
+}
+
+function diaExiste(dia: string): boolean {
+  const m = DIA_ISO.exec(dia);
+  if (!m) return false;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return d.getUTCFullYear() === Number(m[1]) && d.getUTCMonth() === Number(m[2]) - 1 && d.getUTCDate() === Number(m[3]);
+}
+
+/** Mensagem de erro para o dia do prazo (`AAAA-MM-DD`), ou null se serve. Vazio serve: o prazo é opcional.
+ *  `hoje` = dia atual da Casa (`AAAA-MM-DD`). */
+export function validarDiaDoPrazo(dia: string, hoje: string): string | null {
+  if (dia === "") return null;
+  if (!diaExiste(dia)) return "Informe uma data válida para o prazo.";
+  if (dia < hoje) return "O prazo não pode ser uma data que já passou.";
+  return null;
+}
+
+/** O dia atual no fuso da Casa (não o do navegador de quem consulta). */
+export function hojeDaCasa(agora: Date = new Date()): string {
+  return diaLocal(agora.toISOString()) ?? "";
+}
+
+/** Instante do prazo -> `dd/mm/aaaa` do dia da CASA (o servidor devolve em UTC: 23h59 de 20/10 em
+ *  Fortaleza chega como 02h59 de 21/10 e não pode recuar nem avançar um dia na tela). */
+export function dataDoPrazo(iso: string): string {
+  const dia = diaLocal(iso);
+  return dia ? formatarDataSimples(dia) : formatarData(iso);
+}
+
+export function fraseDoPrazoDoExecutivo(iso: string): string {
+  return `O Executivo tem até ${dataDoPrazo(iso)} para sancionar ou vetar.`;
+}
+
+/** O backend responde `{erro: "..."}` com texto interno (400 genérico, 409 de domínio). A secretaria lê uma
+ *  frase que diz o que fazer; o que não é conhecido segue como veio (nunca é escondido). */
+export function fraseErroGerarAutografo(erro: string): string {
+  if (erro === "requisicao invalida") {
+    return "O pedido não foi aceito. Confira a data do prazo; se outra pessoa já gerou o autógrafo desta matéria, recarregue a página.";
+  }
+  if (erro.includes("nao foi aprovada em votacao")) {
+    return "O autógrafo só pode ser gerado depois que a Câmara aprovar a matéria em votação.";
+  }
+  if (erro.includes("nao registrou qual texto foi deliberado")) {
+    return "A votação que aprovou esta matéria não registrou qual texto foi deliberado, então o autógrafo ainda não pode ser gerado.";
+  }
+  if (erro === "autorizacao negada") {
+    return "Você não tem permissão para gerar o autógrafo.";
+  }
+  return erro;
 }

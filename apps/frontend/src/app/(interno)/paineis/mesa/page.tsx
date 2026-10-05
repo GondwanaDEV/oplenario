@@ -53,16 +53,16 @@ export default function PaginaDashboardMesa() {
     <>
       <TopoInterno area="Painéis da Mesa" />
       <main className="envelope">
-        <SaudeInstitucional vista={vista.saude} />
+        <SaudeInstitucional vista={vista.saude} token={token} />
         <div className="cockpit">
           <div className="coluna">
-            <OQueVence vista={vista.oQueVence} />
-            <DespachosDaMesa vista={vista.despachos} />
+            <OQueVence vista={vista.oQueVence} token={token} />
+            <DespachosDaMesa vista={vista.despachos} token={token} />
           </div>
           <ProximaSessaoRail sliSessoes={sliSessoes} sliSessoesTotal={sliSessoesTotal} token={token} />
         </div>
-        <PipelineLegislativo vista={vista.pipeline} />
-        <OrgulhoInstitucional vista={vista.orgulho} />
+        <PipelineLegislativo vista={vista.pipeline} token={token} />
+        <OrgulhoInstitucional vista={vista.orgulho} token={token} />
         <LenteJuridico />
       </main>
     </>

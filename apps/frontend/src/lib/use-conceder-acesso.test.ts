@@ -61,7 +61,7 @@ describe("concederAcesso — a ordem é a garantia de segurança", () => {
       { vereadorId: "v-2", cpf: "52998224725", nome: "H", email: "h@c.local" },
       fetchFake,
     );
-    expect(resultado).toEqual({ identidadeId: "id-xyz-9" });
+    expect(resultado).toEqual({ identidadeId: "id-xyz-9", email: "novo" });
     expect(corpos[1]["identidade-id"]).toBe("id-xyz-9");
     expect(corpos[2]["identidade-id"]).toBe("id-xyz-9");
     expect(corpos[2].tipo).toBe("vereador");
@@ -99,14 +99,14 @@ describe("useConcederAcesso", () => {
       .mockResolvedValueOnce(ok({ "vinculo-id": "vin-1", convite: "enviado" }));
 
     const { result } = renderHook(() => useConcederAcesso("tok-admin"));
-    let devolvido: { identidadeId: string } | undefined;
+    let devolvido: { identidadeId: string; email: string } | undefined;
     await act(async () => {
       devolvido = await result.current.conceder({
         vereadorId: "v-1", cpf: "52998224725", nome: "Helena Matos", email: "h@camara.local",
       });
     });
 
-    expect(devolvido).toEqual({ identidadeId: "id-9" });
+    expect(devolvido).toEqual({ identidadeId: "id-9", email: "novo" });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const [url1, init1] = fetchMock.mock.calls[0];
     const [url2, init2] = fetchMock.mock.calls[1];
@@ -155,7 +155,7 @@ describe("concederJuridico — identidade, e só então o vínculo de servidor c
       return { ok: true, json: async () => ({ "identidade-id": "id-7" }) } as Response;
     });
     const r = await concederJuridico(entrada, fetchFake);
-    expect(r).toEqual({ identidadeId: "id-7" });
+    expect(r).toEqual({ identidadeId: "id-7", email: "novo" });
     expect(chamadas.map(([u]) => u)).toEqual(["/api/identidade/identidades", "/api/identidade/acessos"]);
     expect(chamadas[1][1]).toEqual({
       "identidade-id": "id-7", tipo: "servidor", papeis: ["juridico"], email: "lucia@camara.local",

@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BarraInstitucional } from "./barra-institucional";
 import { TemaProvider } from "@/lib/tema";
 
@@ -92,17 +94,48 @@ describe("BarraInstitucional", () => {
       "/portal/casa/camara-fortaleza#destaque",
     );
     expect(screen.getByRole("link", { name: "Sessões" }).getAttribute("href")).toBe(
-      "/portal/casa/camara-fortaleza#civico",
+      "/portal/casa/camara-fortaleza/pautas",
     );
     expect(screen.getByRole("link", { name: "Transparência" }).getAttribute("href")).toBe(
-      "/portal/casa/camara-fortaleza#civico",
+      "/portal/casa/camara-fortaleza/dados-abertos",
     );
     expect(screen.getByRole("link", { name: "Acesso à informação" }).getAttribute("href")).toBe(
       "/portal/casa/camara-fortaleza#balcoes",
     );
     expect(screen.getByRole("link", { name: "Ouvidoria" }).getAttribute("href")).toBe(
-      "/portal/casa/camara-fortaleza#civico",
+      "/portal/casa/camara-fortaleza/ouvidoria",
     );
+  });
+
+  it("cada item do menu leva a um lugar diferente, e nenhum é a âncora genérica #civico", () => {
+    render(
+      <TemaProvider>
+        <BarraInstitucional ente="camara-fortaleza" nomeCasa="Câmara Municipal de Fortaleza" />
+      </TemaProvider>,
+    );
+    const hrefs = within(screen.getByRole("navigation", { name: "Seções do portal" }))
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href"));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+    expect(hrefs.some((h) => h?.endsWith("#civico"))).toBe(false);
+  });
+
+  it("todo item do menu que não é âncora da home aponta para uma página que existe", () => {
+    render(
+      <TemaProvider>
+        <BarraInstitucional ente="camara-fortaleza" nomeCasa="Câmara Municipal de Fortaleza" />
+      </TemaProvider>,
+    );
+    const casa = join(__dirname, "portal", "casa", "[ente]");
+    const subrotas = within(screen.getByRole("navigation", { name: "Seções do portal" }))
+      .getAllByRole("link")
+      .map((a) => a.getAttribute("href") ?? "")
+      .map((h) => h.replace("/portal/casa/camara-fortaleza", ""))
+      .filter((resto) => resto.startsWith("/"));
+    expect(subrotas.length).toBeGreaterThanOrEqual(3);
+    for (const resto of subrotas) {
+      expect(existsSync(join(casa, ...resto.split("/").filter(Boolean), "page.tsx")), `página de ${resto}`).toBe(true);
+    }
   });
 
   it("aria-current='page' no Início quando paginaAtual='inicio' (home)", () => {
