@@ -19,7 +19,9 @@
 
 .ln-nota { margin: 0.8rem 0 0; font-size: var(--t-13); color: var(--aviso-texto); }
 .ln-total { margin: 1.4rem 0 0.2rem; font-family: var(--mono); font-size: var(--t-12); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-2); }
-.ln-aviso { margin: 0.4rem 0 0.8rem; padding: 0.6rem 0.8rem; border-left: 4px solid var(--aviso-texto); background: var(--surface); font-size: var(--t-13); color: var(--texto); max-width: 52rem; }
+
+.ln-paginas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 1.2rem; font-size: var(--t-13); color: var(--texto-2); }
+.ln-paginas a { color: var(--marca); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; padding-inline: 0.4rem; }
 
 .ln-lista { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.8rem; max-width: 52rem; }
 .ln-lista li { padding: 1rem 1.2rem; border: 1px solid var(--linha); border-radius: var(--raio); background: var(--surface); box-shadow: var(--sombra); display: grid; gap: 0.35rem; min-width: 0; }

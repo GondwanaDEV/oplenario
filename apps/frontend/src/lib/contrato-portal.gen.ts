@@ -15,6 +15,8 @@ export interface NormaOut {
 export interface NormasOut {
   normas: NormaOut[];
   normasTotal: number;
+  pagina: number;
+  porPagina: number;
 }
 
 export interface MateriaOut {

@@ -61,6 +61,20 @@ export function consultaDoFiltro(f: FiltroDeLeis): Record<string, string> {
   };
 }
 
+// A página da lista (`?pagina=`): inteiro de 1 em diante. Qualquer outra coisa (ausente, 0, texto, número enorme) é a
+// primeira página: a lista nunca fica em branco por causa de um endereço digitado errado.
+export function lerPagina(p: Parametro): number {
+  const t = primeiro(p);
+  if (!INTEIRO.test(t)) return 1;
+  const n = Number.parseInt(t, 10);
+  return n > 1 ? n : 1;
+}
+
+// A consulta que vai ao servidor e à URL da tela: o filtro mais a página (a primeira não leva `?pagina=`).
+export function consultaDaLista(f: FiltroDeLeis, pagina: number): Record<string, string> {
+  return { ...consultaDoFiltro(f), ...(pagina > 1 ? { pagina: String(pagina) } : {}) };
+}
+
 export function filtroAtivo(f: FiltroDeLeis): boolean {
   return Boolean(f.tipo || f.ano || f.numero);
 }

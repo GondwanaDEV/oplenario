@@ -88,10 +88,11 @@
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
 (defn- listar-normas-handler
-  "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
+  "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=&pagina=N) — acervo as-enacted (F6c Slice 3). Query-params
   OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1.
-  Resposta e' o PAR {:normas :normas-total} (frente 'truncamento-familia', sitio (c)): o teto de 200 saia
-  sem sinalizar.
+  PAGINADA, 20 por pagina, como as votacoes: a resposta e' {:normas :normas-total :pagina :por-pagina} (frente
+  'truncamento-familia', sitio (c)) — o total e' do mesmo filtro, sem pagina; `:pagina` invalida -> 400. A ordem
+  e' estavel (desempate por id), entao uma norma nao repete nem some entre paginas.
 
   Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
   metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
@@ -102,11 +103,12 @@
   [repo-transparencia resolver-ente-publico info-ente]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
-          filtro  (adapters-in/filtro-legislacao (:query-params req))]
+          filtro  (adapters-in/filtro-legislacao (:query-params req))
+          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))]
       (if-not (info-ente ente-id)
         (http/json-resposta 404 {:erro "ente nao encontrado"})
         (http/json-resposta 200
-          (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro)))))))
+          (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro pagina)))))))
 
 (defn- buscar-norma-handler
   [repo-transparencia resolver-ente-publico]

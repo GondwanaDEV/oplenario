@@ -19,17 +19,19 @@
 
 (defn- fake-repo
   [{:keys [buscar-materia listar-materias buscar-norma norma-da-materia listar-normas filtro-capturado
-           artefato-ptr]}]
+           pagina-capturada artefato-ptr]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-transparencia/RepoTransparencia
     (buscar-materia [_ _ente _pid] buscar-materia)
     (listar-materias [_ _ente _excl] listar-materias)
     (buscar-norma [_ _ente _nid] buscar-norma)
     (norma-da-materia [_ _ente _pid] norma-da-materia)
-    ;; F6c Slice 3: 3-aridade (filtro do acervo). `filtro-capturado` (atom opcional) grava o filtro que a
-    ;; borda coagiu — prova a fiacao query-params -> {:tipo :ano :numero} sem tocar no banco.
-    (listar-normas [_ _ente filtro]
+    ;; F6c Slice 3: o filtro do acervo + a pagina (limite/deslocamento). `filtro-capturado` e `pagina-capturada`
+    ;; (atoms opcionais) gravam o que a borda coagiu — prova a fiacao query-params -> {:tipo :ano :numero} e
+    ;; ?pagina -> [limite deslocamento] sem tocar no banco.
+    (listar-normas [_ _ente filtro limite deslocamento]
       (when filtro-capturado (reset! filtro-capturado filtro))
+      (when pagina-capturada (reset! pagina-capturada [limite deslocamento]))
       listar-normas)
     ;; F6c Slice 4b: ponteiro do artefato mais recente (a rota de download resolve dai').
     (artefato-mais-recente-da-norma [_ _ente _nid] artefato-ptr)))
@@ -136,6 +138,28 @@
     (is (= "Diario Oficial do Municipio" (:veiculo-publicacao (first (:normas body)))))
     (is (= 1 (:normas-total body)))
     (is (= {:tipo nil :ano nil :numero nil} @cap) "sem query-params -> filtro vazio (compat Slice 1)")))
+
+(deftest listar-normas-pagina-repassa-limite-e-deslocamento
+  ;; ?pagina=3 com 20 por pagina = as linhas 41..60 (limite 20, deslocamento 40); sem ?pagina e' a primeira. A borda
+  ;; devolve pagina/por-pagina ao cliente, junto do total VERBATIM do Repo.
+  (let [pag  (atom nil)
+        repo (fake-repo {:listar-normas {:normas [] :normas-total 45} :pagina-capturada pag})
+        url  (str "/portal/casa/" ente "/legislacao")
+        r3   (pt/response-for (service-fn repo) :get (str url "?pagina=3"))
+        b3   (ler-json r3)]
+    (is (= 200 (:status r3)))
+    (is (= [20 40] @pag))
+    (is (= [45 3 20] ((juxt :normas-total :pagina :por-pagina) b3)))
+    (let [r1 (pt/response-for (service-fn repo) :get url)]
+      (is (= [20 0] @pag) "sem ?pagina: a primeira")
+      (is (= [1 20] ((juxt :pagina :por-pagina) (ler-json r1)))))))
+
+(deftest listar-normas-pagina-invalida-400
+  (let [repo (fake-repo {:listar-normas {:normas [] :normas-total 0}})]
+    (is (= [400 400 400]
+           (mapv #(:status (pt/response-for (service-fn repo) :get (str "/portal/casa/" ente "/legislacao" %)))
+                 ["?pagina=0" "?pagina=abc" "?pagina=1&pagina=2"]))
+        "pagina invalida e' 400, nunca vira a pagina 1 em silencio")))
 
 (deftest listar-normas-total-diverge-de-proposito-da-count-da-lista-200
   ;; mesma disciplina de listar-materias-total-diverge-de-proposito: a borda repassa o numero do Repo
