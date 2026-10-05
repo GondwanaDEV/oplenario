@@ -15,13 +15,17 @@
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
-   [:transicionou-em :string]])
+   [:transicionou-em :string]
+   ;; docs/16 linha 18: o ultimo ato a partir do autografo; quando existe, e' ele que diz a coluna (nil = o rito diz)
+   [:desfecho {:optional true} [:maybe :string]]])
 
 (def TotalPorEstadoOut
   "Item do par lista/total do board (fatia 'truncamento-familia'): quantas proposicoes o tenant tem NAQUELE
   estado, sem o corte por-estado da lista (ver docstring de TramitacaoBoardOut)."
   [:map {:closed true}
    [:estado :string]
+   ;; o mesmo par (estado, desfecho) dos itens: a coluna do total segue a do item
+   [:desfecho {:optional true} [:maybe :string]]
    [:total :int]])
 
 (def TramitacaoBoardOut

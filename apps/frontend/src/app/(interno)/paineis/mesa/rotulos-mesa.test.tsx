@@ -5,8 +5,8 @@
 // afirmasse `MAPA["em_comissoes"] === "Em comissoes"` continuaria verde com o componente renderizando
 // a chave crua.
 
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { DespachosDaMesa } from "./despachos-da-mesa";
 import { OQueVence } from "./o-que-vence";
 import { PipelineLegislativo } from "./pipeline-legislativo";
@@ -26,6 +26,10 @@ const pipeline = {
 };
 
 describe("painel da Mesa — nenhuma chave de enum chega a tela", () => {
+  // desmonta entre os casos: os cartões têm `Link` (#151), cujo trabalho agendado rodava depois que o jsdom do
+  // arquivo era desmontado e reprovava a suíte com "window is not defined" (PR #169)
+  afterEach(() => cleanup());
+
   it("pipeline: estagio e referencia saem humanizados, sem underscore", () => {
     const { container } = render(<PipelineLegislativo vista={pipeline} />);
     const texto = container.textContent ?? "";

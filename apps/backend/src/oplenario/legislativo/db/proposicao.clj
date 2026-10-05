@@ -256,12 +256,34 @@
 
 (defn- where-listagem
   [ente-id {:keys [busca tipo estado autor-id ano]}]
-  (cond-> [[:= :ente_id ente-id]]
-    tipo     (conj [:= :tipo tipo])
-    estado   (conj [:= :estado estado])
-    autor-id (conj [:= :autor_id autor-id])
-    ano      (conj [:= :ano ano])
-    busca    (conj [:or [:ilike :ementa (str "%" busca "%")] [:ilike :urn_lex (str "%" busca "%")]])))
+  (cond-> [[:= :p.ente_id ente-id]]
+    tipo     (conj [:= :p.tipo tipo])
+    estado   (conj [:= :p.estado estado])
+    autor-id (conj [:= :p.autor_id autor-id])
+    ano      (conj [:= :p.ano ano])
+    busca    (conj [:or [:ilike :p.ementa (str "%" busca "%")] [:ilike :p.urn_lex (str "%" busca "%")]])))
+
+(def ^:private respostas-do-executivo
+  #{"sancionado" "sancao_tacita" "vetado" "veto_mantido" "veto_derrubado"})
+
+(def ^:private desfecho-depois-do-autografo
+  "O ultimo ato da materia DEPOIS do plenario, a partir do autografo (docs/16, retriagem linha 18): a lei publicada ou
+  so' promulgada, a resposta do Executivo / a apreciacao do veto, ou o autografo ainda sem resposta. NULL = a materia
+  nao saiu do plenario (a votacao sozinha nao decide: em dois turnos, 'Aguardando pauta' depois do 1o e' verdade).
+  Mesmo vocabulario de `proposicao.desfecho-registrado`; as tres tabelas tem UNIQUE por materia (autografo, norma) e
+  1:1 com o autografo (tramitacao executiva), entao os LEFT JOIN nao multiplicam linha."
+  [:case
+   [:= :n.estado "publicada"] "publicada"
+   [:is-not :n.id nil] "promulgada"
+   [:in :x.estado (vec (sort respostas-do-executivo))] :x.estado
+   [:is-not :a.id nil] "autografo_enviado"
+   :else nil])
+
+(def ^:private juncoes-do-desfecho
+  [[:legislativo.autografo :a]
+   [:and [:= :a.ente_id :p.ente_id] [:= :a.proposicao_id :p.id] [:is-not :a.efetivado_em nil]]
+   [:legislativo.tramitacao_executiva :x] [:and [:= :x.ente_id :a.ente_id] [:= :x.autografo_id :a.id]]
+   [:legislativo.norma :n] [:and [:= :n.ente_id :p.ente_id] [:= :n.proposicao_id :p.id]]])
 
 (defn listar
   "Onda B Slice 1 — lista filtravel/ordenavel/paginada do servidor (fonte da verdade, NAO read-model
@@ -276,9 +298,12 @@
         dir (if (= "asc" ordenar-dir) :asc :desc)]
     (comum/linhas->kebab
      (jdbc/execute! tx
-       (sql/format {:select colunas-resumo :from [:legislativo.proposicoes]
+       (sql/format {:select (conj (mapv #(keyword (str "p." (name %))) colunas-resumo)
+                                  [desfecho-depois-do-autografo :desfecho])
+                    :from [[:legislativo.proposicoes :p]]
+                    :left-join juncoes-do-desfecho
                     :where (into [:and] (where-listagem ente-id filtro))
-                    :order-by [[col dir] [:id :asc]]
+                    :order-by [[(keyword (str "p." (name col))) dir] [:p.id :asc]]
                     :limit tamanho
                     :offset (* (dec pagina) tamanho)})))))
 
@@ -290,7 +315,7 @@
   (:total
    (comum/linha->kebab
     (jdbc/execute-one! tx
-      (sql/format {:select [[[:count :*] :total]] :from [:legislativo.proposicoes]
+      (sql/format {:select [[[:count :*] :total]] :from [[:legislativo.proposicoes :p]]
                    :where (into [:and] (where-listagem ente-id filtro))})))))
 
 (defn mudar-estado!
