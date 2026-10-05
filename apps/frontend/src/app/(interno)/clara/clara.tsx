@@ -146,7 +146,7 @@ function useCelular(): boolean {
   );
 }
 
-const Faisca = ({ tamanho = 17 }: { tamanho?: number }) => (
+export const Faisca = ({ tamanho = 17 }: { tamanho?: number }) => (
   <svg width={tamanho} height={tamanho} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z" />
   </svg>

@@ -14,8 +14,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { SessaoComClara } from "../com-clara";
 import { useTema } from "@/lib/tema";
 import { useAta } from "@/lib/use-ata";
 import { faltaParaPublicar, linhaDaVersao, origemDaRedacao, semAta } from "@/lib/ata-vista";
@@ -27,11 +28,10 @@ import "./ata.css";
 
 export default function PaginaAta() {
   const params = useParams<{ id: string }>();
-  const search = useSearchParams();
   return (
-    <AuthProvider tokenQuery={search.get("token")}>
+    <SessaoComClara>
       <ConteudoAta id={params.id} />
-    </AuthProvider>
+    </SessaoComClara>
   );
 }
 

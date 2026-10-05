@@ -5,16 +5,14 @@
 // interno e a administração (o core confere de novo em POST /agente/perguntas). A div existe SEMPRE, com ou sem a
 // Clara: trocar o elemento quando os papéis chegam remontaria a página inteira. Também guarda a dica da tela
 // (`useDicaDaClara`), que a página publica e a Clara mostra, e o controle para a página abrir a Clara
-// (`useAbrirClara`): a aba do app do vereador, ou `?clara=expandida` na URL (o endereço antigo /vereador/assistente).
+// (`useAbrirClara`): a entrada do menu, o botão da home do vereador, ou `?clara=expandida` na URL (os endereços antigos
+// /assistente e /vereador/assistente).
 
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useSyncExternalStore } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuth, usePapeis } from "@/lib/auth";
 import { Clara, conjuntoDaClara, soAuditor, type ControleDaClara } from "./clara";
 import { ProvedorDaDica } from "./dica";
-
-/** Onde a Clara não aparece: a tela cheia do assistente da secretaria. */
-export const ROTAS_SEM_CLARA = new Set(["/assistente"]);
 
 /** Quem pergunta: secretaria e vereador (perguntam e recebem propostas) e quem só consulta (jurídico, controle
  *  interno e administração da Casa). */
@@ -25,7 +23,7 @@ export function podeUsarAClara(papeis: string[]): boolean {
 }
 
 /** O que a página usa para abrir a Clara. `disponivel` é falso quando a Clara não está na tela (sem papel, papéis
- *  carregando, tela cheia do assistente): quem a abre não aparece. */
+ *  carregando): quem a abre não aparece. */
 export type AbrirClara = {
   disponivel: boolean;
   /** A Clara está aberta (janela, expandida ou folha): o `aria-expanded` de quem a abre. */
@@ -65,16 +63,25 @@ export function useAbrirClara(): AbrirClara {
 const PEDIDOS: Record<string, "aberto" | "expandido"> = { aberta: "aberto", expandida: "expandido" };
 
 /** `publico`: o app do vereador pede sempre o conjunto do vereador (quem também é secretaria escolhe pela tela onde
- *  está); sem ele, o core escolhe pelos papéis (secretaria > vereador > consulta). */
-export function MolduraDaClara({ children, publico }: { children: React.ReactNode; publico?: "vereador" }) {
+ *  está); sem ele, o core escolhe pelos papéis (secretaria > vereador > consulta). `discreta`: as telas da sessão
+ *  (Comando da Mesa, chamada, ata, transcrição), operadas ao vivo: o botão recolhido é só o glifo e, no computador, o
+ *  conteúdo deixa livre a faixa da direita onde ele fica — nenhum comando da Mesa passa por baixo dele (clara.css). */
+export function MolduraDaClara({
+  children,
+  publico,
+  discreta,
+}: {
+  children: React.ReactNode;
+  publico?: "vereador";
+  discreta?: boolean;
+}) {
   const { token } = useAuth();
   const { papeis, estado } = usePapeis();
-  const caminho = usePathname() ?? "";
   const pedido = PEDIDOS[useSearchParams()?.get("clara") ?? ""];
   const moldura = useRef<HTMLDivElement>(null);
   const controle = useRef<ControleDaClara>(null);
   const painelId = useId();
-  const ativa = estado === "pronto" && podeUsarAClara(papeis) && !ROTAS_SEM_CLARA.has(caminho);
+  const ativa = estado === "pronto" && podeUsarAClara(papeis);
 
   const abrir = useCallback((t: "aberto" | "expandido", origem?: HTMLElement | null) => {
     controle.current?.abrir(t, origem);
@@ -94,7 +101,12 @@ export function MolduraDaClara({ children, publico }: { children: React.ReactNod
   return (
     <ProvedorDaDica>
       <ContextoDaClara.Provider value={contexto}>
-        <div ref={moldura} className="clara-moldura" data-clara-ativa={ativa ? "" : undefined}>
+        <div
+          ref={moldura}
+          className="clara-moldura"
+          data-clara-ativa={ativa ? "" : undefined}
+          data-clara-discreta={discreta ? "" : undefined}
+        >
           {children}
         </div>
         {ativa && (

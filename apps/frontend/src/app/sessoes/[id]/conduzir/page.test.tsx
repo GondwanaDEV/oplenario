@@ -7,13 +7,17 @@ import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
 // cobre o grafo. Aqui a prova é só que a PÁGINA lê o estado, oferece os atos certos e os dispara do jeito
 // certo por tom (direto / confirmação / motivo).
 
+// A Clara (ADR-0024): sem papel nos testes de sempre; o bloco da Clara liga a secretaria.
+const papeisDaClara = vi.hoisted(() => ({ atual: [] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: vi.fn() }) }));
 const pautaMock = vi.hoisted(() => ({ atual: null as unknown }));
@@ -217,5 +221,43 @@ describe("Comando da Mesa — audiência pública (ADR-0021)", () => {
     montar("aberta");
     expect(screen.getByRole("heading", { name: "Votação" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Mesa da audiência" })).toBeNull();
+  });
+});
+
+describe("Comando da Mesa — a Clara (ADR-0024, fatia 5)", () => {
+  afterEach(() => {
+    papeisDaClara.atual = [];
+    delete document.documentElement.dataset.clara;
+  });
+
+  it("a secretaria tem a Clara, recolhida; aberta, mostra a sessão desta tela", () => {
+    papeisDaClara.atual = ["secretario"];
+    montar("aberta");
+    // dois caminhos para a Clara: o botão flutuante (computador) e a entrada no cabeçalho (celular, conduzir.css)
+    const entradas = screen.getAllByRole("button", { name: /Pergunte à Clara/ });
+    expect(entradas).toHaveLength(2);
+    const lancador = entradas.find((b) => b.classList.contains("ast-lancador")) as HTMLElement;
+    expect(entradas.find((b) => b.classList.contains("clara-no-topo"))?.closest("header.topo")).toBeTruthy();
+    expect(lancador.getAttribute("aria-expanded")).toBe("false");
+    expect(document.documentElement.dataset.clara).toBe("recolhido");
+    fireEvent.click(lancador);
+    const painel = document.querySelector(".ast:not([hidden])") as HTMLElement;
+    expect(painel.textContent).toContain("Nesta tela: 14ª Sessão Ordinária");
+    expect(screen.getByRole("button", { name: "Perguntar sobre esta sessão" })).toBeTruthy();
+  });
+
+  it("a entrada do cabeçalho abre a Clara e diz que ela está aberta", async () => {
+    papeisDaClara.atual = ["secretario"];
+    montar("aberta");
+    const noTopo = document.querySelector(".clara-no-topo") as HTMLButtonElement;
+    expect(noTopo.getAttribute("aria-controls")).toBe(document.querySelector("aside.ast")?.id);
+    fireEvent.click(noTopo);
+    expect(document.documentElement.dataset.clara).toBe("aberto");
+    await waitFor(() => expect(noTopo.getAttribute("aria-expanded")).toBe("true"));
+  });
+
+  it("sem papel da Casa, nada de Clara", () => {
+    montar("aberta");
+    expect(screen.queryByRole("button", { name: /Pergunte à Clara/ })).toBeNull();
   });
 });

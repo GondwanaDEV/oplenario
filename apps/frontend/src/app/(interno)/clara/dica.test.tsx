@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import {
   ProvedorDaDica,
+  dicaDaAta,
   dicaDaMateria,
   dicaDaMateriaPeloNumero,
   dicaDaPauta,
@@ -98,6 +99,27 @@ describe("dicaDaPauta", () => {
   it("sem nome possível, nada", () => {
     expect(dicaDaPauta(undefined)).toBeNull();
     expect(dicaDaPauta({ tipoSessao: "ordinaria", numeroSequencial: 0, agendadaPara: null })).toBeNull();
+  });
+});
+
+describe("dicaDaAta", () => {
+  it("rótulo, começo da pergunta e o botão", () => {
+    expect(dicaDaAta({ tipoSessao: "ordinaria", numeroSequencial: 15 })).toEqual({
+      rotulo: "Ata da 15ª Sessão Ordinária",
+      inicio: "Sobre a ata da 15ª Sessão Ordinária, ",
+      acao: "Perguntar sobre esta ata",
+    });
+  });
+
+  it("sem número, pela data marcada", () => {
+    expect(dicaDaAta({ tipoSessao: "extraordinaria", agendadaPara: "2026-09-30" })?.rotulo).toBe(
+      "Ata da Sessão extraordinária de 30/09/2026",
+    );
+  });
+
+  it("sem nome possível, nada", () => {
+    expect(dicaDaAta(null)).toBeNull();
+    expect(dicaDaAta({ tipoSessao: "ordinaria", numeroSequencial: 0, agendadaPara: null })).toBeNull();
   });
 });
 

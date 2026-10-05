@@ -10,13 +10,17 @@ import { aplicarEvento, estadoInicial, hidratarComposicao, hidratarVotacao, hidr
 // `comVotacao`) — sem elas o telão que abre/recarrega fora da retenção do canal (~5 min) não mostra a votação
 // em curso — e mostra o que o estado hidratado traz, sem nenhum evento SSE.
 
+// A secretaria em todo teste: se esta tela ganhasse a moldura da Clara, o botão apareceria (e o teste da Clara reprova).
+const papeisDaClara = vi.hoisted(() => ({ atual: ["secretario"] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 const usePlenarioMock = vi.fn();
 vi.mock("@/lib/use-plenario", () => ({ usePlenario: (...a: unknown[]) => usePlenarioMock(...a) }));
@@ -258,5 +262,14 @@ describe("Telão da Mesa — placar nominal com o NOME do vereador", () => {
     });
     expect(screen.queryByRole("list", { name: "Votos nominais" })).toBeNull();
     expect(document.body.textContent).not.toContain("Ana Ribeiro");
+  });
+});
+
+describe("Telão — sem a Clara (ADR-0024, fatia 5)", () => {
+  it("projetado ao público: nem botão nem moldura da Clara, mesmo aberto pela secretaria", () => {
+    expect(papeisDaClara.atual).toEqual(["secretario"]);
+    montar({});
+    expect(screen.queryByRole("button", { name: /Clara/ })).toBeNull();
+    expect(document.querySelector(".clara-moldura, .ast-lancador, .ast")).toBeNull();
   });
 });
