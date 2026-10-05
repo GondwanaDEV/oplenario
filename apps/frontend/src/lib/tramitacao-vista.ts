@@ -56,8 +56,9 @@ const CONCLUIDOS_ATE_POR_ESTADO_DE_ESPERA: Record<string, number> = {
   aguardando_pauta: 2,
 };
 
-// ÚNICA fonte de rótulo de estado de proposição — a ficha, a lista, o quadro de tramitação e o painel da
-// Mesa leem daqui (`rotularEstado`). Terminais incluídos, para o quadro rotular o cartão sem outro mapa.
+// ÚNICA fonte do rótulo FIXO de estado de proposição (`rotularEstado`): o quadro de tramitação e o painel da Mesa leem
+// daqui; a ficha e a lista preferem o nome que o rito da Casa dá à etapa e caem aqui quando não o têm
+// (`rotularSituacaoPeloRito`). Terminais incluídos, para o quadro rotular o cartão sem outro mapa.
 const ROTULO_SITUACAO_POR_ESTADO: Record<string, string> = {
   protocolada: "Protocolado",
   em_comissoes: "Em comissões",
@@ -135,6 +136,25 @@ export function faixaDoRito(
       })),
     ],
   };
+}
+
+/**
+ * O rótulo da situação numa tela que tem o RITO DA CASA (ficha interna): o chip diz o mesmo que a faixa.
+ *
+ * 1. a partir do autógrafo, o desfecho decide ("Sancionada", "Virou lei", "Vetada"…), como em toda tela;
+ * 2. senão, se a faixa vem do rito (`faixaDoRito` não nulo), o nome que a Casa deu à etapa atual — o nome da Casa vence
+ *    o rótulo fixo do front;
+ * 3. sem rito verificável (sem rito, ou o rito não declara a etapa atual), o rótulo fixo de sempre (`rotularEstado`).
+ */
+export function rotularSituacaoPeloRito(
+  estado: string,
+  rito: RitoDaMateriaOut | null | undefined,
+  desfecho?: string | null,
+): string {
+  const peloDesfecho = situacaoDoDesfecho(desfecho);
+  if (peloDesfecho) return peloDesfecho.rotuloSituacao;
+  const nomeDaCasa = faixaDoRito(rito) ? rito?.atual?.rotulo.trim() : undefined;
+  return nomeDaCasa || rotularEstado(estado);
 }
 
 export function derivarTramitacao(

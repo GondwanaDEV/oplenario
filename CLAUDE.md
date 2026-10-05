@@ -48,7 +48,7 @@ não frente de trabalho:
 as 8 fases F0–F7 estão mergeadas em `main`** — F0 plataforma base · F1 cadastros+identidade ·
 F2 resolvedor de fatos (o KEYSTONE) · F3 legislativo (8 eixos) · F4 sessões+tempo real (HERO) ·
 F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. Ao fim da F7 eram 13
-módulos e 61 migrations; em 05/10/2026 são 133 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
+módulos e 61 migrations; em 05/10/2026 são 137 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
 marcos MFE-1 a MFE-4 cumpridos.
 
 **Marcos de valor demonstrável:** M1 (a Casa existe), M2 (compliance vivo), M3 (coração
@@ -504,20 +504,31 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **O interstício se mede pela abertura.** `abrir!` grava o instante da abertura em `efetivado_em`, vindo do relógio
     da borda; sem relógio, usa o `now()` da tx.
   - **O portal diz o turno.** O desfecho leva `:turno` e aparece como "Aprovada em 1º turno" / "Aprovada em 2º turno".
-    As votações públicas também levam `turno`. O selo só muda a partir do autógrafo.
+    As votações públicas também levam `turno`. O selo só muda a partir do autógrafo. A mig `20261005000280` reescreveu
+    na linha do tempo pública as votações de PELOM gravadas antes, com a mesma conta da projeção.
+  - **Votação não é "Etapa atual".** Em "Por onde a matéria passou", cada linha traz `votacao` (calculado da chave pela
+    `transparencia.logic.desfecho/votacao?`; a chave não sai), e a marca "Etapa atual" fica na etapa mais recente que
+    não é votação. A votação segue na lista com a data e o nome do ato.
   - **O painel da Mesa trava o quórum.** Para a PELOM, quando a pauta traz a espécie, o quórum fica em 2/3.
   - **A sigla é PELOM em todo lugar;** o backend dizia "PELO".
   - **A demo vota a emenda com 2/3** e a deixa aprovada só no 1º turno.
   - **Não foi mexido:**
-    - a PELOM aprovada antes, por maioria simples, fica como foi votada e passa a contar só como 1º turno;
+    - a PELOM aprovada antes, por maioria simples, fica como foi votada (em `legislativo`) e passa a contar só como 1º
+      turno;
     - turnos que só o Regimento pede (PL em dois turnos) e interstício maior que o da CF por LOM são `[GAP]`;
     - reapresentação depois da rejeição: `[GAP]`;
     - não vistos em browser: a ficha e as votações públicas com o turno.
 - **Falta:**
-  - a faixa do portal ainda é o mapa fixo (a projeção pública não carrega o rito); o chip da ficha usa o rótulo fixo e
-    a faixa o nome da Casa ("Em Plenário" e "Em Pauta" na mesma tela, na demo); `template_estado.ordem` não tem
-    validação nem significado documentado;
-  - em modo dev, conceder acesso grava o vínculo e devolve 500 (não há realm para provisionar);
+  - **chip pelo nome da Casa (05/10/2026):** na ficha interna o chip e a "Situação" do rail dizem o nome que o rito
+    dá à etapa atual, o mesmo da faixa (sem rito verificável, o rótulo fixo); a partir do autógrafo o selo segue o
+    desfecho, que a ficha agora lê da rota de pós-aprovação (`desfechoDaPosAprovacao`). A lista interna recebe
+    `rotulo-estado` (`template_estado.nome`, um LEFT JOIN a mais na mesma consulta) e o chip da ficha pública usa a
+    etapa da movimentação mais recente ("Etapa atual" de "Por onde a matéria passou"). **Resta:** o quadro de
+    tramitação e o painel da Mesa seguem no rótulo fixo (`rotularEstado`), porque `paineis.tramitacao` não guarda o
+    nome da etapa: pede coluna nova, projeção do rótulo que `proposicao.protocolada`/`transicionou` já carregam e
+    reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
+    portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
+    `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de

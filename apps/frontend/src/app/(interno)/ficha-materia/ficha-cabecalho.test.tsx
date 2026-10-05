@@ -120,9 +120,58 @@ describe("FichaCabecalho", () => {
       expect(faixa).toContain("atual Comissões");
     });
 
-    it("o chip de situação continua sendo o rótulo único de estado (o mesmo da lista)", () => {
-      render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: etapa("em_comissoes", "Em Comissões") }} />);
-      expect(screen.getByText("Em comissões")).toBeTruthy();
+    // Decisão de produto (05/10/2026): o chip e a faixa da mesma tela dizem a mesma coisa, e o nome da Casa vence. Antes
+    // o chip dizia "Em pauta" (rótulo fixo) e a faixa "Em Pauta" (nome da Casa), ou pior, nomes diferentes.
+    it("com rito, o chip diz o nome que a Casa deu à etapa atual, o mesmo da faixa", () => {
+      const rito: RitoDaMateriaOut = {
+        ...ritoEmLinha,
+        etapas: [etapa("protocolada", "Entrada"), etapa("em_comissoes", "Análise nas comissões"), etapa("em_pauta", "Na Ordem do Dia")],
+        atual: etapa("em_comissoes", "Análise nas comissões"),
+        proximas: [etapa("em_pauta", "Na Ordem do Dia")],
+      };
+      const { container } = render(<FichaCabecalho proposicao={proposicao} rito={rito} />);
+      const chip = container.querySelector(".ficha-cab .chip");
+      expect(chip?.textContent).toBe("Análise nas comissões");
+      expect(screen.queryByText("Em comissões")).toBeNull();
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("atual Análise nas comissões");
+    });
+
+    it("rito sem ordem única: o chip segue a etapa atual que a faixa mostra", () => {
+      const rito: RitoDaMateriaOut = {
+        ordemUnica: false,
+        etapas: [],
+        atual: etapa("analise", "Análise"),
+        anteriores: null,
+        proximas: [etapa("via_a", "Via A"), etapa("via_b", "Via B")],
+      };
+      const { container } = render(<FichaCabecalho proposicao={{ ...proposicao, estado: "analise" }} rito={rito} />);
+      expect(container.querySelector(".ficha-cab .chip")?.textContent).toBe("Análise");
+    });
+
+    it("sem rito verificável (atual nulo), o chip cai no rótulo fixo de sempre", () => {
+      const { container } = render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: null }} />);
+      expect(container.querySelector(".ficha-cab .chip")?.textContent).toBe("Em comissões");
+    });
+
+    it("a partir do autógrafo o selo vem do desfecho, não do rito (nem do nome da Casa)", () => {
+      const rito: RitoDaMateriaOut = {
+        ...ritoEmLinha,
+        etapas: [etapa("entrada", "Entrada"), etapa("aprovada", "Aprovada pelo Plenário", true)],
+        atual: etapa("aprovada", "Aprovada pelo Plenário", true),
+        proximas: [],
+      };
+      const { container } = render(
+        <FichaCabecalho proposicao={{ ...proposicao, estado: "aprovada" }} rito={rito} desfecho="vetado" />,
+      );
+      const chip = container.querySelector(".ficha-cab .chip");
+      expect(chip?.textContent).toBe("Vetada");
+      expect(chip?.className).toContain("chip-tram");
+    });
+
+    it("desfecho que só registra a votação não muda o selo: vale o nome da Casa", () => {
+      const { container } = render(<FichaCabecalho proposicao={proposicao} rito={ritoEmLinha} desfecho="aprovada" />);
+      expect(container.querySelector(".ficha-cab .chip")?.textContent).toBe("Instrução");
     });
   });
 });
