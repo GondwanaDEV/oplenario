@@ -247,6 +247,26 @@
 
 (declare garantir-mappers-do-client!)
 
+(def ^:private atributos-convergentes
+  "Atributos do client que o PUT de convergencia leva a um client que ja' existe (os outros ficam como o Keycloak os
+  tem). `post.logout.redirect.uris`: sem ele, o realm provisionado antes nunca aceitaria a volta do \"Sair\"."
+  ["post.logout.redirect.uris"])
+
+(defn destinos-pos-logout
+  "O atributo `post.logout.redirect.uris` do client web: a origem de cada redirect de login, com e sem a barra final,
+  separadas por `##` (o separador de lista do Keycloak). O \"Sair\" manda `post_logout_redirect_uri` = a origem do
+  app, sem `id_token_hint`; sem o atributo o Keycloak ignora o destino e termina em \"Voce saiu da sessao\", sem
+  volta. Sai dos `redirect-uris` (e nao dos `web-origins`) porque e' a lista que o login ja' prova certa em producao."
+  [redirect-uris]
+  (->> redirect-uris
+       (keep (fn [u] (try (let [url (java.net.URI. u)]
+                            (when (and (.getScheme url) (.getHost url))
+                              (str (.getScheme url) "://" (.getAuthority url))))
+                          (catch Exception _ nil))))
+       distinct
+       (mapcat (fn [o] [o (str o "/")]))
+       (str/join "##")))
+
 (defn garantir-client!
   "GET-then-converge idempotente de um client no realm: consulta por `client-id`; se NAO existe, POST do
   `payload`; se JA existe, PUT convergindo os campos declarativos que mudam entre deploys
@@ -265,7 +285,9 @@
     (if existente
       ;; PUT da representacao ATUAL com os campos de lista sobrepostos (mesmo padrao GET-then-PUT de
       ;; declarar-atributo-identidade!). Nao reescreve id/mappers/attributes — so' converge o que muda.
-      (let [alvo (merge existente (select-keys payload [:redirectUris :webOrigins :baseUrl]))
+      (let [alvo (cond-> (merge existente (select-keys payload [:redirectUris :webOrigins :baseUrl]))
+                   (seq (select-keys (:attributes payload) atributos-convergentes))
+                   (update :attributes merge (select-keys (:attributes payload) atributos-convergentes)))
             {:keys [status corpo]} (admin-req! http-client token :put
                                                (str "/admin/realms/" realm "/clients/" (:id existente)) alvo base-url)]
         (when-not (= 204 status)
@@ -558,7 +580,9 @@
                       {:clientId web-client-id :publicClient true :standardFlowEnabled true
                        :directAccessGrantsEnabled false
                        :redirectUris redirect-uris :webOrigins web-origins
-                       :attributes {"pkce.code.challenge.method" "S256"}
+                       :attributes (cond-> {"pkce.code.challenge.method" "S256"}
+                                     (seq (destinos-pos-logout redirect-uris))
+                                     (assoc "post.logout.redirect.uris" (destinos-pos-logout redirect-uris)))
                        ;; MESMOS mappers do client de audiencia: o token PKCE tem de carregar `identidade-id`
                        ;; E a audiencia `oplenario-backend`, senao verificar-token (.withAudience + claim
                        ;; identidade-id) rejeita -> "token invalido" no mint. O login real usa ESTE client,

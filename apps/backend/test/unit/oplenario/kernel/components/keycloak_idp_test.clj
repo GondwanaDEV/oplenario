@@ -237,7 +237,7 @@
       (str/includes? caminho "/clients?clientId=")
       (let [client-id (subs caminho (+ (str/index-of caminho "clientId=") (count "clientId=")))]
         (if (contains? clients-existentes client-id)
-          {:status 200 :corpo [{:id "existing-id" :clientId client-id}]}
+          {:status 200 :corpo [{:id "existing-id" :clientId client-id :attributes {"outro-atributo" "valor-antigo"}}]}
           {:status 200 :corpo []}))
 
       (= metodo :post) {:status 201 :corpo {}}
@@ -310,6 +310,34 @@
         (is (some? aud-mapper) "esperava o mapper de audiencia no client web")
         (is (= "oplenario-backend" (get-in aud-mapper [:config "included.client.audience"]))
             "a audiencia injetada tem de ser a do backend (:audiencia da config)")))))
+
+(deftest client-web-aceita-voltar-ao-sistema-depois-do-logout
+  ;; O "Sair" manda `post_logout_redirect_uri` = a origem do app, sem `id_token_hint`. Sem o atributo, o Keycloak
+  ;; ignora o destino e termina em "Voce saiu da sessao", sem caminho de volta (visto em producao, 05/10/2026).
+  (testing "client novo: o atributo lista a origem do redirect de login, com e sem a barra final"
+    (let [post-web (post-do-client (provisionar-capturando! #{}) "oplenario-web")]
+      (is (= "http://localhost:3000##http://localhost:3000/"
+             (get-in post-web [:corpo :attributes "post.logout.redirect.uris"])))))
+  (testing "client que ja' existe: o PUT de convergencia leva o atributo, sem perder os outros"
+    (let [chamadas (provisionar-capturando! #{"oplenario-web" "oplenario-backend"})
+          put-web (some #(when (and (= :put (:metodo %)) (str/ends-with? (:caminho %) "/clients/existing-id")
+                                    (= "oplenario-web" (get-in % [:corpo :clientId])))
+                           %)
+                        chamadas)]
+      (is (some? put-web) "esperava o PUT de convergencia do client web")
+      (is (= "http://localhost:3000##http://localhost:3000/"
+             (get-in put-web [:corpo :attributes "post.logout.redirect.uris"])))
+      (is (= "valor-antigo" (get-in put-web [:corpo :attributes "outro-atributo"]))
+          "atributo que o Keycloak ja' tinha nao some no PUT"))))
+
+(deftest destinos-pos-logout-sai-da-origem-dos-redirects-de-login
+  (is (= "https://oplenario.calvetec.com.br##https://oplenario.calvetec.com.br/"
+         (kc/destinos-pos-logout ["https://oplenario.calvetec.com.br/api/auth/callback"])))
+  (is (= "http://localhost:3000##http://localhost:3000/##https://a.b:8443##https://a.b:8443/"
+         (kc/destinos-pos-logout ["http://localhost:3000/api/auth/callback" "http://localhost:3000/outro"
+                                  "https://a.b:8443/api/auth/callback"]))
+      "origem repetida entra uma vez; a porta fica")
+  (is (= "" (kc/destinos-pos-logout ["nao e' url" "/relativo"])) "o que nao e' URL absoluta nao entra"))
 
 (deftest provisionar-realm-idempotente-nao-recria-client-web
   (let [chamadas (provisionar-capturando! #{"oplenario-web" "oplenario-backend"})]

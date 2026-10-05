@@ -160,7 +160,10 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   operador). Agora está no menu do avatar do topo interno, no topo da área da cidadã, em "Meu acesso" do vereador e no
   `/inicio` de quem não tem o topo; é um POST em `/api/auth/logout` (`lib/botao-sair.tsx`). O Keycloak pergunta "Você
   realmente deseja sair?" porque o logout vai sem `id_token_hint` (o login não guarda token); a sessão do sistema já
-  caiu antes da pergunta. Cookie `sessao` que o backend não reconhece mais (401 em `/eu`) leva a
+  caiu antes da pergunta. Sem o atributo `post.logout.redirect.uris` no client `oplenario-web` o Keycloak ignorava a
+  volta e parava em "Você saiu da sessão" (visto em produção); o provisionamento agora o grava (a origem de cada
+  redirect de login, `destinos-pos-logout`) e o converge nos realms existentes: em produção, rodar
+  `reaplicar-login-prd` depois do deploy da API. Cookie `sessao` que o backend não reconhece mais (401 em `/eu`) leva a
   `/api/auth/sessao-expirada`, que confere no backend, apaga os cookies e abre `/entrar` com o destino; com a sessão
   válida ou o backend fora do ar, não desloga. Antes a pessoa caía no `/inicio` sem papel, sem topo e sem como sair.
 
