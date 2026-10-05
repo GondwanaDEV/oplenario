@@ -8,6 +8,7 @@ import {
   TETO_ITENS_VISIVEIS_POR_COLUNA,
 } from "./tramitacao-board-vista";
 import { formatarEspecieProposicao } from "./proposicoes-vista";
+import { derivarTramitacao } from "./tramitacao-vista";
 import type { ItemBoardOut, TotalPorEstadoOut } from "./contrato-mesa.gen";
 
 // Onda B Slice 4 (tramitacao-board-vista) — agrupa ItemBoardOut (já vem agrupado/ordenado por
@@ -56,25 +57,49 @@ describe("derivarBoard", () => {
     expect(comissoes.itens).toHaveLength(1);
   });
 
-  it("em_pauta e aguardando_pauta -> ambos caem em Pronta p/ pauta (azulejo amarelo)", () => {
+  // 05/10/2026: o quadro punha `em_pauta` em "Pronta p/ pauta", e a ficha dizia "Em pauta". No rito da Casa
+  // (apps/backend/demo/acervo.clj) a matéria só está PRONTA em `aguardando_pauta`; ao `incluir_pauta` ela já
+  // está numa pauta e o Plenário é quem decide (`em_pauta` -> `aprovada`/`arquivada`).
+  it("aguardando_pauta -> Pronta p/ pauta (azulejo amarelo); em_pauta NÃO está pronta, já está na pauta", () => {
     const colunas = derivarBoard([
       item({ proposicaoId: "3", estado: "em_pauta" }),
       item({ proposicaoId: "4", estado: "aguardando_pauta" }),
     ]);
     const pronta = colunas.find((c) => c.titulo === "Pronta p/ pauta")!;
     expect(pronta.azulejo).toBe("amarelo");
-    expect(pronta.itens.map((i) => i.proposicaoId)).toEqual(["3", "4"]);
+    expect(pronta.itens.map((i) => i.proposicaoId)).toEqual(["4"]);
   });
 
-  it("primeiro_turno, segundo_turno e em_sancao -> todos caem em Em Plenário (azulejo telha)", () => {
+  it("em_pauta, primeiro_turno, segundo_turno e em_sancao -> todos caem em Em Plenário (azulejo telha)", () => {
     const colunas = derivarBoard([
+      item({ proposicaoId: "3", estado: "em_pauta" }),
       item({ proposicaoId: "5", estado: "primeiro_turno" }),
       item({ proposicaoId: "6", estado: "segundo_turno" }),
       item({ proposicaoId: "7", estado: "em_sancao" }),
     ]);
     const plenario = colunas.find((c) => c.titulo === "Em Plenário")!;
     expect(plenario.azulejo).toBe("telha");
-    expect(plenario.itens.map((i) => i.proposicaoId)).toEqual(["5", "6", "7"]);
+    expect(plenario.itens.map((i) => i.proposicaoId)).toEqual(["3", "5", "6", "7"]);
+  });
+
+  it("o total autoritativo segue a mesma regra: em_pauta soma em Em Plenário, não em Pronta p/ pauta", () => {
+    const colunas = derivarBoard([], [
+      { estado: "aguardando_pauta", total: 4 },
+      { estado: "em_pauta", total: 2 },
+    ]);
+    expect(colunas.find((c) => c.titulo === "Pronta p/ pauta")!.total).toBe(4);
+    expect(colunas.find((c) => c.titulo === "Em Plenário")!.total).toBe(2);
+  });
+
+  // O cartão do quadro e a ficha leem o rótulo da mesma função (rotularEstado). Chaves reais da demo.
+  it("o cartão traz a situação com o MESMO rótulo da ficha, para cada estado do rito da demo", () => {
+    for (const estado of ["protocolada", "em_comissoes", "aguardando_pauta", "em_pauta", "aprovada", "arquivada"]) {
+      const colunas = derivarBoard([item({ proposicaoId: "x", estado })]);
+      const cartao = colunas.flatMap((c) => c.itens)[0];
+      expect(cartao.situacao).toBe(derivarTramitacao(estado).rotuloSituacao);
+    }
+    const colunas = derivarBoard([item({ proposicaoId: "x", estado: "em_pauta" })]);
+    expect(colunas.flatMap((c) => c.itens)[0].situacao).toBe("Em pauta");
   });
 
   it("estados aprovados e arquivados -> ambos caem em Concluídas (azulejo verde)", () => {

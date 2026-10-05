@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categorizarSituacao, derivarProposicoesVista } from "./proposicoes-vista";
+import { categorizarSituacao, derivarProposicoesVista, ESTADOS_AGUARDANDO_PAUTA, ESTADOS_EM_PAUTA } from "./proposicoes-vista";
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
 const base: ProposicaoResumoOut = {
@@ -64,6 +64,11 @@ describe("categorizarSituacao", () => {
   it("estado de espera de pauta categoriza como 'aguarda'", () => {
     expect(categorizarSituacao("em_pauta")).toBe("aguarda");
     expect(categorizarSituacao("aguardando_pauta")).toBe("aguarda");
+  });
+
+  it("ESTADOS_AGUARDANDO_PAUTA é só a matéria pronta (aguardando_pauta); em_pauta tem o próprio conjunto", () => {
+    expect([...ESTADOS_AGUARDANDO_PAUTA]).toEqual(["aguardando_pauta"]);
+    expect([...ESTADOS_EM_PAUTA]).toEqual(["em_pauta"]);
   });
 
   it("estado terminal de sucesso categoriza como 'aprovada'", () => {

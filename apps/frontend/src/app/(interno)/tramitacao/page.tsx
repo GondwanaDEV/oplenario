@@ -154,6 +154,7 @@ export default function PaginaTramitacao() {
                       <article className="mat" key={item.proposicaoId}>
                         <div className="mat-topo">
                           <span className="mat-num">{item.numero}</span>
+                          <span className="mat-situacao">{item.situacao}</span>
                         </div>
                         <h3>
                           <Link href={comToken(`/ficha-materia/${encodeURIComponent(item.proposicaoId)}`, token)}>

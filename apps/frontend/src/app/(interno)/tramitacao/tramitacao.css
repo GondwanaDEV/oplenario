@@ -70,6 +70,8 @@
 .mat { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra); padding: 0.8rem 0.85rem; display: grid; gap: 0.5rem; }
 .mat-topo { display: flex; align-items: center; gap: 0.5rem; }
 .mat-num { font-family: var(--mono); font-weight: 600; font-size: var(--t-12); color: var(--acento-texto); }
+/* a situação do cartão: o mesmo rótulo que a ficha da matéria mostra (rotularEstado). */
+.mat-situacao { margin-left: auto; font-size: var(--t-12); color: var(--texto-2); text-align: right; }
 .mat h3 { font-family: var(--corpo); font-weight: 600; font-size: var(--t-13); line-height: 1.35; margin: 0; }
 .mat h3 a { color: var(--texto); text-decoration: none; }
 .mat h3 a:hover { text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--marca) 40%, transparent); text-underline-offset: 2px; }

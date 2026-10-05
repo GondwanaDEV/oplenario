@@ -65,12 +65,18 @@ export type LinhaProposicaoVista = {
 // conjuntos de estado usados aqui pro chip de status; nenhum vocabulário novo é inventado lá.
 export const ESTADOS_APROVADOS = new Set(["aprovada", "sancionado", "sancao_tacita", "veto_derrubado"]);
 export const ESTADOS_ARQUIVADOS = new Set(["arquivada", "rejeitada", "prejudicada", "retirada"]);
-export const ESTADOS_AGUARDANDO_PAUTA = new Set(["em_pauta", "aguardando_pauta"]);
+// "Pronta para pauta": a comissão concluiu e a matéria espera ser incluída. NÃO inclui `em_pauta` — esse já
+// foi incluído (rito da demo: aguardando_pauta -> incluir_pauta -> em_pauta -> aprovar|rejeitar), e contá-lo
+// aqui fazia o quadro e o painel inicial chamarem de "pronta" uma matéria que o Plenário já vai decidir.
+export const ESTADOS_AGUARDANDO_PAUTA = new Set(["aguardando_pauta"]);
+// Já incluída numa pauta de sessão; o Plenário decide. Usado pelo quadro (coluna "Em Plenário").
+export const ESTADOS_EM_PAUTA = new Set(["em_pauta"]);
 
 export function categorizarSituacao(estado: string): CategoriaSituacao {
   if (ESTADOS_APROVADOS.has(estado)) return "aprovada";
   if (ESTADOS_ARQUIVADOS.has(estado)) return "arquivada";
-  if (ESTADOS_AGUARDANDO_PAUTA.has(estado)) return "aguarda";
+  // as duas esperas de pauta compartilham o chip "aguarda" (cor âmbar): a diferença está no rótulo.
+  if (ESTADOS_AGUARDANDO_PAUTA.has(estado) || ESTADOS_EM_PAUTA.has(estado)) return "aguarda";
   return "tram";
 }
 
