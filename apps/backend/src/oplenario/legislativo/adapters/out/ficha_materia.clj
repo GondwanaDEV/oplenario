@@ -50,6 +50,10 @@
    :comissao-nome (:comissao-nome linha)
    :relator-id (->str (:relator-id linha)) :relator-nome (:relator-nome linha) :voto-relator (:voto-relator linha) :estado (:estado linha)})
 
+(defn- ato->wire [a]
+  (-> (select-keys a [:ato :redacao-final :veto-tipo :tipo-norma :numero :ano])
+      (assoc :ocorrido-em (->str (:ocorrido-em a)))))
+
 (defn ficha->wire
   "`proposicao-out` = ProposicaoDetalheOut JA PROJETADO (o diplomat chamou `adapters.out.proposicao/
   detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :tramitacao-truncado :apensadas
@@ -66,7 +70,7 @@
   CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
   pra' pegar exatamente esse produtor incompleto)."
   [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
-                          emendas emendas-truncado pareceres pareceres-truncado coautores]}]
+                          emendas emendas-truncado pareceres pareceres-truncado coautores atos]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
@@ -79,5 +83,7 @@
              :pareceres-truncado pareceres-truncado
              ;; fatia 2c: so' materia de requerimento coletivo tem coautores; as demais saem com []
              :coautores (mapv (fn [c] {:nome (:vereador-nome c) :assinado-em (->str (:assinado-em c))})
-                              coautores)}
+                              coautores)
+             ;; docs/16 linha 30: os atos depois do plenario (aprovacao, autografo, sancao/veto, lei)
+             :atos (mapv ato->wire atos)}
             "ficha da materia"))

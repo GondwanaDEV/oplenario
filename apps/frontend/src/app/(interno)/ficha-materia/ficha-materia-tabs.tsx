@@ -15,7 +15,7 @@ import { AcoesTramitacao } from "./acoes-tramitacao";
 import { PainelResumo } from "./painel-resumo";
 import { PainelParecerJuridico } from "./painel-parecer-juridico";
 import { DesignarRelator } from "./designar-relator";
-import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas, rotularRelator, type ParecerResumoComRelator } from "@/lib/ficha-materia-vista";
+import { derivarLinhaDoTempo, derivarPareceres, derivarEmendas, rotularRelator, type ParecerResumoComRelator } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
 import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
@@ -43,7 +43,7 @@ export function FichaMateriaTabs({
   // useMemo: todos os 5 painéis ficam montados simultaneamente (só `hidden` alterna, ver abaixo) — sem
   // isto, o sort()+map() das 3 derivações reroda a cada keypress de navegação das abas (ArrowLeft/Right/
   // Home/End), mesmo quando `ficha` não mudou (achado do review desta fatia).
-  const timeline = useMemo(() => derivarTimelineTramitacao(ficha.tramitacao), [ficha.tramitacao]);
+  const timeline = useMemo(() => derivarLinhaDoTempo(ficha.tramitacao, ficha.atos), [ficha.tramitacao, ficha.atos]);
   const pareceres = useMemo(() => derivarPareceres(ficha.pareceres as ParecerResumoComRelator[]), [ficha.pareceres]);
   const ehSecretaria = papeis.includes("secretario");
   const emendas = useMemo(() => derivarEmendas(ficha.emendas), [ficha.emendas]);
@@ -161,16 +161,24 @@ export function FichaMateriaTabs({
               </p>
             )}
             <ol className="tempo">
-              {timeline.map((item, i) => (
-                <li key={`${item.ocorridoEm}-${i}`}>
-                  <span className="data">{formatarData(item.ocorridoEm)}</span>
-                  <p className="evt">
-                    {item.rotuloDe} → {item.rotuloPara}
-                  </p>
-                  <span className="quem">{item.gatilho}</span>
-                  {item.recebimentoTexto && <span className="recebido">{item.recebimentoTexto}</span>}
-                </li>
-              ))}
+              {timeline.map((item, i) =>
+                item.tipo === "ato" ? (
+                  // docs/16 linha 30: aprovação, autógrafo, sanção/veto e lei entram na mesma linha do tempo
+                  <li key={`${item.ocorridoEm}-${i}`} className="ato">
+                    <span className="data">{formatarData(item.ocorridoEm)}</span>
+                    <p className="evt">{item.texto}</p>
+                  </li>
+                ) : (
+                  <li key={`${item.ocorridoEm}-${i}`}>
+                    <span className="data">{formatarData(item.ocorridoEm)}</span>
+                    <p className="evt">
+                      {item.rotuloDe} → {item.rotuloPara}
+                    </p>
+                    <span className="quem">{item.gatilho}</span>
+                    {item.recebimentoTexto && <span className="recebido">{item.recebimentoTexto}</span>}
+                  </li>
+                ),
+              )}
             </ol>
           </>
         )}

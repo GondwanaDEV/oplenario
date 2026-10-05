@@ -41,7 +41,7 @@ export function derivarRef(m: Pick<MateriaOut, "tipo" | "sequencial" | "ano">): 
 }
 
 function paraVista(m: MateriaOut): MateriaVista {
-  const { estagios, rotuloSituacao } = derivarTramitacao(m.estado);
+  const { estagios, rotuloSituacao } = derivarTramitacao(m.estado, m.desfecho);
   return {
     ref: derivarRef(m),
     titulo: m.ementa,

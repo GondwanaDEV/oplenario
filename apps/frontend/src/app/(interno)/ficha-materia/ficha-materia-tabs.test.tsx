@@ -32,6 +32,7 @@ const ficha: FichaMateriaOut = {
   ],
   pareceresTruncado: false,
   coautores: [],
+  atos: [],
 };
 
 describe("FichaMateriaTabs", () => {
@@ -60,6 +61,29 @@ describe("FichaMateriaTabs", () => {
     // pro detector de underscore da sonda. `rotularVoto` já existia em parecer-vista.ts e não estava
     // sendo usado aqui; achado olhando a tela viva, não a suíte.
     expect(screen.getByText(/Voto do relator: Favorável$/)).toBeTruthy();
+  });
+
+  it("aba Tramitação: a aprovação, o autógrafo e a lei entram na linha do tempo (docs/16 linha 30)", () => {
+    render(
+      <FichaMateriaTabs
+        ficha={{
+          ...ficha,
+          atos: [
+            { ato: "aprovada", ocorridoEm: "2026-05-01T12:00:00Z" },
+            { ato: "autografo_enviado", ocorridoEm: "2026-05-02T12:00:00Z", numero: 8, ano: 2026 },
+            { ato: "publicada", ocorridoEm: "2026-06-10T12:00:00Z", tipoNorma: "lei", numero: 5, ano: 2026 },
+          ],
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /tramitação/i }));
+    const itens = within(document.querySelector("ol.tempo") as HTMLElement).getAllByRole("listitem");
+    expect(itens.map((li) => li.querySelector(".evt")?.textContent)).toEqual([
+      "Publicação: Lei nº 5/2026",
+      "Autógrafo nº 8/2026 enviado ao Executivo",
+      "Aprovada em plenário",
+      "Protocolado → Em comissões",
+    ]);
   });
 
   it("aba Pareceres: com nome servido pelo backend, a linha diz a comissão de verdade", () => {

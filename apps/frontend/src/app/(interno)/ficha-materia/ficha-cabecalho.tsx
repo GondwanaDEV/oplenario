@@ -9,6 +9,7 @@
 
 import { formatarNumeroProposicao, formatarEspecieProposicao, categorizarSituacao } from "@/lib/proposicoes-vista";
 import { derivarTramitacao, descreverFaixa } from "@/lib/tramitacao-vista";
+import { categoriaDoDesfecho } from "@/lib/desfecho-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { formatarData } from "@/lib/formatar-data";
 import type { CoautorOut, ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
@@ -16,15 +17,18 @@ import type { CoautorOut, ProposicaoDetalheOut } from "@/lib/contrato-legislativ
 export function FichaCabecalho({
   proposicao,
   coautores = [],
+  desfecho = null,
 }: {
   proposicao: ProposicaoDetalheOut;
+  /** o último ato depois do plenário (docs/16 linha 18): quando existe, é ele que diz onde a matéria está */
+  desfecho?: string | null;
   /** fatia 2c: quem subscreveu o requerimento coletivo (assinou antes do protocolo). */
   coautores?: CoautorOut[];
 }) {
   const numero = formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano);
   const especie = formatarEspecieProposicao(proposicao.tipo);
-  const { estagios, rotuloSituacao } = derivarTramitacao(proposicao.estado);
-  const categoria = categorizarSituacao(proposicao.estado);
+  const { estagios, rotuloSituacao } = derivarTramitacao(proposicao.estado, desfecho);
+  const categoria = categoriaDoDesfecho(desfecho) ?? categorizarSituacao(proposicao.estado);
 
   return (
     <>

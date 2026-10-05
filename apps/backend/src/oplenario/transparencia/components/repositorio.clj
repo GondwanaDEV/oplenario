@@ -46,6 +46,7 @@
             [oplenario.transparencia.db.norma :as db-norma]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.events.notificacao :as ev-notif]
+            [oplenario.transparencia.logic.desfecho :as desfecho]
             [oplenario.transparencia.logic.notificacao :as logic-notif])
   (:import (java.time Instant)
            (java.util UUID)))
@@ -147,6 +148,24 @@
       (db-movimentacao/registrar! tx {:ente-id ente-id :proposicao-id proposicao-id :ocorrido-em instante
                                       :etapa-chave chave :etapa etapa :inicial? inicial?}))))
 
+(defn- registrar-desfecho!
+  "Um ato depois do plenario: entra na linha do tempo publica (com o rotulo de logic/desfecho) e vira o desfecho da
+  materia, que da' a situacao no portal. Ato desconhecido (evento de versao futura) ou instante invalido = LOG, nada
+  projetado (mesma tolerancia de registrar-movimentacao!: o relay e' compartilhado)."
+  [tx ente-id proposicao-id a tipo]
+  (let [instante (instant-tolerante (:ocorrido-em a))
+        rotulo   (desfecho/rotulo a)]
+    (if (or (nil? instante) (nil? rotulo))
+      (log/warn "transparencia: ato depois do plenario sem instante ou ato desconhecido — nao projetado"
+                {:tipo tipo :ente-id ente-id :proposicao-id proposicao-id :ato (:ato a)})
+      (do (registrar-movimentacao! tx ente-id proposicao-id
+                                   {:ocorrido-em (:ocorrido-em a) :chave (desfecho/chave a) :nome rotulo
+                                    :inicial? false :tipo tipo})
+          (or (db-materia/atualizar-desfecho! tx {:ente-id ente-id :proposicao-id proposicao-id
+                                                  :desfecho (:ato a) :desfecho-em instante})
+              (log/warn "transparencia: desfecho sem materia projetada (ou ato ja' superado)"
+                        {:ente-id ente-id :proposicao-id proposicao-id :ato (:ato a)}))))))
+
 (defn despachar!
   "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause')
   OU em payload malformado ({:pre ...} de db/, UUID/Instant invalidos). PUBLICA (nao `defn-`) DE
@@ -204,11 +223,22 @@
           (log/warn "transparencia: proposicao.transicionou sem materia projetada (protocolada ausente?)"
                     {:ente-id ente-id :proposicao-id pid :para (:para payload)})))
 
+    ;; docs/16 linhas 18 e 30: aprovada/rejeitada em plenario, autografo, sancao/veto, apreciacao do veto, promulgacao
+    "proposicao.desfecho-registrado"
+    (registrar-desfecho! tx ente-id (UUID/fromString (str (:proposicao-id payload))) payload
+                         "proposicao.desfecho-registrado")
+
     "norma.publicada"
-    (db-norma/inserir! tx (-> payload
-                              (uuid-payload [:norma-id :proposicao-id])
-                              (assoc :ente-id ente-id)
-                              (update :publicado-em #(Instant/parse %))))
+    (let [r (db-norma/inserir! tx (-> payload
+                                      (uuid-payload [:norma-id :proposicao-id])
+                                      (assoc :ente-id ente-id)
+                                      (update :publicado-em #(Instant/parse %))))]
+      ;; a publicacao e' o ultimo ato: entra na linha do tempo e a materia "virou lei" no portal
+      (registrar-desfecho! tx ente-id (UUID/fromString (str (:proposicao-id payload)))
+                           {:ato "publicada" :ocorrido-em (:publicado-em payload) :tipo-norma (:tipo-norma payload)
+                            :numero (:numero payload) :ano (:ano payload)}
+                           "norma.publicada")
+      r)
 
     "artefato.publicacao.gerado"
     (db-artefato/inserir! tx (-> payload

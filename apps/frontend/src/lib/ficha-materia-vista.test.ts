@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { COMISSAO_SEM_NOME } from "./comissao-vista";
 import {
+  derivarLinhaDoTempo,
+  desfechoDaFicha,
   derivarDadosMateria,
   derivarTimelineTramitacao,
   derivarPareceres,
@@ -44,6 +46,7 @@ const fichaBase: FichaMateriaOut = {
   ],
   pareceresTruncado: false,
   coautores: [],
+  atos: [],
 };
 
 describe("derivarDadosMateria", () => {
@@ -230,5 +233,32 @@ describe("derivarEmendas", () => {
 
   it("lista vazia -> array vazio", () => {
     expect(derivarEmendas([])).toEqual([]);
+  });
+});
+
+describe("derivarLinhaDoTempo (docs/16 linha 30)", () => {
+  it("junta as movimentações do rito e os atos depois do plenário, do mais novo ao mais antigo", () => {
+    const itens = derivarLinhaDoTempo(
+      [
+        { deEstado: "protocolada", paraEstado: "em_comissoes", gatilho: "despachar", ocorridoEm: "2026-03-01T12:00:00Z", recebimento: null },
+        { deEstado: "em_comissoes", paraEstado: "aguardando_pauta", gatilho: "concluir", ocorridoEm: "2026-04-01T12:00:00Z", recebimento: null },
+      ],
+      [
+        { ato: "aprovada", ocorridoEm: "2026-05-01T12:00:00Z" },
+        { ato: "autografo_enviado", ocorridoEm: "2026-05-02T12:00:00Z", numero: 8, ano: 2026 },
+        { ato: "ato_de_uma_versao_futura", ocorridoEm: "2026-05-03T12:00:00Z" },
+      ],
+    );
+    expect(itens.map((i) => (i.tipo === "ato" ? i.texto : `${i.rotuloDe} → ${i.rotuloPara}`))).toEqual([
+      "Autógrafo nº 8/2026 enviado ao Executivo",
+      "Aprovada em plenário",
+      "Em comissões → Aguardando pauta",
+      "Protocolado → Em comissões",
+    ]);
+  });
+
+  it("o desfecho da ficha é o último ato; sem atos, nenhum", () => {
+    expect(desfechoDaFicha({ atos: [{ ato: "aprovada", ocorridoEm: "x" }, { ato: "vetado", ocorridoEm: "y" }] })).toBe("vetado");
+    expect(desfechoDaFicha({ atos: [] })).toBeNull();
   });
 });

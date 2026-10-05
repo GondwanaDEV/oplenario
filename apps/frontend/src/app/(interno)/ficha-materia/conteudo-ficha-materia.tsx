@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useAuth, usePapeis } from "@/lib/auth";
 import { useFichaMateria } from "@/lib/use-ficha-materia";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { derivarDadosMateria } from "@/lib/ficha-materia-vista";
+import { derivarDadosMateria, desfechoDaFicha } from "@/lib/ficha-materia-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { FichaCabecalho } from "./ficha-cabecalho";
@@ -74,7 +74,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
           <b>{numero}</b>
         </nav>
 
-        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} />
+        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} desfecho={desfechoDaFicha(ficha)} />
 
         <div className="corpo">
           <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} onTramitou={recarregar} />

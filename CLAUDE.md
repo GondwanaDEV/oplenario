@@ -368,6 +368,11 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
 - **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
   criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
 - **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
+- **Desfecho da matéria (retriagem 18 e 30):** cada ato depois do plenário (aprovada/rejeitada, autógrafo, sanção ou
+  veto, apreciação do veto, promulgação) emite `proposicao.desfecho-registrado`. O portal guarda o último em
+  `transparencia.materia.desfecho` e a situação vem dele ("Aprovada em plenário", "Virou lei"), não mais do estado do
+  rito; os atos entram em "Por onde a matéria passou" e na aba Tramitação da ficha interna. A migration
+  20261005000210 reconstrói os atos anteriores. Matéria de dois turnos aparece aprovada desde o 1º turno.
 - **Cockpit com duas sessões em curso:** `/votar` abre a aberta mais recente e oferece a troca para a outra (`?sessao=`);
   `GET /meu/sessao-atual` lista `sessoes-vivas`. A Trilha 3 abre o cockpit com a sessão explícita.
 - **Dashboard da Mesa:** "em tramitação" vem do rito (`template_estado.terminal`, levado pelo evento

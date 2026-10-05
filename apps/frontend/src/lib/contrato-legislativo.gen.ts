@@ -87,6 +87,16 @@ export interface CoautorOut {
   assinadoEm: string;
 }
 
+export interface AtoDepoisDoPlenarioOut {
+  ato: string;
+  ocorridoEm: string;
+  redacaoFinal?: boolean;
+  vetoTipo?: string;
+  tipoNorma?: string;
+  numero?: number;
+  ano?: number;
+}
+
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
@@ -98,6 +108,7 @@ export interface FichaMateriaOut {
   pareceres: ParecerResumoOut[];
   pareceresTruncado: boolean;
   coautores: CoautorOut[];
+  atos: AtoDepoisDoPlenarioOut[];
 }
 
 export interface ObjetoResumoOut {

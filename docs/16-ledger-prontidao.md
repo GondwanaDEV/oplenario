@@ -2773,6 +2773,19 @@ O que essas frentes deixaram registrado:
     em curso agora" com o link para a outra;
   - a Trilha 3 abre o `/votar` com `?sessao=` explícito, então não depende mais da ordem.
   A vista `sli_sessao` segue sem o tipo da sessão: o rótulo da troca é a hora em que a sessão abriu.
+- **Desfecho da matéria (05/10/2026, linhas 18 e 30):**
+  - evento novo `proposicao.desfecho-registrado`, emitido na tx de cada ato: votação encerrada da matéria ou da
+    redação final (aprovada/rejeitada), autógrafo, resposta do Executivo, apreciação do veto e promulgação. A
+    publicação segue em `norma.publicada`, que agora também entra na linha do tempo;
+  - o portal guarda o último ato em `transparencia.materia.desfecho` (só avança: reentrega fora de ordem não volta
+    atrás) e a situação e a faixa vêm dele; sem desfecho, vêm do estado do rito como antes;
+  - a ficha interna lê os mesmos atos das tabelas donas (`legislativo/db/desfecho.clj`) e os mistura à aba
+    Tramitação; o chip da situação usa o último;
+  - os rótulos estão em dois lugares que mudam juntos: `transparencia/logic/desfecho.clj` (e o backfill SQL da
+    migration 20261005000210, conferido por `desfecho_da_materia_test`) e `lib/desfecho-vista.ts`;
+  - **limites:** matéria de dois turnos aparece "Aprovada em plenário" desde o 1º turno (cada votação encerrada é um
+    ato; o rito não diz quantos turnos faltam); a lista interna de proposições e o quadro de tramitação seguem lendo
+    só o estado do rito; votação corretiva (sem rota hoje) entraria como mais um ato.
 - **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
   perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
   o problema: confere a sessão.
@@ -2813,7 +2826,7 @@ O que essas frentes deixaram registrado:
 | 15 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |
 | 16 | Responder um pedido não notifica o cidadão | alto | `participacao/events/prazo.clj` | espera SMTP/push |
 | 17 | `secretario` não é papel concedível pela tela | alto | `identidade/wire/in/acesso.clj:7` | decisão do fundador |
-| 18 | Matéria aprovada em plenário segue "Aguardando pauta" no portal: encerrar a votação não move o rito e o portal só lê o `estado` (a ficha interna já lê o ato, `aprovada`) | alto | `legislativo/components/repositorio.clj:938-956`; `legislativo/controllers.clj:373` (único chamador de `transicionar!`); `transparencia/db/materia.clj:15` | parte; o portal ler o ato é código, mover o estado é decisão do fundador |
+| 18 | ~~Matéria aprovada em plenário segue "Aguardando pauta" no portal: encerrar a votação não move o rito e o portal só lê o `estado` (a ficha interna já lê o ato, `aprovada`)~~ **fechado em 05/10/2026:** cada ato depois do plenário emite `proposicao.desfecho-registrado`; o portal guarda o último (`transparencia.materia.desfecho`) e a situação vem dele ("Aprovada em plenário", "Virou lei"). O estado do rito segue intocado: movê-lo continua decisão do fundador | alto | `legislativo/components/repositorio.clj:938-956`; `legislativo/controllers.clj:373` (único chamador de `transicionar!`); `transparencia/db/materia.clj:15` | parte; o portal ler o ato é código, mover o estado é decisão do fundador |
 | 19 | A obrigação de compliance não conhece nenhuma matéria: só nasce de competência (SIM, metas fiscais) ou de prestação de contas | alto | `gatilho_compliance.clj:85-86` e `:229-237` | decisão do fundador (quais prazos por matéria) |
 | 20 | Não existe tramitação pública: o portal guarda só o `estado`, sem histórico de movimentações | alto | `transparencia/diplomat/http/in.clj:220-253` (nenhuma rota de histórico); `transparencia/db/materia.clj:44-64` | sim |
 | 21 | Nenhum item permanente do art. 8º §1º da LAI no portal (estrutura, competências, endereço, horário, perguntas frequentes) | alto | `(publico)/navegacao-civica.tsx:23-62` (só cartões; "Carta de Serviços" em breve) | parte; o conteúdo vem da Casa |
@@ -2825,7 +2838,7 @@ O que essas frentes deixaram registrado:
 | 27 | O número do item na pauta é um só por sessão, não por fase: o primeiro item lido aparece como "item 5" | médio | `sessoes/db/pauta.clj:~113` (`proxima-ordem` sem fase); `sessoes/[id]/conduzir/painel-votacao.tsx:240`; `sessoes/[id]/tv/page.tsx:330` | sim |
 | 28 | A fila da tribuna nunca esvazia: quem já falou segue inscrito, inclusive com a palavra | médio | `sessoes/logic.clj:1060` (só `desistencia` é terminal); `sessoes/db/tribuna.clj:185-194` (iniciar a fala não consome a inscrição); `sessoes/controllers.clj:1178`; `lib/plenario-reducer.ts:720-733` | sim |
 | 29 | Atos humanos aparecem como prefixo de UUID ("Chamada · dbf001fc", "Conduzida por (id)") | médio | `sessoes/[id]/chamada/page.tsx:960`; `sessoes/components/serializador_folha.clj:358` | sim |
-| 30 | Autógrafo e sanção não aparecem na linha do tempo da matéria | médio | `lib/ficha-materia-vista.ts:72-92` (só o histórico de tramitação) | sim |
+| 30 | ~~Autógrafo e sanção não aparecem na linha do tempo da matéria~~ **fechado em 05/10/2026:** aprovação, autógrafo, sanção/veto, apreciação do veto, promulgação e publicação entram na linha do tempo da ficha interna (`atos` da ficha) e na pública ("Por onde a matéria passou"); a migration 20261005000210 reconstrói os atos anteriores | médio | `lib/ficha-materia-vista.ts:72-92` (só o histórico de tramitação) | sim |
 | 31 | O prazo de resposta do Executivo não pode ser informado: a tela gera o autógrafo sem prazo | médio | `pos-aprovacao/conteudo-pos-aprovacao.tsx:77` (`gerar({})`); `legislativo/wire/in/pos_aprovacao.clj:19-23` (o backend aceita); `pos-aprovacao/card-autografo.tsx:23-25` | sim; o prazo por LOM é `[GAP]`, a Casa digita |
 | 32 | O gráfico "Carga por estágio" sai cinza: 5 chaves de cor, e uma (`em_comissao`) nem existe | médio | `paineis/mesa/pipeline-legislativo.tsx:20-26` | sim |
 | 33 | Nada é clicável no Dashboard da Mesa: nenhum link nem botão nos cartões | médio | `paineis/mesa/*.tsx` (nenhum `<a>`, `<button>` ou `Link`) | sim |

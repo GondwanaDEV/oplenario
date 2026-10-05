@@ -67,7 +67,7 @@
    :apensadas [] :apensadas-truncado false
    :emendas [] :emendas-truncado false
    :pareceres [] :pareceres-truncado false
-   :coautores []})
+   :coautores [] :atos []})
 
 (deftest ficha-materia-out-minima-valida
   (is (m/validate wire/FichaMateriaOut ficha-minima)))
@@ -89,3 +89,13 @@
 (deftest ficha-materia-out-truncado-nao-booleano-invalida
   (is (not (m/validate wire/FichaMateriaOut (assoc ficha-minima :tramitacao-truncado "true")))
       "string 'true' nao e' :boolean — o schema nao aceita truthy solto"))
+
+(deftest ficha-materia-out-com-atos-depois-do-plenario
+  ;; docs/16 linha 30: aprovacao, autografo, veto, apreciacao e lei na ficha interna
+  (is (m/validate wire/FichaMateriaOut
+                  (assoc ficha-minima :atos [{:ato "aprovada" :ocorrido-em "2026-05-01T12:00:00Z"}
+                                             {:ato "autografo_enviado" :ocorrido-em "2026-05-02T12:00:00Z" :numero 8 :ano 2026}
+                                             {:ato "vetado" :ocorrido-em "2026-05-20T12:00:00Z" :veto-tipo "parcial"}
+                                             {:ato "promulgada" :ocorrido-em "2026-06-01T12:00:00Z"
+                                              :tipo-norma "lei" :numero 5 :ano 2026}])))
+  (is (not (m/validate wire/FichaMateriaOut (dissoc ficha-minima :atos))) "a lista e' obrigatoria (vazia antes do voto)"))

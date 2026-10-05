@@ -17,7 +17,9 @@ import { rotularComissao } from "./comissao-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
 import { categorizarSituacao, type CategoriaSituacao } from "./proposicoes-vista";
 import { textoRecebimento } from "./recebimento-vista";
+import { rotuloDoAto } from "./desfecho-vista";
 import type {
+  AtoDepoisDoPlenarioOut,
   FichaMateriaOut,
   HistoricoTramitacaoItemOut,
   EmendaResumoOut,
@@ -47,8 +49,14 @@ export type DadosMateriaVista = {
   ultimaAcaoEm: string;
 };
 
+/** O último ato depois do plenário (os `atos` chegam do mais antigo ao mais novo), ou null antes do voto. */
+export function desfechoDaFicha(ficha: Pick<FichaMateriaOut, "atos">): string | null {
+  const atos = ficha.atos ?? [];
+  return atos.length > 0 ? atos[atos.length - 1].ato : null;
+}
+
 export function derivarDadosMateria(ficha: FichaMateriaOut): DadosMateriaVista {
-  const { rotuloSituacao } = derivarTramitacao(ficha.proposicao.estado);
+  const { rotuloSituacao } = derivarTramitacao(ficha.proposicao.estado, desfechoDaFicha(ficha));
   const ordenado = [...ficha.tramitacao].sort((a, b) => a.ocorridoEm.localeCompare(b.ocorridoEm));
   return {
     situacao: rotuloSituacao,
@@ -90,6 +98,24 @@ export function derivarTimelineTramitacao(
       rotuloPara: derivarTramitacao(item.paraEstado).rotuloSituacao,
       recebimentoTexto: textoRecebimento(item.recebimento),
     }));
+}
+
+/** Um item da linha do tempo da aba "Tramitação": uma movimentação do rito OU um ato depois do plenário
+ * (aprovação, autógrafo, sanção/veto, lei — docs/16, retriagem linha 30), na mesma ordem cronológica. */
+export type ItemLinhaDoTempo =
+  | ({ tipo: "tramitacao" } & ItemTimelineVista)
+  | { tipo: "ato"; ocorridoEm: string; texto: string };
+
+export function derivarLinhaDoTempo(
+  tramitacao: HistoricoTramitacaoItemOut[],
+  atos: AtoDepoisDoPlenarioOut[] | undefined,
+): ItemLinhaDoTempo[] {
+  const movimentacoes: ItemLinhaDoTempo[] = derivarTimelineTramitacao(tramitacao).map((i) => ({ tipo: "tramitacao", ...i }));
+  const depois: ItemLinhaDoTempo[] = (atos ?? []).flatMap((a) => {
+    const texto = rotuloDoAto(a);
+    return texto ? [{ tipo: "ato" as const, ocorridoEm: a.ocorridoEm, texto }] : [];
+  });
+  return [...movimentacoes, ...depois].sort((a, b) => b.ocorridoEm.localeCompare(a.ocorridoEm));
 }
 
 // ---------------------------------------------------------------------------

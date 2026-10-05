@@ -20,6 +20,7 @@
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.artefato-publicacao :as artefato]
             [oplenario.legislativo.db.autografo :as autografo]
+            [oplenario.legislativo.db.desfecho :as desfecho]
             [oplenario.legislativo.db.documento :as documento]
             [oplenario.legislativo.db.distribuicao :as distribuicao]
             [oplenario.legislativo.db.documento-modelo :as doc-modelo]
@@ -372,6 +373,22 @@
          (catch PSQLException e
            (if (= "23505" (.getSQLState e)) (inserir) (throw e))))))
 
+(defn- emitir-desfecho!
+  "Emite `proposicao.desfecho-registrado` com o ato `a` (de db/desfecho), NA tx do proprio ato. Sem ato (a votacao
+  nao carrega a materia; a linha nao foi achada) nao emite nada."
+  [bus tx ente-id pid a]
+  (when a
+    (producers/emitir-desfecho-registrado! bus tx ente-id
+      (-> (select-keys a [:ato :redacao-final :tipo-norma :numero :ano])
+          (assoc :proposicao-id pid :ocorrido-em (str (:ocorrido-em a)))))))
+
+(defn- emitir-desfecho-do-executivo!
+  "A resposta do Executivo ou a apreciacao do veto (`estado` novo da tramitacao executiva `tram-id`): acha a materia
+  pelo autografo e emite o ato correspondente."
+  [bus tx ente-id tram-id estado]
+  (when-let [pid (some->> (exec/buscar tx ente-id tram-id) :autografo-id (autografo/buscar tx ente-id) :proposicao-id)]
+    (emitir-desfecho! bus tx ente-id pid (desfecho/ultimo-ato tx ente-id pid estado))))
+
 (defn- proposicao-com-aprovada
   "A proposicao de `id` com `:aprovada` ja' resolvido, na `tx` CORRENTE — nil se ela nao existe no tenant.
 
@@ -645,7 +662,9 @@
            ;; fatia 2b: quem recebeu cada movimentacao (o controller anota o historico com o nome)
            :recebimentos (recebimento/recebimentos-da-proposicao tx ente-id id)
            ;; fatia 2c: os coautores que constam (subscricao confirmada antes do protocolo)
-           :coautores (subscricao/coautores-da-proposicao tx ente-id id)}))))
+           :coautores (subscricao/coautores-da-proposicao tx ente-id id)
+           ;; docs/16 linha 30: os atos depois do plenario (nenhum deles move o `estado` do rito)
+           :atos (desfecho/atos-da-proposicao tx ente-id id)}))))
   (nova-versao! [this ente-id v] (transacao this ente-id #(texto/nova-versao! % (assoc v :ente-id ente-id))))
   (promover-versao! [this ente-id m] (transacao this ente-id #(texto/promover! % (assoc m :ente-id ente-id))))
   (buscar-versao [this ente-id id] (transacao this ente-id #(texto/buscar % ente-id id)))
@@ -959,6 +978,10 @@
               v (votacao/buscar tx ente-id (:id m))]  ; snapshot persistido: sessao-id + totais + resultado
           ;; ADR-0021: se esta e' a votacao do PDL de uma prestacao de contas, o julgamento fica gravado NA MESMA tx
           (prestacao-contas/registrar-julgamento! tx ente-id v)
+          ;; o desfecho da materia no plenario (aprovada/rejeitada): o portal e a ficha deixam de esperar pauta
+          (when (contains? #{"proposicao" "redacao_final"} (:objeto-tipo v))
+            (emitir-desfecho! bus tx ente-id (:objeto-id v)
+              (desfecho/ato-da-votacao-encerrada tx ente-id (:objeto-id v) (:id m))))
           (when (:sessao-id v)
             (producers/emitir-votacao-encerrada! bus tx ente-id
               (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id v) :resultado (:resultado v)
@@ -981,7 +1004,12 @@
   (buscar-autografo [this ente-id id] (transacao this ente-id #(autografo/buscar % ente-id id)))
   (autografo-da-proposicao [this ente-id pid] (transacao this ente-id #(autografo/buscar-por-proposicao % ente-id pid)))
   (iniciar-tramitacao-executiva! [this ente-id m] (transacao this ente-id #(exec/iniciar! % (assoc m :ente-id ente-id))))
-  (registrar-resposta-executivo! [this ente-id m] (transacao this ente-id #(exec/registrar-resposta! % (assoc m :ente-id ente-id))))
+  (registrar-resposta-executivo! [this ente-id m]
+    (transacao this ente-id
+      (fn [tx]
+        (let [r (exec/registrar-resposta! tx (assoc m :ente-id ente-id))]
+          (emitir-desfecho-do-executivo! bus tx ente-id (:id m) (:estado r))
+          r))))
   (apreciar-veto! [this ente-id m]
     ;; 23503 (FK) do par `(ente_id, veto_votacao_id) -> legislativo.votacoes` -> erro de CORPO (400),
     ;; nunca 500. Mesmo predicado/forma de `cadastros/ligar-identidade!` (23505) e de `registrar-voto!`
@@ -989,7 +1017,11 @@
     ;; que nao existia e recebeu 500 'erro interno' — e a docstring de `wire/in/pos_aprovacao` ainda
     ;; afirmava que este campo era "forward-ref (sem FK declarativa)", o que o banco desmente.
     (try
-      (transacao this ente-id #(exec/apreciar-veto! % (assoc m :ente-id ente-id)))
+      (transacao this ente-id
+        (fn [tx]
+          (let [r (exec/apreciar-veto! tx (assoc m :ente-id ente-id))]
+            (emitir-desfecho-do-executivo! bus tx ente-id (:id m) (:estado r))
+            r)))
       (catch PSQLException e
         (if (= "23503" (.getSQLState e))
           (throw (ex-info "veto-votacao-id nao corresponde a uma votacao desta Casa"
@@ -1043,6 +1075,8 @@
                                                                        :texto-versao-id texto-versao-id))
               {tram-id :id} (exec/iniciar! tx {:id (random-uuid) :ente-id ente-id :autografo-id aut-id
                                                :created-by (:created-by m)})]
+          (emitir-desfecho! bus tx ente-id (:proposicao-id m)
+            (desfecho/ultimo-ato tx ente-id (:proposicao-id m) "autografo_enviado"))
           {:autografo-id aut-id :numero numero :tramitacao-executiva-id tram-id}))))
   ;; F3.8b — norma. promulgar! compoe (sequencial + URN + insert) na tx; o caller garante o desfecho promulgavel.
   ;; Duas promulgacoes da MESMA materia ao mesmo tempo passam as duas pelo guard do controller; o UNIQUE
@@ -1050,7 +1084,12 @@
   ;; numero ou de URN e' contador fora de sincronia (ver demo/reconciliar_contadores), nao "ja promulgada".
   (promulgar-norma! [this ente-id m]
     (try
-      (transacao this ente-id #(norma/promulgar! % (assoc m :ente-id ente-id)))
+      (transacao this ente-id
+        (fn [tx]
+          (let [r (norma/promulgar! tx (assoc m :ente-id ente-id))]
+            (emitir-desfecho! bus tx ente-id (:proposicao-id m)
+              (desfecho/ultimo-ato tx ente-id (:proposicao-id m) "promulgada"))
+            r)))
       (catch PSQLException e
         (if (and (= "23505" (.getSQLState e))
                  (#{"norma_ente_id_proposicao_id_key" "norma_ente_id_autografo_id_key"}

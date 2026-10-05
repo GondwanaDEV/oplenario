@@ -15,7 +15,10 @@
    [:ementa :string]
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
-   [:estado :string]])
+   [:estado :string]
+   ;; docs/16 linhas 18 e 30: o ultimo ato depois do plenario (aprovada, rejeitada, autografo_enviado, sancionado,
+   ;; sancao_tacita, vetado, veto_mantido, veto_derrubado, promulgada, publicada); nil = ainda nao foi a votos
+   [:desfecho [:maybe :string]]])
 
 (def MateriasOut
   "Resposta de GET /portal/casa/:ente/materias (familia 'truncamento-familia', sitio (b)): a listagem
@@ -50,6 +53,9 @@
    [:autor-tipo {:optional true} [:maybe :string]]
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
+   ;; docs/16 linhas 18 e 30: o ultimo ato depois do plenario (aprovada, rejeitada, autografo_enviado, sancionado,
+   ;; sancao_tacita, vetado, veto_mantido, veto_derrubado, promulgada, publicada); nil = ainda nao foi a votos
+   [:desfecho [:maybe :string]]
    [:norma {:optional true} [:maybe wire-norma/NormaOut]]
    [:resumo {:optional true} [:maybe ResumoPublicoOut]]])
 
