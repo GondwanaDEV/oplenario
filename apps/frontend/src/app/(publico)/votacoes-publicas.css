@@ -1,0 +1,38 @@
+/* Votações no portal: a lista das encerradas de sessões públicas e o voto de cada vereador. Tokens do sistema. */
+.votacoes-publicas { padding-block: 2rem 3rem; }
+.votacoes-publicas .pg-cab h1 { font-family: var(--display); margin: 0.2rem 0 0.4rem; }
+.votacoes-publicas .sub { color: var(--texto-2); max-width: 66ch; margin: 0; }
+.votacoes-publicas .secao-tit { font-family: var(--display); font-size: var(--t-16); margin: 1.6rem 0 0.6rem; }
+.votacoes-publicas .estado { color: var(--texto-2); }
+
+.vp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.vp-lista li { padding: 0.8rem 1rem; border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); background: var(--surface); }
+.vp-lista li.vp-aprovada, .vp-aberta.vp-aprovada { border-left-color: var(--jade); }
+.vp-lista li.vp-rejeitada, .vp-aberta.vp-rejeitada { border-left-color: var(--telha-fundo); }
+.vp-lista li.atual { box-shadow: 0 0 0 2px var(--foco); }
+.vp-lista a { color: var(--texto); text-decoration: none; display: block; min-height: 44px; }
+.vp-lista a:hover b, .vp-lista a:focus-visible b { text-decoration: underline; }
+.vp-titulo { display: block; font-weight: 700; }
+.vp-ementa { display: block; color: var(--texto-2); font-size: var(--t-13); margin-top: 0.15rem; }
+.vp-resultado { display: block; margin-top: 0.35rem; font-size: var(--t-13); }
+.vp-meta { display: block; margin-top: 0.2rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
+
+.vp-aberta { margin: 1.4rem 0 0; padding: 1.2rem 1.3rem; border: 1px solid var(--linha); border-left-width: 6px; border-radius: var(--raio); background: var(--surface); }
+.vp-aberta h2 { font-family: var(--display); margin: 0; }
+.vp-aberta .vp-ementa { font-size: var(--t-16); margin-top: 0.3rem; }
+.vp-aberta .vp-resultado { font-size: var(--t-16); font-weight: 700; margin-top: 0.8rem; }
+.vp-aberta p { margin: 0.4rem 0 0; }
+.vp-aberta .vp-nota { color: var(--texto-2); font-size: var(--t-13); max-width: 62ch; }
+.vp-aberta .vp-ficha { display: inline-block; margin-top: 0.7rem; color: var(--acao); font-weight: 600; min-height: 44px; line-height: 44px; }
+
+.vp-votos { width: 100%; border-collapse: collapse; margin-top: 0.9rem; font-size: var(--t-13); }
+.vp-votos caption { text-align: left; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding-bottom: 0.4rem; }
+.vp-votos th, .vp-votos td { text-align: left; padding: 0.5rem 0.4rem; border-top: 1px solid var(--linha); }
+.vp-votos th { font-weight: 600; color: var(--texto-2); }
+
+.vp-paginas { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 1.2rem; font-size: var(--t-13); color: var(--texto-2); }
+.vp-paginas a { color: var(--acao); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; padding-inline: 0.4rem; }
+
+@media (max-width: 560px) {
+  .vp-aberta { padding: 1rem; }
+}

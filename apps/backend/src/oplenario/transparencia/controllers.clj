@@ -120,3 +120,43 @@
     (let [linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d))
           nomes (if (= "votos-nominais" (:chave d)) (nomes-dos-vereadores ente-id) {})]
       {:dataset d :csv (dados-abertos/->csv d linhas nomes)})))
+
+;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------
+
+(def por-pagina
+  "Quantas votacoes a lista publica entrega por pagina (rota anonima: tamanho fixo no servidor)."
+  20)
+
+(def ^:private objetos-que-sao-a-materia
+  "Os `objeto_tipo` de votacao cujo `objeto_id` e' a PROPRIA proposicao (o vocabulario de `legislativo`, que este
+  modulo nao importa — §22.10): so' neles existe materia para ligar a ficha publica. Parecer, emenda e requerimento
+  aparecem so' pelo tipo."
+  #{"proposicao" "redacao_final"})
+
+(defn- com-materia
+  "Acrescenta `:materia` (cabecalho da ficha publica) as votacoes cujo objeto e' uma proposicao PUBLICADA no portal;
+  materia nao projetada fica sem."
+  [repo-transparencia ente-id votacoes]
+  (let [ids (into #{} (comp (filter #(contains? objetos-que-sao-a-materia (:objeto-tipo %))) (map :objeto-id)) votacoes)
+        por-id (into {} (map (juxt :proposicao-id identity)) (repo/materias-por-ids repo-transparencia ente-id ids))]
+    (mapv (fn [v] (cond-> v
+                    (contains? objetos-que-sao-a-materia (:objeto-tipo v))
+                    (assoc :materia (get por-id (:objeto-id v)))))
+          votacoes)))
+
+(defn votacoes-publicas
+  "Portal: {:votacoes :total :pagina :por-pagina} das votacoes ENCERRADAS de sessoes publicas, a mais recente
+  primeiro. `listar-votacoes` e' o seam do host (fn [ente-id limite deslocamento] -> {:votacoes :total}): quem sabe
+  que sessao e' publica (sessoes) e quem guarda a votacao (legislativo) nao sao este modulo."
+  [repo-transparencia listar-votacoes ente-id pagina]
+  (let [{:keys [votacoes total]} (listar-votacoes ente-id por-pagina (* por-pagina (dec pagina)))]
+    {:votacoes (com-materia repo-transparencia ente-id votacoes)
+     :total total :pagina pagina :por-pagina por-pagina}))
+
+(defn votacao-publica
+  "Portal: uma votacao encerrada de sessao publica, com a materia e, se nominal, os votos por vereador + `nomes`
+  ({vereador-id nome}); nil = nao existe, nao encerrou ou a sessao nao e' publica."
+  [repo-transparencia buscar-votacao nomes-dos-vereadores ente-id votacao-id]
+  (when-let [v (buscar-votacao ente-id votacao-id)]
+    (let [[v] (com-materia repo-transparencia ente-id [v])]
+      {:votacao v :nomes (if (= "nominal" (:modalidade v)) (nomes-dos-vereadores ente-id) {})})))

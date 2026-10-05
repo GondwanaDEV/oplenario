@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buscarNomeCasa, buscarPublico, buscarPublicoDetalhado, resolverCasa } from "./portal-api";
+import { buscarNomeCasa, buscarPublico, buscarPublicoComConsulta, buscarPublicoDetalhado, resolverCasa } from "./portal-api";
 
 // Task 0.3 (Fatia A2.0, Portal do Cidadão) — espelha buscarOuNull de use-mesa.ts, mas SEM o header
 // Authorization (superfície pública, sem auth) e degradando SEMPRE para null (nunca lança — "degradação
@@ -7,6 +7,30 @@ import { buscarNomeCasa, buscarPublico, buscarPublicoDetalhado, resolverCasa } f
 //
 // `buscarPublico` recebe SEGMENTOS (`...segmentos: string[]`), não um `caminho` já concatenado (review
 // de segurança A2.0, item 2) — por isso as chamadas abaixo passam cada parte separada.
+
+describe("buscarPublicoComConsulta", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("sem valores: a mesma URL de buscarPublico, sem '?'", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+    await buscarPublicoComConsulta(["fortaleza", "votacoes"], { pagina: undefined });
+    expect(vi.mocked(fetchMock).mock.calls[0][0]).toBe("/api/portal/casa/fortaleza/votacoes");
+  });
+
+  it("com valor: vira query string codificada; o segmento continua codificado à parte", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ "por-pagina": 20 }) })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+    const r = await buscarPublicoComConsulta<{ porPagina: number }>(["a/b", "votacoes"], { pagina: "2" });
+    expect(vi.mocked(fetchMock).mock.calls[0][0]).toBe("/api/portal/casa/a%2Fb/votacoes?pagina=2");
+    expect(r).toEqual({ porPagina: 20 });
+  });
+
+  it("falha -> null, nunca lança", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 400 })) as unknown as typeof fetch;
+    expect(await buscarPublicoComConsulta(["fortaleza", "votacoes"], { pagina: "0" })).toBeNull();
+  });
+});
 
 describe("buscarPublico", () => {
   afterEach(() => vi.restoreAllMocks());

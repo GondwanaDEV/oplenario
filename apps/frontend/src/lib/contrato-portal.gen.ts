@@ -158,3 +158,63 @@ export interface VereadorDaListaOut {
 export interface VereadoresOut {
   vereadores: VereadorDaListaOut[];
 }
+
+export interface SessaoDaVotacaoOut {
+  sessaoId: string;
+  tipoSessao: string;
+  numeroSequencial: number;
+  data?: string | null;
+}
+
+export interface MateriaDaVotacaoOut {
+  proposicaoId: string;
+  tipo: string;
+  sequencial: number;
+  ano: number;
+  ementa: string;
+}
+
+export interface PlacarOut {
+  sim: number;
+  nao: number;
+  abstencoes: number;
+  baseMembros?: number | null;
+}
+
+export interface VotacaoPublicaOut {
+  votacaoId: string;
+  encerradaEm: string;
+  sessao: SessaoDaVotacaoOut;
+  objetoTipo: string;
+  materia?: MateriaDaVotacaoOut | null;
+  modalidade: "nominal" | "simbolica" | "secreta";
+  quorumTipo: string;
+  resultado: "aprovada" | "rejeitada";
+  placar?: PlacarOut | null;
+}
+
+export interface VotacoesPublicasOut {
+  votacoes: VotacaoPublicaOut[];
+  total: number;
+  pagina: number;
+  porPagina: number;
+}
+
+export interface VotoNominalOut {
+  vereadorId: string;
+  vereador: string;
+  voto: "sim" | "nao" | "abstencao";
+}
+
+export interface VotacaoDetalheOut {
+  votacaoId: string;
+  encerradaEm: string;
+  sessao: SessaoDaVotacaoOut;
+  objetoTipo: string;
+  materia?: MateriaDaVotacaoOut | null;
+  modalidade: "nominal" | "simbolica" | "secreta";
+  quorumTipo: string;
+  resultado: "aprovada" | "rejeitada";
+  placar?: PlacarOut | null;
+  votos: VotoNominalOut[];
+}

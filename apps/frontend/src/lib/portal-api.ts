@@ -28,6 +28,25 @@ export async function buscarPublico<T>(...segmentos: string[]): Promise<T | null
   }
 }
 
+// Como `buscarPublico`, para a rota que PAGINA: `consulta` vira query string (cada valor codificado). Valor
+// ausente (undefined) não entra — a página 1 sai sem `?pagina=` e o backend assume 1.
+export async function buscarPublicoComConsulta<T>(
+  segmentos: string[],
+  consulta: Record<string, string | undefined>,
+): Promise<T | null> {
+  const qs = new URLSearchParams(
+    Object.entries(consulta).filter((par): par is [string, string] => par[1] !== undefined),
+  ).toString();
+  try {
+    const caminho = segmentos.map(codificarSegmento).join("/");
+    const r = await fetch(`/api/portal/casa/${caminho}${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    return camelizarChaves(await r.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // `buscarPublicoDetalhado` — o mesmo fetch, para a página que precisa dizer ao cidadão QUAL dos dois aconteceu:
 // "isto não existe" (404) ou "não consegui agora" (5xx, rede, 400). `consulta` vira query string (só o que veio
 // preenchido); nunca lança.
