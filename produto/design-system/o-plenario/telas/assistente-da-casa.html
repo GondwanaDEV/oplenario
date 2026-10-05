@@ -16,11 +16,14 @@
      tela interna (aqui, sobre a Ficha da matéria resumida). Os
      três estados de tamanho são do mesmo componente:
        recolhido  -> só o botão "Perguntar à Casa", canto inferior
-       aberto     -> painel lateral de 400px que EMPURRA a tela
-                     (não cobre: o foco nunca some atrás dele)
-       expandido  -> ocupa a área da tela, com o histórico ao lado
-     No celular (<760px) aberto e expandido viram FOLHA em tela
-     cheia, modal (foco preso, Esc fecha).
+       aberto     -> JANELA de 400px no canto, abaixo do cabeçalho,
+                     até 680px de altura; EMPURRA o conteúdo
+                     (não cobre: o foco nunca some atrás dela)
+       expandido  -> ocupa a área abaixo do cabeçalho, com o
+                     histórico ao lado
+     No celular (<760px): aberto = FOLHA que sobe de baixo até 88%
+     da altura, com alça e véu (modal: foco preso, Esc ou toque
+     fora fecha); expandido = tela cheia.
      Identidade da IA = cobalto (mesma marca do copiloto do editor).
      A ousadia continua sendo a página; o painel é disciplina.
      O HISTÓRICO é registro: toda conversa fica guardada com as
@@ -29,7 +32,7 @@
      ============================================================ */
 
   /* ---------- a tela de fundo (Ficha da matéria resumida) ---------- */
-  .pagina { transition: padding-right .22s ease-out; }
+  #conteudo { transition: padding-right .22s ease-out; }
   .migalhas { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding: 1rem 0 0; display: flex; gap: .4rem; flex-wrap: wrap; }
   .migalhas a { color: var(--texto-2); text-decoration: none; }
   .migalhas b { color: var(--texto); }
@@ -48,7 +51,7 @@
 
   /* ---------- o botão recolhido ---------- */
   .ast-lancador {
-    position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 40;
+    position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 42;
     display: inline-flex; align-items: center; gap: .55rem;
     min-height: 48px; padding: .45rem 1.1rem .45rem .5rem;
     border-radius: var(--raio-capsula); border: 1px solid var(--linha);
@@ -67,17 +70,23 @@
   [data-tema="escuro"] .glifo-ia { background: var(--cobalto-fundo); }
 
   /* ---------- o painel ---------- */
+  /* aberto = JANELA ancorada no canto inferior direito, abaixo do cabeçalho (que fica
+     inteiro): altura até 680px, nunca a tela toda. --topo-altura é a do .topo desta prancha;
+     no React vem medida do cabeçalho real. */
+  :root { --topo-altura: 68px; --ast-margem: 1rem; --ast-largura: 400px; }
   .ast {
-    position: fixed; top: 0; right: 0; bottom: 0; z-index: 30;
-    width: 400px; max-width: 100vw;
+    position: fixed; right: var(--ast-margem); bottom: var(--ast-margem); z-index: 41;
+    width: var(--ast-largura); max-width: calc(100vw - 2 * var(--ast-margem));
+    height: min(680px, calc(100vh - var(--topo-altura) - 2 * var(--ast-margem)));
     display: none; grid-template-rows: auto auto minmax(0, 1fr) auto;
     background: var(--surface-solida); color: var(--texto);
-    border-left: 1px solid var(--linha); box-shadow: var(--sombra-alta);
-    border-top: 3px solid var(--cobalto);
+    border: 1px solid var(--linha); border-top: 3px solid var(--cobalto);
+    border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra-alta);
   }
   [data-tema="escuro"] .ast { border-top-color: var(--cobalto-texto); }
   html[data-assistente="aberto"] .ast { display: grid; }
-  html[data-assistente="aberto"] .pagina { padding-right: 400px; }
+  /* empurra o CONTEÚDO, não o cabeçalho: a janela começa abaixo dele */
+  html[data-assistente="aberto"] #conteudo { padding-right: calc(var(--ast-largura) + var(--ast-margem)); }
 
   .ast-cabe { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; padding: .6rem .75rem .65rem 1rem; border-bottom: 1px solid var(--linha); }
   .ast-cabe .titulo { flex: 1; min-width: 0; font-family: var(--display); font-size: var(--t-16); font-weight: 700; line-height: 1.15; margin: 0; }
@@ -160,11 +169,12 @@
 
   /* ---------- expandido: ocupa a área da tela, histórico à esquerda ---------- */
   html[data-assistente="expandido"] .ast {
-    display: grid; width: auto; left: 0; top: 0;
+    display: grid; width: auto; max-width: none; height: auto; left: 0; right: 0; bottom: 0; top: var(--topo-altura);
+    border-radius: 0; border-right: 0; border-bottom: 0;
     grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
     border-left: 0;
   }
-  html[data-assistente="expandido"] .pagina { visibility: hidden; }
+  html[data-assistente="expandido"] #conteudo { visibility: hidden; }
   html[data-assistente="expandido"] .ast-cabe { grid-column: 1 / -1; }
   html[data-assistente="expandido"] .ast-contexto { display: none; }
   html[data-assistente="expandido"] .ast-lateral { display: block; grid-row: 2 / 4; border-right: 1px solid var(--linha); overflow-y: auto; padding: 1rem; }
@@ -177,15 +187,33 @@
 
   /* ---------- celular: folha modal em tela cheia ---------- */
   @media (max-width: 760px) {
-    html[data-assistente="aberto"] .pagina { padding-right: 0; }
-    html[data-assistente="aberto"] .ast,
-    html[data-assistente="expandido"] .ast { width: 100vw; left: 0; grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    /* aberto = FOLHA que sobe de baixo até ~88% da altura, com alça; a página fica
+       escurecida atrás (modal: foco preso, Esc ou toque fora fecha) */
+    html[data-assistente="aberto"] #conteudo { padding-right: 0; }
+    html[data-assistente="aberto"] .ast {
+      width: 100vw; max-width: none; left: 0; right: 0; bottom: 0; top: auto;
+      height: 88dvh; border: 0; border-top: 3px solid var(--cobalto);
+      border-radius: var(--raio-lg) var(--raio-lg) 0 0; padding-top: 14px;
+    }
+    html[data-assistente="aberto"] .ast::before {
+      content: ""; position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px;
+      border-radius: 2px; background: var(--texto-2);
+    }
+    html[data-assistente="aberto"] .ast-veu { display: block; }
+    /* expandido = tela cheia; o histórico continua pelo botão do cabeçalho */
+    html[data-assistente="expandido"] .ast { width: 100vw; max-width: none; height: auto; top: 0; left: 0; right: 0; bottom: 0; border-radius: 0; border: 0; border-top: 3px solid var(--cobalto); grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr) auto; }
     html[data-assistente="expandido"] .ast-lateral { display: none; }
     html[data-assistente="expandido"] .ast-corpo, html[data-assistente="expandido"] .ast-campo { grid-column: 1; }
-    .ast-expandir { display: none; }
+    html[data-assistente="expandido"] #ast-historico { display: grid; }
+    html[data-assistente="expandido"] .ast-corpo [data-estado~="historico"] { display: none; }
+    html[data-assistente="expandido"][data-ast-estado="historico"] .ast-corpo [data-estado~="historico"] { display: grid; }
+    html[data-assistente="expandido"] .ast-contexto { display: flex; }
     .ast-lancador .rotulo-longo, .ast-lancador kbd { display: none; }
     html[data-assistente="aberto"] .prancha, html[data-assistente="expandido"] .prancha { display: none; }
   }
+
+  /* véu atrás da folha no celular (só existe lá) */
+  .ast-veu { display: none; position: fixed; inset: 0; z-index: 40; background: rgba(11, 20, 12, .45); border: 0; padding: 0; cursor: pointer; }
 
   /* ---------- estados da prancha ---------- */
   .ast [data-estado] { display: none; }
@@ -205,7 +233,7 @@
   .prancha button { min-height: 32px; padding: .2rem .55rem; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: transparent; color: var(--texto); font: 500 var(--t-12) var(--corpo); cursor: pointer; }
   .prancha button[aria-pressed="true"] { background: var(--texto); color: var(--surface-solida); border-color: var(--texto); }
 
-  @media (prefers-reduced-motion: reduce) { .pagina { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { #conteudo { transition: none; } }
 </style>
 </head>
 <body>
@@ -270,6 +298,9 @@
   <span>Perguntar <span class="rotulo-longo">à Casa</span></span>
   <kbd aria-hidden="true">Ctrl /</kbd>
 </button>
+
+<!-- véu do celular: toque fora recolhe -->
+<button class="ast-veu" id="ast-veu" type="button" tabindex="-1" aria-hidden="true"></button>
 
 <!-- ================= O PAINEL ================= -->
 <aside class="ast" id="ast" aria-labelledby="ast-titulo">
@@ -466,6 +497,7 @@
       status.textContent = v === 'historico' ? 'Histórico de conversas aberto' : '';
     }
     lancador.addEventListener('click', function () { tamanho('aberto', true); });
+    document.getElementById('ast-veu').addEventListener('click', function () { tamanho('recolhido', true); });
     document.getElementById('ast-recolher').addEventListener('click', function () { tamanho('recolhido', true); });
     var btnExp = document.getElementById('ast-expandir');
     btnExp.addEventListener('click', function () {
