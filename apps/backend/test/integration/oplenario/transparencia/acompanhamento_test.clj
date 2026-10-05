@@ -47,6 +47,11 @@
 
 ;; ---------- seguir materia existente -> aparece em 'minhas' ----------
 
+(deftest minhas-diz-de-qual-casa-e-a-lista
+  (let [ente (random-uuid) cidadao (random-uuid)]
+    (is (= ente (:ente-id (controllers/meus-acompanhamentos *repo* (ator ente cidadao))))
+        "mesmo vazia, a lista diz a Casa: a tela monta o link /portal/casa/<ente>/materias/<id> com ela")))
+
 (deftest seguir-projeta-em-minhas
   (let [ente (random-uuid) cidadao (random-uuid)
         pid  (criar-materia! ente)]

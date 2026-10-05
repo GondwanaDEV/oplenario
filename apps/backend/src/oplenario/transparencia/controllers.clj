@@ -96,12 +96,13 @@
     {:proposicao-id proposicao-id :seguidor-identidade-id (:identidade-id ator)}))
 
 (defn meus-acompanhamentos
-  "{:acompanhamentos :acompanhamentos-total} 'minhas materias acompanhadas' do cidadao autenticado — escopo
+  "{:ente-id :acompanhamentos :acompanhamentos-total} 'minhas materias acompanhadas' do cidadao autenticado — escopo
   pelo seguidor do ATOR (nunca ve as de outro; sem :id, sem policy fina necessaria — a query ja filtra por
   seguidor). `:acompanhamentos-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia',
   sitio (c))."
   [repo-transparencia ator]
-  (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator)))
+  (assoc (repo/meus-acompanhamentos repo-transparencia (:ente-id ator) (:identidade-id ator))
+         :ente-id (:ente-id ator)))
 
 ;; ---------- Onda E: DADOS ABERTOS ----------
 
