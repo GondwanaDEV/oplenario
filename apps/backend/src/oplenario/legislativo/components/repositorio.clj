@@ -40,6 +40,7 @@
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
+            [oplenario.legislativo.db.regra-votacao :as regra-votacao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
             [oplenario.legislativo.db.recebimento :as recebimento]
             [oplenario.legislativo.db.nota-tecnica :as nota-tecnica]
@@ -884,9 +885,10 @@
   (abrir-votacao! [this ente-id m]
     (transacao this ente-id
       (fn [tx]
-        ;; ADR-0021 (B2): a materia de CONTAS so' abre votacao que passe na regra da classe (`contas_prefeito`, guarda
-        ;; DSL avaliada pelo motor, com o `:registro` que o controller traz) — na MESMA tx do INSERT.
-        (prestacao-contas/conferir-regra-de-votacao! tx ente-id (:registro m) m)
+        ;; A materia com regra de votacao (contas do Prefeito, ADR-0021 B2; emenda a LOM, CF art. 29) so' abre votacao
+        ;; que passe na regra da classe (guarda DSL avaliada pelo motor, com o `:registro` que o controller traz) — na
+        ;; MESMA tx do INSERT.
+        (regra-votacao/conferir! tx ente-id (:registro m) m)
         (let [r (votacao/abrir! tx (assoc m :ente-id ente-id))]
           (when (:sessao-id m)
             (producers/emitir-votacao-aberta! bus tx ente-id
