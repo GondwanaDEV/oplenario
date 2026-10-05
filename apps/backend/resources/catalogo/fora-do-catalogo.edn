@@ -259,6 +259,8 @@
                                         :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB e nome do perfil dele): o agente nem propoe; nao e' voto, presenca nem conducao, por isso nao vai em :pessoal"}
  :legislativo/substituir-parecer-juridico {:categoria :so-tela
                                            :motivo "corrigir o parecer assinado e' ato do advogado, na tela; o agente nem propoe (mesmo motivo de assinar)"}
+ :legislativo/meus-votos {:categoria :so-tela
+                           :motivo "'Minha atuacao': traz o voto do vereador em sessao secreta ou fechada ao publico, dado so' dele; o agente age COMO a pessoa mas a resposta iria ao fornecedor de IA (DPA de nao-treino pendente) e poderia ser citada ao vereador fora do contexto — a tela le, o agente nao"}
  :legislativo/meu-pedido-juridico {:categoria :so-tela
                                    :motivo "o relator pede o parecer juridico da materia que relata, na tela do vereador; o agente da secretaria tem pedir_parecer_juridico"}
  :transparencia/movimentacoes-da-materia {:categoria :so-tela

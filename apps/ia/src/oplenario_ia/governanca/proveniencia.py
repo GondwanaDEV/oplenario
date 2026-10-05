@@ -37,6 +37,15 @@ class Fonte(BaseModel):
     id: str = Field(min_length=1, pattern=r"^[^|\]\s\"]+$")
     rotulo: str
     versao: str | None = None
+    # Fonte ESTRUTURADA (um fato do core, não um texto escrito por gente): a conferência vai além do trecho literal. O
+    # parágrafo que a cita tem de conter uma das `canonicas` (frases geradas do dado, em `ata/redacao.py`) e não pode
+    # sobrar nenhum sinal numérico depois de tiradas as canônicas e os `identificadores` (confianca/numeros.py).
+    estruturada: bool = False
+    canonicas: list[str] = []
+    identificadores: list[str] = []
+    # o que pode vir dentro de um `[confirmar: a gravação indica N …]` desta fonte: o rótulo e o valor do DADO
+    # ("votos a favor; o sistema registra 9"). Outro `[confirmar]` no parágrafo da votação fica na conferência.
+    duvidas_canonicas: list[str] = []
 
 
 class Peca(BaseModel):

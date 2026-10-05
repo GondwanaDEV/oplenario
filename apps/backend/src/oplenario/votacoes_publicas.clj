@@ -37,6 +37,16 @@
   [repo-sessoes repo-legislativo ente-id]
   (leg/ids-das-votacoes-das-sessoes repo-legislativo ente-id (map :id (ses/sessoes-publicas repo-sessoes ente-id))))
 
+(defn ids-de-sessoes-publicas
+  "#{sessao-id} das sessoes da Casa que o portal pode mostrar — a MESMA regra de `listar` e `ids-de-votacoes-publicas`
+  (`sessoes-publicas`). Serve a 'Minha atuacao' (`GET /meu/votos`): o vereador ve todos os seus votos, e este conjunto
+  so' MARCA quais o portal tambem publica; nao decide o que ele ve. Sem repo de sessoes, conjunto vazio (nada e' marcado
+  como publico)."
+  [repo-sessoes ente-id]
+  (if repo-sessoes
+    (into #{} (map :id) (ses/sessoes-publicas repo-sessoes ente-id))
+    #{}))
+
 (defn buscar
   "A votacao encerrada com os votos nominais (se nominal) e a `:sessao`, ou nil quando nao existe, nao encerrou, foi
   anulada, e' de outra Casa ou a sessao dela nao e' publica."

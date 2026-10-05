@@ -11,9 +11,11 @@
             [oplenario.legislativo.components.repositorio :as repo]
             [oplenario.legislativo.components.repositorio-contas :as repo-contas]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
+            [oplenario.legislativo.components.repositorio-meus-votos :as repo-meus-votos]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.logic.contas :as logic-contas]
+            [oplenario.legislativo.logic.meus-votos :as logic-meus-votos]
             [oplenario.motor.api :as motor])
   (:import (java.security MessageDigest)))
 
@@ -911,6 +913,25 @@
     (assoc (repo/meu-painel repo-legislativo (:ente-id ator) vereador-id) :vereador-id vereador-id)
     {:vereador-id nil :proposicoes [] :proposicoes-truncado false :pareceres [] :pareceres-truncado false
      :ciencias [] :ciencias-truncado false}))
+
+(defn meus-votos
+  "Os votos NOMINAIS do vereador ATOR para a tela 'Minha atuacao' — TODOS, inclusive os de sessao secreta ou fechada
+  ao publico (o voto e' dele, dado de forma identificada), cada um marcado com o que o portal faz com ele. O vereador
+  vem SEMPRE do ator (`resolver-vereador`, injetado pelo host — anti-forja, mesmo contrato de `meu-painel`): nenhum
+  id do request escolhe de quem sao os votos, e a leitura e' da FONTE (`legislativo.votos`), com `ente_id` do ator.
+  Voto de votacao SECRETA nunca entra (sigilo no schema). `sessoes-publicas` (injetada pelo host: ente-id -> ids das
+  sessoes que o portal mostra, a regra de `sessoes`) so' MARCA o voto — nao decide o que o vereador ve. Ator sem
+  cadastro de vereador -> resposta vazia, nunca erro."
+  [repo-legislativo resolver-vereador sessoes-publicas ator]
+  (let [ente-id (:ente-id ator)]
+    (if-let [vereador-id (resolver-vereador ente-id (:identidade-id ator))]
+      (let [{:keys [votos total sim nao abstencao]} (repo-meus-votos/meus-votos repo-legislativo ente-id vereador-id)
+            publicas (set (sessoes-publicas ente-id))]
+        {:vereador-id vereador-id
+         :votos (mapv #(logic-meus-votos/marcar-voto publicas %) votos)
+         :votos-total total
+         :votos-por-opcao {:sim sim :nao nao :abstencao abstencao}})
+      {:vereador-id nil :votos [] :votos-total 0 :votos-por-opcao {:sim 0 :nao 0 :abstencao 0}})))
 
 (defn acusar-ciencia
   "Onda C1 — 'Dar ciencia' (Task 3): registra a ciencia do vereador ATOR sobre `evento-ref` (anti-forja:

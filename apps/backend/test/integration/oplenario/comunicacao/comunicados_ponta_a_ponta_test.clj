@@ -161,7 +161,7 @@
                         (swap! propostas conj {:ferramenta (:nome e) :entrada entrada :apresentacao apresentacao})
                         {:proposta-id (str (random-uuid)) :titulo (:titulo apresentacao)
                          :estado "aguardando_confirmacao" :mensagem "Nada foi feito ainda."})
-              :registrar-chamada (fn [_ e desfecho] (swap! chamadas conj [(:nome e) desfecho]))}
+              :registrar-chamada (fn [_ e desfecho _] (swap! chamadas conj [(:nome e) desfecho]))}
         agente (fn [quem papeis] {:identidade-id quem :ente-id ente :papeis papeis :tipo-vinculo "servidor"
                                   :via {:agente "assistente" :execucao-id (random-uuid) :publico :secretaria
                                         :classes #{:leitura :ato} :institucional? false}})]
@@ -179,7 +179,8 @@
                                    "destinos" [{"tipo" "pessoa" "alvo-id" (str (p :bia))}]})]
         (is (= "aguardando_confirmacao" (:estado r)))
         (is (re-find #"Para: Bia Souza \(1 pessoa\)" (get-in (first @propostas) [:apresentacao :texto])))
-        (is (= [["enviar_comunicado" "proposta"]] @chamadas))
+        (is (= [["enviar_comunicado" "proposta"]] (filterv #(= "enviar_comunicado" (first %)) @chamadas)))
+        (is (some #(= ["ler_comunicado" "ok"] %) @chamadas) "a leitura do agente tambem foi ao audit (ADR-0024)")
         (is (empty? (get-in (pedir svc ente (p :bia) :get "/meu/comunicados") [:corpo :itens]))
             "nada foi enviado")))
     (testing "a pessoa confirma: a mesma entrada roda como ela (ator sem :via) e envia"

@@ -31,6 +31,7 @@
             [oplenario.legislativo.adapters.out.ficha-materia :as adapters-out-ficha]
             [oplenario.legislativo.adapters.out.juridico :as adapters-out-juridico]
             [oplenario.legislativo.adapters.out.meu-painel :as adapters-out-meu-painel]
+            [oplenario.legislativo.adapters.out.meus-votos :as adapters-out-meus-votos]
             [oplenario.legislativo.adapters.in.pos-aprovacao :as adapters-in-pos-aprovacao]
             [oplenario.legislativo.adapters.out.autografo :as adapters-out-autografo]
             [oplenario.legislativo.adapters.out.norma :as adapters-out-norma]
@@ -1059,6 +1060,16 @@
     (http/json-resposta 200 (adapters-out-meu-painel/meu-painel->wire
                                (controllers/meu-painel repo-leg resolver-vereador (:ator req))))))
 
+(defn- meus-votos-handler
+  "GET /meu/votos — 'Minha atuacao': os votos NOMINAIS do vereador do ATOR, inclusive os de sessao secreta ou fechada ao
+  publico, cada um marcado com o que o portal faz com ele. Gate grosso 'vereador' na rota; o vereador vem de
+  `resolver-vereador` (injetado pelo host), nunca do caminho, da query ou do corpo — um vereador nao le o voto de outro
+  por aqui. Ator sem cadastro vinculado -> 200 vazio."
+  [repo-leg resolver-vereador sessoes-publicas]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-meus-votos/meus-votos->wire
+                               (controllers/meus-votos repo-leg resolver-vereador sessoes-publicas (:ator req))))))
+
 (defn- acusar-ciencia-handler
   "POST /meu/ciencias. `vereador-id` NUNCA vem do corpo (adapters/in nem o le); o controller injeta o
   resolvido do ator. nil (ator sem cadastro vinculado -> `resolver-vereador` nil) -> 404, mesmo contrato de
@@ -1335,8 +1346,12 @@
            registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
            comissoes-vigentes nomes-de-vereadores perfil-juridico casa-tem-juridico? copiloto-analise normas-publicadas?
            ;; ADR-0020 fatia 2: as pessoas com `juridico` que recebem o aviso do pedido de parecer (host). Opcional.
-           juridicos-a-avisar]}]
+           juridicos-a-avisar
+           ;; 'Minha atuacao': ente-id -> ids das sessoes que o portal mostra (host; so' MARCA o voto). Opcional.
+           sessoes-publicas]}]
   (let [nome-na-casa (or nome-na-casa (constantly nil))
+        ;; sem o seam nenhum voto e' marcado como publico (o erro cai no lado de avisar o vereador)
+        sessoes-publicas (or sessoes-publicas (constantly #{}))
         ;; sem o seam, ninguem le o resultado da ultima votacao (fail-closed)
         pode-ver-resultado? (or pode-ver-resultado? (constantly false))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
@@ -1542,6 +1557,9 @@
        :route-name :legislativo/meu-pedido-juridico]
       ["/meu/painel" :get [auth papel-vereador (meu-painel-handler repo-legislativo resolver-vereador)]
        :route-name :legislativo/meu-painel]
+      ;; 'Minha atuacao': todos os votos do PROPRIO vereador (inclusive de sessao nao publica); so' ele os le
+      ["/meu/votos" :get [auth papel-vereador (meus-votos-handler repo-legislativo resolver-vereador sessoes-publicas)]
+       :route-name :legislativo/meus-votos]
       ["/meu/ciencias" :post
        [auth papel-vereador it/corpo-json (acusar-ciencia-handler repo-legislativo resolver-vereador)]
        :route-name :legislativo/acusar-ciencia]
