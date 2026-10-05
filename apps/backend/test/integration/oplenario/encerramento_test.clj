@@ -40,6 +40,10 @@
 
 (def ^:private opts {:builder-fn rs/as-unqualified-maps})
 
+;; 11 digitos sorteados em 10^11: os sorteios antigos ("1111111" + rand-int 9999) colidiam entre testes da mesma corrida
+;; (`identidade_cpf_key`), e a suite reprovava de vez em quando sem defeito nenhum.
+(defn- cpf-sorteado [] (format "%011d" (long (rand 1e11))))
+
 (defn- sql! [& args] (jdbc/execute! *dono* (vec args) opts))
 
 (defn- sql-cenario!
@@ -150,7 +154,7 @@
            VALUES (?, ?, 19, 2025, 2028, true, now())" (random-uuid) ente)
     (sql! "INSERT INTO cadastros.vereador (id, ente_id, nome, efetivado_em) VALUES (?, ?, ?, now())"
           (random-uuid) ente (str "Vereadora " marca " \"Aspas\", vírgula\nquebra"))
-    (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, ?)" pessoa (str "1111111" (rand-int 9999)) (str "Pessoa só da " marca))
+    (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, ?)" pessoa (cpf-sorteado) (str "Pessoa só da " marca))
     (sql! "INSERT INTO identidade.identidade_externa (id, identidade_id, provedor, sub) VALUES (?, ?, 'govbr', ?)"
           (random-uuid) pessoa (str "sub-" marca "-" pessoa))
     (doseq [p [pessoa compartilhada]]
@@ -192,7 +196,7 @@
       (store/guardar! st k (.getBytes (str "conteudo " marca " " k)) "application/octet-stream"))
     ;; a CIDADA (so' vinculo de cidadao): segue uma materia e faz uma manifestacao ANONIMA a ouvidoria
     (let [cidada (random-uuid)]
-      (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, ?)" cidada (str "3333" (rand-int 99999))
+      (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, ?)" cidada (cpf-sorteado)
             (str "Cidadã da " marca))
       (sql! "INSERT INTO identidade.vinculo (id, ente_id, identidade_id, tipo) VALUES (?, ?, ?, 'cidadao')" (random-uuid) ente cidada)
       (sql! "INSERT INTO transparencia.acompanhamento (ente_id, proposicao_id, seguidor_identidade_id, created_by, efetivado_em)
@@ -239,7 +243,7 @@
   "A e B semeadas, com uma pessoa compartilhada, num store novo."
   []
   (let [st (store-memoria) a (random-uuid) b (random-uuid) comp (random-uuid) r (repo-aud)]
-    (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, 'Pessoa das duas Casas')" comp (str "2222" (rand-int 99999)))
+    (sql! "INSERT INTO identidade.identidade (id, cpf, nome) VALUES (?, ?, 'Pessoa das duas Casas')" comp (cpf-sorteado))
     {:st st :a a :b b :compartilhada comp
      :pa (semear-casa! a "Casa-A" st r comp)
      :pb (semear-casa! b "Casa-B" st r comp)}))
