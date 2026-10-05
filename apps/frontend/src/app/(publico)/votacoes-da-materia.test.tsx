@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { VotacoesDaMateria } from "./votacoes-da-materia";
+import type { VotacaoPublicaOut } from "@/lib/contrato-portal.gen";
+import { UltimaVotacaoEmPlenario, VotacoesDaMateria } from "./votacoes-da-materia";
 
 // "Votações desta matéria" na ficha pública: só existe quando o servidor diz que há votação pública encerrada dela.
 
@@ -76,5 +77,27 @@ describe("VotacoesDaMateria", () => {
     mockar({ corpo: { votacoes: [], total: 0, pagina: 1, "por-pagina": 20 } });
     rerender(<VotacoesDaMateria ente={ENTE} proposicaoId="30000000-0000-0000-0000-000000000002" />);
     await waitFor(() => expect(screen.queryByRole("link", { name: "Ver as votações desta matéria" })).toBeNull());
+  });
+});
+
+describe("UltimaVotacaoEmPlenario", () => {
+  const base: VotacaoPublicaOut = {
+    votacaoId: "v1",
+    encerradaEm: "2026-10-05T15:00:00Z",
+    sessao: { sessaoId: "s1", tipoSessao: "ordinaria", numeroSequencial: 3 },
+    objetoTipo: "proposicao",
+    modalidade: "nominal",
+    quorumTipo: "maioria_qualificada_2_3",
+    resultado: "aprovada",
+  };
+
+  it("emenda à Lei Orgânica aprovada só no 1º turno: a frase diz o turno, não que a matéria foi aprovada", () => {
+    render(<UltimaVotacaoEmPlenario ente={ENTE} ultima={{ ...base, turno: 1 }} />);
+    expect(screen.getByRole("status").textContent).toContain("a matéria foi aprovada em 1º turno em 05/10/2026");
+  });
+
+  it("matéria de um turno: a frase de sempre", () => {
+    render(<UltimaVotacaoEmPlenario ente={ENTE} ultima={base} />);
+    expect(screen.getByRole("status").textContent).toContain("a matéria foi aprovada em 05/10/2026");
   });
 });
