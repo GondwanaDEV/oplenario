@@ -31,6 +31,12 @@ export function useEu(token: string | null): { papeis: string[] | null; tipoVinc
     (async () => {
       try {
         const r = await apiFetch("/api/eu", { token: token ?? undefined, cache: "no-store" });
+        if (r.status === 401) {
+          // O cookie existe (o middleware deixou passar) mas o backend não reconhece mais a sessão: expirou, foi
+          // encerrada ou o vínculo caiu. Volta ao login em vez de deixar a tela sem papel e sem como sair.
+          voltarAoLogin();
+          return;
+        }
         if (!r.ok) throw new Error(`eu ${r.status}`);
         const d = (await r.json()) as { ator?: { papeis?: unknown; "tipo-vinculo"?: unknown } };
         const ps = Array.isArray(d?.ator?.papeis)
@@ -55,4 +61,13 @@ export function useEu(token: string | null): { papeis: string[] | null; tipoVinc
   }, [token]);
 
   return { papeis, tipoVinculo, estado };
+}
+
+const CAMINHOS_PUBLICOS = ["/portal", "/entrar", "/status"];
+
+/** Leva a `/api/auth/sessao-expirada`, que confere no backend, limpa os cookies e abre `/entrar` com o destino. Nunca
+ *  numa página pública (lá não há sessão a perder). */
+export function voltarAoLogin(loc: Pick<Location, "pathname" | "search" | "assign"> = window.location): void {
+  if (CAMINHOS_PUBLICOS.some((p) => loc.pathname === p || loc.pathname.startsWith(`${p}/`))) return;
+  loc.assign(`/api/auth/sessao-expirada?redirect=${encodeURIComponent(loc.pathname + loc.search)}`);
 }

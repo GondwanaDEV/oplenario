@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useEu } from "./use-eu";
+import { useEu, voltarAoLogin } from "./use-eu";
 
 describe("useEu", () => {
   afterEach(() => {
@@ -30,9 +30,9 @@ describe("useEu", () => {
     expect(chamada[0]).toBe("/api/eu");
   });
 
-  it("modo real + resposta não-ok -> papeis [], estado 'erro' (fail-closed)", async () => {
+  it("modo real + resposta não-ok (que não é 401) -> papeis [], estado 'erro' (fail-closed)", async () => {
     vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
-    global.fetch = vi.fn(async () => ({ ok: false, status: 401 }) as Response) as unknown as typeof fetch;
+    global.fetch = vi.fn(async () => ({ ok: false, status: 500 }) as Response) as unknown as typeof fetch;
 
     const { result } = renderHook(() => useEu(null));
     await waitFor(() => expect(result.current.estado).toBe("erro"));
@@ -63,5 +63,25 @@ describe("useEu", () => {
     const { result } = renderHook(() => useEu(null));
     await waitFor(() => expect(result.current.estado).toBe("pronto"));
     expect(result.current.papeis).toEqual([]);
+  });
+});
+
+describe("voltarAoLogin — sessão que o backend não reconhece mais (401 em /eu)", () => {
+  function loc(pathname: string, search = "") {
+    return { pathname, search, assign: vi.fn() };
+  }
+
+  it("leva à rota que confere, limpa os cookies e abre /entrar, com o caminho atual", () => {
+    const l = loc("/proposicoes", "?filtro=abertas");
+    voltarAoLogin(l);
+    expect(l.assign).toHaveBeenCalledWith("/api/auth/sessao-expirada?redirect=%2Fproposicoes%3Ffiltro%3Dabertas");
+  });
+
+  it("nunca numa página pública (lá não há sessão a perder)", () => {
+    for (const p of ["/portal/casa/abc", "/entrar", "/entrar/escolher", "/status"]) {
+      const l = loc(p);
+      voltarAoLogin(l);
+      expect(l.assign, p).not.toHaveBeenCalled();
+    }
   });
 });

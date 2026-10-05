@@ -100,7 +100,11 @@ com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão pr
 ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
 reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429) — cada modelo
 da lista ganhou uma folga de raciocínio somada ao `max_tokens` (`MODELOS_OPENROUTER`), ainda não medida ao vivo; o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
-`[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+`[GAP]` jurídico, agora com o OpenRouter como contratado. **Exceção temporária (05/10/2026, decisão do Daouda, ADR-0023):** até haver crédito, o
+satélite pode rodar com modelos GRATUITOS sem ZDR (`OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita`):
+`nvidia/nemotron-3-super-120b-a12b:free`, com `qwen/qwen3.8-27b:free` e `nvidia/nemotron-3-ultra-550b-a55b:free` de
+reserva (`OPLENARIO_IA_MODELOS_RESERVA`, troca em 429/5xx/404). Sem crédito comprado, a conta inteira tem 50 chamadas
+por dia a modelos gratuitos. Avaliação da Clara por papel: `apps/ia/avaliacoes/clara-papeis.json`, prompt `agente-v2`. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
@@ -152,6 +156,13 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   `/entrar`, `/status`, `/api`, `/_next`, `/fontes` e arquivo estático; a raiz e qualquer caminho desconhecido levam
   direto à tela do CPF (com `redirect`, menos a raiz), sem página de passagem. `middleware.test.ts` mede as páginas
   públicas em disco contra a lista. O console do operador segue com a entrada própria.
+- **Sair e sessão que expirou (05/10/2026):** não havia "Sair" em nenhuma tela das Câmaras (só no console do
+  operador). Agora está no menu do avatar do topo interno, no topo da área da cidadã, em "Meu acesso" do vereador e no
+  `/inicio` de quem não tem o topo; é um POST em `/api/auth/logout` (`lib/botao-sair.tsx`). O Keycloak pergunta "Você
+  realmente deseja sair?" porque o logout vai sem `id_token_hint` (o login não guarda token); a sessão do sistema já
+  caiu antes da pergunta. Cookie `sessao` que o backend não reconhece mais (401 em `/eu`) leva a
+  `/api/auth/sessao-expirada`, que confere no backend, apaga os cookies e abre `/entrar` com o destino; com a sessão
+  válida ou o backend fora do ar, não desloga. Antes a pessoa caía no `/inicio` sem papel, sem topo e sem como sair.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:

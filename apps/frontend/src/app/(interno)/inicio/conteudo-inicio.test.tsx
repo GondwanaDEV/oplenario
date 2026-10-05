@@ -174,3 +174,13 @@ describe("ConteudoInicio — a fiação dos dados", () => {
     expect(screen.getByText(/não foi possível carregar as sessões/i)).toBeTruthy();
   });
 });
+
+describe("ConteudoInicio — o acesso que não carregou", () => {
+  it("erro ao buscar os papéis (não 401): diz que o acesso não carregou, e não mostra a área da cidadã", () => {
+    estado.papeis = [];
+    estado.estadoPapeis = "erro";
+    render(<ConteudoInicio />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Não foi possível carregar o seu acesso");
+    expect(screen.queryByText("Acompanhamentos")).toBeNull();
+  });
+});

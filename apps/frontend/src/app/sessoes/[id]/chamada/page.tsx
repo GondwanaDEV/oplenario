@@ -38,6 +38,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { SessaoComClara } from "../com-clara";
+import { useSessaoNoCabecalho } from "../sessao-no-cabecalho";
 import { useTema } from "@/lib/tema";
 import { useChamada, type EstadoCanal } from "@/lib/use-chamada";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
@@ -100,12 +101,15 @@ export default function PaginaChamada() {
   );
 }
 
-function ConteudoChamada({ id }: { id: string }) {
+export function ConteudoChamada({ id }: { id: string }) {
   const { token } = useAuth();
   const {
     dados, justificativas, estado, canal, erro,
     marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
   } = useChamada(id, token);
+  // Qual sessão é (ADR-0024, fatia 6): o nome no cabeçalho e a dica da Clara. Lida em paralelo à chamada e nunca a
+  // bloqueia: sem ela, o cabeçalho fica só com a composição.
+  const nomeSessao = useSessaoNoCabecalho(id, token, "sessao");
 
   if (estado === "erro") {
     return (
@@ -132,6 +136,7 @@ function ConteudoChamada({ id }: { id: string }) {
       registrarChamada={registrarChamada}
       decidirJustificativa={decidirJustificativa}
       abrirJustificativa={abrirJustificativa}
+      nomeSessao={nomeSessao}
     />
   );
 }
@@ -148,10 +153,12 @@ interface ChamadaProps {
     lockVersion: number,
   ) => Promise<{ ok: true } | { ok: false; erro: string; conflito: boolean }>;
   abrirJustificativa: (vereadorId: string, motivo: string) => Promise<{ ok: true } | { ok: false; erro: string }>;
+  /** "Sessão ordinária nº 15", ou `null` enquanto a sessão não chega (ou se a leitura falhar). */
+  nomeSessao: string | null;
 }
 
 function Chamada({
-  dados, justificativas, canal, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa,
+  dados, justificativas, canal, marcarLinha, registrarChamada, decidirJustificativa, abrirJustificativa, nomeSessao,
 }: ChamadaProps) {
   const { tema, alternar } = useTema();
   const [busca, setBusca] = useState("");
@@ -257,7 +264,12 @@ function Chamada({
             <span className="tipo">Chamada de presença</span>
             {/* `data-de-composicao` chega ISO (`2026-08-15`) — formato de transporte, não de tela. O util
                 compartilhado `formatarData` é a convenção da casa (pt-BR, instância única de Intl). */}
-            <span className="quando">composição de {formatarData(dados.dataDeComposicao)}</span>
+            {/* Com o nome da sessão, no celular a linha quebra entre os dois trechos, nunca no meio de um. */}
+            <span className="quando">
+              {nomeSessao && <span className="sem-quebra">{nomeSessao} ·</span>}
+              {nomeSessao && " "}
+              <span className="sem-quebra">composição de {formatarData(dados.dataDeComposicao)}</span>
+            </span>
           </div>
           <div className="topo-dir">
             <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">

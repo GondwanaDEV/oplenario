@@ -27,6 +27,7 @@
 .sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
 .sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+.sessao-meta .quando .sem-quebra { white-space: nowrap; }
 
 /* ============== 2 · layout da cabine ============== */
 .cabine { display: grid; grid-template-columns: minmax(0,1fr) 372px; gap: clamp(1rem, 2.4vw, 1.8rem); padding: clamp(1.2rem, 3vw, 2rem) 0 8.5rem; align-items: start; }

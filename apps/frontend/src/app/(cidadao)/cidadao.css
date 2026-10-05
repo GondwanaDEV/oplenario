@@ -19,3 +19,12 @@
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
 }
+
+/* "Sair" da sessão do gov.br: botão de contorno discreto ao lado do nome (POST em /api/auth/logout). */
+.topo-cidadao .form-sair { margin: 0; }
+.topo-cidadao .cid-sair {
+  padding: 0.45rem 0.85rem; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: transparent;
+  color: var(--texto); font: inherit; font-size: var(--t-13); font-weight: 600; cursor: pointer; min-height: 40px;
+}
+.topo-cidadao .cid-sair:hover { background: color-mix(in srgb, var(--marca) 7%, transparent); }
+.topo-cidadao .cid-sair:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }

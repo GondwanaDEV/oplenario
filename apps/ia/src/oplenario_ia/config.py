@@ -8,9 +8,10 @@ fornecedor não ficam na `Config` — vêm do ambiente (OPENROUTER_API_KEY, ou A
 
 from __future__ import annotations
 
+import logging
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -18,6 +19,12 @@ from pydantic import BaseModel, Field, model_validator
 Vendor = Literal["fake", "openrouter", "anthropic"]
 Asr = Literal["fake", "sherpa"]
 Embeddings = Literal["fake", "fastembed"]
+# A política de dado do roteamento no OpenRouter (ADR-0023). `zdr` é a regra; `excecao-gratuita` é a EXCEÇÃO TEMPORÁRIA
+# decidida pelo dono do produto em 05/10/2026 ("use os melhores modelos gratuitos mesmo não sendo compliance à nossa
+# política... até conseguir comprar créditos"): desligada por padrão, ligada pelo operador por variável de ambiente.
+PoliticaOpenRouter = Literal["zdr", "excecao-gratuita"]
+
+log = logging.getLogger("oplenario_ia.config")
 
 
 class Config(BaseModel):
@@ -28,6 +35,12 @@ class Config(BaseModel):
     # restringe quem pode atender (`provider.only`) — vazio = qualquer provedor que cumpra ZDR e não colete dado.
     openrouter_url: str = "https://openrouter.ai/api/v1"
     openrouter_provedores: list[str] = Field(default_factory=list)
+    # `zdr` (padrão): data_collection deny + zdr + require_parameters. `excecao-gratuita`: só require_parameters, e só
+    # com modelos `:free` da lista própria — o provedor gratuito pode guardar e usar o dado (exceção à ADR-0023).
+    openrouter_politica: PoliticaOpenRouter = "zdr"
+    # failover NOSSO (ADR-0023 item 4, §22.3.5): modelos tentados em ordem quando o principal falha de forma
+    # retentável ou some (404). Nunca o `models` do OpenRouter. Cada um passa pela mesma regra do principal.
+    modelos_reserva: list[str] = Field(default_factory=list)
     registro_jsonl: str | None = None  # caminho do registro append-only; None = em memória
     # Fronteira com o core (ADR-0008) e o trabalho da Faixa A.
     core_url: str | None = None
@@ -46,14 +59,35 @@ class Config(BaseModel):
     def _modelo_do_openrouter(self) -> Config:
         if self.vendor != "openrouter":
             return self
-        # no OpenRouter o modelo leva o prefixo do fabricante; sem modelo explícito, o padrão vira o slug dele
+        # no OpenRouter o modelo leva o prefixo do fabricante; sem modelo explícito, o padrão vira o slug dele (na
+        # exceção gratuita, o primeiro da lista dela)
         if "modelo" not in self.model_fields_set:
-            self.modelo = MODELO_OPENROUTER_PADRAO
+            self.modelo = (
+                next(iter(MODELOS_OPENROUTER_GRATUITOS_EXCECAO))
+                if self.openrouter_politica == "excecao-gratuita"
+                else MODELO_OPENROUTER_PADRAO
+            )
         if not modelo_openrouter_fixo(self.modelo):
             raise ValueError(
                 "OPLENARIO_IA_MODELO: esperado `autor/modelo` fixo, em minúsculas — sem `openrouter/*`, alias `~` nem"
                 " `:online` (ADR-0023)"
             )
+        for reserva in self.modelos_reserva:
+            if not modelo_openrouter_fixo(reserva):
+                raise ValueError(
+                    f"OPLENARIO_IA_MODELOS_RESERVA: `{reserva}` não é `autor/modelo` fixo, em minúsculas — sem"
+                    " `openrouter/*`, alias `~` nem `:online` (ADR-0023)"
+                )
+        if len({self.modelo, *self.modelos_reserva}) != 1 + len(self.modelos_reserva):
+            raise ValueError("OPLENARIO_IA_MODELOS_RESERVA: modelo repetido (ou igual ao principal)")
+        if self.openrouter_politica == "excecao-gratuita":
+            # a exceção só existe para modelo gratuito: vale também na avaliação, que aceita qualquer slug fixo
+            pagos = [m for m in (self.modelo, *self.modelos_reserva) if not m.endswith(":free")]
+            if pagos:
+                raise ValueError(
+                    "OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita só aceita modelo gratuito (`:free`): "
+                    + ", ".join(pagos)
+                )
         return self
 
 
@@ -71,9 +105,53 @@ MODELOS_OPENROUTER: dict[str, int] = {
 MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(MODELOS_OPENROUTER)
 
 
-def folga_de_raciocinio(modelo: str) -> int:
+# EXCEÇÃO TEMPORÁRIA à ADR-0023 (decisão do dono do produto, 05/10/2026, até haver créditos no OpenRouter): os
+# modelos com que o satélite pode SUBIR com `OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita`, com a mesma folga de
+# raciocínio de `MODELOS_OPENROUTER`. Critério de entrada: (1) gratuito — slug terminado em `:free`, sem custo e sem
+# crédito na conta; (2) entre os melhores gratuitos do catálogo na triagem, medido com `oplenario-ia-avaliar --vendor
+# openrouter --politica excecao-gratuita --modelo <slug>` (R-IA-4) — a avaliação aprova, a lista só registra;
+# (3) slug fixo (`modelo_openrouter_fixo`). Os provedores gratuitos desses modelos em geral NÃO cumprem ZDR nem "sem
+# coleta": é por isso que a exceção existe, e por isso ela nunca vale com a política `zdr` (lá, só a lista acima).
+# Os três da triagem ao vivo de 05/10/2026 (ADR-0023, "Exceção temporária"), na ordem de uso: o primeiro é o padrão
+# sem `OPLENARIO_IA_MODELO`, os outros dois vão em `OPLENARIO_IA_MODELOS_RESERVA`. A avaliação completa ainda não
+# rodou (a conta bateu o limite diário do nível gratuito no meio da triagem).
+MODELOS_OPENROUTER_GRATUITOS_EXCECAO: dict[str, int] = {
+    "nvidia/nemotron-3-super-120b-a12b:free": 4000,
+    "qwen/qwen3.8-27b:free": 8000,
+    "nvidia/nemotron-3-ultra-550b-a55b:free": 4000,
+}
+
+AVISO_EXCECAO_GRATUITA = (
+    "EXCEÇÃO TEMPORÁRIA À ADR-0023 LIGADA (OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita): os pedidos ao OpenRouter"
+    " vão SEM zdr e SEM data_collection=deny, a modelos gratuitos (`:free`) — o provedor gratuito pode GUARDAR e USAR o"
+    " dado enviado (inclusive para treino). Decisão do dono do produto (05/10/2026) até haver créditos; desligar"
+    " voltando a política para `zdr`."
+)
+_excecao_avisada = False
+
+
+def avisar_excecao_gratuita(saida: Callable[[str], None] | None = None) -> bool:
+    """Emite o aviso da exceção UMA vez por processo (WARNING no log, ou `saida` quando dada, ex.: a CLI de avaliação).
+    Devolve se emitiu agora."""
+    global _excecao_avisada
+    if _excecao_avisada:
+        return False
+    _excecao_avisada = True
+    if saida is None:
+        log.warning(AVISO_EXCECAO_GRATUITA)
+    else:
+        saida(AVISO_EXCECAO_GRATUITA)
+    return True
+
+
+def modelos_da_politica(politica: PoliticaOpenRouter) -> dict[str, int]:
+    """Os modelos (slug → folga de raciocínio) com que o satélite pode subir na política dada."""
+    return MODELOS_OPENROUTER_GRATUITOS_EXCECAO if politica == "excecao-gratuita" else MODELOS_OPENROUTER
+
+
+def folga_de_raciocinio(modelo: str, politica: PoliticaOpenRouter = "zdr") -> int:
     """Os tokens a mais que o modelo ganha para raciocinar antes da resposta; 0 para modelo fora da lista."""
-    return MODELOS_OPENROUTER.get(modelo, 0)
+    return modelos_da_politica(politica).get(modelo, 0)
 
 
 _SLUG_OPENROUTER = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*$")
@@ -106,6 +184,10 @@ def carregar(env: Mapping[str, str] | None = None) -> Config:
         dados["openrouter_url"] = v
     if v := e.get("OPLENARIO_IA_OPENROUTER_PROVEDORES"):
         dados["openrouter_provedores"] = [p.strip() for p in v.split(",") if p.strip()]
+    if v := e.get("OPLENARIO_IA_OPENROUTER_POLITICA"):
+        dados["openrouter_politica"] = v
+    if v := e.get("OPLENARIO_IA_MODELOS_RESERVA"):
+        dados["modelos_reserva"] = [m.strip() for m in v.split(",") if m.strip()]
     for var, campo in (
         ("OPLENARIO_CORE_URL", "core_url"),
         ("OPLENARIO_IA_SEGREDO", "segredo"),
@@ -121,7 +203,16 @@ def carregar(env: Mapping[str, str] | None = None) -> Config:
         if v := e.get(var):
             dados[campo] = v
     config = Config.model_validate(dados)
-    if config.vendor == "openrouter" and config.modelo not in MODELOS_OPENROUTER_PERMITIDOS:
-        permitidos = ", ".join(sorted(MODELOS_OPENROUTER_PERMITIDOS))
-        raise ValueError(f"OPLENARIO_IA_MODELO fora da lista de modelos permitidos do OpenRouter ({permitidos})")
+    if config.vendor != "openrouter":
+        return config
+    excecao = config.openrouter_politica == "excecao-gratuita"
+    lista = modelos_da_politica(config.openrouter_politica)
+    permitidos = ", ".join(sorted(lista))
+    nome_lista = "MODELOS_OPENROUTER_GRATUITOS_EXCECAO" if excecao else "lista de modelos permitidos do OpenRouter"
+    if config.modelo not in lista:
+        raise ValueError(f"OPLENARIO_IA_MODELO fora da {nome_lista} ({permitidos})")
+    if fora := [m for m in config.modelos_reserva if m not in lista]:
+        raise ValueError(f"OPLENARIO_IA_MODELOS_RESERVA fora da {nome_lista} ({permitidos}): {', '.join(fora)}")
+    if excecao:
+        avisar_excecao_gratuita()
     return config

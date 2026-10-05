@@ -2,6 +2,11 @@
 demo). Planeja por padrões da pergunta ("PL 12/2026", "tramitação", "pauta", "art. 45 do Regimento", "quórum")
 entre as ferramentas que o core ofereceu, e responde citando linhas LITERAIS do que a ferramenta devolveu (a
 conferência roda de verdade) — dispositivo de norma é citado pelo artigo, com a data até quando o texto foi conferido.
+
+Segue o prompt `agente-v2` (fatia 6 da Clara): pergunta sobre a trilha ou sobre as conversas da Casa não consulta nada
+e aponta a tela Auditoria; pedido de ato sem proposta criada diz que a Clara não o faz e que a pessoa o faz pela tela;
+sem fonte, diz que não encontrou com o acesso da pessoa e onde ver; um parágrafo ou inciso achado na busca leva à
+leitura do artigo inteiro.
 """
 
 from __future__ import annotations
@@ -45,6 +50,25 @@ _DESTINATARIO = re.compile(
 _ASSUNTO = re.compile(r"\bsobre\s+(.+?)[.?!]*$", re.IGNORECASE)
 _PARECER_JURIDICO = re.compile(
     r"\b(pe[çc]a|pedir|solicite|solicitar|abra|abrir|encaminhe|encaminhar)\b.*\bparecer\b.*\bjur[íi]dic", re.IGNORECASE
+)
+_TRILHA = re.compile(
+    r"\bquem\s+(?:alterou|mudou|apagou|excluiu|editou|incluiu|retirou|mexeu|acessou)\b|\btrilha\b"
+    r"|\bconversas?\b.*\bclara\b|\bperguntas?\b.*\bclara\b",
+    re.IGNORECASE,
+)
+# o pedido de ato vem no imperativo ("Protocole…", "Peça…"); "como pedir vista?" é pergunta, não pedido
+_ATO = re.compile(
+    r"\b(?:protocole|pe[çc]a|solicite|encaminhe|designe|envie|mande|registre|publique|assine|vote)\b", re.IGNORECASE
+)
+_NORMA_LIDA = re.compile(r'<fonte id="norma:([^"#]+)#([^"]+)"')
+SEM_TRILHA = (
+    "Eu não leio a trilha de auditoria nem as conversas das pessoas da Casa com a Clara, então não sei dizer isso. "
+    "Quem tem esse acesso, como o controle interno, vê na tela Auditoria."
+)
+NAO_FAZ = "Não posso fazer isso por você daqui. Você faz isso pela tela da plataforma, se o seu acesso permitir."
+SEM_FONTE = (
+    "Não encontrei isso nas consultas que o seu acesso permite, e não vou adivinhar. Veja na tela da plataforma em "
+    "que isso aparece, ou pergunte à secretaria da Casa."
 )
 _ID_DA_MATERIA = re.compile(r"^id: (\S+)$", re.MULTILINE)
 _ITEM = re.compile(r"^itens\.(\d+)\.(id|nome|campos\.\d+): (.+)$", re.MULTILINE)
@@ -141,13 +165,34 @@ def _planejar_parecer_juridico(pedido: PedidoInferencia, pergunta: str, disponiv
     )
 
 
+def _ler_o_artigo(pedido: PedidoInferencia, disponiveis: set[str]) -> str | None:
+    """A busca achou um parágrafo ou inciso (`art45_par1`): lê o artigo inteiro (`art45`) antes de responder — o trecho
+    sozinho não diz a regra toda. Uma leitura só: artigo já lido, ou leitura que não trouxe nada, encerra."""
+    if "ler_dispositivo" not in disponiveis:
+        return None
+    lidos = [m for bruto in pedido.conteudo for m in _NORMA_LIDA.findall(bruto)]
+    if not lidos or any(c.startswith("A ferramenta ler_dispositivo") for c in pedido.conteudo):
+        return None
+    norma_id, endereco = lidos[0]
+    artigo = endereco.split("_", 1)[0]
+    if (norma_id, artigo) in lidos:
+        return None
+    argumentos = {"norma-id": norma_id, "endereco": artigo}
+    return json.dumps({"acao": "ferramenta", "nome": "ler_dispositivo", "argumentos": argumentos})
+
+
 def planejar(pedido: PedidoInferencia) -> str:
+    if _TRILHA.search(_pergunta(pedido)):
+        return json.dumps({"acao": "responder"})  # nenhuma ferramenta lê a trilha nem as conversas da Casa
     parecer = _planejar_parecer_juridico(pedido, _pergunta(pedido), _disponiveis(pedido))
     if parecer is not None:
         return parecer
     requerimento = _planejar_requerimento(pedido, _pergunta(pedido), _disponiveis(pedido))
     if requerimento is not None:
         return requerimento
+    artigo_inteiro = _ler_o_artigo(pedido, _disponiveis(pedido))
+    if artigo_inteiro is not None:
+        return artigo_inteiro
     ja_consultou = any(c.startswith(("<fonte id=", "A ferramenta ")) for c in pedido.conteudo)
     if ja_consultou:
         return json.dumps({"acao": "responder"})
@@ -182,13 +227,14 @@ def _linha_informativa(texto: str) -> str:
 
 
 def responder(pedido: PedidoInferencia) -> str:
+    pergunta = _pergunta(pedido)
+    if _TRILHA.search(pergunta):
+        return SEM_TRILHA
     fontes = [
         (fid, html.unescape(rotulo), html.unescape(versao), html.unescape(texto))
         for bruto in pedido.conteudo
         for fid, rotulo, versao, texto in _FONTE.findall(bruto)
     ]
-    if not fontes:
-        return "Não encontrei nas informações da Casa o que responder a essa pergunta."
     for fid, _r, _v, texto in fontes:
         titulo = next((linha for linha in texto.split("\n") if linha.startswith("titulo: ")), None)
         if titulo and any(linha.startswith("proposta-id: ") for linha in texto.split("\n")):
@@ -196,7 +242,8 @@ def responder(pedido: PedidoInferencia) -> str:
                 f"Preparei a proposta: {titulo.removeprefix('titulo: ')}. Nada foi protocolado ainda: revise o texto, "
                 f"assine e protocole na tela Propostas — ou recuse. [[{fid} | {titulo}]]"
             )
-    paragrafos = []
+    # pedido de ato sem proposta criada: a Clara não fez nem vai fazer (agente-v2)
+    paragrafos = [NAO_FAZ] if _ATO.search(pergunta) else []
     for fid, rotulo, versao, texto in fontes[:2]:
         if fid.startswith("norma:"):
             trecho = frase(texto).rstrip(" .;:")
@@ -207,4 +254,4 @@ def responder(pedido: PedidoInferencia) -> str:
         if linha:
             valor = linha.split(": ", 1)[-1]
             paragrafos.append(f"Segundo o sistema da Casa: {valor}. [[{fid} | {linha}]]")
-    return "\n\n".join(paragrafos) or "Não encontrei nas informações da Casa o que responder a essa pergunta."
+    return "\n\n".join(paragrafos) or SEM_FONTE

@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { SessaoComClara } from "../com-clara";
+import { useSessaoNoCabecalho } from "../sessao-no-cabecalho";
 import { useTema } from "@/lib/tema";
 import { useAta } from "@/lib/use-ata";
 import { faltaParaPublicar, linhaDaVersao, origemDaRedacao, semAta } from "@/lib/ata-vista";
@@ -40,6 +41,9 @@ type Modo = "ler" | "editar" | "confirmar" | "revisar";
 export function ConteudoAta({ id }: { id: string }) {
   const { token } = useAuth();
   const r = useAta(id, token);
+  // Qual sessão é (ADR-0024, fatia 6): o nome no cabeçalho e, só com a ata aberta (quem não a lê não ganha dica
+  // sobre ela), a dica da Clara. Nunca bloqueia a ata.
+  const nomeSessao = useSessaoNoCabecalho(id, token, r.estado === "pronto" ? "ata" : null);
   const { tema, alternar } = useTema();
   // O aviso de sucesso vive AQUI: publicar relê a ata e a versão nova remonta <Ata> (key) — ali ele se perderia.
   const [aviso, setAviso] = useState<string | null>(null);
@@ -58,6 +62,7 @@ export function ConteudoAta({ id }: { id: string }) {
           <div className="topo-sep" aria-hidden="true" />
           <div className="sessao-meta">
             <span className="tipo">Ata</span>
+            {nomeSessao && <span className="quando">{nomeSessao}</span>}
           </div>
           <div className="topo-dir">
             <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">

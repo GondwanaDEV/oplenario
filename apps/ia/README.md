@@ -53,10 +53,20 @@ Conjuntos em `avaliacoes/*.json` (formato em `avaliacao/conjunto.py`): casos `se
 capacidade — `real` (anonimizados, `[GAP]` LGPD). Casos `apenas_fake` testam o pipeline e são pulados contra fornecedor
 real.
 
+Conjunto com `"nivel": "agente"` (formato em `avaliacao/agente.py`; `agente-seguranca`, `clara-papeis`) roda o laço
+inteiro da Clara contra um MCP roteirizado: o `catalogo` declara cada ferramenta como o core a oferece (descrição e
+entrada), o caso aponta as do papel pelo nome, e o `esperado` confere `chama`, `chama_com`, `nunca_chama`,
+`max_chamadas`, `texto_contem`, `texto_contem_algum` (uma das formas de cada grupo), `texto_nao_contem`,
+`citacoes_conferidas_min`, `nunca_enviado`, `enviado_contem` e `contaminado`.
+
 ```sh
 oplenario-ia-avaliar avaliacoes                                   # fake, custo zero
 oplenario-ia-avaliar avaliacoes --vendor anthropic --saida avaliacoes/resultados/$(date +%F).json
+oplenario-ia-avaliar avaliacoes --vendor openrouter --politica excecao-gratuita --modelo <autor/modelo:free>
 ```
+
+`--politica` (padrão `zdr`) é a mesma `OPLENARIO_IA_OPENROUTER_POLITICA` do satélite; na exceção gratuita a avaliação
+aceita qualquer slug fixo `:free` e imprime o aviso da exceção.
 
 Contra fornecedor real **gasta dinheiro** e é **obrigatório antes de trocar fornecedor ou modelo** (§22.11.8) — junto
 com a atualização de `avaliacao/precos.json`. O fornecedor da avaliação vem só da linha de comando, nunca do ambiente.
@@ -81,6 +91,8 @@ com o carregamento dos modelos.
 | `OPLENARIO_IA_MODELO` | `claude-opus-5` (`openai/gpt-oss-120b` no OpenRouter, provisório) | no OpenRouter, o slug fixo do catálogo, da lista `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, `qwen/qwen3.8-27b:free`); fora dela o satélite não sobe |
 | `OPENROUTER_API_KEY` | — | chave do OpenRouter, do cofre; sem ela a IA responde "indisponível" |
 | `OPLENARIO_IA_OPENROUTER_PROVEDORES` | — | provedores aprovados, separados por vírgula (`provider.only`); ZDR e "sem coleta" vão sempre |
+| `OPLENARIO_IA_OPENROUTER_POLITICA` | `zdr` | política de dado no OpenRouter. `zdr`: `data_collection: deny` + `zdr` + `require_parameters` em toda requisição. `excecao-gratuita`: **exceção temporária à ADR-0023, por decisão do dono do produto (05/10/2026), até haver créditos** — só `require_parameters` (e `only`), sem ZDR nem "sem coleta": o provedor gratuito pode guardar e usar o dado. Só sobe com modelo `:free` de `MODELOS_OPENROUTER_GRATUITOS_EXCECAO` (sem `OPLENARIO_IA_MODELO`, o primeiro dela) e registra um WARNING na subida. Os modelos dessa lista não sobem com `zdr` |
+| `OPLENARIO_IA_MODELOS_RESERVA` | — | failover nosso de modelo (nunca o `models` do OpenRouter): slugs separados por vírgula, cada um validado como o principal na política vigente. Tentados na ordem, uma vez cada, quando o anterior falha de forma retentável (429, 503, 408, 5xx, rede, timeout, resposta vazia) ou devolve 404; nunca em 400, 401, 402 ou 403. O erro final é o do último; o registro leva o modelo e o provedor que atenderam |
 | `OPLENARIO_IA_OPENROUTER_URL` | `https://openrouter.ai/api/v1` | |
 | `OPLENARIO_IA_TIMEOUT_S` | `60` | |
 | `OPLENARIO_IA_REGISTRO_JSONL` | — | registro append-only em arquivo; sem ele, em memória |
