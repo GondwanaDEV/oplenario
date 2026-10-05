@@ -10,7 +10,13 @@ import pytest
 
 from oplenario_ia.avaliacao.custo import calcular, tabela_padrao
 from oplenario_ia.confianca.registro import RegistroExecucao, RegistroMemoria
-from oplenario_ia.config import MODELOS_OPENROUTER_PERMITIDOS, Config, carregar
+from oplenario_ia.config import (
+    MODELOS_OPENROUTER,
+    MODELOS_OPENROUTER_PERMITIDOS,
+    Config,
+    carregar,
+    folga_de_raciocinio,
+)
 from oplenario_ia.erros import Categoria, ErroIA
 from oplenario_ia.governanca.filtro import PedidoGovernado
 from oplenario_ia.governanca.proveniencia import Fonte, Peca, Proveniencia, Sigilo
@@ -70,6 +76,7 @@ def porta_com(
     *,
     chave: str | None = "sk-or-teste",
     provedores: list[str] | None = None,
+    folga_raciocinio: int = 0,
 ) -> PortaOpenRouter:
     def tratar(req: httpx.Request) -> httpx.Response:
         if visto is not None:
@@ -83,6 +90,7 @@ def porta_com(
         timeout_s=5,
         chave=chave,
         provedores=provedores,
+        folga_raciocinio=folga_raciocinio,
         cliente=httpx.Client(transport=httpx.MockTransport(tratar)),
     )
 
@@ -159,6 +167,23 @@ def test_resposta_sem_texto_e_falha_de_modelo() -> None:
     with pytest.raises(ErroIA) as e:
         porta_com(httpx.Response(200, json=conclusao(texto=None))).gerar(pedido())
     assert (e.value.categoria, e.value.retentavel) == (Categoria.MODELO, True)
+
+
+def test_modelo_que_raciocina_ate_o_limite_tem_detalhe_proprio_sem_o_raciocinio() -> None:
+    # o caso medido ao vivo (qwen gratuito, 05/10/2026): finish_reason=length, content vazio, so' o raciocinio
+    corpo = conclusao("length", None, nativo="length")
+    corpo["choices"][0]["message"]["reasoning"] = "segredo-do-raciocinio " * 50
+    with pytest.raises(ErroIA) as e:
+        porta_com(httpx.Response(200, json=corpo)).gerar(pedido())
+    assert (e.value.categoria, e.value.retentavel) == (Categoria.MODELO, True)
+    assert "raciocinando" in e.value.detalhe
+    assert "segredo-do-raciocinio" not in e.value.detalhe, "o detalhe nunca leva conteudo (B4)"
+
+
+def test_folga_de_raciocinio_soma_ao_limite_do_pedido() -> None:
+    visto: list[httpx.Request] = []
+    porta_com(httpx.Response(200, json=conclusao()), visto, folga_raciocinio=4000).gerar(pedido(max_tokens=1000))
+    assert json.loads(visto[0].content)["max_tokens"] == 5000
 
 
 def test_erro_no_corpo_de_um_200_vira_categoria() -> None:
@@ -275,6 +300,24 @@ def test_fabrica_cria_a_porta_do_openrouter_com_a_chave_do_ambiente(monkeypatch:
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-x")
     porta = criar_porta(Config(vendor="openrouter"))
     assert isinstance(porta, PortaOpenRouter) and porta.vendor == "openrouter"
+
+
+def test_cada_modelo_permitido_tem_folga_de_raciocinio_e_o_de_fora_nao(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-x")
+    assert all(folga > 0 for folga in MODELOS_OPENROUTER.values()), "todo modelo da lista raciocina"
+    assert folga_de_raciocinio("openai/gpt-oss-120b") == 4000
+    assert folga_de_raciocinio("anthropic/claude-opus-5") == 0, "fora da lista (so' na avaliacao): sem folga"
+    visto: list[httpx.Request] = []
+
+    def tratar(req: httpx.Request) -> httpx.Response:
+        visto.append(req)
+        return httpx.Response(200, json=conclusao())
+
+    porta = criar_porta(Config(vendor="openrouter"))
+    assert isinstance(porta, PortaOpenRouter)
+    porta._cliente = httpx.Client(transport=httpx.MockTransport(tratar))
+    porta.gerar(pedido(max_tokens=1000))
+    assert json.loads(visto[0].content)["max_tokens"] == 5000, "a fabrica passa a folga do modelo"
 
 
 # ---------- custo ----------
