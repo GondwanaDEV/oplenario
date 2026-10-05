@@ -30,8 +30,43 @@ interface ComplianceCard {
     estado: string;
   }[];
   emAbertoTotal: number;
-  remessasRecentes: unknown[];
+  remessasRecentes: RemessaRecente[];
   remessasRecentesTotal: number;
+}
+
+/** Espelho à mão de `RemessaRecenteOut` (compliance/wire/out/painel.clj) — mesmo motivo do `ComplianceCard`:
+ *  `compliance` não está no manifesto do codegen. `estado` é o ciclo `rascunho|validada|submetida|aceita|
+ *  rejeitada` (`compliance.logic/estados-remessa`), tratado como texto aberto e rotulado por
+ *  `rotularEstadoRemessa`. */
+export interface RemessaRecente {
+  id: string;
+  templateChave: string;
+  sistema: string;
+  competencia: string;
+  versao: number;
+  estado: string;
+  submetidaEm: string | null;
+  respostaEm: string | null;
+  criadoEm: string;
+}
+
+/** As remessas ao TCE do card de compliance. `total` é o do SERVIDOR (`remessasRecentesTotal`, sem teto): o
+ *  corte da lista é denunciado por ele, nunca deduzido. `rejeitadas` conta só as da lista exibida. */
+export interface RemessasVista {
+  itens: RemessaRecente[];
+  total: number;
+  truncado: boolean;
+  rejeitadas: number;
+}
+
+function remessasDeCompliance(compliance: ComplianceCard): RemessasVista {
+  const itens = compliance.remessasRecentes;
+  return {
+    itens,
+    total: compliance.remessasRecentesTotal,
+    truncado: compliance.remessasRecentesTotal > itens.length,
+    rejeitadas: itens.filter((r) => r.estado === "rejeitada").length,
+  };
 }
 
 /** Corte da lista `emAberto` de compliance, direto do total autoritativo do servidor — nunca deduzido.
@@ -98,7 +133,10 @@ export function derivarMesaVista(input: MesaVistaInput) {
 
   if (!mesa) {
     return {
-      saude: { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined, truncamento: null as TruncamentoCompliance | null },
+      saude: {
+        estado: "indisponivel" as const, resumo: undefined, emAberto: undefined,
+        truncamento: null as TruncamentoCompliance | null, remessas: undefined,
+      },
       oQueVence: {
         estado: "indisponivel" as const,
         itens: [] as { venceEm: string; origem: "compliance" | "pendencia" }[],
@@ -143,8 +181,12 @@ export function derivarMesaVista(input: MesaVistaInput) {
           resumo: compliance!.resumo,
           emAberto: compliance!.emAberto as unknown[],
           truncamento: truncamentoDeCompliance(compliance!),
+          remessas: remessasDeCompliance(compliance!),
         }
-      : { estado: "indisponivel" as const, resumo: undefined, emAberto: undefined, truncamento: null as TruncamentoCompliance | null },
+      : {
+          estado: "indisponivel" as const, resumo: undefined, emAberto: undefined,
+          truncamento: null as TruncamentoCompliance | null, remessas: undefined,
+        },
 
     oQueVence: complianceOk
       ? {

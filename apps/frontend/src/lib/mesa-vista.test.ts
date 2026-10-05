@@ -53,6 +53,46 @@ describe("derivarMesaVista", () => {
     expect(v.saude.truncamento).toBeNull();
   });
 
+  // As remessas ao TCE já chegavam no card de compliance (`remessasRecentes`) e nenhuma tela as lia.
+  const remessa = (id: string, estado: string, criadoEm: string) => ({
+    id, templateChave: "remessa_mensal_sim", sistema: "SIM", competencia: "2026-08", versao: 1, estado,
+    submetidaEm: null, respostaEm: null, criadoEm,
+  });
+
+  it("remessas recentes -> saude.remessas com itens, total e o corte denunciado pelo total do servidor", () => {
+    const mesaComRemessas = {
+      ...mesaBase,
+      complianceTce: {
+        ...mesaBase.complianceTce,
+        remessasRecentes: [remessa("r2", "submetida", "2026-09-02T12:00:00Z"), remessa("r1", "rejeitada", "2026-08-02T12:00:00Z")],
+        remessasRecentesTotal: 9,
+      },
+    };
+    const v = derivarMesaVista({ mesa: mesaComRemessas, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [] });
+    expect(v.saude.remessas?.itens.map((r) => r.id)).toEqual(["r2", "r1"]);
+    expect(v.saude.remessas?.total).toBe(9);
+    expect(v.saude.remessas?.truncado).toBe(true);
+    expect(v.saude.remessas?.rejeitadas).toBe(1);
+  });
+
+  it("remessas sem corte -> truncado false", () => {
+    const mesaSemCorte = {
+      ...mesaBase,
+      complianceTce: { ...mesaBase.complianceTce, remessasRecentes: [remessa("r1", "aceita", "2026-08-02T12:00:00Z")], remessasRecentesTotal: 1 },
+    };
+    const v = derivarMesaVista({ mesa: mesaSemCorte, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [] });
+    expect(v.saude.remessas?.truncado).toBe(false);
+    expect(v.saude.remessas?.rejeitadas).toBe(0);
+  });
+
+  it("compliance indisponivel -> saude.remessas é undefined (nada a afirmar)", () => {
+    const v = derivarMesaVista({
+      mesa: { ...mesaBase, complianceTce: { indisponivel: true } },
+      tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.saude.remessas).toBeUndefined();
+  });
+
   it("compliance indisponivel -> saude.truncamento é null (não há o que denunciar)", () => {
     const v = derivarMesaVista({
       mesa: { ...mesaBase, complianceTce: { indisponivel: true } },

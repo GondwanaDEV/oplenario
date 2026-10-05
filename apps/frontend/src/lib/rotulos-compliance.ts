@@ -20,3 +20,18 @@ const NOME_OBRIGACAO: Record<string, string> = {
 export function rotularObrigacao(templateChave: string): string {
   return NOME_OBRIGACAO[templateChave] ?? templateChave;
 }
+
+// O ciclo da REMESSA ao TCE (`compliance.logic/estados-remessa`, §22.7.8): rascunho -> validada -> submetida ->
+// {aceita | rejeitada}. Palavras de tela para o painel da Mesa. Fail-closed como `rotularObrigacao`: estado
+// fora do ciclo (vocabulário que cresceu no servidor) aparece com o próprio nome, nunca um rótulo inventado.
+const NOME_ESTADO_REMESSA: Record<string, string> = {
+  rascunho: "Em preparação",
+  validada: "Validada, pronta para enviar",
+  submetida: "Enviada, aguardando o TCE",
+  aceita: "Aceita pelo TCE",
+  rejeitada: "Rejeitada pelo TCE",
+};
+
+export function rotularEstadoRemessa(estado: string): string {
+  return NOME_ESTADO_REMESSA[estado] ?? estado;
+}
