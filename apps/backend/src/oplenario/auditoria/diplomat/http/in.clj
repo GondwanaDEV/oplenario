@@ -23,19 +23,53 @@
 
   No :enter ele so' deixa no contexto COMO gravar a tentativa: os globais rodam antes do router e da autenticacao, e a
   tentativa precisa da rota e do ator — quem a grava e' `tentativa`, que `com-tentativa` poe logo antes do handler de
-  toda rota de escrita. No :leave grava o desfecho, apontando a tentativa quando houve."
+  toda rota de escrita. No :leave grava o desfecho, apontando a tentativa quando houve.
+
+  A ENTRADA (o mint da sessao) e' a excecao em que o ator so' existe DENTRO do handler: `tentativa` entrega ao handler
+  uma funcao que grava a tentativa quando ele ja' sabe quem entra, e o :leave a encontra em `::entrada` — inclusive
+  para fechar com desfecho `falhou` quando o handler lanca depois dela (adendo de 05/10/2026)."
   [repo-auditoria seams]
   {:name  ::trilha
    :enter (fn [ctx]
             (assoc ctx
                    ::exigir-tentativa? (true? (:exigir-tentativa? seams))
                    ::registrar-tentativa!
-                   (fn [req acao] (controllers/registrar-tentativa! repo-auditoria seams req acao))))
+                   (fn [req acao] (controllers/registrar-tentativa! repo-auditoria seams req acao))
+                   ::registrar-tentativa-de-entrada!
+                   (fn [req acao ator]
+                     (controllers/registrar-tentativa-de-entrada! repo-auditoria seams req acao ator))))
    :leave (fn [ctx]
-            (let [acao (get-in ctx [:route :route-name])]
-              (controllers/registrar-requisicao! repo-auditoria seams (:request ctx) (:response ctx) acao
-                                                 (::tentativa ctx))
+            (let [acao    (get-in ctx [:route :route-name])
+                  entrada (some-> (::entrada ctx) deref)
+                  ;; a entrada que lancou depois da tentativa nao tem marca na resposta: sem ela o desfecho `falhou`
+                  ;; nao saberia o ator nem a classe, e a tentativa ficaria solta
+                  resp    (cond-> (:response ctx)
+                            entrada (update :auditoria #(merge {:classe "entrada" :ator (:ator entrada)} %)))]
+              (controllers/registrar-requisicao! repo-auditoria seams (:request ctx) resp acao
+                                                 (or (::tentativa ctx) (:tentativa entrada)))
               (update ctx :response #(some-> % (dissoc :auditoria)))))})
+
+(defn- tentativa-de-entrada
+  "Poe no request a funcao `:tentativa-da-entrada!` (ator -> nil) que o handler do mint chama quando ja' resolveu quem
+  entra e ANTES de criar a sessao, e guarda em `::entrada` o que ela gravou. A funcao NUNCA lanca e NUNCA recusa a
+  entrada, com ou sem `:exigir-tentativa?`: se a trilha nao grava, vai para o `log/error` e a sessao abre — trancar o
+  login quando a trilha cai trancaria tambem quem vai consertar (ADR-0017, adendo de 05/10/2026)."
+  [ctx acao]
+  (let [entrada (atom nil)
+        req     (:request ctx)
+        grava!  (::registrar-tentativa-de-entrada! ctx)]
+    (-> ctx
+        (assoc ::entrada entrada)
+        (assoc-in [:request :tentativa-da-entrada!]
+                  (fn [ator]
+                    (try
+                      (when-let [n (grava! req acao ator)]
+                        (reset! entrada {:ator ator :tentativa n}))
+                      nil
+                      (catch Exception e
+                        (log/error e "auditoria: tentativa de ENTRADA nao gravada; a entrada SEGUE (a trilha nunca a tranca)"
+                                   {:acao acao :ente-id (:ente-id ator)})
+                        nil)))))))
 
 (def tentativa
   "O interceptor da TENTATIVA (ADR-0017, adendo de 04/10/2026): logo antes do handler de uma escrita — depois da
@@ -48,26 +82,31 @@
     pode cair porque a auditoria caiu). O ato so' fica fora da trilha se a propria trilha estiver fora, e isso fica no
     log.
   - com `:exigir-tentativa?` (AUDITORIA_EXIGIR_TENTATIVA=true): o pedido e' recusado com 503 e o handler nao roda.
+  A ENTRADA (`logic/acoes-de-entrada`) e' a excecao: o ator so' existe dentro do handler, que grava a tentativa por
+  `:tentativa-da-entrada!`, e a trilha fora NUNCA a recusa — nem com a exigencia ligada (ver `tentativa-de-entrada`).
   Sem o interceptor global da trilha (testes de borda de um modulo so'), nao faz nada."
   {:name  ::tentativa
    :enter (fn [ctx]
-            (if-let [registrar! (::registrar-tentativa! ctx)]
-              (try
-                (if-let [n (registrar! (:request ctx) (get-in ctx [:route :route-name]))]
-                  (assoc ctx ::tentativa n)
-                  ctx)
-                (catch Exception e
-                  (let [onde {:acao (get-in ctx [:route :route-name])
-                              :ente-id (get-in ctx [:request :ator :ente-id])}]
-                    (if (::exigir-tentativa? ctx)
-                      (do (log/error e "auditoria: tentativa NAO gravada; o pedido foi RECUSADO" onde)
-                          (chain/terminate
-                           (assoc ctx :response
-                                  (http/json-resposta
-                                   503 {:erro "o registro de auditoria esta indisponivel; nada foi feito"}))))
-                      (do (log/error e "auditoria: tentativa NAO gravada; o ato SEGUE sem rastro previo na trilha" onde)
-                          ctx)))))
-              ctx))})
+            (let [acao (get-in ctx [:route :route-name])]
+              (cond
+                (nil? (::registrar-tentativa! ctx)) ctx
+                ;; a entrada nao tem ator antes do handler: ele grava a tentativa (ver `tentativa-de-entrada`)
+                (logic/acoes-de-entrada acao) (tentativa-de-entrada ctx acao)
+                :else
+                (try
+                  (if-let [n ((::registrar-tentativa! ctx) (:request ctx) acao)]
+                    (assoc ctx ::tentativa n)
+                    ctx)
+                  (catch Exception e
+                    (let [onde {:acao acao :ente-id (get-in ctx [:request :ator :ente-id])}]
+                      (if (::exigir-tentativa? ctx)
+                        (do (log/error e "auditoria: tentativa NAO gravada; o pedido foi RECUSADO" onde)
+                            (chain/terminate
+                             (assoc ctx :response
+                                    (http/json-resposta
+                                     503 {:erro "o registro de auditoria esta indisponivel; nada foi feito"}))))
+                        (do (log/error e "auditoria: tentativa NAO gravada; o ato SEGUE sem rastro previo na trilha" onde)
+                            ctx))))))))})
 
 (defn com-tentativa
   "Poe `tentativa` logo antes do handler de TODA rota de escrita (table syntax). Feito no HOST sobre as rotas montadas,

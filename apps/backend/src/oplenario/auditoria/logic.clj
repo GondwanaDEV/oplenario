@@ -101,6 +101,21 @@
     (when (and (:ente-id ator) acao (escrita? (:request-method req)))
       (assoc (base req ator acao) :classe "escrita" :decisao iniciado :status-http nil))))
 
+(def acoes-de-entrada
+  "As rotas de ENTRADA da Casa (o mint da sessao): o ator nao existe antes do handler — ele o resolve do token verificado —,
+  entao a tentativa e' gravada pelo proprio handler, ja' com o ator, ANTES de a sessao ser criada (adendo de 05/10/2026).
+  Lista FECHADA: o mint de OPERADOR (`/operacao/sessoes`) nao esta' aqui de proposito — a entrada dele fica na corrente
+  da Operacao (ADR-0016), nunca na da Casa."
+  #{:identidade/mint-sessao})
+
+(defn registro-da-tentativa-de-entrada
+  "A tentativa da ENTRADA: o ator ja' resolvido pelo handler (identidade com vinculo ativo na Casa) -> o registro
+  `entrada`/`iniciado` (sem selo, sem seq), ou nil sem Casa, sem ator ou sem rota. O desfecho o aponta pelo seq, como o
+  da escrita (`registro-da-requisicao`, com a marca `:classe \"entrada\"` do handler)."
+  [req ator acao]
+  (when (and (:ente-id ator) acao)
+    (assoc (base req ator acao) :classe "entrada" :decisao iniciado :status-http nil)))
+
 (defn registro-da-requisicao
   "Da requisicao/resposta ja' respondida -> o registro a gravar (sem selo, sem seq), ou nil se nao entra na trilha.
   `tentativa` (opcional) = o seq da tentativa gravada antes do handler: o desfecho a aponta em `detalhe.tentativa`."
