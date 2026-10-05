@@ -57,6 +57,16 @@ export function formatarNumeroNorma(tipoNorma: string, numero: number, ano: numb
   return `${NOME_DA_ESPECIE[tipoNorma] ?? tipoNorma} nº ${numero}/${ano}`;
 }
 
+// "virou a Lei nº 5/2026, já publicada" — o Desfecho depois da promulgação. Só o decreto legislativo é masculino.
+export function fraseDaNorma(norma: Pick<NormaOut, "tipoNorma" | "numero" | "ano" | "estado">): string {
+  const masculino = norma.tipoNorma === "decreto_legislativo";
+  const situacao =
+    norma.estado === "publicada"
+      ? `já publicad${masculino ? "o" : "a"}`
+      : "que ainda falta publicar";
+  return `virou ${masculino ? "o" : "a"} ${formatarNumeroNorma(norma.tipoNorma, norma.numero, norma.ano)}, ${situacao}`;
+}
+
 export function derivarPipeline(
   autografo: AutografoOut,
   tramitacaoExecutiva: TramitacaoExecutivaOut | null,
