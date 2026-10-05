@@ -66,7 +66,7 @@ uma tela esperando um botão que não existe, a demo trava na sua frente.
 | Botão **"Acompanhar"** no portal | Não existe em tela nenhuma — embora a tela vazia de `/acompanhamentos` instrua a usá-lo |
 | **A resposta de um pedido e-SIC** | É write-only. A cidadã vê "Situação: Respondido" e nenhum texto |
 | Seção de **leis/normas** no portal | Não há porta. O backend tem `/portal/casa/:ente/legislacao`; o frontend não tem tela |
-| **A tela de login do Keycloak** | Diz `Sign in to ente-10000000-0000-…` — **em inglês e com o UUID cru**. É a 1ª tela depois de clicar Entrar. Faça o login ANTES do cliente entrar, ou conserte o `displayName` do realm |
+| ~~**A tela de login do Keycloak**~~ | **Resolvido em 05/10/2026 (ADR-0025).** A entrada é o CPF em `/entrar` e a senha numa tela em português com o nome da Câmara (tema `oplenario`, montado no Keycloak local pelo compose). Ver §3 |
 | **A capa do portal, sem preparo** | O destaque de "Em tramitação agora" mostra a matéria de **maior número**, sem filtrar estado — hoje é a **PL 015/2026, ARQUIVADA**. O título da seção promete tramitação e o item está morto |
 | **Login gov.br** | Não existe. **Atenção:** a barra do portal público mostra um botão "gov.br Entrar" **clicável e morto** (`barra-institucional.tsx:111`, `href="#"` — só rola ao topo). Está visível na janela anônima do Ato 3; não o clique nem deixe o cliente clicar |
 | **Console do operador** (supratenant) | 3 linhas de código, zero rotas |
@@ -163,7 +163,7 @@ cd ~/oplenario
 # A Casa: 1 ente + 17 vereadores + Mesa + 3 comissões + acervo + 3 sessões + participação
 ./demo/semear-tudo.sh
 
-# As credenciais Keycloak das 4 personas (exige o profile auth de pé)
+# As senhas das personas no Keycloak (exige o profile auth de pé)
 ./demo/semear-credenciais.sh
 ```
 
@@ -171,8 +171,9 @@ cd ~/oplenario
 perfil público antes de terminar. Se ele falhar nessa espera, o container `app` (que hospeda o relay)
 não está de pé — conserte isso antes de seguir.
 
-Ao fim, as credenciais ficam em `e2e/.artifacts/credenciais.edn`. **Os usernames mudam a cada
-`down -v`** — leia sempre do arquivo, nunca de memória:
+Ao fim, as credenciais ficam em `e2e/.artifacts/credenciais.edn`. Para entrar pela tela não é preciso
+abri-lo: entra-se com o **CPF da persona**, fixo em `apps/backend/demo/personas.clj`. O identidade-id do
+arquivo só serve para quem abre a tela do Keycloak direto (workflows, testes):
 
 ```bash
 cat e2e/.artifacts/credenciais.edn
@@ -225,8 +226,10 @@ prova tela nenhuma aqui — quase tudo é Client Component que busca *depois* da
 Três atos, um por público decisor. **~25 minutos.** Cada ato responde à pergunta que aquele público
 faz na licitação.
 
-Entrada única: `http://localhost:3000/entrar/10000000-0000-0000-0000-000000000001`
-Senha de todas as personas: `Plenario@2026` · usernames em `e2e/.artifacts/credenciais.edn`
+Entrada única: `http://localhost:3000/entrar` (ou o link da Câmara,
+`/entrar/10000000-0000-0000-0000-000000000001`) → **CPF** da persona → **senha** na tela da Câmara.
+Senha de todas as personas: `Plenario@2026` · CPFs em `apps/backend/demo/personas.clj`. As personas não têm
+código do aplicativo cadastrado; CPF e senha bastam. Para trocar de persona: menu do avatar → **Sair**.
 
 > **Prepare as abas antes.** Faça login com as três personas em três janelas/perfis diferentes do
 > browser **antes** do cliente entrar. Trocar de persona ao vivo custa 40 segundos de silêncio.
@@ -285,7 +288,9 @@ como visão, porque a Track IA ainda não tem código. Não a demonstre.
 
 ## §4 · As quatro personas
 
-Leia sempre os usernames de `e2e/.artifacts/credenciais.edn` — eles mudam a cada `down -v`.
+Todas entram pelo CPF em `/entrar` (CPFs fixos em `apps/backend/demo/personas.clj`, senha `Plenario@2026`),
+menos a cidadã: o CPF dela não tem vínculo de servidor ou vereador, então ela entra pelo portal, em "Entrar
+para participar", pelo gov.br simulado (ADR-0015).
 
 | Persona | Papéis | Serve para |
 |---|---|---|
@@ -293,6 +298,7 @@ Leia sempre os usernames de `e2e/.artifacts/credenciais.edn` — eles mudam a ca
 | Antônio Carlos Ferreira | `vereador` + `admin_ente` | Presidente da Mesa. **Não abre `/paineis/*` (403)** — use só para votar |
 | Fernanda Rocha Pinto | `vereador` | O cockpit de votação em `/votar` |
 | Roberta Costa Aguiar | (nenhum) | Cidadã. O portal é anônimo; ela quase não é necessária |
+| Patrícia Nogueira Santos | `vereador` + `secretario` + `admin_ente` | "Acesso total": um login só para a visita sem trocar de persona (docs/18) |
 
 ---
 

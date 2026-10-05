@@ -43,20 +43,39 @@ secretario/vereador/admin_ente; quem só consulta ou peticiona, não).
 
 ## As 6 personas — cartão resumo
 
-| Persona | Nome | Vínculo · papéis | Username (Keycloak) | Senha | URL de entrada |
-|---|---|---|---|---|---|
-| **Secretária** | Marina Alencar Freire | `servidor` · `secretario` | `identidade-id` da secretaria (ver `credenciais.edn`) | `Plenario@2026` | `http://localhost:3000/entrar/10000000-0000-0000-0000-000000000001` |
-| **Presidente da Mesa** | Antônio Carlos Ferreira | `vereador` · `vereador`, `admin_ente` | idem | `Plenario@2026` | idem |
-| **Vereadora** | Fernanda Rocha Pinto | `vereador` · `vereador` | idem | `Plenario@2026` | idem |
-| **Cidadã** | Roberta Costa Aguiar | `cidadao` · *(sem papel)* | idem | `Plenario@2026` | idem |
-| **Apresentação (acesso total)** | Patrícia Nogueira Santos | `vereador` · `vereador`, `secretario`, `admin_ente` | idem | `Plenario@2026` | idem |
-| **Cidadão anônimo** | — | — (sem login) | — | — | `http://localhost:3000/portal/casa/10000000-0000-0000-0000-000000000001` |
+| Persona | Nome | Vínculo · papéis | Como entra | Senha |
+|---|---|---|---|---|
+| **Secretária** | Marina Alencar Freire | `servidor` · `secretario` | CPF em `http://localhost:3000/entrar` | `Plenario@2026` |
+| **Presidente da Mesa** | Antônio Carlos Ferreira | `vereador` · `vereador`, `admin_ente` | idem | `Plenario@2026` |
+| **Vereadora** | Fernanda Rocha Pinto | `vereador` · `vereador` | idem | `Plenario@2026` |
+| **Cidadã** | Roberta Costa Aguiar | `cidadao` · *(sem papel)* | portal → "Entrar para participar" (gov.br simulado) | — |
+| **Apresentação (acesso total)** | Patrícia Nogueira Santos | `vereador` · `vereador`, `secretario`, `admin_ente` | CPF em `/entrar` | `Plenario@2026` |
+| **Cidadão anônimo** | — | — (sem login) | `http://localhost:3000/portal/casa/10000000-0000-0000-0000-000000000001` | — |
 
-As 5 personas nomeadas entram pela **mesma URL** (`/entrar/<ente-id>`) — um único realm-por-tenant
-(§22.5.1); o app roteia cada uma pelo **papel do token** depois do login. Os `identidade-id` reais
-(usados como `username` no Keycloak) saem impressos por `semear-credenciais.sh` e gravados em
-`credenciais.edn` — não são repetidos aqui porque são UUIDs gerados a partir do CPF fixo, estáveis
-entre execuções mas não literais fáceis de citar num doc estático.
+**Como se entra (desde 05/10/2026, [ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
+
+1. Sem sessão, qualquer tela interna (e a raiz `/`) leva a **`/entrar`**, "Entre com o seu CPF". O link da
+   Câmara, `/entrar/10000000-0000-0000-0000-000000000001`, mostra a mesma tela com a Câmara fixa.
+2. O CPF vai no corpo de `POST /api/auth/entrar`; o BFF pergunta ao backend (`POST /auth/localizar`) em quais
+   Câmaras há vínculo **institucional** ativo (`servidor`, `vereador` ou `admin_ente`) e vai direto à senha da
+   Câmara com `login_hint` = identidade-id. Mais de uma Câmara → `/entrar/escolher`.
+3. A senha é digitada no **tema `oplenario`** do Keycloak (pt-BR, com o nome da Câmara, usuário escondido).
+4. O **código do aplicativo** só é pedido de quem tem um cadastrado (todo convite novo cadastra senha + código).
+   As personas da demo não têm: CPF e senha bastam, porque a semente define a senha e apaga as pendências.
+5. O app roteia pelo **papel do token**: `/inicio`, ou `/vereador` para quem só é vereador.
+
+**CPF de cada persona:** fixo, em `apps/backend/demo/personas.clj` (CPFs de teste). O identidade-id, que
+continua sendo o usuário dentro do Keycloak, sai impresso por `semear-credenciais.sh` e gravado em
+`credenciais.edn`; só precisa dele quem abre a tela do Keycloak direto, sem o CPF (os workflows de
+homologação preenchem `#username` com ele).
+
+**A cidadã não entra por `/entrar`:** o CPF dela não tem vínculo institucional, e a tela responde que não há
+Câmara para esse CPF. Ela entra pelo portal, em "Entrar para participar"
+(`/portal/casa/<ente>/participar`), pelo gov.br (o simulado em dev e demo, `demo/govbr_simulado.clj`), e cai
+em `/acompanhamentos`. A sessão aberta pelo gov.br é só de cidadão (ADR-0015).
+
+**Sair:** menu do avatar no topo → **Sair** (POST em `/api/auth/logout`); o Keycloak pergunta "Você
+realmente deseja sair?". Sessão que o backend não reconhece mais volta sozinha a `/entrar`.
 
 ## Verificado AO VIVO — matriz de autorização (12/09/2026)
 
@@ -65,6 +84,9 @@ entre execuções mas não literais fáceis de citar num doc estático.
 > de autorização (`(:papeis ator)`, `oplenario.kernel.autorizacao/tem-papel?`) que já está provada linha
 > por linha abaixo para a presidente (`vereador`+`admin_ente`) — empilhar um 3º papel no mesmo vínculo
 > não é mecanismo novo, só mais um elemento no mesmo conjunto.
+
+> Prova anterior à entrada pelo CPF (ADR-0025): na época o usuário digitava o identidade-id na tela do
+> Keycloak. O caminho até o token (PKCE, sem password grant) não mudou.
 
 Daouda verificou as 4 credenciais originais contra um Keycloak real (`docker compose --profile auth up -d`, app
 religado com `OPLENARIO_APP_ENV=production` para usar o `KeycloakIdp` de verdade, não o `idp-dev`).
@@ -288,11 +310,7 @@ stub de 3 linhas e `admin_sistema/diplomat/http/in.clj` não tem rota nenhuma �
 usuário, não há tela para provisionar. Isso não é omissão desta frente: é o estado real do código
 (`CLAUDE.md` §3, item 2), e criar uma persona aqui seria fingir uma superfície que não existe.
 
-**(b) O login da cidadã aqui é Keycloak, não gov.br — e isso NÃO é o fluxo de produção previsto.** O
-broker gov.br (`identidade.identidade_externa`, provedor `gov_br`) está na migration e no `db/` de
-identidade, mas **zero linhas de integração real** existem (`CLAUDE.md` §3, item 2). A cidadã desta
-demo entra pelo **mesmo realm-por-tenant** que secretaria/presidente/vereador usam — o que serve
-perfeitamente para **provar a superfície autenticada do cidadão** (o objetivo desta frente), mas é uma
-substituição deliberada de infraestrutura ausente, não uma antecipação do fluxo real. Em produção, a
-V1 prevê o cidadão entrando por gov.br, com um `sub` OIDC vinculado à identidade via
-`identidade_externa` — carry aberto, sem relação com este trabalho.
+**(b) O login da cidadã (atualizado em 05/10/2026):** quando este mapa foi escrito, ela entrava pelo mesmo
+realm-por-tenant da secretaria, porque o broker gov.br ainda não tinha integração. Desde a ADR-0015
+(27/09/2026) ela entra pelo gov.br (o simulado em dev, demo e CI), pelo portal; a tela do CPF (`/entrar`) é
+só de servidor e vereador.
