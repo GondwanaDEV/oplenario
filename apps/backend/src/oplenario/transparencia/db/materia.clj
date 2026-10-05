@@ -7,6 +7,7 @@
   dedup, §22.9 E2); o Repo-Component (components/repositorio) so' serve a LEITURA publica."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.kernel.db-util :as comum]))
 
 (set! *warn-on-reflection* true)
@@ -119,6 +120,27 @@
                                  [:or [:= :resumo_versao nil] [:< :resumo_versao versao]]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :versao versao})))
+
+(defn ids-sem-rito
+  "As materias do portal ainda SEM rito (anteriores a mig 20261005000262 e sem evento novo desde entao), em ordem estavel."
+  [tx ente-id]
+  (mapv :proposicao_id
+        (jdbc/execute! tx (sql/format {:select [:proposicao_id] :from [:transparencia.materia]
+                                       :where [:and [:= :ente_id ente-id] [:= :rito nil]]
+                                       :order-by [:proposicao_id]})
+                       {:builder-fn rs/as-unqualified-maps})))
+
+(defn gravar-rito-ausente!
+  "Grava o `rito` SO' na materia que ainda nao tem: o rito de um evento projetado depois (mais novo) nunca e' trocado
+  pelo da carga. Nao mexe em `estado` nem em `atualizado_em` (a carga nao e' movimentacao). true se gravou."
+  [tx ente-id proposicao-id rito]
+  {:pre [(some? ente-id) (some? proposicao-id) (some? rito)]}
+  (pos? (:next.jdbc/update-count
+         (jdbc/execute-one! tx (sql/format {:update :transparencia.materia
+                                            :set {:rito (comum/->jsonb rito)}
+                                            :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                                    [:= :rito nil]]}))
+         0)))
 
 (defn buscar
   "Ficha PUBLICA de uma materia (RLS via ente-id). Devolve o mapa kebab-case ou nil. `:rito` sai como dado (chaves
