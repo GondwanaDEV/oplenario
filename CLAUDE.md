@@ -48,7 +48,7 @@ não frente de trabalho:
 as 8 fases F0–F7 estão mergeadas em `main`** — F0 plataforma base · F1 cadastros+identidade ·
 F2 resolvedor de fatos (o KEYSTONE) · F3 legislativo (8 eixos) · F4 sessões+tempo real (HERO) ·
 F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. Ao fim da F7 eram 13
-módulos e 61 migrations; em 04/10/2026 são 121 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
+módulos e 61 migrations; em 05/10/2026 são 133 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
 marcos MFE-1 a MFE-4 cumpridos.
 
 **Marcos de valor demonstrável:** M1 (a Casa existe), M2 (compliance vivo), M3 (coração
@@ -294,9 +294,19 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   tranca o login, nem com `AUDITORIA_EXIGIR_TENTATIVA=true`. Jobs e consumidores do outbox foram inventariados e não
   têm ato que peça o par (não há agendador em produção; 7 de 9 consumidores só projetam); um teste de inventário
   (`atos_fora_do_http_test`) reprova job, comando ou consumidor novo sem classificação;
-- **falta:** o resumo legível por ação ainda é incremental; a ADR diz que o login do cidadão não entra na trilha, mas
-  o código o registra (agora com duas linhas por entrada): decidir se corrige o texto ou tira o registro; na Operação,
-  `ia-orcamento` não grava na atuação e a entrada do operador não tem tentativa.
+- **resumo em palavras para toda escrita (05/10/2026):** `auditoria/resumos.clj` dá uma frase a cada rota de escrita
+  ("Publicou a pauta da sessão"); das 169, 149 têm rótulo e 20 têm motivo escrito (operador, satélite de IA, duas do
+  assistente). O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
+  selo, então registro anterior segue sem ele. `resumo_de_toda_escrita_test` reprova escrita nova sem rótulo nem
+  motivo. A leitura devolve `recurso.do-ato` e a tela decide a etiqueta só por esse campo, nunca pelo texto do rótulo;
+- **na Operação (05/10/2026):** `ia-orcamento` e a entrada do operador gravam na atuação da Operação o par
+  tentativa/desfecho, sem mudar o selo. `ia-orcamento` sem a tentativa não roda; o login do operador nunca é trancado
+  pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
+  `tentativas-sem-desfecho` existe como função de repositório, sem tela;
+- **falta:** a ADR diz que o login do cidadão não entra na trilha, mas o código o registra (agora com duas linhas por
+  entrada): decidir se corrige o texto ou tira o registro; dar rótulo a `agente/perguntar` e
+  `agente/reportar-erro-ia`; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
+  reabre e a reativação não restaura): decidir a regra.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
@@ -346,7 +356,7 @@ como o **kaocha randomiza a ordem**, quando um deles rodava antes de um seeder o
 estourava. Consertado: os dois passam a semear `2304400` (idempotente), sem afrouxar asserção. Detalhe e
 procedência em `docs/16`, seção "Progressão do CI". Já existe um PR ([#1](https://github.com/GondwanaDEV/oplenario/pull/1)) com os consertos de
 infra + a re-verificação; abrir/mergear é decisão do Daouda. Um plano de teste completo de toda a
-plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 9
+plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 11
 specs de browser autenticadas) cobre boa parte da Onda T1 e **é gate do CI desde 02/10/2026** (`t3-e2e` sem
 `continue-on-error`; voto e presença ao vivo fora da quarentena SSE porque o placar hidrata por snapshot; só as
 3 sondas de cockpit seguem opt-in em `E2E_T3_SSE`). A presença do próprio vereador, que não hidratava por
@@ -454,13 +464,37 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     nominal aberta, uma encerrada e uma matéria aprovada sem autógrafo. Não rodar a Trilha 3 no mesmo banco depois dele.
   - **Testes instáveis consertados:** "nunca CPF" do revogar acesso (procurava 11 dígitos seguidos) e o CPF sorteado
     do encerramento.
+- **Quarta rodada de 05/10 (PRs #177 a #186):**
+  - **Faixa "Onde está a matéria" pelo rito da Casa:** `GET /legislativo/proposicoes/:id/ficha` devolve `rito`
+    (calculado em `legislativo/logic/rito.clj`) e a ficha interna desenha as etapas na ordem do rito, com o nome que a
+    Casa deu. Sem ordem única verificável (ramificação ou salto), mostra só anteriores, atual e próximas possíveis.
+    `derivarTramitacao` segue como faixa do portal e como reserva.
+  - **Índice por vereador** em `legislativo.votos` (mig `20261005000230`), para `GET /meu/votos`. O `CREATE INDEX`
+    bloqueia o registro de voto enquanto constrói: não promover no meio de sessão.
+  - **Telão:** votação encerrada diz "não votaram N de M". **Meus protocolos:** só "respondido" fica verde; arquivada,
+    indeferida e estado desconhecido ficam no chip neutro. **Subscrição:** estado desconhecido sai em palavras.
+  - **Fumaça de produção** (`fumaca-hml.yaml`) com 5 casos novos, só leitura: leis, vereadores, votações, ficha
+    pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
+    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes
+    (o `next dev` do CI respondeu 404 na primeira visita a uma rota dinâmica).
+  - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
+    `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
+    de varredura afirma o volume varrido.
 - **Falta:**
-  - a faixa "Onde está a matéria" ainda depende do nome do estado (nenhuma rota devolve a ordem das etapas do rito);
-  - `legislativo.votos` não tem índice por vereador: `GET /meu/votos` varre os votos da Casa;
-  - o bloco de votação encerrada do telão ainda diz "faltam votar N";
-  - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e a folha em PDF com
-    nome. Vistos em 05/10 com a semente ao vivo: telão com os nomes, TV, formulário do prazo do Executivo, resultado
-    depois de recarregar e "Minha atuação";
+  - a faixa do portal ainda é o mapa fixo (a projeção pública não carrega o rito); o chip da ficha usa o rótulo fixo e
+    a faixa o nome da Casa ("Em Plenário" e "Em Pauta" na mesma tela, na demo); `template_estado.ordem` não tem
+    validação nem significado documentado;
+  - o cockpit do vereador ainda diz "faltam N" em votação encerrada;
+  - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
+    cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
+    `folha-sessao-v2`;
+  - em modo dev, conceder acesso grava o vínculo e devolve 500 (não há realm para provisionar);
+  - instáveis conhecidos: `mesa-audiencia.test.tsx` (cronômetro, `04:50` em vez de `00:40`) e o CPF sorteado em ~25
+    arquivos de teste do backend (colisão a cada ~8 mil corridas);
+  - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
+    anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
+    prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de
+    auditoria com os rótulos;
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
     acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
     (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,
