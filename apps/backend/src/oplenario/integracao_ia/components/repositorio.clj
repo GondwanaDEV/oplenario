@@ -27,6 +27,9 @@
     "Grava a interacao (a linha ja' com o hash, `logic/interacao`), na tx do tenant. Append-only.")
   (interacao-assistente [this ente-id id] "A interacao `id`, ou nil.")
   (conversa-da-pessoa? [this ente-id identidade-id conversa-id] "A conversa existe nesta Casa e e' desta pessoa?")
+  (historico-assistente [this ente-id identidade-id antes limite]
+    "As interacoes, a mais recente primeiro (resumo). `identidade-id` nil = a Casa inteira (so' o auditor).")
+  (conversa-assistente [this ente-id conversa-id] "As interacoes de uma conversa, em ordem, com tudo o que foi guardado.")
   ;; B.6 / ADR-0012: a proposta de ato e as leituras de terceiro da execucao
   (criar-proposta! [this proposta] "Grava a proposta (estado aguardando); devolve-a.")
   (proposta [this ente-id id])
@@ -64,6 +67,10 @@
     (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/buscar % ente-id id)))
   (conversa-da-pessoa? [_ ente-id identidade-id conversa-id]
     (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/conversa-da-pessoa? % ente-id identidade-id conversa-id)))
+  (historico-assistente [_ ente-id identidade-id antes limite]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/listar % ente-id identidade-id antes limite)))
+  (conversa-assistente [_ ente-id conversa-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/da-conversa % ente-id conversa-id)))
   (criar-proposta! [_ p]
     (tenancy/com-tenant* (:ds datasource) (:ente-id p) #(proposta/inserir! % p)))
   (proposta [_ ente-id id]

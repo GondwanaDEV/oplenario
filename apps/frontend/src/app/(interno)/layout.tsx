@@ -26,6 +26,7 @@ import { useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import { TemaProvider } from "@/lib/tema";
+import { MolduraDaClara } from "./clara/moldura-da-clara";
 
 export default function LayoutInterno({ children }: { children: React.ReactNode }) {
   return (
@@ -41,7 +42,8 @@ function LeitorToken({ children }: { children: React.ReactNode }) {
     <AuthProvider tokenQuery={searchParams.get("token")}>
       <TemaProvider>
         <Faixa />
-        {children}
+        {/* A Clara (ADR-0024): o painel retrátil da assistente da Casa, em toda tela interna. */}
+        <MolduraDaClara>{children}</MolduraDaClara>
       </TemaProvider>
     </AuthProvider>
   );
