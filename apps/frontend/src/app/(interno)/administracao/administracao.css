@@ -70,3 +70,6 @@
 .adm-revogar textarea, .adm-revogar input { font: inherit; padding: 0.45rem 0.6rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); box-sizing: border-box; width: 100%; max-width: 40rem; }
 .adm-revogar input { min-height: 44px; }
 .adm-revogar textarea:focus-visible, .adm-revogar input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+
+/* texto auxiliar sob o campo (reconvite: para onde o convite vai de verdade) */
+.adm-revogar .campo-dica { color: var(--texto-2); font-size: var(--t-12); margin: 0.35rem 0 0; max-width: 60ch; }

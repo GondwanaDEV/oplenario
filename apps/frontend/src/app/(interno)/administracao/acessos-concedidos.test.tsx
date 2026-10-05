@@ -115,7 +115,11 @@ describe("Quem tem acesso", () => {
     const form = await screen.findByRole("form", { name: "Dar o acesso de novo a Mauro Antigo" });
     fireEvent.change(within(form).getByLabelText(/E-mail institucional/), { target: { value: "mauro@camara.local" } });
     fireEvent.submit(form);
-    expect((await screen.findByRole("status")).textContent).toMatch(/concedido de novo\. O convite foi enviado/);
+    expect(within(form).getByText(/recebe o novo no mesmo e-mail de então/)).toBeTruthy();
+    const aviso = (await screen.findByRole("status")).textContent ?? "";
+    expect(aviso).toMatch(/concedido de novo\. O convite foi enviado para o e-mail de acesso desta pessoa/);
+    // a tela não pode afirmar que o convite foi para o endereço digitado: o backend usa o já cadastrado
+    expect(aviso).not.toMatch(/e-mail informado/);
     expect(chamadas.find((c) => c.metodo === "POST")!.corpo).toEqual({
       "identidade-id": "i3", tipo: "vereador", papeis: ["vereador"], email: "mauro@camara.local",
     });

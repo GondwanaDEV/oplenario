@@ -356,7 +356,11 @@
       (jdbc/with-transaction [tx *ds* {:rollback-only true}]
         (jdbc/execute! tx ["SELECT set_config('app.ente_id', ?, true)" (str ente)])
         (is (= 1 (n tx revogada)) "antes do down a linha revogada existe (a leitura enxerga: o teste nao e' vacuo)")
+        ;; o down roda como numa migration de verdade: SEM a Casa no GUC (aqui, o de OUTRA Casa). Com a RLS forcada o
+        ;; DELETE e a conferencia nao veriam a linha e as colunas cairiam com ela la' — o down desliga o FORCE para isso.
+        (jdbc/execute! tx ["SELECT set_config('app.ente_id', ?, true)" (str (random-uuid))])
         (doseq [i (instrucoes-do-down)] (jdbc/execute! tx [i]))
+        (jdbc/execute! tx ["SELECT set_config('app.ente_id', ?, true)" (str ente)])
         (is (zero? (n tx revogada)) "depois do down o acesso revogado NAO voltou")
         (is (= 1 (n tx ativa)) "o ativo segue")))
     (is (= #{} (repo/papeis-de (repo-id) ente revogada)) "a tx desfez: o banco segue na versao nova")))

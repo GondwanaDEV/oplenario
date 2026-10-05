@@ -128,7 +128,7 @@ function ItemDoAcesso({
     setModo("ver");
     setEmail("");
     setTocado(false);
-    aoMudar("ok", `Acesso de ${acesso.nome} (${rotulo}) concedido de novo. O convite foi enviado para o e-mail informado.`);
+    aoMudar("ok", `Acesso de ${acesso.nome} (${rotulo}) concedido de novo. O convite foi enviado para o e-mail de acesso desta pessoa.`);
   }
 
   return (
@@ -225,6 +225,12 @@ function ItemDoAcesso({
                 Informe um e-mail válido.
               </p>
             )}
+            {/* O backend NÃO troca o e-mail de quem já tem conta: o convite sai para o endereço já cadastrado. A tela
+                diz isso para o administrador não achar que redirecionou o convite. */}
+            <p className="campo-dica">
+              Quem já recebeu convite antes recebe o novo no mesmo e-mail de então. O endereço acima só vale para quem
+              ainda não tem conta de acesso. Para trocar o e-mail de alguém, fale com o operador da plataforma.
+            </p>
           </div>
           <div className="form-acoes">
             <button type="submit" className="btn btn-primaria btn-mini" disabled={enviando}>
