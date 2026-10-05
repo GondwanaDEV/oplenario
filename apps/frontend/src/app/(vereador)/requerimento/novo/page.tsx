@@ -122,17 +122,17 @@ export default function PaginaNovoRequerimento() {
 
   if (estadoModelos === "carregando") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Carregando…</h1>
-      </main>
+      </div>
     );
   }
   if (estadoModelos === "erro") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Não foi possível abrir o formulário</h1>
         <p>Confira se o seu cadastro de vereador está vinculado a este login.</p>
-      </main>
+      </div>
     );
   }
 

@@ -48,17 +48,17 @@ export default function PaginaHomeVereador() {
 
   if (estado === "erro") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Não foi possível carregar sua home</h1>
         <p>Tente novamente em instantes.</p>
-      </main>
+      </div>
     );
   }
   if (estado === "carregando") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Carregando…</h1>
-      </main>
+      </div>
     );
   }
 
