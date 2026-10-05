@@ -99,6 +99,13 @@ describe("formulários do cidadão", () => {
     expect(screen.queryByRole("link", { name: /meus protocolos/i })).toBeNull();
   });
 
+  it("ouvidoria: o exemplo do campo é um número que o sistema emite (OUV-AAAA-NNNNNN, e o sequencial começa em 1)", () => {
+    render(<FormOuvidoria ente={ENTE} sessao={{ estado: "anonima", token: null }} />);
+    const campo = screen.getByLabelText(/número do protocolo/i) as HTMLInputElement;
+    expect(campo.placeholder).toMatch(/^OUV-\d{4}-\d{6}$/);
+    expect(campo.placeholder).not.toMatch(/-000000$/);
+  });
+
   it("ouvidoria: o trilho acompanha pelo protocolo (rota pública)", async () => {
     respondeCom(200, { protocolo: "OUV-2026-000003", estado: "em_analise", "dias-restantes": 12 });
     render(<FormOuvidoria ente={ENTE} sessao={{ estado: "anonima", token: null }} />);

@@ -31,22 +31,30 @@ describe("BalcaoEsic", () => {
     expect(screen.getByText(/exige identificação/i)).toBeTruthy();
   });
 
+  it("o exemplo do campo e do recibo tem o formato que o sistema emite (ESIC-AAAA-NNNNNN), nunca 2026/00488", () => {
+    const { container } = render(<BalcaoEsic ente="fortaleza" />);
+    const campo = screen.getByLabelText(/acompanhar pelo número/i) as HTMLInputElement;
+    expect(campo.placeholder).toMatch(/^Ex\.: ESIC-\d{4}-\d{6}$/);
+    expect(container.querySelector(".recibo-nota .prot")?.textContent).toMatch(/^ESIC-\d{4}-\d{6}$/);
+    expect(container.textContent).not.toMatch(/\d{4}\/\d{5}/);
+  });
+
   it("busca por protocolo -> chama a rota real e mostra o status (faixa + situação)", async () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ protocolo: "2026/00488", estado: "em_analise", "dias-restantes": 9 }),
+      json: async () => ({ protocolo: "ESIC-2026-000001", estado: "em_analise", "dias-restantes": 9 }),
     })) as unknown as typeof fetch;
 
     render(<BalcaoEsic ente="fortaleza" />);
-    fireEvent.change(screen.getByLabelText(/acompanhar pelo número/i), { target: { value: "2026/00488" } });
+    fireEvent.change(screen.getByLabelText(/acompanhar pelo número/i), { target: { value: "ESIC-2026-000001" } });
     fireEvent.click(screen.getByRole("button", { name: /acompanhar/i }));
 
-    await waitFor(() => expect(screen.getByText(/pedido nº 2026\/00488/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/pedido nº ESIC-2026-000001/i)).toBeTruthy());
     // "Em análise" aparece 2x: no rótulo de situação (.tipo-obj) e no estágio ativo da AzulejoFaixa.
     expect(screen.getAllByText("Em análise").length).toBeGreaterThanOrEqual(2);
 
     const [url] = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
-    expect(url).toBe("/api/portal/casa/fortaleza/esic/acompanhar/2026%2F00488");
+    expect(url).toBe("/api/portal/casa/fortaleza/esic/acompanhar/ESIC-2026-000001");
   });
 
   it("protocolo não encontrado -> mensagem honesta, sem inventar um pedido, e sem o rótulo 'em breve'", async () => {
@@ -82,14 +90,14 @@ describe("BalcaoEsic", () => {
     ) as unknown as typeof fetch;
 
     const { container } = render(<BalcaoEsic ente="fortaleza" />);
-    fireEvent.change(screen.getByLabelText(/acompanhar pelo número/i), { target: { value: "2026/00488" } });
+    fireEvent.change(screen.getByLabelText(/acompanhar pelo número/i), { target: { value: "ESIC-2026-000001" } });
     fireEvent.click(screen.getByRole("button", { name: /acompanhar/i }));
 
     const regiao = container.querySelector('[aria-live="polite"]');
     expect(regiao?.textContent).toMatch(/buscando/i);
 
-    resolverFetch({ ok: true, json: async () => ({ protocolo: "2026/00488", estado: "em_analise", "dias-restantes": 9 }) });
-    await waitFor(() => expect(screen.getByText(/pedido nº 2026\/00488/i)).toBeTruthy());
+    resolverFetch({ ok: true, json: async () => ({ protocolo: "ESIC-2026-000001", estado: "em_analise", "dias-restantes": 9 }) });
+    await waitFor(() => expect(screen.getByText(/pedido nº ESIC-2026-000001/i)).toBeTruthy());
   });
 
   it("submeter enquanto já busca (2º Enter) não dispara uma segunda chamada (guarda de reentrância)", async () => {
@@ -104,15 +112,15 @@ describe("BalcaoEsic", () => {
 
     render(<BalcaoEsic ente="fortaleza" />);
     const campo = screen.getByLabelText(/acompanhar pelo número/i);
-    fireEvent.change(campo, { target: { value: "2026/00488" } });
+    fireEvent.change(campo, { target: { value: "ESIC-2026-000001" } });
     const formulario = campo.closest("form") as HTMLFormElement;
     fireEvent.submit(formulario);
     fireEvent.submit(formulario);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    resolverFetch({ ok: true, json: async () => ({ protocolo: "2026/00488", estado: "em_analise", "dias-restantes": 9 }) });
-    await waitFor(() => expect(screen.getByText(/pedido nº 2026\/00488/i)).toBeTruthy());
+    resolverFetch({ ok: true, json: async () => ({ protocolo: "ESIC-2026-000001", estado: "em_analise", "dias-restantes": 9 }) });
+    await waitFor(() => expect(screen.getByText(/pedido nº ESIC-2026-000001/i)).toBeTruthy());
   });
 
   it("submeter vazio não dispara busca (sem fetch)", () => {
