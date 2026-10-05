@@ -22,12 +22,14 @@ import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
 import { MovimentacoesPublicas } from "./movimentacoes-publicas";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
-import { VotacoesDaMateria } from "./votacoes-da-materia";
+import { UltimaVotacaoEmPlenario, useVotacoesDaMateria, VotacoesDaMateria } from "./votacoes-da-materia";
 import "./participacao.css";
 
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const { ficha, comentarios, estado } = useFicha(ente, proposicaoId);
   const sessao = useSessaoCidada(ente);
+  // uma busca só para as votações públicas da matéria: o ato no topo e a seção "Votações desta matéria"
+  const votacoes = useVotacoesDaMateria(ente, proposicaoId);
 
   // review A2.3 item 5: affordance de carregamento (consistência com secao-em-tramitacao.tsx) — sem
   // skeleton, só o `aria-busy` honesto para leitor de tela/testes; nenhum conteúdo visível ainda.
@@ -73,6 +75,8 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
           )}
         </p>
       </div>
+
+      <UltimaVotacaoEmPlenario ente={ente} ultima={votacoes.ultima} />
 
       <section className="ficha-tram" aria-label="Tramitação da matéria">
         <h2>Onde este projeto está</h2>
@@ -179,7 +183,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
       <PareceresJuridicosPublicos ente={ente} proposicaoId={proposicaoId} />
 
       {/* só aparece se a matéria já teve votação encerrada em sessão pública; a seção some sozinha se não */}
-      <VotacoesDaMateria ente={ente} proposicaoId={proposicaoId} />
+      <VotacoesDaMateria ente={ente} proposicaoId={proposicaoId} dados={votacoes} />
 
       <section className="secao" aria-label="Participação cidadã">
         <h2>O que a população está dizendo</h2>

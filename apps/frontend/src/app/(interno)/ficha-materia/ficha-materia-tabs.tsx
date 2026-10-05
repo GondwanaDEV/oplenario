@@ -15,10 +15,10 @@ import { AcoesTramitacao } from "./acoes-tramitacao";
 import { PainelResumo } from "./painel-resumo";
 import { PainelParecerJuridico } from "./painel-parecer-juridico";
 import { DesignarRelator } from "./designar-relator";
-import { derivarTimelineTramitacao, derivarPareceres, derivarEmendas, rotularRelator, type ParecerResumoComRelator } from "@/lib/ficha-materia-vista";
+import { derivarLinhaDoTempo, derivarPareceres, derivarEmendas, rotularRelator, type ParecerResumoComRelator } from "@/lib/ficha-materia-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { comToken } from "@/lib/nav";
-import type { FichaMateriaOut } from "@/lib/contrato-legislativo.gen";
+import type { FichaMateriaOut, PosAprovacaoOut } from "@/lib/contrato-legislativo.gen";
 import "./juridico-ficha.css";
 
 type Aba = { id: string; rotulo: string; contagem?: number; truncado?: boolean };
@@ -27,9 +27,13 @@ export function FichaMateriaTabs({
   ficha,
   token = null,
   papeis = [],
+  posAprovacao = null,
   onTramitou,
 }: {
   ficha: FichaMateriaOut;
+  // autógrafo, resposta do Executivo e norma (GET /proposicoes/:id/pos-aprovacao), lidos pela página: entram na
+  // linha do tempo da aba Tramitação ao lado das transições do rito. Nulo enquanto não chega ou sem autógrafo.
+  posAprovacao?: PosAprovacaoOut | null;
   // token dev opcional (Onda B Slice 5) — só pra preservar ?token= no link "Abrir parecer"; recebido via
   // prop (não `useAuth()` aqui) porque esta suíte de teste renderiza o componente SEM <AuthProvider>.
   token?: string | null;
@@ -43,7 +47,9 @@ export function FichaMateriaTabs({
   // useMemo: todos os 5 painéis ficam montados simultaneamente (só `hidden` alterna, ver abaixo) — sem
   // isto, o sort()+map() das 3 derivações reroda a cada keypress de navegação das abas (ArrowLeft/Right/
   // Home/End), mesmo quando `ficha` não mudou (achado do review desta fatia).
-  const timeline = useMemo(() => derivarTimelineTramitacao(ficha.tramitacao), [ficha.tramitacao]);
+  const timeline = useMemo(() => derivarLinhaDoTempo(ficha.tramitacao, posAprovacao), [ficha.tramitacao, posAprovacao]);
+  // o corte do servidor vale só para as transições: o aviso conta só elas
+  const transicoes = timeline.filter((i) => i.tipo === "transicao").length;
   const pareceres = useMemo(() => derivarPareceres(ficha.pareceres as ParecerResumoComRelator[]), [ficha.pareceres]);
   const ehSecretaria = papeis.includes("secretario");
   const emendas = useMemo(() => derivarEmendas(ficha.emendas), [ficha.emendas]);
@@ -156,21 +162,29 @@ export function FichaMateriaTabs({
           <>
             {ficha.tramitacaoTruncado && (
               <p role="status" className="aviso-corte">
-                Mostrando as <b>{timeline.length}</b> transições mais recentes — pode haver mais fora
+                Mostrando as <b>{transicoes}</b> transições mais recentes — pode haver mais fora
                 desta lista.
               </p>
             )}
             <ol className="tempo">
-              {timeline.map((item, i) => (
-                <li key={`${item.ocorridoEm}-${i}`}>
-                  <span className="data">{formatarData(item.ocorridoEm)}</span>
-                  <p className="evt">
-                    {item.rotuloDe} → {item.rotuloPara}
-                  </p>
-                  <span className="quem">{item.gatilho}</span>
-                  {item.recebimentoTexto && <span className="recebido">{item.recebimentoTexto}</span>}
-                </li>
-              ))}
+              {timeline.map((item, i) =>
+                item.tipo === "ato" ? (
+                  <li key={`${item.ocorridoEm}-${i}`}>
+                    <span className="data">{formatarData(item.ocorridoEm)}</span>
+                    <p className="evt">{item.evento}</p>
+                    <span className="quem">{item.quem}</span>
+                  </li>
+                ) : (
+                  <li key={`${item.ocorridoEm}-${i}`}>
+                    <span className="data">{formatarData(item.ocorridoEm)}</span>
+                    <p className="evt">
+                      {item.rotuloDe} → {item.rotuloPara}
+                    </p>
+                    <span className="quem">{item.gatilho}</span>
+                    {item.recebimentoTexto && <span className="recebido">{item.recebimentoTexto}</span>}
+                  </li>
+                ),
+              )}
             </ol>
           </>
         )}

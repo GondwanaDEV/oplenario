@@ -166,6 +166,64 @@ describe("SecaoFicha", () => {
     expect(screen.getByRole("heading", { name: "Votações desta matéria" })).toBeTruthy();
   });
 
+  it("matéria votada em plenário -> o ATO aparece no topo, com a data e o link; o selo de estado não muda", async () => {
+    const votacao = {
+      "votacao-id": "v9",
+      "encerrada-em": "2026-09-12T18:30:00Z",
+      "objeto-tipo": "proposicao",
+      resultado: "aprovada",
+      sessao: { "sessao-id": "s1", "tipo-sessao": "ordinaria", "numero-sequencial": 3 },
+    };
+    mockFetch((url) => ({
+      ok: true,
+      json: async () =>
+        url.endsWith("/comentarios")
+          ? []
+          : url.includes("/votacoes")
+            ? { votacoes: [votacao], total: 1, pagina: 1, "por-pagina": 20 }
+            : fichaFake,
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    const ato = await waitFor(() => {
+      const el = document.querySelector(".ultima-votacao");
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(ato.textContent).toContain("Última votação em plenário: a matéria foi aprovada em 12/09/2026.");
+    expect(ato.querySelector("a")?.getAttribute("href")).toBe("/portal/casa/fortaleza/votacoes/v9");
+    // o selo segue o estado do rito da Casa: o ato não o reescreve (numa matéria de dois turnos ele pode ser verdade)
+    expect(document.querySelector(".estado-chip")?.textContent).not.toMatch(/aprovad/i);
+    // uma busca só de votações: o ato e a seção "Votações desta matéria" usam a mesma resposta
+    const chamadas = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/votacoes"));
+    expect(chamadas).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Votações desta matéria" })).toBeTruthy();
+  });
+
+  it("redação final rejeitada -> o ato diz que foi a redação final; resultado desconhecido -> nada aparece", async () => {
+    const base = { "votacao-id": "v2", "encerrada-em": "2026-09-20T12:00:00Z", sessao: { "sessao-id": "s2" } };
+    for (const [votacao, esperado] of [
+      [{ ...base, "objeto-tipo": "redacao_final", resultado: "rejeitada" }, "a redação final foi rejeitada em 20/09/2026."],
+      [{ ...base, "objeto-tipo": "proposicao", resultado: "empate" }, null],
+    ] as const) {
+      cleanup();
+      mockFetch((url) => ({
+        ok: true,
+        json: async () =>
+          url.endsWith("/comentarios")
+            ? []
+            : url.includes("/votacoes")
+              ? { votacoes: [votacao], total: 1, pagina: 1, "por-pagina": 20 }
+              : fichaFake,
+      }));
+      render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+      // a seção de votações aparece nos dois casos: é o sinal de que a resposta de votações já chegou
+      await screen.findByRole("heading", { name: "Votações desta matéria" });
+      const ato = document.querySelector(".ultima-votacao");
+      if (esperado) expect(ato?.textContent).toContain(esperado);
+      else expect(ato).toBeNull();
+    }
+  });
+
   it("matéria sem votação pública -> nenhuma seção nem link de votações (nunca um link para lista vazia)", async () => {
     mockFetch((url) => ({
       ok: true,

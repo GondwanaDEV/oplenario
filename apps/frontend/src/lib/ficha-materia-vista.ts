@@ -17,11 +17,13 @@ import { rotularComissao } from "./comissao-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
 import { categorizarSituacao, type CategoriaSituacao } from "./proposicoes-vista";
 import { textoRecebimento } from "./recebimento-vista";
+import { dataDoPrazo, formatarNumeroAutografo, formatarNumeroNorma } from "./pos-aprovacao-vista";
 import type {
   FichaMateriaOut,
   HistoricoTramitacaoItemOut,
   EmendaResumoOut,
   ParecerResumoOut,
+  PosAprovacaoOut,
 } from "./contrato-legislativo.gen";
 
 // ---------------------------------------------------------------------------
@@ -90,6 +92,91 @@ export function derivarTimelineTramitacao(
       rotuloPara: derivarTramitacao(item.paraEstado).rotuloSituacao,
       recebimentoTexto: textoRecebimento(item.recebimento),
     }));
+}
+
+// ---------------------------------------------------------------------------
+// Aba "Tramitação" — os atos depois da aprovação (ledger docs/16, linha 30)
+// ---------------------------------------------------------------------------
+// O autógrafo, a resposta do Executivo, a apreciação do veto e a norma não são transições do rito: vivem
+// em GET /proposicoes/:id/pos-aprovacao. Sem eles a linha do tempo parava na aprovação, e a matéria que já
+// é lei parecia esquecida. Cada ato entra com a data em que ocorreu; ato sem data não entra.
+
+export type AtoPosAprovacaoVista = { ocorridoEm: string; evento: string; quem: string };
+
+const RESPOSTA_DO_EXECUTIVO: Record<string, string> = {
+  sancionado: "Sancionada pelo Executivo",
+  sancao_tacita: "Sanção tácita: o Executivo não respondeu no prazo",
+  vetado: "Vetada pelo Executivo",
+  veto_mantido: "Vetada pelo Executivo",
+  veto_derrubado: "Vetada pelo Executivo",
+};
+
+const APRECIACAO_DO_VETO: Record<string, string> = {
+  veto_mantido: "Veto mantido pela Câmara",
+  veto_derrubado: "Veto derrubado pela Câmara",
+};
+
+const ESTADOS_COM_VETO = new Set(["vetado", "veto_mantido", "veto_derrubado"]);
+
+export function derivarAtosPosAprovacao(pos: PosAprovacaoOut | null | undefined): AtoPosAprovacaoVista[] {
+  const atos: AtoPosAprovacaoVista[] = [];
+  const autografo = pos?.autografo;
+  if (!autografo) return atos;
+  atos.push({
+    ocorridoEm: autografo.enviadoEm,
+    evento: `Autógrafo nº ${formatarNumeroAutografo(autografo.numero, autografo.ano)} enviado ao Executivo`,
+    quem: autografo.prazoRespostaEm
+      ? `${autografo.destinatarioTexto} · resposta até ${dataDoPrazo(autografo.prazoRespostaEm)}`
+      : autografo.destinatarioTexto,
+  });
+  const executivo = pos?.tramitacaoExecutiva;
+  const resposta = executivo ? RESPOSTA_DO_EXECUTIVO[executivo.estado] : undefined;
+  if (executivo && resposta && executivo.respondidoEm) {
+    const tipoVeto =
+      ESTADOS_COM_VETO.has(executivo.estado) && (executivo.vetoTipo === "total" || executivo.vetoTipo === "parcial")
+        ? ` (veto ${executivo.vetoTipo})`
+        : "";
+    atos.push({ ocorridoEm: executivo.respondidoEm, evento: `${resposta}${tipoVeto}`, quem: "Executivo" });
+  }
+  const apreciacao = executivo ? APRECIACAO_DO_VETO[executivo.estado] : undefined;
+  if (executivo && apreciacao && executivo.apreciadoEm) {
+    atos.push({ ocorridoEm: executivo.apreciadoEm, evento: apreciacao, quem: "Plenário" });
+  }
+  const norma = pos?.norma;
+  if (norma) {
+    const numero = formatarNumeroNorma(norma.tipoNorma, norma.numero, norma.ano);
+    atos.push({ ocorridoEm: norma.promulgadoEm, evento: `Promulgada como ${numero}`, quem: "Câmara" });
+    if (norma.publicadoEm) {
+      atos.push({
+        ocorridoEm: norma.publicadoEm,
+        evento: `${numero} publicada`,
+        quem: norma.veiculoPublicacao ? `Em ${norma.veiculoPublicacao}` : "Veículo não informado",
+      });
+    }
+  }
+  return atos;
+}
+
+export type ItemLinhaDoTempoVista =
+  | ({ tipo: "transicao" } & ItemTimelineVista)
+  | ({ tipo: "ato" } & AtoPosAprovacaoVista);
+
+function instante(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
+}
+
+/** As transições do rito e os atos depois da aprovação numa só lista, do mais recente ao mais antigo. Compara o
+ *  instante, não o texto: as duas fontes não escrevem a data do mesmo jeito (com e sem fuso). */
+export function derivarLinhaDoTempo(
+  tramitacao: HistoricoTramitacaoItemOut[],
+  pos: PosAprovacaoOut | null | undefined,
+): ItemLinhaDoTempoVista[] {
+  const itens: ItemLinhaDoTempoVista[] = [
+    ...derivarTimelineTramitacao(tramitacao).map((i) => ({ tipo: "transicao" as const, ...i })),
+    ...derivarAtosPosAprovacao(pos).map((a) => ({ tipo: "ato" as const, ...a })),
+  ];
+  return itens.sort((a, b) => instante(b.ocorridoEm) - instante(a.ocorridoEm));
 }
 
 // ---------------------------------------------------------------------------
