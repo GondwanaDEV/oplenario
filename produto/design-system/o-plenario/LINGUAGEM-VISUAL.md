@@ -109,6 +109,14 @@ Inter + JetBrains Mono de 22/09 a 05/10.)*
 - **Número grande isolado** (placar, quórum, KPI) em `--display` usa `font-variant-numeric:
   var(--numero-destaque)`, não `tabular-nums`: o algarismo tabular da Mona Sans corta o zero, o que ajuda
   numa coluna e destoa num placar.
+- **Título curto vs. título longo.** O `h1` vem largo e com `text-wrap: balance` do chassi, o que serve ao título
+  curto ("Proposições", a manchete do portal). Quando o `h1` é texto longo — a **ementa** na ficha da matéria, no
+  editor, na nota técnica, na conferência — ele leva a classe **`.titulo-longo`** (largura 100%, `text-wrap:
+  pretty`): com a largura extra e o balance, uma ementa de 120 caracteres ganhava uma linha e virava um bloco de
+  três linhas curtas. **Tela nova com `h1` de texto variável e longo: usar `.titulo-longo`.**
+- **Telão:** manchete a 104% (tem limite de linhas e é lida de longe), números do placar a 115%, nomes da grade
+  nominal em `--largura-densa` — a mesma condensação vale para a chamada e o placar nominal do plenário, onde o
+  nome é cortado com reticências.
 
 Escala: **11 · 12 · 13 · 16 · 21 · 28 · 40 · 56**. Corpo base 16px, linha 1.6, medida 56–60 ch.
 O front serve as fontes do próprio domínio (`apps/frontend/src/app/fontes.css`); as telas HTML deste

@@ -353,6 +353,18 @@ TCE-CE; prazos corridos vs. úteis (LAI 20+10, LGPD, ouvidoria 13.460); rito de 
 layout do Diário Oficial; admissibilidade de emenda de plenário; e os outros 26 TCEs (forma validada
 só contra o CE, rollout demand-pulled).
 
+**Tipografia trocada (05/10/2026, PRs #121 e #125, em produção):** Mona Sans (título e corpo) + Geist Mono (dados), no
+lugar de Plus Jakarta Sans + Inter + JetBrains Mono.
+- A hierarquia vem do eixo de **largura** da Mona Sans: `--largura-titulo` (112%) no `h1`, `--largura-densa` (92%) na
+  tabela e nas grades nominais.
+- As fontes saem do próprio front (`apps/frontend/src/app/fontes.css` + `public/fontes/`), sem Google Fonts. As telas
+  HTML do design system seguem no Google Fonts.
+- Três armadilhas:
+  - o `tabular-nums` da Mona Sans corta o zero; número grande em `--display` usa `var(--numero-destaque)`;
+  - `h1` com texto longo (ementa) leva `.titulo-longo`, senão vira um bloco estreito de linhas curtas;
+  - `font-stretch` só vale em fonte com eixo de largura.
+- Regras em `produto/design-system/o-plenario/LINGUAGEM-VISUAL.md`, seção Tipografia.
+
 **Se voltar a fazer design:** o protocolo por tela segue valendo — linkar `produto/design-system/o-plenario/sistema/`,
 usar arquétipo já provado, reusar receitas de `PADROES-DE-COMPOSICAO.md`, passar pelo
 `GUIDELINES-CHECKLIST.md` como gate (esp. §5.1: branco-sobre-telha → `--telha-fundo`; fill de gráfico
