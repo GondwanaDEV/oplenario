@@ -84,6 +84,16 @@
   background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
 .form-apreciacao .campo input[type="text"]:focus-visible, .form-publicacao .campo input[type="text"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+/* ---- Gerar autógrafo (prazo do Executivo) ---- */
+.form-gerar-autografo { margin-top: 1rem; }
+.form-gerar-autografo .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
+.form-gerar-autografo .campo input[type="date"] {
+  width: 100%; max-width: 16rem; min-height: 44px; padding: 0.5rem 0.6rem; border: 1px solid var(--linha); border-radius: 8px;
+  background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
+}
+.form-gerar-autografo .campo input[type="date"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.form-gerar-autografo .nota-gap p { margin: 0 0 0.3rem; }
+.form-gerar-autografo .acoes { margin-top: 1rem; }
 .form-erro { color: var(--acento-texto); font-size: var(--t-13); font-weight: 600; margin: 0 0 0.8rem; }
 .fr-opcoes { display: flex; flex-direction: column; gap: 0.5rem; }
 .fr-opcao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto); min-height: 32px; }
@@ -96,4 +106,5 @@
 
 /* F3.8b — o card "Lei": a URN é longa e sem espaços; quebra em qualquer ponto para não estourar a coluna. */
 .card-norma .urn { overflow-wrap: anywhere; font-size: var(--t-12); }
+.card-norma .status-norma { margin: 0 0 0.8rem; font-size: var(--t-13); font-weight: 600; color: var(--marca); }
 .card-norma .confirmar-norma { border-top: 1px dashed var(--linha); margin-top: 0.8rem; padding-top: 0.7rem; }

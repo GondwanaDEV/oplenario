@@ -19,6 +19,8 @@
 .ac-item-topo { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .ac-desde { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .ac-titulo { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); margin: 0 0 0.35rem; }
+.ac-link { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.ac-link:hover { color: var(--marca); }
 .ac-ementa { font-size: var(--t-13); color: var(--texto-2); line-height: 1.5; margin: 0; }
 .ac-indisponivel { font-size: var(--t-13); color: var(--texto-2); font-style: italic; margin: 0.5rem 0 0; }
 

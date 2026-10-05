@@ -5,10 +5,17 @@
 // mockup (dado real disponível; "recebido" em si não tem timestamp próprio no domínio — só enviadoEm).
 
 import { formatarData } from "@/lib/formatar-data";
-import { formatarNumeroAutografo } from "@/lib/pos-aprovacao-vista";
+import { dataDoPrazo, formatarNumeroAutografo, fraseDoPrazoDoExecutivo } from "@/lib/pos-aprovacao-vista";
 import type { AutografoOut } from "@/lib/contrato-legislativo.gen";
 
-export function CardAutografo({ autografo }: { autografo: AutografoOut }) {
+// `aguardandoResposta`: o Executivo ainda não respondeu — só então a frase "tem até …" é verdadeira.
+export function CardAutografo({
+  autografo,
+  aguardandoResposta = false,
+}: {
+  autografo: AutografoOut;
+  aguardandoResposta?: boolean;
+}) {
   return (
     <div className="card">
       <h2>Autógrafo</h2>
@@ -20,8 +27,11 @@ export function CardAutografo({ autografo }: { autografo: AutografoOut }) {
         <dt>Destinatário</dt>
         <dd>{autografo.destinatarioTexto}</dd>
         <dt>Prazo de resposta</dt>
-        <dd className="mono">{autografo.prazoRespostaEm ? formatarData(autografo.prazoRespostaEm) : "não informado"}</dd>
+        <dd className="mono">{autografo.prazoRespostaEm ? dataDoPrazo(autografo.prazoRespostaEm) : "não informado"}</dd>
       </dl>
+      {autografo.prazoRespostaEm && aguardandoResposta && (
+        <p className="prazo-texto">{fraseDoPrazoDoExecutivo(autografo.prazoRespostaEm)}</p>
+      )}
       {!autografo.prazoRespostaEm && (
         <p className="nota-gap">
           <span className="tag">GAP</span> O prazo de sanção/veto é o da Lei Orgânica do Município — não foi

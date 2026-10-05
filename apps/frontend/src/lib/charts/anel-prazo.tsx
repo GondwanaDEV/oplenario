@@ -14,18 +14,30 @@ export function AnelPrazo({
   diasTotal,
   rotulo,
   tamanho = 64,
+  atrasoDias,
 }: {
   diasRestantes: number;
   diasTotal: number;
   rotulo: string;
   tamanho?: number;
+  /** Prazo JÁ VENCIDO há quantos dias. Com ele o centro mostra o atraso ("36 · atraso") em vez de "0 dias",
+   *  que dizia o contrário da frase ao lado ("venceu há 36 dias"). O anel fica cheio: o prazo se esgotou. */
+  atrasoDias?: number;
 }) {
+  const vencido = atrasoDias !== undefined && atrasoDias > 0;
+  const dias = (n: number) => (n === 1 ? "1 dia" : `${n} dias`);
   const raio = tamanho / 2 - 4;
   const circunferencia = 2 * Math.PI * raio;
-  const offset = arcoDashoffset(diasRestantes, diasTotal, raio);
+  const offset = arcoDashoffset(vencido ? 0 : diasRestantes, diasTotal, raio);
   const centro = tamanho / 2;
   return (
-    <div className="anel-c" role="img" aria-label={`${rotulo}: faltam ${diasRestantes} dias.`}>
+    <div className="anel-c" role="img" aria-label={
+        vencido
+          ? `${rotulo}: venceu há ${dias(atrasoDias)}.`
+          : diasRestantes === 1
+            ? `${rotulo}: falta 1 dia.`
+            : `${rotulo}: faltam ${diasRestantes} dias.`
+      }>
       <svg viewBox={`0 0 ${tamanho} ${tamanho}`} style={{ transform: "rotate(-90deg)", display: "block" }}>
         <circle className="trilho" cx={centro} cy={centro} r={raio} fill="none" strokeWidth={6} />
         <circle
@@ -41,8 +53,8 @@ export function AnelPrazo({
         />
       </svg>
       <div className="centro">
-        <span className="d">{diasRestantes}</span>
-        <span className="u">dias</span>
+        <span className="d">{vencido ? atrasoDias : diasRestantes}</span>
+        <span className="u">{vencido ? "atraso" : diasRestantes === 1 ? "dia" : "dias"}</span>
       </div>
     </div>
   );

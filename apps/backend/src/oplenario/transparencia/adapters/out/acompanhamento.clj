@@ -38,11 +38,12 @@
   (mapv minha->wire ms))
 
 (defn meus->wire
-  "{:acompanhamentos :acompanhamentos-total} (dominio) -> MeusAcompanhamentosOut — o par lista+total de GET
+  "{:ente-id :acompanhamentos :acompanhamentos-total} (dominio) -> MeusAcompanhamentosOut — o par lista+total de GET
   /portal/acompanhamentos (frente 'truncamento-familia', sitio (c)). SEM `(or ... 0)` (corrige achado
   IMPORTANTE da revisao adversarial): `:acompanhamentos-total` ausente e' bug de servidor e tem de reprovar
   no schema (500), nao virar `0` silencioso."
-  [{:keys [acompanhamentos acompanhamentos-total]}]
+  [{:keys [ente-id acompanhamentos acompanhamentos-total]}]
   (validar! wire/MeusAcompanhamentosOut
-            {:acompanhamentos (minhas->wire acompanhamentos) :acompanhamentos-total acompanhamentos-total}
+            {:ente-id (->str ente-id) :acompanhamentos (minhas->wire acompanhamentos)
+             :acompanhamentos-total acompanhamentos-total}
             "MeusAcompanhamentosOut"))

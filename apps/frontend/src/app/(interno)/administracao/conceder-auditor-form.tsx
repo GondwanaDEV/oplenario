@@ -6,12 +6,12 @@
 // por último"). O vínculo é de servidor: o papel de auditor nunca vai para um vereador (o backend também recusa).
 
 import { useState } from "react";
-import { useConcederAuditor } from "@/lib/use-conceder-acesso";
+import { type SituacaoEmail, useConcederAuditor } from "@/lib/use-conceder-acesso";
 import { validarConcederAcesso, apenasDigitos } from "@/lib/cadastro-vereadores-forms";
 
 export function ConcederAuditorForm({ token, onSucesso, onCancelar }: {
   token: string | null;
-  onSucesso: (nome: string) => void;
+  onSucesso: (nome: string, email: SituacaoEmail) => void;
   onCancelar: () => void;
 }) {
   const [nome, setNome] = useState("");
@@ -28,8 +28,8 @@ export function ConcederAuditorForm({ token, onSucesso, onCancelar }: {
     setTocado(true);
     if (!valido) return;
     try {
-      await conceder({ nome: nome.trim(), cpf: apenasDigitos(cpf), email: email.trim() });
-      onSucesso(nome.trim());
+      const { email: situacao } = await conceder({ nome: nome.trim(), cpf: apenasDigitos(cpf), email: email.trim() });
+      onSucesso(nome.trim(), situacao);
     } catch { /* o estado 'erro' já aparece abaixo, com a mensagem do servidor */ }
   }
 

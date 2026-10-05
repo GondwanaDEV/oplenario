@@ -2765,15 +2765,27 @@ histórico.
 | 38 | A raiz `/` deixou de dizer "em construção" | #129 |
 
 O que essas frentes deixaram registrado:
-- **Linha 12 segue aberta.** A tentativa de fazer o cockpit abrir a sessão viva mais recente reprovou a Trilha 3 (votar
-  e confirmar presença) e foi desfeita no próprio #133. A vista `sli_sessao` não guarda o tipo da sessão nem o corpo do
-  vereador; o conserto certo depende de o evento de sessão carregar o tipo.
+- **Linha 12 fechada (05/10/2026).** A primeira tentativa (o cockpit abrir a sessão viva mais recente) reprovou a
+  Trilha 3 e foi desfeita no #133: o `preparar.mjs` dependia de `/meu/sessao-atual` devolver a mais antiga. Agora:
+  - `GET /meu/sessao-atual` devolve por padrão a aberta mais recente (aberta antes de suspensa) e a lista
+    `sessoes-vivas`;
+  - `/votar` aceita `?sessao=` (só vale se a sessão estiver em curso) e, com duas ou mais vivas, mostra "Há N sessões
+    em curso agora" com o link para a outra;
+  - a Trilha 3 abre o `/votar` com `?sessao=` explícito, então não depende mais da ordem.
+  A vista `sli_sessao` segue sem o tipo da sessão: o rótulo da troca é a hora em que a sessão abriu.
 - **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
   perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
   o problema: confere a sessão.
-- **Achado novo, aberto:** ao reconceder acesso a quem já tem conta, o convite sai para o e-mail já cadastrado; não há
-  como trocar o e-mail de alguém pela tela. Dar esse poder ao `admin_ente` permitiria assumir a conta de outra pessoa,
-  então é decisão, não só código.
+- **Achado fechado (05/10/2026, decisão do Daouda "A e B"):** ao reconceder acesso a quem já tem conta, o convite saía
+  para o e-mail já cadastrado. Agora:
+  - **A:** se a pessoa nunca entrou (sem `primeiro_acesso_em` na Casa e sem credencial no Keycloak), o e-mail informado
+    substitui o da conta antes do convite (`idp/corrigir-email-do-convite!`; o usuário inteiro é relido e regravado para
+    não perder o atributo `identidade-id`). E-mail de outra pessoa do realm → 409. A resposta do `POST
+    /identidade/acessos` diz `email: novo | atualizado | mantido` e a tela mostra a frase correspondente.
+  - **B:** quem já entrou não tem o e-mail trocado pelo `admin_ente` (seria tomar a conta). A própria pessoa troca na
+    página de conta do Keycloak da Casa (`/realms/ente-<ente>/account`, "Personal info"), conferido em produção na
+    Casa demo: o campo é editável. A página está em inglês e o app não tem link para ela.
+  - Provas: `acesso_http_test` (5 casos novos) e `provisionamento_test` (3 casos contra o Keycloak real do CI).
 - O módulo `compliance` não emite evento nenhum (`events/remessa.clj`, `events/obrigacao.clj` e `producers.clj` são
   stubs). Frente que presuma "evento de remessa" parte de premissa falsa.
 - Decisões embutidas, a confirmar: a matéria é única por sessão em qualquer fase (linha 8); `admin_ente` não é
@@ -2795,7 +2807,7 @@ O que essas frentes deixaram registrado:
 | 9 | Placar nominal do telão mostra prefixo de UUID, não o nome | alto | `sessoes/[id]/plenario/page.tsx:377` | sim |
 | 10 | "Proposições em tramitação" soma aprovadas e arquivadas | alto | `paineis/adapters/out/mesa.clj:27`; `paineis/db/tramitacao.clj:90-104` | sim |
 | 11 | Não há como revogar o acesso de ninguém | alto | `identidade/diplomat/http/in.clj:170-186` | sim |
-| 12 | Duas sessões abertas: o cockpit vai para a mais antiga | alto | `paineis/db/sli_sessao.clj:136-139` | sim para o cockpit |
+| 12 | ~~Duas sessões abertas: o cockpit vai para a mais antiga~~ **fechado em 05/10/2026:** abre a mais recente e oferece a troca | alto | `paineis/db/sli_sessao.clj:136-139` | sim para o cockpit |
 | 13 | Não existe página pública de votações | alto | `transparencia/diplomat/http/in.clj:220-264` | parte |
 | 14 | Perfil público do vereador só abre por UUID; sem lista | alto | `(publico)/…/vereadores/[vereadorId]/page.tsx` | sim |
 | 15 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |

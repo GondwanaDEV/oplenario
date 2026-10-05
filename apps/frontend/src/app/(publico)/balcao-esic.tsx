@@ -91,7 +91,7 @@ export function BalcaoEsic({ ente }: { ente: string }) {
             inputMode="text"
             value={protocolo}
             onChange={(evento) => setProtocolo(evento.target.value)}
-            placeholder="Ex.: 2026/00488"
+            placeholder="Ex.: ESIC-2026-000001"
           />
           <button className="btn btn-contorno" type="submit" disabled={estado === "buscando"}>
             {estado === "buscando" ? "Buscando…" : "Acompanhar"}
@@ -164,7 +164,7 @@ export function BalcaoEsic({ ente }: { ente: string }) {
         </svg>
         <span>
           Ao enviar, você recebe <b>na hora</b> um número de protocolo e um <b>recibo</b> (ex.:{" "}
-          <span className="prot">2026/00489</span>) — a prova de que pediu e o{" "}
+          <span className="prot">ESIC-2026-000001</span>) — a prova de que pediu e o{" "}
           <b>marco em que o prazo começa a contar</b>. O recibo chega também por e-mail.
         </span>
       </p>

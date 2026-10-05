@@ -108,6 +108,73 @@ describe("ConteudoPosAprovacao", () => {
     expect(screen.getByText("Autógrafo gerado e enviado ao Executivo")).toBeTruthy();
   });
 
+  it("o prazo escolhido vai no POST (fim do dia, fuso da Casa) e a tela mostra até quando o Executivo tem", async () => {
+    mockFetch(semAutografo);
+    renderComProviders();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i })).toBeTruthy(),
+    );
+
+    const doDia = (iso: string) => ({
+      ...comAutografoAguardando,
+      autografo: { ...comAutografoAguardando.autografo, "prazo-resposta-em": iso },
+    });
+    const posts: string[] = [];
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push(String(init.body));
+        // o servidor devolve em UTC: 23h59 de 31/12 em Fortaleza = 01/01 02h59 UTC
+        return { ok: true, json: async () => doDia("2099-01-01T02:59:59Z") } as Response;
+      }
+      if (url.includes("/pos-aprovacao")) return { ok: true, json: async () => semAutografo } as Response;
+      return { ok: true, json: async () => proposicaoAprovada } as Response;
+    }) as unknown as typeof fetch;
+
+    fireEvent.change(screen.getByLabelText(/prazo de sanção ou veto/i), { target: { value: "2098-12-31" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i }));
+    });
+
+    await waitFor(() => expect(screen.getByRole("list", { name: /etapas da sanção/i })).toBeTruthy());
+    expect(posts).toEqual([JSON.stringify({ "prazo-resposta-em": "2098-12-31T23:59:59-03:00" })]);
+    expect(screen.getByText("O Executivo tem até 31/12/2098 para sancionar ou vetar.")).toBeTruthy();
+  });
+
+  it("data no passado -> frase de erro no formulário e nenhum POST", async () => {
+    mockFetch(semAutografo);
+    renderComProviders();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i })).toBeTruthy(),
+    );
+    fireEvent.change(screen.getByLabelText(/prazo de sanção ou veto/i), { target: { value: "2020-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i }));
+    expect(screen.getByRole("alert").textContent).toBe("O prazo não pode ser uma data que já passou.");
+    const chamadas = (global.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls;
+    expect(chamadas.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+  });
+
+  it("o 400 do backend aparece como frase, não como 'requisicao invalida'", async () => {
+    mockFetch(semAutografo);
+    renderComProviders();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i })).toBeTruthy(),
+    );
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        return { ok: false, status: 400, json: async () => ({ erro: "requisicao invalida" }) } as Response;
+      }
+      if (url.includes("/pos-aprovacao")) return { ok: true, json: async () => semAutografo } as Response;
+      return { ok: true, json: async () => proposicaoAprovada } as Response;
+    }) as unknown as typeof fetch;
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /gerar autógrafo e enviar ao executivo/i }));
+    });
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/O pedido não foi aceito/));
+    expect(screen.queryByText("requisicao invalida")).toBeNull();
+  });
+
   it("com autógrafo 'aguardando' -> mostra pipeline, card do autógrafo e prazo do Executivo", async () => {
     mockFetch(comAutografoAguardando);
     renderComProviders();
@@ -314,5 +381,8 @@ describe("ConteudoPosAprovacao", () => {
     await waitFor(() => expect(screen.getByText("Diário Oficial do Município, ed. 1.234")).toBeTruthy());
     expect(screen.queryByLabelText("Onde a lei foi publicada")).toBeNull();
     expect(screen.getByText(/aparece no portal da Câmara, em Leis e normas/)).toBeTruthy();
+    // o Desfecho deixa de dizer "segue para promulgação/publicação" e diz o que a matéria virou
+    expect(screen.getByText("A matéria foi sancionada e virou a Lei nº 12/2026, já publicada.")).toBeTruthy();
+    expect(screen.queryByText(/segue para promulgação/)).toBeNull();
   });
 });

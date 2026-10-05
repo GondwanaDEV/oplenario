@@ -235,8 +235,8 @@ describe("derivarCentral — próximas sessões, prontas p/ pauta, cabeçalho", 
     expect(v.proximas[1].acao.href).toBe("/pauta-convocacao?sessao=p2");
   });
 
-  it("prontas p/ pauta soma os estados da coluna pelo total autoritativo; quadro falho → null", () => {
-    expect(derivarCentral(entrada({ tramitacao: [{ estado: "aguardando_pauta", total: 3 }, { estado: "em_pauta", total: 1 }, { estado: "em_comissoes", total: 9 }] })).prontasParaPauta).toBe(4);
+  it("prontas p/ pauta conta só aguardando_pauta (em_pauta já está numa pauta) pelo total autoritativo; quadro falho → null", () => {
+    expect(derivarCentral(entrada({ tramitacao: [{ estado: "aguardando_pauta", total: 3 }, { estado: "em_pauta", total: 1 }, { estado: "em_comissoes", total: 9 }] })).prontasParaPauta).toBe(3);
     expect(derivarCentral(entrada({ tramitacao: null })).prontasParaPauta).toBeNull();
   });
 

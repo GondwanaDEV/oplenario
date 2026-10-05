@@ -1,5 +1,36 @@
-import { describe, expect, it } from "vitest";
-import { arcoDashoffset } from "./anel-prazo";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { AnelPrazo, arcoDashoffset } from "./anel-prazo";
+
+describe("AnelPrazo — o número do centro diz a verdade", () => {
+  afterEach(() => cleanup());
+
+  it("no prazo: o número é o que falta, com 'dias'", () => {
+    const { container } = render(<AnelPrazo diasRestantes={9} diasTotal={30} rotulo="Prazo X" />);
+    expect(container.querySelector(".d")?.textContent).toBe("9");
+    expect(container.querySelector(".u")?.textContent).toBe("dias");
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Prazo X: faltam 9 dias.");
+  });
+
+  it("falta um dia: singular no centro e na descrição", () => {
+    const { container } = render(<AnelPrazo diasRestantes={1} diasTotal={30} rotulo="Prazo X" />);
+    expect(container.querySelector(".u")?.textContent).toBe("dia");
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Prazo X: falta 1 dia.");
+  });
+
+  it("JÁ VENCIDO: o centro mostra os dias de ATRASO, não '0 dias'", () => {
+    const { container } = render(<AnelPrazo diasRestantes={0} diasTotal={30} rotulo="Prazo X" atrasoDias={36} />);
+    expect(container.querySelector(".d")?.textContent).toBe("36");
+    expect(container.querySelector(".u")?.textContent).toBe("atraso");
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Prazo X: venceu há 36 dias.");
+    expect(container.textContent).not.toMatch(/0\s*dias/);
+  });
+
+  it("vencido há um dia: singular", () => {
+    render(<AnelPrazo diasRestantes={0} diasTotal={30} rotulo="Prazo X" atrasoDias={1} />);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toBe("Prazo X: venceu há 1 dia.");
+  });
+});
 
 describe("arcoDashoffset", () => {
   it("0 dias restantes de um total -> offset = 0 (arco cheio)", () => {

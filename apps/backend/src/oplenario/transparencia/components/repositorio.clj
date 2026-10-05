@@ -32,7 +32,8 @@
   Malli do evento aqui (acoplaria este modulo a `legislativo.events.*`/`sessoes.events.*`, o que §22.10
   proibe — o mesmo motivo pelo qual `diplomat/consumers.clj` hardcoda os tipos como STRING em vez de
   importar o schema do produtor)."
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tempo :as tempo]
@@ -41,6 +42,7 @@
             [oplenario.transparencia.db.artefato-publicacao :as db-artefato]
             [oplenario.transparencia.db.dados-abertos :as db-dados-abertos]
             [oplenario.transparencia.db.materia :as db-materia]
+            [oplenario.transparencia.db.movimentacao :as db-movimentacao]
             [oplenario.transparencia.db.norma :as db-norma]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.events.notificacao :as ev-notif]
@@ -123,6 +125,28 @@
        (instance? ClassCastException t)
        (:transparencia/payload-malformado? (ex-data t)))))
 
+(defn- registrar-movimentacao!
+  "Projeta UMA movimentacao na linha do tempo publica da materia (`transparencia.materia_movimentacao`). TOLERANTE por
+  desenho — este e' o relay COMPARTILHADO: instante ausente/invalido (evento anterior ao campo, deploy rolling) ou
+  chave de etapa ausente vira LOG e a movimentacao nao e' projetada (nunca data inventada, nunca nome de etapa
+  inventado, nunca excecao). `nome` so' vale se for texto nao vazio; senao a etapa fica sem rotulo (a tela diz isso,
+  em vez de exibir a chave). A materia que o portal nao mostra nao ganha historico (a guarda esta' no db)."
+  [tx ente-id proposicao-id {:keys [ocorrido-em chave nome inicial? tipo]}]
+  (let [instante (instant-tolerante ocorrido-em)
+        etapa    (when (and (string? nome) (not (str/blank? nome))) nome)]
+    (cond
+      (nil? instante)
+      (log/warn "transparencia: movimentacao sem instante valido (evento anterior ao campo?) — nao projetada"
+                {:tipo tipo :ente-id ente-id :proposicao-id proposicao-id})
+
+      (not (and (string? chave) (not (str/blank? chave))))
+      (log/warn "transparencia: movimentacao sem etapa — nao projetada"
+                {:tipo tipo :ente-id ente-id :proposicao-id proposicao-id})
+
+      :else
+      (db-movimentacao/registrar! tx {:ente-id ente-id :proposicao-id proposicao-id :ocorrido-em instante
+                                      :etapa-chave chave :etapa etapa :inicial? inicial?}))))
+
 (defn despachar!
   "O `case` de fato, SEM tolerancia — lanca em tipo sem branch (`case` sem default: 'No matching clause')
   OU em payload malformado ({:pre ...} de db/, UUID/Instant invalidos). PUBLICA (nao `defn-`) DE
@@ -145,7 +169,14 @@
   [tx ente-id tipo payload]
   (case tipo
     "proposicao.protocolada"
-    (db-materia/inserir! tx (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id)))
+    (let [m (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id))
+          r (db-materia/inserir! tx m)]
+      ;; a ABERTURA da linha do tempo publica. Sem rotulo no rito, a etapa de abertura e' "Protocolada": e' o ato.
+      (registrar-movimentacao! tx ente-id (:proposicao-id m)
+                               {:ocorrido-em (:protocolada-em payload) :chave (:estado payload)
+                                :nome (or (:estado-nome payload) "Protocolada") :inicial? true
+                                :tipo "proposicao.protocolada"})
+      r)
 
     "proposicao.editada"
     (let [m (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id))]
@@ -165,6 +196,10 @@
 
     "proposicao.transicionou"
     (let [pid (UUID/fromString (:proposicao-id payload))]
+      ;; cada movimentacao entra na linha do tempo publica (data + rotulo da etapa de destino; nada de quem despachou)
+      (registrar-movimentacao! tx ente-id pid {:ocorrido-em (:ocorrido-em payload) :chave (:para payload)
+                                               :nome (:para-nome payload) :inicial? false
+                                               :tipo "proposicao.transicionou"})
       (or (db-materia/atualizar-estado! tx {:ente-id ente-id :proposicao-id pid :estado (:para payload)})
           (log/warn "transparencia: proposicao.transicionou sem materia projetada (protocolada ausente?)"
                     {:ente-id ente-id :proposicao-id pid :para (:para payload)})))
@@ -342,6 +377,11 @@
      `listar-em-tramitacao` (200), mais `:materias-total` (SEM teto, `contar-em-tramitacao`) no MESMO
      predicado — a UNICA listagem publica de proposicoes (frente 'truncamento-familia', sitio (b)). Uma
      UNICA tx (mesma disciplina de `perfil-parlamentar` abaixo — READ COMMITTED, ver a nota la').")
+  (movimentacoes-da-materia [this ente-id proposicao-id]
+    "A linha do tempo PUBLICA da materia (\"Por onde a materia passou\"): {:movimentacoes :total :completo? :desde} —
+     da mais recente para a mais antiga, TRUNCADA no teto de `db.movimentacao/listar` (100), com `:total` (SEM teto,
+     mesmo predicado), `:completo?` (a abertura esta' entre as movimentacoes) e `:desde` (o instante da mais antiga).
+     nil se a materia nao esta' no portal (a mesma regra da ficha). Uma UNICA tx.")
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
   (listar-normas [this ente-id filtro]
@@ -373,19 +413,23 @@
   ;; `:isolation :repeatable-read :read-only true`. Fora do escopo desta fatia — o kernel e' COMPARTILHADO e
   ;; o mesmo overclaim existe em legislativo/components/repositorio (ficha-completa-da-proposicao, o
   ;; precedente citado); corrigir so' aqui criaria inconsistencia entre os dois.
-  (perfil-parlamentar [this ente-id vereador-id janelas]
+  (perfil-parlamentar [this ente-id vereador-id janelas votacoes-publicas]
     "{:materias :materias-total :normas-de-autoria :votos :votos-total :votos-por-opcao :presenca} do vereador no read-model
      publico (sem identidade). DUAS listas truncam e cada uma vem com o seu total: `:materias` no teto de
      `listar-por-autor` (200) e `:votos` no de `votos-do-vereador` (50) — sem `:materias-total`/`:votos-total`
      a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
      Task 4) — e CINCO quando `janelas` e' vazia: `resumo-presenca` curto-circuita e nao emite statement
-     nenhum (ver a docstring dela).")
+     nenhum (ver a docstring dela). `votacoes-publicas` (conjunto de UUID, do host) e' o universo de votacoes cujo
+     voto pode sair: lista, total e numeros por opcao usam o MESMO conjunto (fail-closed: vazio = nenhum voto).")
   (materias-por-ids [this ente-id proposicao-ids]
     "Portal de votacoes: o cabecalho (tipo, numero, ano, ementa) das materias PUBLICADAS entre os ids. Id sem materia
      projetada nao volta.")
-  (resumo-dados-abertos [this ente-id] "Onda E: {dataset {:linhas :atualizado-em}} de cada dataset aberto.")
-  (linhas-dados-abertos [this ente-id chave]
-    "Onda E: o dataset `chave` (\"proposicoes\" | \"legislacao\" | \"votos-nominais\") INTEIRO, na ordem estavel."))
+  (resumo-dados-abertos [this ente-id votacoes-publicas]
+    "Onda E: {dataset {:linhas :atualizado-em}} de cada dataset aberto. Os votos nominais contam so' as votacoes de
+     `votacoes-publicas` (as de sessao publica, do host).")
+  (linhas-dados-abertos [this ente-id chave votacoes-publicas]
+    "Onda E: o dataset `chave` (\"proposicoes\" | \"legislacao\" | \"votos-nominais\") INTEIRO, na ordem estavel.
+     `votacoes-publicas` so' vale para \"votos-nominais\": o voto de votacao fora dele nao sai."))
 
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
@@ -396,6 +440,12 @@
       (fn [tx]
         {:materias       (db-materia/listar-em-tramitacao tx ente-id excl)
          :materias-total (db-materia/contar-em-tramitacao tx ente-id excl)})))
+  (movimentacoes-da-materia [this ente-id pid]
+    (transacao this ente-id
+      (fn [tx]
+        (when (db-movimentacao/materia-no-portal? tx ente-id pid)
+          (assoc (db-movimentacao/resumo tx ente-id pid)
+                 :movimentacoes (db-movimentacao/listar tx ente-id pid))))))
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
   (listar-normas [this ente-id filtro]
@@ -412,28 +462,28 @@
       (fn [tx]
         {:acompanhamentos       (db-acompanhamento/meus-da-materia tx ente-id sid)
          :acompanhamentos-total (db-acompanhamento/contar-meus tx ente-id sid)})))
-  (perfil-parlamentar [this ente-id vid janelas]
+  (perfil-parlamentar [this ente-id vid janelas votacoes-publicas]
     (transacao this ente-id
       (fn [tx]
         ;; o total de votos sai do MESMO statement que os conta por opcao (sim/nao/abstencao) — segue SEIS
-        (let [por-opcao (db-parlamentar/votos-por-opcao-do-vereador tx ente-id vid)]
+        (let [por-opcao (db-parlamentar/votos-por-opcao-do-vereador tx ente-id vid votacoes-publicas)]
           {:materias          (db-materia/listar-por-autor tx ente-id vid)
            :materias-total    (db-materia/contar-por-autor tx ente-id vid)
            :normas-de-autoria (db-materia/contar-normas-por-autor tx ente-id vid)
-           :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil)
+           :votos             (db-parlamentar/votos-do-vereador tx ente-id vid nil votacoes-publicas)
            :votos-total       (:total por-opcao)
            :votos-por-opcao   (dissoc por-opcao :total)
            :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)}))))
   (materias-por-ids [this ente-id ids]
     (transacao this ente-id #(db-materia/por-ids % ente-id ids)))
-  (resumo-dados-abertos [this ente-id]
-    (transacao this ente-id #(db-dados-abertos/resumo % ente-id)))
-  (linhas-dados-abertos [this ente-id chave]
+  (resumo-dados-abertos [this ente-id votacoes-publicas]
+    (transacao this ente-id #(db-dados-abertos/resumo % ente-id votacoes-publicas)))
+  (linhas-dados-abertos [this ente-id chave votacoes-publicas]
     (transacao this ente-id
       (case chave
         "proposicoes"    #(db-dados-abertos/proposicoes % ente-id)
         "legislacao"     #(db-dados-abertos/normas % ente-id)
-        "votos-nominais" #(db-dados-abertos/votos-nominais % ente-id)))))
+        "votos-nominais" #(db-dados-abertos/votos-nominais % ente-id votacoes-publicas)))))
 
 (defn repositorio
   "Cria o Component (sem estado proprio; recebe :datasource via `using`)."

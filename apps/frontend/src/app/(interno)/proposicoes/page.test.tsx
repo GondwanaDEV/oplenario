@@ -39,6 +39,20 @@ describe("PaginaProposicoes", () => {
     expect(screen.getByText("Helena Matos")).toBeTruthy();
   });
 
+  it("o filtro Espécie oferece TODAS as espécies do backend, inclusive Lei Complementar e Emenda à LOM", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => respostaFake }) as Response) as unknown as typeof fetch;
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("PL 42/2026")).toBeTruthy());
+    const select = screen.getByLabelText("Espécie") as HTMLSelectElement;
+    const opcoes = Array.from(select.options).map((o) => [o.value, o.textContent]);
+    expect(opcoes.map(([v]) => v).sort()).toEqual(
+      ["", "indicacao", "mocao", "projeto_decreto_legislativo", "projeto_lei", "projeto_lei_complementar",
+       "projeto_resolucao", "proposta_emenda_lom", "requerimento"],
+    );
+    expect(opcoes).toContainEqual(["projeto_lei_complementar", "Projeto de Lei Complementar"]);
+    expect(opcoes).toContainEqual(["proposta_emenda_lom", "Emenda à LOM"]);
+  });
+
   it("lista vazia mostra o estado 'nenhuma matéria encontrada'", async () => {
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ itens: [], total: 0, pagina: 1, "tamanho-pagina": 20 }) }) as Response) as unknown as typeof fetch;
     renderComProviders("tok-de-teste");

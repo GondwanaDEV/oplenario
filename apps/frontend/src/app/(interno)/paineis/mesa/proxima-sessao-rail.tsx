@@ -110,6 +110,11 @@ export function ProximaSessaoRail({
           {proxima ? (
             <>
               <p>Agendada para {proxima.agendadaPara ? dataEHoraDaCasa(proxima.agendadaPara) : "data a definir"}.</p>
+              <p>
+                <Link className="btn btn-contorno" href={comToken(`/sessoes/${encodeURIComponent(proxima.sessaoId)}/conduzir`, token)}>
+                  Abrir a sessão
+                </Link>
+              </p>
               <p className="nota-gap">O registro de ciência da convocação e o checklist de prontidão da sessão chegam numa próxima entrega.</p>
             </>
           ) : truncado ? (

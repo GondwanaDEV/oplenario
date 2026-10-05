@@ -18,6 +18,7 @@
             [oplenario.transparencia.adapters.out.dados-abertos :as adapters-out-dados-abertos]
             [oplenario.transparencia.adapters.out.ente :as adapters-out-ente]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
+            [oplenario.transparencia.adapters.out.movimentacao :as adapters-out-movimentacao]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
             [oplenario.transparencia.adapters.out.parlamentar :as adapters-out-parlamentar]
             [oplenario.transparencia.adapters.out.vereadores :as adapters-out-vereadores]
@@ -73,6 +74,18 @@
           proposicao-id (adapters-in/proposicao-param->uuid (get-in req [:path-params :proposicao_id]))]
       (if-let [detalhe (controllers/ficha-materia repo-transparencia ente-id proposicao-id)]
         (http/json-resposta 200 (adapters-out-materia/ficha->wire detalhe (:norma detalhe)))
+        (http/json-resposta 404 {:erro "materia nao encontrada"})))))
+
+(defn- movimentacoes-da-materia-handler
+  "GET /portal/casa/:ente/materias/:proposicao_id/movimentacoes — \"Por onde a materia passou\" (PUBLICO): cada
+  movimentacao com a data e o nome da etapa no rito da Casa, da mais recente para a mais antiga, com o total e o
+  sinal de historico completo. So' de materia que o portal mostra (404 senao, a mesma voz da ficha)."
+  [repo-transparencia resolver-ente-publico]
+  (fn [req]
+    (let [ente-id       (resolver-ente-publico (get-in req [:path-params :ente]))
+          proposicao-id (adapters-in/proposicao-param->uuid (get-in req [:path-params :proposicao_id]))]
+      (if-let [r (controllers/movimentacoes-da-materia repo-transparencia ente-id proposicao-id)]
+        (http/json-resposta 200 (adapters-out-movimentacao/movimentacoes->wire r))
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
 (defn- pareceres-juridicos-handler
@@ -149,7 +162,7 @@
   o guard tambem impede que numeros DESTA Casa saiam sob a identidade de outra. E o read-model so' e' lido
   no caminho 200 — `perfil-de-vereador-inexistente-continua-404-sem-ler-o-perfil` injeta um Repo que explode
   em `perfil-parlamentar` justamente para que a ordem nao possa inverter em silencio."
-  [repo-transparencia resolver-ente-publico ficha-e-janelas-publicas]
+  [repo-transparencia resolver-ente-publico ficha-e-janelas-publicas votacoes-com-voto-publico]
   (fn [req]
     (let [ente-id     (resolver-ente-publico (get-in req [:path-params :ente]))
           vereador-id (adapters-in/vereador-param->uuid (get-in req [:path-params :vereador_id]))]
@@ -157,7 +170,8 @@
         (http/json-resposta 200
           (adapters-out-parlamentar/->wire
            ficha janelas
-           (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas)))
+           (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas
+                                          votacoes-com-voto-publico)))
         (http/json-resposta 404 {:erro "vereador nao encontrado"})))))
 
 (defn- listar-vereadores-handler
@@ -209,22 +223,23 @@
 (defn- dados-abertos-handler
   "GET /portal/casa/:ente/dados-abertos — o catalogo (PUBLICO): cada dataset com dicionario, linhas e ultima
   atualizacao. Casa inexistente -> 404, como a rota-pai e as irmas (nunca 200 com catalogo de ninguem)."
-  [repo-transparencia resolver-ente-publico info-ente]
+  [repo-transparencia resolver-ente-publico info-ente votacoes-com-voto-publico]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
       (if-not (info-ente ente-id)
         (http/json-resposta 404 {:erro "ente nao encontrado"})
         (http/json-resposta 200 (adapters-out-dados-abertos/catalogo->wire
-                                 (controllers/catalogo-dados-abertos repo-transparencia ente-id)))))))
+                                 (controllers/catalogo-dados-abertos repo-transparencia votacoes-com-voto-publico
+                                                                     ente-id)))))))
 
 (defn- baixar-dataset-handler
   "GET /portal/casa/:ente/dados-abertos/:arquivo — o dataset INTEIRO em CSV (PUBLICO). 404 para Casa inexistente
   ou arquivo que nao e' do catalogo."
-  [repo-transparencia resolver-ente-publico info-ente nomes-dos-vereadores]
+  [repo-transparencia resolver-ente-publico info-ente nomes-dos-vereadores votacoes-com-voto-publico]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
       (if-let [r (when (info-ente ente-id)
-                   (controllers/dataset-csv repo-transparencia nomes-dos-vereadores ente-id
+                   (controllers/dataset-csv repo-transparencia nomes-dos-vereadores votacoes-com-voto-publico ente-id
                                             (get-in req [:path-params :arquivo])))]
         (adapters-out-dados-abertos/->download r)
         (http/json-resposta 404 {:erro "dataset nao encontrado"})))))
@@ -265,7 +280,10 @@
   [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas
            nomes-dos-vereadores vereadores-em-exercicio pareceres-juridicos-publicos acesso-restrito-desde
            ;; portal de votacoes: seams do host sobre sessoes (o que e' publico) + legislativo (a votacao)
-           votacoes-publicas votacao-publica]}]
+           votacoes-publicas votacao-publica
+           ;; voto POR VEREADOR (perfil, CSV de votos nominais): (fn [ente-id] -> #{votacao-id}) das votacoes de sessao
+           ;; publica, do host. Sem ele nenhum voto sai (fail-closed).
+           votacoes-com-voto-publico]}]
   #{["/portal/casa/:ente" :get
      [(info-ente-handler info-ente resolver-ente-publico acesso-restrito-desde)]
      :route-name :transparencia/info-ente]
@@ -275,6 +293,9 @@
     ["/portal/casa/:ente/materias/:proposicao_id" :get
      [(ficha-materia-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/ficha-materia]
+    ["/portal/casa/:ente/materias/:proposicao_id/movimentacoes" :get
+     [(movimentacoes-da-materia-handler repo-transparencia resolver-ente-publico)]
+     :route-name :transparencia/movimentacoes-da-materia]
     ["/portal/casa/:ente/materias/:proposicao_id/pareceres-juridicos" :get
      [(pareceres-juridicos-handler repo-transparencia resolver-ente-publico
                                    (or pareceres-juridicos-publicos (fn [_ _] {:pareceres []})))]
@@ -297,15 +318,18 @@
     ;; ---- Onda E fatia 2: perfil PUBLICO do vereador (`vereadores` e' mais um literal no MESMO nivel de
     ;;      `materias`/`legislacao` — literais entre si nao colidem no prefix-tree, so' wildcard+literal) ----
     ["/portal/casa/:ente/vereadores/:vereador_id" :get
-     [(perfil-vereador-handler repo-transparencia resolver-ente-publico ficha-e-janelas-publicas)]
+     [(perfil-vereador-handler repo-transparencia resolver-ente-publico ficha-e-janelas-publicas
+                               (or votacoes-com-voto-publico (constantly #{})))]
      :route-name :transparencia/perfil-vereador]
     ;; ---- Onda E: DADOS ABERTOS (mais um literal no nivel de `materias`/`legislacao`) ----
     ["/portal/casa/:ente/dados-abertos" :get
-     [(dados-abertos-handler repo-transparencia resolver-ente-publico info-ente)]
+     [(dados-abertos-handler repo-transparencia resolver-ente-publico info-ente
+                             (or votacoes-com-voto-publico (constantly #{})))]
      :route-name :transparencia/dados-abertos]
     ["/portal/casa/:ente/dados-abertos/:arquivo" :get
      [(baixar-dataset-handler repo-transparencia resolver-ente-publico info-ente
-                              (or nomes-dos-vereadores (fn [_] {})))]
+                              (or nomes-dos-vereadores (fn [_] {}))
+                              (or votacoes-com-voto-publico (constantly #{})))]
      :route-name :transparencia/baixar-dataset]
     ;; ---- Portal de VOTACOES: mais um literal no nivel de `materias`/`legislacao` ----
     ["/portal/casa/:ente/votacoes" :get

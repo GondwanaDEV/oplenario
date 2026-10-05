@@ -9,6 +9,9 @@
 //
 // Lista+total (regra da casa, frente "truncamento-familia"): o par {acompanhamentos, acompanhamentos-total}
 // já é o contrato do backend — "Mostrando N de M" nunca esconde um teto atingido.
+//
+// Cada matéria leva à ficha pública dela (`/portal/casa/<ente>/materias/<id>`): a rota devolve o `ente-id` da
+// lista, e a matéria sem projeção ainda (indisponível) não tem ficha, então não vira link.
 
 import { useAuth } from "@/lib/auth";
 import { useMeusAcompanhamentos, type MeusAcompanhamentosOut } from "@/lib/use-meus-acompanhamentos";
@@ -50,7 +53,7 @@ export default function PaginaAcompanhamentos() {
 }
 
 function ListaAcompanhamentos({ dados }: { dados: MeusAcompanhamentosOut }) {
-  const linhas = derivarMeusAcompanhamentosVista(dados.acompanhamentos);
+  const linhas = derivarMeusAcompanhamentosVista(dados.acompanhamentos, dados.enteId);
 
   if (linhas.length === 0) {
     return (
@@ -81,7 +84,15 @@ function ListaAcompanhamentos({ dados }: { dados: MeusAcompanhamentosOut }) {
                   (publico)/secao-ficha.tsx, "Publicada em"/"comentário em") — nenhuma formatação nova. */}
               <span className="ac-desde">seguindo desde {formatarData(linha.seguidoEm)}</span>
             </div>
-            <p className="ac-titulo">{linha.titulo}</p>
+            <p className="ac-titulo">
+              {linha.href ? (
+                <a className="ac-link" href={linha.href}>
+                  {linha.titulo}
+                </a>
+              ) : (
+                linha.titulo
+              )}
+            </p>
             {linha.ementa && <p className="ac-ementa">{linha.ementa}</p>}
             {linha.indisponivel && (
               <p className="ac-indisponivel">

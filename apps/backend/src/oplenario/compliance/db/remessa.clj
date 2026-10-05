@@ -23,14 +23,16 @@
      (sql/format {:select cols :from [:compliance.remessa_gerada]
                   :where [:and [:= :ente_id ente-id] [:= :id id]]}))))
 
-(defn existe?
-  "A remessa `id` existe no tenant (RLS via ente-id)? Point-lookup pela PK, projeta SO `1` — NAO traz ao
-  heap os ponteiros/proveniencia internos (hash/objeto_store_ref/...) que `buscar` traria (review sec
-  BAIXO; defesa-em-profundidade, como `cols-painel`). Usado pela borda p/ desambiguar 404 vs 409."
+(defn estado-de
+  "O `estado` da remessa `id` no tenant (RLS via ente-id), ou nil se ela nao existe. Point-lookup pela PK, projeta SO
+  `estado` — NAO traz ao heap os ponteiros/proveniencia internos (hash/objeto_store_ref/...) que `buscar` traria
+  (review sec BAIXO; defesa-em-profundidade, como `cols-painel`). Usado pela borda p/ desambiguar 404 (nil) vs 409
+  (o estado atual, que a mensagem do conflito diz)."
   [tx ente-id id]
-  (some? (jdbc/execute-one! tx
-           (sql/format {:select [[[:inline 1] :existe]] :from [:compliance.remessa_gerada]
-                        :where [:and [:= :ente_id ente-id] [:= :id id]] :limit 1}))))
+  (:estado (comum/linha->kebab
+            (jdbc/execute-one! tx
+              (sql/format {:select [:estado] :from [:compliance.remessa_gerada]
+                           :where [:and [:= :ente_id ente-id] [:= :id id]] :limit 1})))))
 
 (defn proxima-versao
   "SUPERSEDIDA p/ a geracao: use `inserir-versionada!` (computa a versao no proprio INSERT, sem janela
@@ -135,6 +137,19 @@
      (sql/format {:select cols-painel :from [:compliance.remessa_gerada]
                   :where [:= :ente_id ente-id]
                   :order-by [[:criado_em :desc] [:id :desc]]
+                  :limit limite}))))
+
+(defn listar-aceitas
+  "As (template, sistema, competencia) com remessa ACEITA pelo TCE no tenant, DISTINTAS (as re-emissoes de uma
+  competencia contam uma vez), a competencia mais recente primeiro, com TETO `limite`. E' o lado 'remessa' da costura
+  `remessa_enviada` para o gatilho do host reavaliar a obrigacao que ela cumpre. `[:inline ...]` p/ o indice parcial
+  `idx_remessa_gerada_costura` (estado='aceita'). Projeta so as tres colunas da chave."
+  [tx ente-id limite]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select-distinct [:template_chave :sistema :competencia] :from [:compliance.remessa_gerada]
+                  :where [:and [:= :ente_id ente-id] [:= :estado [:inline "aceita"]]]
+                  :order-by [[:competencia :desc] [:template_chave :asc] [:sistema :asc]]
                   :limit limite}))))
 
 (defn contar-recentes

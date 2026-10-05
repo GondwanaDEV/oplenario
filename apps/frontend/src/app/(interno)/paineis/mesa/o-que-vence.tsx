@@ -12,34 +12,21 @@
 // ver o comentário lá. Com isso, `item.templateChave` / `item.objetoTipo` / `item.protocolo` acessam
 // direto, com checagem estática de verdade em vez de um cast que mascarava a falta do campo.
 
+import Link from "next/link";
 import { AnelPrazo } from "@/lib/charts/anel-prazo";
-import { rotularObjetoPrazo } from "@/lib/mesa-vista";
+import { contar, destinoDoPrazo, diasAteVencer, frasePrazo, rotularObjetoPrazo } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
+import { comToken } from "@/lib/nav";
 import { rotularObrigacao } from "@/lib/rotulos-compliance";
 
-/** Dias ate' o vencimento, COM SINAL: negativo = ja' venceu ha' N dias.
- *
- * O `Math.max(0, ...)` que estava aqui achatava todo o passado em zero, e o rotulo imprimia
- * "vence em 0 dia(s)" para uma obrigacao vencida ha' semanas — no MESMO cartao cuja manchete diz
- * "1 obrigacao venceu o prazo no TCE-CE". Duas metades do card de saude institucional afirmavam
- * coisas diferentes sobre o mesmo prazo, e e' justamente este o card que vende confianca
- * operacional. O clamp continua existindo, mas onde e' de facto necessario: no anel, que nao sabe
- * desenhar angulo negativo. */
-function diasAte(dataIso: string): number {
-  const alvo = new Date(dataIso).getTime();
-  const hoje = new Date().getTime();
-  return Math.ceil((alvo - hoje) / (1000 * 60 * 60 * 24));
+/** A cor do anel e da borda: vencido ou a até 2 dias é urgente; até 5, atenção; o resto, no prazo. Mesmos degraus
+ *  do prazo do Executivo no pós-aprovação. Sem a classe o arco do anel nem era desenhado (só o trilho). */
+function urgenciaDoPrazo(dias: number | null): string {
+  if (dias === null || dias <= 2) return "prz-urgente";
+  return dias <= 5 ? "prz-atencao" : "prz-noprazo";
 }
 
-/** O prazo em palavras. Atrasado, hoje e futuro sao tres frases distintas — "vence em 0 dia(s)"
- * nao distingue "vence hoje" de "venceu ha' um mes", e as duas exigem acoes opostas da Mesa. */
-function textoPrazo(dias: number): string {
-  if (dias < 0) return `venceu há ${Math.abs(dias)} dia(s)`;
-  if (dias === 0) return "vence hoje";
-  return `vence em ${dias} dia(s)`;
-}
-
-export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
+export function OQueVence({ vista, token = null }: { vista: MesaVista["oQueVence"]; token?: string | null }) {
   if (vista.estado === "indisponivel") {
     return (
       <section className="bloco" aria-labelledby="prazos-titulo">
@@ -52,7 +39,7 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
     <section className="bloco" aria-labelledby="prazos-titulo">
       <div className="bloco-cabeca">
         <h2 id="prazos-titulo">O que vence</h2>
-        <span className="selo-n mono">{vista.itens.length} itens</span>
+        <span className="selo-n mono">{contar(vista.itens.length, "item", "itens")}</span>
       </div>
       <div className="bloco-corpo">
         {/* GET /compliance/painel e GET /paineis/pendencias cortam suas listas no teto server-side; os
@@ -78,7 +65,8 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
         )}
         <ul className="prazos">
           {vista.itens.map((item) => {
-            const dias = diasAte(item.venceEm);
+            const dias = diasAteVencer(item.venceEm);
+            const destino = destinoDoPrazo(item);
             const rotulo =
               item.origem === "compliance"
                 ? `Obrigação · ${rotularObrigacao(item.templateChave)}`
@@ -87,11 +75,16 @@ export function OQueVence({ vista }: { vista: MesaVista["oQueVence"] }) {
               // Chave ESTAVEL, nao o indice: `vista.itens` e' recomposta de duas fontes e reordenada
               // por `venceEm`, entao um prazo novo mais urgente entra no meio e desloca todos os
               // indices seguintes — o React reaproveitaria o <li> errado.
-              <li key={item.origem === "compliance" ? item.id : item.objetoId} className="prazo-item">
-                <AnelPrazo diasRestantes={Math.max(0, dias)} diasTotal={30} rotulo={rotulo} />
+              <li key={item.origem === "compliance" ? item.id : item.objetoId} className={`prazo-item ${urgenciaDoPrazo(dias)}`}>
+                <AnelPrazo
+                  diasRestantes={Math.max(0, dias ?? 0)}
+                  diasTotal={30}
+                  rotulo={rotulo}
+                  atrasoDias={dias !== null && dias < 0 ? -dias : undefined}
+                />
                 <div className="prazo-obj">
-                  <b>{rotulo}</b>
-                  <span className={dias < 0 ? "quando quando-atrasado" : "quando"}>{textoPrazo(dias)}</span>
+                  <b>{destino ? <Link href={comToken(destino, token)}>{rotulo}</Link> : rotulo}</b>
+                  <span className={dias !== null && dias < 0 ? "quando quando-atrasado" : "quando"}>{frasePrazo(dias)}</span>
                 </div>
               </li>
             );

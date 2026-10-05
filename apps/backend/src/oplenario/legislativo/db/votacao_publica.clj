@@ -6,6 +6,7 @@
   outro). Funcoes sobre a `tx` do tenant (RLS isola); ente_id em toda query."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.kernel.db-util :as comum]
             [oplenario.legislativo.db.votacao :as votacao]))
 
@@ -33,6 +34,19 @@
        :total (:total (comum/linha->kebab
                        (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :total]]
                                                           :from [:legislativo.votacoes] :where onde}))))})))
+
+(defn ids-das-sessoes
+  "#{votacao-id} das votacoes (qualquer estado) cujas sessoes estao em `sessao-ids`. Sem sessoes -> `#{}`, sem consulta.
+  Nao filtra por estado de proposito: quem usa e' a leitura publica de VOTO POR VEREADOR, e o voto ja' esta' projetado
+  desde que foi registrado; o que decide se ele sai e' a sessao ser publica, nao o estado da votacao."
+  [tx ente-id sessao-ids]
+  (if (empty? sessao-ids)
+    #{}
+    (into #{}
+          (map :id)
+          (jdbc/execute! tx (sql/format {:select [:id] :from [:legislativo.votacoes]
+                                         :where [:and [:= :ente_id ente-id] [:in :sessao_id (vec sessao-ids)]]})
+                         {:builder-fn rs/as-unqualified-maps}))))
 
 (defn encerrada
   "Uma votacao ENCERRADA e com sessao, com os votos NOMINAIS quando a modalidade e' nominal — ou nil. Votos so'
