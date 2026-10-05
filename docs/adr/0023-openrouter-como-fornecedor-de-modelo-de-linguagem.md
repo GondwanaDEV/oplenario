@@ -26,11 +26,13 @@ pelo OpenRouter.**
    o contrato dele é HTTP+JSON, e o `httpx` já é dependência (fronteira com o core). A porta continua isolando isso do
    resto do código, e o mapeamento de status para as 6 categorias está testado contra transporte mock.
 3. **Política de dado travada em toda requisição, sem chave para desligar:** `provider.data_collection = "deny"` e
-   `provider.zdr = true`. `OPLENARIO_IA_OPENROUTER_PROVEDORES` (lista separada por vírgula) vira `provider.only`:
+   `provider.zdr = true`, mais `provider.require_parameters = true` (só atende quem honra todos os parâmetros do
+   pedido). `OPLENARIO_IA_OPENROUTER_PROVEDORES` (lista separada por vírgula) vira `provider.only`:
    o failover nativo do OpenRouter fica restrito aos provedores aprovados. Vazio = qualquer provedor que cumpra ZDR
    e não colete dado.
 4. **Um modelo só por requisição.** Nunca `models` (fallback de modelo do OpenRouter): o modelo não troca em silêncio
-   (§22.11.8). Sem retry no cliente: retry, backoff e failover seguem nossos (§22.3.5).
+   (§22.11.8). Pela mesma razão a config recusa, no boot, slug que não aponta um modelo fixo: `openrouter/*`
+   (roteador e meta-modelos), alias `~…` e o sufixo `:online` (busca na web). Sem retry no cliente: retry, backoff e failover seguem nossos (§22.3.5).
 5. **Proveniência:** `vendor = "openrouter"`, `modelo` = o `model` da resposta (slug do catálogo, ex.
    `openai/gpt-oss-120b`) e o novo campo `provedor` = o `provider` da resposta (quem de fato atendeu). O
    `provedor` entra no registro da execução (`RegistroExecucao.provedor`, no corpo JSON do `ia.registro_evento`, sem
@@ -48,6 +50,16 @@ pelo OpenRouter.**
 9. **Fora do escopo do OpenRouter:** a transcrição (Whisper + pyannote no sherpa-onnx) e os embeddings da busca
    (fastembed) continuam self-host — nada sai do cluster, e o OpenRouter não oferece transcrição com diarização.
    Trocar embeddings mudaria a dimensão do índice e pediria reindexação; não foi pedido.
+
+## O que veio do munex
+
+O munex (`colmeia-solucoes/munex`, ADR-0053 de lá) já usa o OpenRouter como único caminho para modelos e verificou ao
+vivo o que aqui só está em teste: o bloco `provider` com `only`, `zdr`, `data_collection` e `require_parameters` é
+aceito, e a resposta traz o campo `provider`. A regra do slug fixo e o `require_parameters` foram copiados de lá. O
+comparativo de lá (E19–E21, dado sintético) pôs o `openai/gpt-oss-120b` no topo, servido pela DeepInfra com a Groq
+como segundo host: é a origem do modelo padrão e o ponto de partida sugerido para
+`OPLENARIO_IA_OPENROUTER_PROVEDORES=deepinfra,groq`. Diferença consciente: lá vai `allow_fallbacks: false`; aqui o
+failover entre os provedores da lista fica ligado, porque a lista já é a dos aprovados.
 
 ## O que NÃO muda
 

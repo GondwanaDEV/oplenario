@@ -24,7 +24,7 @@ Tudo no Dokploy (`vps.calvetec.com.br`), projeto **`oplenario`**, ambiente **`pr
   ([ADR-0023](adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)) e espera o `[GAP]` jurídico (DPA de
   não-treino com o OpenRouter, LGPD art. 33). Ligar, nos dois apps de IA: `OPLENARIO_IA_VENDOR=openrouter`,
   `OPENROUTER_API_KEY` (do cofre) e, se a lista de provedores aprovados estiver fechada,
-  `OPLENARIO_IA_OPENROUTER_PROVEDORES` (slugs de provedor do OpenRouter, separados por vírgula). Antes, rodar
+  `OPLENARIO_IA_OPENROUTER_PROVEDORES` (ex.: `deepinfra,groq`, os hosts que o munex mediu para o `gpt-oss-120b`; ADR-0023). Antes, rodar
   `oplenario-ia-avaliar avaliacoes --vendor openrouter` com a chave e conferir o custo e o provedor no registro.
 
 ## 2. Variáveis (aba Environment de cada app)

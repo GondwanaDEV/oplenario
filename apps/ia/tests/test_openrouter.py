@@ -105,7 +105,12 @@ def test_pedido_vai_no_formato_de_chat_com_a_politica_de_dado_travada() -> None:
         {"role": "system", "content": "Resuma."},
         {"role": "user", "content": [{"type": "text", "text": "texto público"}]},
     ]
-    assert corpo["provider"] == {"data_collection": "deny", "zdr": True, "only": ["groq", "cerebras"]}
+    assert corpo["provider"] == {
+        "data_collection": "deny",
+        "zdr": True,
+        "require_parameters": True,
+        "only": ["groq", "cerebras"],
+    }
     assert "models" not in corpo, "sem fallback de modelo: nunca troca de modelo em silêncio"
     assert "reasoning" not in corpo
 
@@ -114,7 +119,7 @@ def test_sem_lista_de_provedores_a_politica_de_dado_continua() -> None:
     visto: list[httpx.Request] = []
     porta_com(httpx.Response(200, json=conclusao()), visto).gerar(pedido(esforco="low"))
     corpo = json.loads(visto[0].content)
-    assert corpo["provider"] == {"data_collection": "deny", "zdr": True}
+    assert corpo["provider"] == {"data_collection": "deny", "zdr": True, "require_parameters": True}
     assert corpo["reasoning"] == {"effort": "low"}
 
 
@@ -237,6 +242,20 @@ def test_config_do_openrouter() -> None:
         == "anthropic/claude-opus-5"
     )
     assert Config().modelo == "claude-opus-5", "o padrão dos outros fornecedores não muda"
+
+
+@pytest.mark.parametrize(
+    "modelo",
+    ["openrouter/auto", "~anthropic/claude-opus-latest", "openai/gpt-oss-120b:online", "OpenAI/GPT-OSS", " openai/x"],
+)
+def test_modelo_que_troca_sozinho_e_recusado_na_config(modelo: str) -> None:
+    with pytest.raises(ValueError, match="autor/modelo"):
+        Config(vendor="openrouter", modelo=modelo)
+
+
+def test_variante_fixa_do_modelo_e_aceita() -> None:
+    assert Config(vendor="openrouter", modelo="openai/gpt-oss-20b:free").modelo == "openai/gpt-oss-20b:free"
+    assert Config(vendor="anthropic", modelo="claude-opus-5").modelo == "claude-opus-5", "só vale no OpenRouter"
 
 
 def test_fabrica_cria_a_porta_do_openrouter_com_a_chave_do_ambiente(monkeypatch: pytest.MonkeyPatch) -> None:

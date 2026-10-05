@@ -6,8 +6,8 @@ Decisões (ADR-0023, sobre a ADR-0006):
 - Sem retry e sem fallback de modelo: um `model` só, nunca `models` — retry, backoff e failover são política nossa
   (§22.3.5, Eixo 13), e o modelo não troca em silêncio (§22.11.8).
 - Roteamento travado em TODA requisição: `data_collection: "deny"` e `zdr: true` (nenhum provedor que guarde ou
-  treine com o dado), e `only` com a lista de provedores aprovados quando a config a define. O failover entre
-  provedores fica restrito a essa lista.
+  treine com o dado), `require_parameters: true` (nenhum que ignore um parâmetro do pedido), e `only` com a lista
+  de provedores aprovados quando a config a define. O failover entre provedores fica restrito a essa lista.
 - Proveniência: o modelo e o PROVEDOR que de fato atenderam vêm da resposta (`model`, `provider`), não da config.
 - O custo informado pelo OpenRouter (`usage.cost`) viaja na resposta; a taxa da plataforma é somada na tabela.
 - Erros mapeados às 6 categorias. O `detalhe` nunca leva o conteúdo nem a mensagem do provedor (que pode ecoá-lo).
@@ -80,7 +80,9 @@ class PortaOpenRouter:
         return VENDOR
 
     def corpo(self, pedido: PedidoInferencia) -> dict[str, Any]:
-        provider: dict[str, Any] = {"data_collection": "deny", "zdr": True}
+        # `require_parameters`: só atende quem honra todos os parâmetros do pedido (ex.: `max_tokens`), em vez de um
+        # provedor que os ignore em silêncio
+        provider: dict[str, Any] = {"data_collection": "deny", "zdr": True, "require_parameters": True}
         if self._provedores:
             provider["only"] = self._provedores
         corpo: dict[str, Any] = {

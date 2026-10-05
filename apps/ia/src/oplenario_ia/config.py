@@ -9,6 +9,7 @@ fornecedor não ficam na `Config` — vêm do ambiente (OPENROUTER_API_KEY, ou A
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Mapping
 from typing import Literal
 
@@ -43,13 +44,33 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def _modelo_do_openrouter(self) -> Config:
+        if self.vendor != "openrouter":
+            return self
         # no OpenRouter o modelo leva o prefixo do fabricante; sem modelo explícito, o padrão vira o slug dele
-        if self.vendor == "openrouter" and "modelo" not in self.model_fields_set:
+        if "modelo" not in self.model_fields_set:
             self.modelo = MODELO_OPENROUTER_PADRAO
+        if not modelo_openrouter_fixo(self.modelo):
+            raise ValueError(
+                "OPLENARIO_IA_MODELO: esperado `autor/modelo` fixo, em minúsculas — sem `openrouter/*`, alias `~` nem"
+                " `:online` (ADR-0023)"
+            )
         return self
 
 
 MODELO_OPENROUTER_PADRAO = "openai/gpt-oss-120b"  # provisório (05/10/2026), ADR-0023
+_SLUG_OPENROUTER = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*$")
+
+
+def modelo_openrouter_fixo(modelo: str) -> bool:
+    """O slug aponta UM modelo (§22.11.8, nunca troca em silêncio). Ficam de fora o roteador e os meta-modelos
+    (`openrouter/*`), o alias `~…` (segue a versão mais nova sozinho) e o sufixo `:online` (busca na web: o pedido
+    sairia do filtro de governança para um buscador). Mesma regra do munex (ADR-0053 de lá)."""
+    m = modelo.lower()
+    return (
+        _SLUG_OPENROUTER.fullmatch(modelo) is not None
+        and not m.startswith("openrouter/")
+        and re.search(r":online(:|$)", m) is None
+    )
 
 
 def carregar(env: Mapping[str, str] | None = None) -> Config:
