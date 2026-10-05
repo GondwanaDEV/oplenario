@@ -23,3 +23,9 @@
     (is (str/includes? corpo "arborizacao urbana") "corpo tem a ementa (info publica)")
     (is (str/includes? corpo "sancionada") "corpo tem a NOVA fase (do evento, autoritativa)")
     (is (not (str/includes? corpo "2222")) "corpo NAO tem o destinatario (entrega 1:1, sem PII no texto)")))
+
+(deftest renderizar-nao-promete-o-que-o-portal-nao-mostra
+  (let [{:keys [corpo]} (logic/renderizar materia "sancionada")]
+    (is (not (re-find #"(?i)tramita[cç][aã]o completa|toda a tramita" corpo))
+        "o portal publico mostra a faixa do estado da materia, nao a tramitacao inteira: a notificacao nao promete mais que isso")
+    (is (str/includes? corpo "no portal da Câmara") "o corpo ainda leva o cidadao ao portal")))

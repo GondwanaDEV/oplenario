@@ -27,4 +27,4 @@
      :corpo   (str "A materia " id-materia " que voce acompanha teve movimentacao.\n\n"
                    "Ementa: " (:ementa materia) "\n"
                    "Nova fase: " para "\n\n"
-                   "Acompanhe a tramitacao completa no portal da Camara.")}))
+                   "Veja a matéria no portal da Câmara.")}))
