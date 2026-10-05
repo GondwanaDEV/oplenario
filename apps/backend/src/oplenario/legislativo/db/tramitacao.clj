@@ -13,6 +13,7 @@
             [oplenario.legislativo.db.proposicao :as proposicao]
             [oplenario.legislativo.db.recebimento :as recebimento]
             [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.logic.rito :as rito]
             [oplenario.motor.api :as motor]))
 
 (set! *warn-on-reflection* true)
@@ -89,8 +90,25 @@
   CARGA: alguem tem de receber e assinar antes de ela sair. `:recebedor` = QUEM pode receber, expressao da MESMA
   DSL de `template_transicao.autorizacao` (vocabulario ator/recurso) — gateada no SAVE pelos mesmos dois passos
   de `criar-transicao!`: expressao que nao parseia ou que cita vocabulario de fora nao entra no rito (senao a
-  falha apareceria no meio do expediente, e `check!` traduz lance em negacao: 'ninguem pode receber')."
+  falha apareceria no meio do expediente, e `check!` traduz lance em negacao: 'ninguem pode receber').
+
+  `:ordem` (mig 20261005000261) = 0/ausente: nao declarada; > 0: a posicao da ETAPA (estado nao terminal) na linha do
+  rito, UNICA entre as etapas do template. Repeticao e' recusada aqui (`:ordem-repetida`, com quem repete em
+  `:repetidas`), pelo mesmo motivo do `recebedor`: a faixa 'Onde esta a materia' le a ordem declarada, e ordem repetida
+  ela ignora em silencio. Desfecho (terminal) nao entra na linha e nao concorre. So' o save confere (o banco nao tem
+  UNIQUE: ritos ja gravados podem ter tudo em 0, e dois `criar-estado!` simultaneos do MESMO template passam um pelo
+  outro; nenhuma rota cria estado, so' a semente e o onboarding de operador, em serie)."
   [tx {:keys [id ente-id template-id chave nome terminal ordem exige-recebimento recebedor]}]
+  (when (and (not terminal) (pos? (or ordem 0)))
+    (let [irmas (comum/linhas->kebab
+                  (jdbc/execute! tx
+                    (sql/format {:select [:chave :ordem :terminal] :from [:legislativo.template_estado]
+                                 :where [:and [:= :ente_id ente-id] [:= :template_id template-id]
+                                         [:= :terminal false] [:= :ordem ordem]]})))
+          repetidas (rito/ordem-repetida (conj (vec irmas) {:chave chave :ordem ordem :terminal false}))]
+      (when (seq repetidas)
+        (throw (ex-info (str "ordem repetida entre as etapas do rito (rejeitada no save): " (pr-str repetidas))
+                        {:erro :ordem-repetida :estado chave :repetidas repetidas})))))
   (when-not (str/blank? recebedor)
     (let [{:keys [status erros]} (motor/validar-guarda recebedor)]
       (when (not= "VALIDA" status)

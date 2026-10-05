@@ -123,6 +123,17 @@
   [["protocolada" "em_comissoes"] ["em_comissoes" "em_pauta"]
    ["em_pauta" "segundo_turno"] ["segundo_turno" "em_sancao"] ["em_sancao" "aprovada"]])
 
+(def rito-fixture-estados
+  "Os estados do rito [FIXTURE] do portal, com `ordem` declarada: 1.. nas etapas, na ordem da linha, e os dois desfechos
+  depois do ultimo passo (mig 20261005000261: 0 = nao declarada, e a faixa da ficha teria de cair na topologia)."
+  [{:chave "protocolada" :ordem 1 :terminal false}
+   {:chave "em_comissoes" :ordem 2 :terminal false}
+   {:chave "em_pauta" :ordem 3 :terminal false}
+   {:chave "segundo_turno" :ordem 4 :terminal false}
+   {:chave "em_sancao" :ordem 5 :terminal false}
+   {:chave "aprovada" :ordem 6 :terminal true}
+   {:chave "arquivada" :ordem 7 :terminal true}])
+
 (def ^:private materias-seed
   "6 proposições variadas (tipo + quantos passos avança no rito, ou arquivamento direto) — o suficiente
   p/ a home do portal (destaque + mais-em-tramitação, Task 1.3) mostrar estágios DIFERENTES da faixa."
@@ -153,10 +164,9 @@
        (legislativo-repo/criar-template! repo ente
          {:id tid :chave "rito_fixture_portal" :versao 1
           :nome "Rito [FIXTURE] — demo do portal" :estado-inicial "protocolada"})
-       (doseq [ch ["protocolada" "em_comissoes" "em_pauta" "segundo_turno" "em_sancao" "aprovada" "arquivada"]]
+       (doseq [{:keys [chave] :as e} rito-fixture-estados]
          (legislativo-repo/criar-estado! repo ente
-           {:id (random-uuid) :template-id tid :chave ch :nome ch
-            :terminal (boolean (#{"aprovada" "arquivada"} ch))}))
+           (assoc e :id (random-uuid) :template-id tid :nome chave)))
        (doseq [[de para] rito-fixture-transicoes]
          (legislativo-repo/criar-transicao! repo ente
            {:id (random-uuid) :template-id tid :de-estado de :para-estado para :gatilho "avancar" :guarda nil}))
