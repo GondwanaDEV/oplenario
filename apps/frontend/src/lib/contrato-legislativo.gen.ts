@@ -12,6 +12,7 @@ export interface ProposicaoResumoOut {
   estado: string;
   atualizadoEm: string;
   desfecho?: string | null;
+  rotuloEstado?: string | null;
 }
 
 export interface ListaProposicoesOut {

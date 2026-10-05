@@ -6,9 +6,15 @@
   `template_estado` (chave, nome, terminal, ordem) e `template_transicao` (de -> para).
 
   A ORDEM so' existe quando e' unica E verificavel. Duas fontes, nesta precedencia:
-    1. `ordem` declarada em `template_estado` (a coluna tem DEFAULT 0 e nada a valida, entao so' vale com valores
-       DISTINTOS entre as etapas);
-    2. a ordem topologica das transicoes a partir do estado inicial, quando for unica.
+    1. `ordem` declarada em `template_estado`. SIGNIFICADO (o mesmo do COMMENT ON COLUMN da migration
+       20261005000261): 0 = nao declarada (o DEFAULT da coluna); > 0 = a posicao da ETAPA (estado nao terminal) na
+       linha do rito, do estado inicial ao ultimo passo, UNICA entre as etapas. Desfecho (terminal) nao entra na
+       linha, entao a `ordem` dele nao conta. Quem cria o estado (`db/tramitacao/criar-estado!`) recusa repeticao
+       (`ordem-repetida`); o banco NAO a impede (ritos ja gravados podem ter tudo em 0), por isso a leitura continua
+       defensiva: so' vale com valores DISTINTOS entre as etapas;
+    2. a ordem topologica das transicoes a partir do estado inicial, quando for unica. E' o que cobre o rito que nao
+       declara `ordem` (e so' ela: com devolucao, ciclo, a topologia nao tem ordem unica e a `ordem` declarada passa a
+       ser a unica fonte).
   Qualquer candidata so' vira linha se o RITO a confirmar (`linha-confirmada?`): comeca no estado inicial, cada etapa
   e' ligada a seguinte por uma transicao, e nenhuma transicao SALTA etapa (voltar e' devolucao, vale). Sem isso 'antes
   da atual' nao quer dizer 'ja passou', e a faixa passaria a afirmar o que o rito nao garante.
@@ -38,6 +44,20 @@
           (every? (fn [[a b]] (tem-elo? arestas a b)) (partition 2 1 candidata))
           ;; nenhuma transicao salta para frente mais que uma etapa (voltar e mesmo-lugar sao validos)
           (every? (fn [[de para]] (<= (posicao para) (inc (posicao de)))) arestas)))))
+
+(defn ordem-repetida
+  "As `ordem` > 0 que MAIS DE UMA etapa (estado nao terminal) declara, como `[{:ordem n :chaves [chave ...]}]` (por
+  `ordem`, as chaves na ordem recebida); [] quando nenhuma repete. 0 ou ausente = nao declarada (se repete a
+  vontade) e terminal nao entra (nao e' passo da linha). E' a regra que `criar-estado!` aplica no save e que o teste
+  dos templates padrao da demo aplica ao dado semeado."
+  [estados]
+  (->> estados
+       (remove :terminal)
+       (filter #(pos? (or (:ordem %) 0)))
+       (group-by :ordem)
+       (keep (fn [[ordem es]] (when (< 1 (count es)) {:ordem ordem :chaves (mapv :chave es)})))
+       (sort-by :ordem)
+       vec))
 
 (defn- pela-ordem-declarada
   "As etapas pela `ordem` do template, ou nil quando a ordem nao distingue todas (valores repetidos, tipicamente o 0

@@ -18,6 +18,7 @@ export interface ComentarioOut {
 import type { FichaOut } from "./contrato-portal.gen";
 import { derivarRef } from "./materia-vista";
 import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
+import { situacaoDoDesfecho } from "./desfecho-vista";
 
 export type NormaPublicadaVista = {
   normaId: string;
@@ -53,12 +54,20 @@ export type FichaVista = {
 
 export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
-export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | null): FichaVista {
+/** `etapaAtual`: o nome que o rito da Casa dá à etapa atual, como "Por onde a matéria passou" o mostra (a movimentação
+ * mais recente, já projetada em `transparencia.materia_movimentacao`). O chip diz o mesmo; a partir do autógrafo vale
+ * o desfecho; sem etapa nomeada, o rótulo fixo. A faixa continua o mapa fixo: a projeção pública não carrega o rito. */
+export function derivarFicha(
+  ficha: FichaOut,
+  comentarios: ComentarioOut[] | null,
+  etapaAtual?: string | null,
+): FichaVista {
   const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
+  const nomeDaCasa = etapaAtual?.trim();
   return {
     ref: derivarRef(ficha),
     titulo: ficha.ementa,
-    situacao: rotuloSituacao,
+    situacao: situacaoDoDesfecho(ficha.desfecho) || !nomeDaCasa ? rotuloSituacao : nomeDaCasa,
     permalink: ficha.urnLex,
     proposicaoId: ficha.proposicaoId,
     autorTexto: ficha.autorTexto ?? null,
