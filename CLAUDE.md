@@ -135,8 +135,13 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
 - o realm ganha nome, pt-BR, tema de login e de e-mail, política de senha e trava temporária de força bruta;
 - **o convite pede senha + código do aplicativo** (antes só passkey, e o login pedia senha: o convidado real ficava sem
   como entrar). A passkey volta quando o domínio definitivo existir — adia o passwordless-first da §22.5 (confirmar);
-- **falta em produção:** a imagem do Keycloak com o tema e "Reaplicar configuração de login" em cada Câmara (`docs/27`,
-  seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
+- **em produção (05/10/2026):** a entrada pelo CPF está no ar e a configuração de login foi reaplicada nas Câmaras pelo
+  workflow `reaplicar-login-prd` (nome, pt-BR, política de senha, força bruta, senha → código). **Falta o tema:** o
+  Keycloak das Casas é um compose no Dokploy e o servidor não tem login no GHCR (o pacote
+  `oplenario-keycloak-prd` é privado); a 1ª troca derrubou o Keycloak por ~14 min até a volta automática. Antes de
+  rodar `build-keycloak-prd` de novo: tornar o pacote público ou cadastrar o `ghcr.io` em Settings → Registry do
+  Dokploy (`docs/27`, seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o
+  segundo fator.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:

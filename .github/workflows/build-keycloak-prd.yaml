@@ -111,9 +111,30 @@ jobs:
           echo "id=$id" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/keycloak.json"
 
-      # So' a linha da imagem muda (a indentacao e o resto do compose ficam). O servidor do Dokploy puxa do GHCR com o
-      # login que ja' usa para as imagens da API; sem ele o deploy falha, o Keycloak antigo segue no ar e o passo
-      # seguinte volta o compose.
+      # Um COMPOSE puxa a imagem com o login do SERVIDOR (a API puxa com o login guardado no app dela, que nao vale aqui).
+      # Na 1a troca (05/10/2026) o pacote era privado e o servidor nao tinha login no GHCR: o Keycloak ficou fora do ar
+      # ate' a volta do compose (~14 min). So' segue se a imagem baixa sem login (pacote publico) ou se o Dokploy tem um
+      # registro do ghcr.io cadastrado (Settings -> Registry), que loga o servidor.
+      - name: Conferir que o servidor consegue baixar a imagem
+        run: |
+          set -euo pipefail
+          t=$(curl -s --max-time 15 "https://ghcr.io/token?scope=repository:${REPO_IMAGEM#ghcr.io/}:pull" | jq -r '.token // empty' || true)
+          if [ -n "$t" ] && curl -sf -o /dev/null --max-time 15 -H "Authorization: Bearer $t" \
+               -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json' \
+               "https://ghcr.io/v2/${REPO_IMAGEM#ghcr.io/}/manifests/latest"; then
+            echo "a imagem e' publica: o servidor baixa sem login"
+            exit 0
+          fi
+          n=$(curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/registry.all" \
+                | jq '[.[]? | select((.registryUrl // "") | test("ghcr\\.io"))] | length' || echo 0)
+          if [ "${n:-0}" -ge 1 ]; then
+            echo "o Dokploy tem registro do ghcr.io cadastrado: o servidor baixa com ele"
+            exit 0
+          fi
+          echo "::error::a imagem e' privada e o Dokploy nao tem registro do ghcr.io: o servidor nao conseguiria baixar. Torne o pacote publico ou cadastre o ghcr.io em Settings -> Registry. Nada foi trocado."
+          exit 1
+
+      # So' a linha da imagem muda (a indentacao e o resto do compose ficam).
       - name: Trocar a imagem e reimplantar
         env:
           ID: ${{ steps.app.outputs.id }}
@@ -146,11 +167,16 @@ jobs:
             curl -sf --max-time 15 -H "Authorization: Bearer $t" "$KC/admin/serverinfo" \
               | jq -e '[.themes.login[]?.name] | index("oplenario")' > /dev/null
           }
+          # 12 min para o tema aparecer, mas o Keycloak fora do ar por 4 min seguidos volta o compose na hora: a 1a troca
+          # ficou ~14 min fora porque so' a ausencia do tema era medida
+          fora=0
           for i in $(seq 1 48); do
             if tem_tema; then echo "tema oplenario carregado no Keycloak (tentativa $i)"; exit 0; fi
+            if curl -sf -o /dev/null --max-time 10 "$KC/realms/master"; then fora=0; else fora=$((fora + 1)); fi
+            if [ "$fora" -ge 16 ]; then echo "::error::o Keycloak esta' fora do ar ha' 4 min"; break; fi
             sleep 15
           done
-          echo "::error::o tema nao apareceu em 12 min: voltando o compose anterior"
+          echo "::error::o tema nao apareceu: voltando o compose anterior"
           if ! curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' \
                  -d @"$RUNNER_TEMP/anterior.json" "$DK/compose.update" > /dev/null; then
             echo "::error::o Dokploy recusou a volta do compose: no compose do Keycloak, voltar a imagem para quay.io/keycloak/keycloak:26.0.0"
