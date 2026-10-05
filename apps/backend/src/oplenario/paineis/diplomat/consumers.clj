@@ -24,6 +24,8 @@
    "participacao.pedido_esic.indeferido" "participacao.solicitacao_titular.indeferida"
    "participacao.prazo.vencido" "participacao.prazo.prorrogado"
    "proposicao.protocolada" "proposicao.transicionou"
+   ;; docs/16 linha 18: o desfecho a partir do autografo muda a coluna da materia no quadro
+   "proposicao.desfecho-registrado" "norma.publicada"
    ;; F7 E2: o fan-out de transparencia (`notificacao.requisitada`, 1 por seguidor) -> intent no ledger de entrega.
    "notificacao.requisitada"
    ;; F7 E3: o ciclo de vida da SESSAO plenaria (F4) -> vista de SLI de janela de sessao (Inv.9). `agendada`

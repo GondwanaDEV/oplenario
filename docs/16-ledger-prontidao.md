@@ -2870,8 +2870,12 @@ O que essas frentes deixaram registrado:
     ao Executivo", "Sancionada", "Vetada", "Virou lei"). A migration 20261005000210 reconstrói os atos anteriores;
   - os rótulos da linha do tempo pública estão em `transparencia/logic/desfecho.clj` e no backfill SQL da migration
     (conferidos um contra o outro por `desfecho_da_materia_test`);
-  - **limites:** a lista interna de proposições e o quadro de tramitação seguem lendo só o estado do rito; votação
-    corretiva (sem rota hoje) entraria como mais um ato.
+  - **lista interna e quadro (05/10/2026, depois do #159):** a lista de proposições calcula o desfecho na própria
+    consulta (autógrafo, Executivo e norma, por LEFT JOIN no `legislativo`) e o selo vem dele; o quadro projeta o
+    evento em `paineis.tramitacao.desfecho` (só a partir do autógrafo; a votação passa reto) e a matéria muda de
+    coluna: "Vetada" volta a "Em Plenário" (a Câmara aprecia o veto), o resto vai a "Concluídas". Os totais do quadro
+    agrupam por (estado, desfecho). Migration 20261005000211 com backfill, conferido por `tramitacao_desfecho_test`;
+  - **limite:** votação corretiva (sem rota hoje) entraria como mais um ato.
 - **Achado novo, fechado no #145:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados
   abertos e o perfil público do vereador publicavam o voto, porque filtravam só pela modalidade.
 - **Achado fechado (05/10/2026, decisão do Daouda "A e B"):** ao reconceder acesso a quem já tem conta, o convite saía

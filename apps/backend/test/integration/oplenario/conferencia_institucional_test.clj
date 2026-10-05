@@ -134,10 +134,11 @@
           (is (= (:execucao-id c) (:execucao-id n)) "a execucao vem da credencial, nunca da entrada")
           (is (re-find #"Secretaria de Obras" (:texto n)) "a segunda chamada nao muda a nota")
           (is (= ["conferida" "conferida"] (mapv :status (:citacoes n)))))
-        (is (= [["registrar_nota_tecnica" "rascunho" "ok"] ["registrar_nota_tecnica" "rascunho" "ok"]]
+        (is (= [["situacao_da_materia" "leitura" "ok"]
+                ["registrar_nota_tecnica" "rascunho" "ok"] ["registrar_nota_tecnica" "rascunho" "ok"]]
                (mapv (juxt :ferramenta :classe :desfecho)
                      (repo-ia/chamadas-da-execucao (repo-integracao) ente (:execucao-id c))))
-            "escrita do agente institucional vai ao audit, sem pessoa")))
+            "toda chamada do agente institucional vai ao audit, leitura inclusive (ADR-0024), sem pessoa")))
     (testing "proposicao de outra Casa (ou inexistente): nao encontrada, nada gravado"
       (is (nil? (catalogo/executar! (deps) ator "registrar_nota_tecnica"
                                     (assoc nota :proposicao-id (str (:id (proposicao! (random-uuid) "outra"))))))))

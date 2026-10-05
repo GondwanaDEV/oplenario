@@ -1,12 +1,15 @@
 "use client";
 
-// Hook da tela "Minha atuação" (app do vereador). Compõe três leituras que JÁ existem, sem rota nova:
+// Hook da tela "Minha atuação" (app do vereador). Compõe quatro leituras:
 //   1. GET /api/eu          → o `ente-id` da sessão (a Casa onde o vereador está logado);
 //   2. GET /api/meu/painel  → o `vereadorId` resolvido do ator (anti-forja: nunca vem da URL) e os
 //                             pareceres em que ele é relator;
-//   3. GET /api/portal/casa/{ente}/vereadores/{vereadorId} → o perfil público (autoria, leis, presença,
-//                             votos por opção) — os MESMOS números que o cidadão vê.
-// 1 e 2 em paralelo; 3 depende dos dois. Qualquer falha colapsa em "erro"; um ator sem cadastro de
+//   3. GET /api/meu/votos   → os votos nominais DELE, inclusive os de sessão secreta ou fechada ao público
+//                             (o portal não os publica; esta rota é autenticada e só devolve os do ator);
+//   4. GET /api/portal/casa/{ente}/vereadores/{vereadorId} → o perfil público (autoria, leis, presença) —
+//                             os MESMOS números que o cidadão vê. Os votos NÃO vêm daqui: o perfil público
+//                             só conta voto de sessão pública.
+// 1, 2 e 3 em paralelo; 4 depende de 1 e 2. Qualquer falha colapsa em "erro"; um ator sem cadastro de
 // vereador nesta Casa (`vereadorId` nulo) é estado próprio, não erro.
 
 import { useEffect, useState } from "react";
@@ -14,14 +17,14 @@ import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import { buscarPublico } from "./portal-api";
 import { semCredencial } from "./modo";
-import type { MeuPainelOut } from "./contrato-legislativo.gen";
+import type { MeuPainelOut, MeusVotosOut } from "./contrato-legislativo.gen";
 import type { PerfilVereadorOut } from "./contrato-portal.gen";
 
 export type EstadoAtuacao =
   | { fase: "carregando" }
   | { fase: "erro" }
   | { fase: "sem-vereador" }
-  | { fase: "pronto"; perfil: PerfilVereadorOut; painel: MeuPainelOut };
+  | { fase: "pronto"; perfil: PerfilVereadorOut; painel: MeuPainelOut; votos: MeusVotosOut };
 
 async function enteDaSessao(token: string | null): Promise<string | null> {
   const r = await apiFetch("/api/eu", { token: token ?? undefined, cache: "no-store" });
@@ -37,14 +40,24 @@ async function painelDoVereador(token: string | null): Promise<MeuPainelOut | nu
   return camelizarChaves(await r.json()) as MeuPainelOut;
 }
 
+async function votosDoVereador(token: string | null): Promise<MeusVotosOut | null> {
+  const r = await apiFetch("/api/meu/votos", { token: token ?? undefined, cache: "no-store" });
+  if (!r.ok) return null;
+  return camelizarChaves(await r.json()) as MeusVotosOut;
+}
+
 export async function carregarAtuacao(token: string | null): Promise<EstadoAtuacao> {
   try {
-    const [ente, painel] = await Promise.all([enteDaSessao(token), painelDoVereador(token)]);
-    if (!ente || !painel) return { fase: "erro" };
+    const [ente, painel, votos] = await Promise.all([
+      enteDaSessao(token),
+      painelDoVereador(token),
+      votosDoVereador(token),
+    ]);
+    if (!ente || !painel || !votos) return { fase: "erro" };
     if (!painel.vereadorId) return { fase: "sem-vereador" };
     const perfil = await buscarPublico<PerfilVereadorOut>(ente, "vereadores", painel.vereadorId);
     if (!perfil) return { fase: "erro" };
-    return { fase: "pronto", perfil, painel };
+    return { fase: "pronto", perfil, painel, votos };
   } catch {
     return { fase: "erro" };
   }

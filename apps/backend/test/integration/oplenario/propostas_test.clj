@@ -86,9 +86,9 @@
       (is (= "aguardando_confirmacao" (:estado r)))
       (is (re-find #"Nada foi feito" (:mensagem r)))
       (is (= 0 (proposicoes ente)))
-      (is (= [["protocolar_requerimento" "ato" "proposta"]]
+      (is (= [["modelos_de_requerimento" "leitura" "ok"] ["protocolar_requerimento" "ato" "proposta"]]
              (mapv (juxt :ferramenta :classe :desfecho) (repo-ia/chamadas-da-execucao repo-ia ente exec)))
-          "o audit registra a tentativa de ato como proposta"))
+          "o audit registra a leitura (ADR-0024) e a tentativa de ato como proposta"))
     (testing "a proposta guarda o texto exato, o ritual e a entrada validada"
       (let [p (repo-ia/proposta repo-ia ente pid)]
         (is (= "aguardando" (:estado p)))

@@ -63,6 +63,17 @@ describe("derivarProposicoesVista", () => {
     expect(linha.especie).toBe("Requerimento");
   });
 
+  it("a partir do autógrafo o desfecho diz a situação e a cor do chip (docs/16 linha 18)", () => {
+    const [lei] = derivarProposicoesVista([{ ...base, estado: "aguardando_pauta", desfecho: "publicada" }]);
+    expect(lei.situacao.rotulo).toBe("Virou lei");
+    expect(lei.situacao.categoria).toBe("aprovada");
+    const [vetada] = derivarProposicoesVista([{ ...base, estado: "aguardando_pauta", desfecho: "vetado" }]);
+    expect(vetada.situacao.rotulo).toBe("Vetada");
+    expect(vetada.situacao.categoria).toBe("tram");
+    const [semDesfecho] = derivarProposicoesVista([{ ...base, estado: "aguardando_pauta", desfecho: null }]);
+    expect(semDesfecho.situacao.rotulo).toBe("Aguardando pauta");
+  });
+
   it("autor ausente vira travessão, não string vazia/undefined", () => {
     const [linha] = derivarProposicoesVista([{ ...base, autorTexto: undefined, autorTipo: undefined }]);
     expect(linha.autor).toBe("—");

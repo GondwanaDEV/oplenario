@@ -6,6 +6,7 @@
             [next.jdbc :as jdbc]
             [oplenario.integracao-ia.db.chamada-agente :as chamada-agente]
             [oplenario.integracao-ia.db.eventos :as eventos]
+            [oplenario.integracao-ia.db.interacao-assistente :as interacao]
             [oplenario.integracao-ia.db.orcamento :as orcamento]
             [oplenario.integracao-ia.db.proposta-ato :as proposta]
             [oplenario.integracao-ia.logic :as logic]
@@ -21,6 +22,11 @@
   (registrar-chamada-agente! [this chamada]
     "Audit (ADR-0010, Eixo 3.5): uma chamada de ferramenta de agente que escreve, com o desfecho, na tx do tenant.")
   (chamadas-da-execucao [this ente-id execucao-id] "As chamadas registradas de uma execucao, em ordem.")
+  ;; ADR-0024: o historico auditavel da Clara
+  (registrar-interacao-assistente! [this interacao]
+    "Grava a interacao (a linha ja' com o hash, `logic/interacao`), na tx do tenant. Append-only.")
+  (interacao-assistente [this ente-id id] "A interacao `id`, ou nil.")
+  (conversa-da-pessoa? [this ente-id identidade-id conversa-id] "A conversa existe nesta Casa e e' desta pessoa?")
   ;; B.6 / ADR-0012: a proposta de ato e as leituras de terceiro da execucao
   (criar-proposta! [this proposta] "Grava a proposta (estado aguardando); devolve-a.")
   (proposta [this ente-id id])
@@ -52,6 +58,12 @@
     (tenancy/com-tenant* (:ds datasource) (:ente-id chamada) #(chamada-agente/registrar! % chamada)))
   (chamadas-da-execucao [_ ente-id execucao-id]
     (tenancy/com-tenant* (:ds datasource) ente-id #(chamada-agente/da-execucao % ente-id execucao-id)))
+  (registrar-interacao-assistente! [_ i]
+    (tenancy/com-tenant* (:ds datasource) (:ente-id i) #(interacao/inserir! % i)))
+  (interacao-assistente [_ ente-id id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/buscar % ente-id id)))
+  (conversa-da-pessoa? [_ ente-id identidade-id conversa-id]
+    (tenancy/com-tenant* (:ds datasource) ente-id #(interacao/conversa-da-pessoa? % ente-id identidade-id conversa-id)))
   (criar-proposta! [_ p]
     (tenancy/com-tenant* (:ds datasource) (:ente-id p) #(proposta/inserir! % p)))
   (proposta [_ ente-id id]

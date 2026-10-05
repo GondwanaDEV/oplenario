@@ -11,6 +11,7 @@ export interface ProposicaoResumoOut {
   autorTexto?: string | null;
   estado: string;
   atualizadoEm: string;
+  desfecho?: string | null;
 }
 
 export interface ListaProposicoesOut {
@@ -286,6 +287,31 @@ export interface MeuPainelOut {
 export interface AcusarCienciaOut {
   id: string;
   cienteEm: string;
+}
+
+export interface MeuVotoOut {
+  votacaoId: string;
+  voto: string;
+  registradoEm: string;
+  anulada: boolean;
+  portal: "publico" | "sessao-fechada" | "sem-sessao";
+  materiaTipo: string | null;
+  materiaAno: number | null;
+  materiaSequencial: number | null;
+  materiaEmenta: string | null;
+}
+
+export interface MeusVotosPorOpcaoOut {
+  sim: number;
+  nao: number;
+  abstencao: number;
+}
+
+export interface MeusVotosOut {
+  vereadorId: string | null;
+  votos: MeuVotoOut[];
+  votosTotal: number;
+  votosPorOpcao: MeusVotosPorOpcaoOut;
 }
 
 export interface GatilhoPossivelOut {
