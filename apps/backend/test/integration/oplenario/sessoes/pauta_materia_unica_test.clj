@@ -200,13 +200,23 @@
     (jdbc/execute-one! *ds* ["DROP INDEX IF EXISTS sessoes.uq_pauta_item_materia_ativa"])
     (try
       (legado! ente sid dup true) (legado! ente sid dup true) (legado! ente sid dup true) (legado! ente sid (random-uuid) false)
+      ;; duplicata RECENTE (criado_em = agora, sem o indice): com corte de data fixa ela cairia dentro do indice e o
+      ;; CREATE INDEX derrubaria o deploy. O corte e' o instante da migration, entao ela tambem fica de fora.
+      (let [recente (random-uuid)
+            pid (tenancy/com-tenant* *ds* ente #(:id (pauta/garantir-pauta! % {:ente-id ente :sessao-id sid})))]
+        (dotimes [_ 2]
+          (tenancy/com-tenant* *ds* ente
+            #(jdbc/execute-one! % ["INSERT INTO sessoes.pauta_item (id, ente_id, pauta_sessao_id, fase, tipo_item,
+                                                                     proposicao_id, ordem, efetivado_em)
+                                    VALUES (gen_random_uuid(), ?, ?, 'ordem_do_dia', 'proposicao', ?, 5, now())"
+                                   ente pid recente]))))
       (let [antes (estado-das-linhas ente)]
-        (is (= 4 (count (:itens antes))))
+        (is (= 6 (count (:itens antes))))
         (aplicar-migration!)
         (is (indice-existe?) "o CREATE INDEX nao falha numa base com duplicata legada")
         (is (= antes (estado-das-linhas ente))
             "nenhuma linha mudou (ativo, lock_version, atualizado_em), nenhuma foi apagada, e nenhuma linha nova em pauta_alteracao")
-        (is (= 3 (count (filter :ativo (:itens (estado-das-linhas ente))))) "as 3 duplicatas legadas seguem ativas"))
+        (is (= 5 (count (filter :ativo (:itens (estado-das-linhas ente))))) "as 3 legadas e as 2 recentes seguem ativas"))
       (finally (aplicar-migration!)))))
 
 (deftest materia-que-so-existe-num-item-legado-da-409

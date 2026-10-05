@@ -1,5 +1,5 @@
--- A mesma materia nao entra duas vezes (ATIVA) na pauta da mesma sessao — para os itens incluidos a partir de
--- 2026-10-05 (o CORTE abaixo).
+-- A mesma materia nao entra duas vezes (ATIVA) na pauta da mesma sessao — para os itens incluidos depois que esta
+-- migration roda (o CORTE, explicado no fim).
 --
 -- ANTES: `POST /sessoes/:id/pauta/itens` aceitava a mesma proposicao N vezes — nenhum indice nem checagem a barrava
 -- (a unica UNIQUE da pauta e' a do container 1:1). Dois cliques, ou duas pessoas da Mesa ao mesmo tempo, deixavam a
@@ -20,11 +20,19 @@
 -- DADO LEGADO. Esta migration NAO MUTA NENHUM DADO: nenhum item antigo e' retirado e nenhuma linha entra em
 -- `pauta_alteracao`. Pauta de sessao encerrada ou ja publicada e' registro historico; reescreve-la por um backfill
 -- privilegiado (sem RLS, sem autor) seria apagar prova. Em vez disso o indice so' vale para itens CRIADOS DEPOIS do
--- corte (`criado_em >= 2026-10-05 00:00:00+00`, constante): o CREATE UNIQUE INDEX nunca falha numa base que ja' tem
--- duplicata, e a duplicata antiga fica onde esta'. O predicado e' IMMUTABLE (comparacao de timestamptz com literal
--- constante com offset explicito); `criado_em` e' `timestamptz NOT NULL DEFAULT now()` e nao e' alterada por UPDATE
--- nenhum do sistema. Consequencia assumida: duas duplicatas LEGADAS continuam coexistindo, e a inclusao de uma
--- materia que so' existe num item legado e' barrada pela checagem em codigo, nao pelo indice.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_pauta_item_materia_ativa
-  ON sessoes.pauta_item (ente_id, pauta_sessao_id, proposicao_id)
-  WHERE ativo AND proposicao_id IS NOT NULL AND criado_em >= timestamptz '2026-10-05 00:00:00+00';
+-- corte (`criado_em >= <instante da migration>`): o --
+-- O CORTE E' O INSTANTE EM QUE ESTA MIGRATION RODA EM CADA BANCO, nao uma data escrita aqui. Uma data fixa acoplava
+-- a migration ao relogio do deploy: duplicata criada entre a data escrita e o deploy cairia DENTRO do indice e o
+-- CREATE UNIQUE INDEX falharia, derrubando o deploy. Com o instante da propria migration, nenhuma linha existente
+-- entra no indice (toda linha ja gravada tem `criado_em` anterior), entao a criacao nunca falha. O valor vira
+-- literal constante dentro do predicado (`format %L`), que por isso continua IMMUTABLE.
+DO $$
+BEGIN
+  IF to_regclass('sessoes.uq_pauta_item_materia_ativa') IS NULL THEN
+    EXECUTE format(
+      'CREATE UNIQUE INDEX uq_pauta_item_materia_ativa
+         ON sessoes.pauta_item (ente_id, pauta_sessao_id, proposicao_id)
+         WHERE ativo AND proposicao_id IS NOT NULL AND criado_em >= %L::timestamptz',
+      now());
+  END IF;
+END $$;
