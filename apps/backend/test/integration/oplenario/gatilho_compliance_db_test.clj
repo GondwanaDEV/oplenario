@@ -328,29 +328,31 @@
 ;; ---------- a remessa ACEITA cumpre a obrigacao da competencia (achado 5 da retriagem, docs/16) ----------
 ;; Antes: o aceite pela rota so' transicionava a remessa; a obrigacao seguia pendente e o sweep a vencia depois do prazo.
 
-(def ^:private chave-sim "remessa_mensal_sim")
-
 (defn- garantir-regra-sim!
-  "O template do SIM (T1 de docs/05, a mesma regra da demo) vigente no catalogo, e o prazo SIM da competencia."
+  "A regra do SIM (T1 de docs/05, a mesma da demo) com uma chave PROPRIA deste teste — o catalogo e' global e outros
+  testes gravam outra `remessa_mensal_sim`; reaproveitar a deles fazia este teste depender da ordem. Mais o prazo SIM
+  da competencia. Devolve a chave."
   [competencia data-limite]
-  (let [rm (:repo-motor *deps*)]
-    (when-not (repo-motor/template-vigente rm chave-sim)
-      (let [env (nuc/carregar-envelope tpl/T1)]
-        (repo-motor/criar-template! rm
-          {:id (random-uuid) :chave-template chave-sim :versao 1 :template-pai-id nil :dominio (:dominio env)
-           :chave-dominio "TCE-CE" :descricao "Remessa mensal do SIM ao TCE-CE" :severidade (:severidade env)
-           :referencia-normativa "IN 04/2019" :fonte-yaml tpl/T1 :forma-compilada env
-           :assinatura-parametros (:parametros env) :registry-versao-ref "registry-v1@2026-06-20"
-           :estado-versao "vigente"})))
+  (let [rm (:repo-motor *deps*)
+        chave (str "remessa_sim_teste_" (str/replace (subs (str (random-uuid)) 0 8) #"[0-9]" "x"))
+        fonte (str/replace tpl/T1 "remessa_mensal_sim" chave)
+        env (nuc/carregar-envelope fonte)]
+    (repo-motor/criar-template! rm
+      {:id (random-uuid) :chave-template chave :versao 1 :template-pai-id nil :dominio (:dominio env)
+       :chave-dominio "TCE-CE" :descricao "Remessa mensal do SIM ao TCE-CE (teste)" :severidade (:severidade env)
+       :referencia-normativa "IN 04/2019" :fonte-yaml fonte :forma-compilada env
+       :assinatura-parametros (:parametros env) :registry-versao-ref "registry-v1@2026-06-20"
+       :estado-versao "vigente"})
     (jdbc/execute-one! *ds* ["DELETE FROM motor.prazo_dominio_vigente WHERE chave_periodo = ? AND tipo_prazo = 'SIM_mensal'"
                              competencia])
     (repo-motor/criar-prazo! rm {:id (random-uuid) :dominio "tribunal_de_contas" :chave-dominio "TCE-CE"
                                  :tipo-prazo "SIM_mensal" :chave-periodo competencia :data-limite data-limite
-                                 :vigente true :fonte "IN 04/2019"})))
+                                 :vigente true :fonte "IN 04/2019"})
+    chave))
 
 (defn- casa-no-sim!
   "A Casa ligada a regra do SIM, com a obrigacao da competencia ja' pendente (avaliada antes do prazo)."
-  [ente competencia]
+  [chave-sim ente competencia]
   (let [rm (:repo-motor *deps*)
         [ano mes] (map parse-long (str/split competencia #"-"))]
     (repo-motor/criar-binding! rm ente {:id (random-uuid) :ente-id ente :template-chave chave-sim
@@ -361,7 +363,7 @@
        :objeto-id (logic-compliance/objeto-da-competencia ente "SIM" competencia)
        :amb {"competencia" {:ano ano :mes mes}} :agora (LocalDate/parse "2026-10-01") :origem "evento"})))
 
-(defn- remessa-submetida! [ente competencia]
+(defn- remessa-submetida! [chave-sim ente competencia]
   (na-casa ente
     (fn [tx]
       (let [{:keys [id]} (db-rem/inserir! tx {:id (random-uuid) :ente-id ente :template-chave chave-sim :sistema "SIM"
@@ -372,32 +374,32 @@
         (db-rem/transicionar-estado! tx ente id "validada" "submetida" {:submetida-em [:now]})
         id))))
 
-(defn- obrigacao-sim [ente competencia]
+(defn- obrigacao-sim [chave-sim ente competencia]
   (obrigacao ente chave-sim "competencia" (logic-compliance/objeto-da-competencia ente "SIM" competencia)))
 
 (deftest remessa-aceita-pela-rota-cumpre-a-obrigacao-e-o-sweep-nao-a-vence
-  (let [ente (random-uuid) competencia "2026-09"]
-    (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))
-    (casa-no-sim! ente competencia)
-    (is (= "pendente" (:estado (obrigacao-sim ente competencia))) "antes do aceite a obrigacao esta' pendente")
-    (let [rid (remessa-submetida! ente competencia)
+  (let [ente (random-uuid) competencia "2026-09"
+        chave-sim (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))]
+    (casa-no-sim! chave-sim ente competencia)
+    (is (= "pendente" (:estado (obrigacao-sim chave-sim ente competencia))) "antes do aceite a obrigacao esta' pendente")
+    (let [rid (remessa-submetida! chave-sim ente competencia)
           r (chamar *svc* ente :post (str "/compliance/remessas/" rid "/resposta") {:estado "aceita"})]
       (is (= 200 (:status r)))
-      (is (= "cumprida" (:estado (obrigacao-sim ente competencia))) "o aceite cumpre a obrigacao na hora")
+      (is (= "cumprida" (:estado (obrigacao-sim chave-sim ente competencia))) "o aceite cumpre a obrigacao na hora")
       (repo-compliance/varrer-vencimentos! (:repo-compliance *deps*) ente (LocalDate/parse "2026-11-02"))
-      (is (= "cumprida" (:estado (obrigacao-sim ente competencia))) "o sweep depois do prazo nao a vence"))))
+      (is (= "cumprida" (:estado (obrigacao-sim chave-sim ente competencia))) "o sweep depois do prazo nao a vence"))))
 
 (deftest remessa-rejeitada-nao-cumpre
-  (let [ente (random-uuid) competencia "2026-09"]
-    (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))
-    (casa-no-sim! ente competencia)
-    (let [rid (remessa-submetida! ente competencia)]
+  (let [ente (random-uuid) competencia "2026-09"
+        chave-sim (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))]
+    (casa-no-sim! chave-sim ente competencia)
+    (let [rid (remessa-submetida! chave-sim ente competencia)]
       (is (= 200 (:status (chamar *svc* ente :post (str "/compliance/remessas/" rid "/resposta") {:estado "rejeitada"}))))
-      (is (= "pendente" (:estado (obrigacao-sim ente competencia))) "rejeicao nao cumpre (so' aceita satisfaz remessa_enviada)"))))
+      (is (= "pendente" (:estado (obrigacao-sim chave-sim ente competencia))) "rejeicao nao cumpre (so' aceita satisfaz remessa_enviada)"))))
 
 (deftest casa-sem-vinculo-a-regra-do-sim-aceita-sem-criar-obrigacao
-  (let [ente (random-uuid) competencia "2026-09"]
-    (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))
-    (let [rid (remessa-submetida! ente competencia)]
+  (let [ente (random-uuid) competencia "2026-09"
+        chave-sim (garantir-regra-sim! competencia (LocalDate/parse "2026-10-30"))]
+    (let [rid (remessa-submetida! chave-sim ente competencia)]
       (is (= 200 (:status (chamar *svc* ente :post (str "/compliance/remessas/" rid "/resposta") {:estado "aceita"}))))
-      (is (nil? (obrigacao-sim ente competencia)) "sem vinculo a' regra, o gatilho nao inventa obrigacao"))))
+      (is (nil? (obrigacao-sim chave-sim ente competencia)) "sem vinculo a' regra, o gatilho nao inventa obrigacao"))))
