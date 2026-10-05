@@ -18,6 +18,7 @@ function materia(parcial: Partial<MateriaOut>): MateriaOut {
     autorTipo: "vereador",
     autorTexto: "Ver.ª Helena Matos",
     estado: "protocolada",
+    desfecho: null,
     ...parcial,
   };
 }

@@ -34,6 +34,12 @@
   [bus tx ente-id payload]
   (eventos/emitir! bus tx (ev/editada ente-id payload)))
 
+(defn emitir-desfecho-registrado!
+  "Emite `proposicao.desfecho-registrado` no `bus` DENTRO da `tx` do ato (aprovacao/rejeicao em plenario, autografo,
+  sancao/veto, apreciacao do veto, promulgacao). `payload` casa events/DesfechoRegistradoPayload."
+  [bus tx ente-id payload]
+  (eventos/emitir! bus tx (ev/desfecho-registrado ente-id payload)))
+
 (defn emitir-norma-publicada!
   "Emite `norma.publicada` no `bus` DENTRO da `tx` corrente (F3.8b, marco de eficacia). `payload` casa
   events.norma/PublicadaPayload — o snapshot publico que o portal (transparencia) projeta."
