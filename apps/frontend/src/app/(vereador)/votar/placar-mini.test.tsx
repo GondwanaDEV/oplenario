@@ -69,3 +69,73 @@ describe("PlacarMini — cockpit do vereador segue o MESMO aviso de lacuna da Me
     expect(container.innerHTML).toBe("");
   });
 });
+
+// O defeito (05/10/2026): na votação ENCERRADA o cockpit ainda escrevia "faltam N" (e o rótulo de leitor de tela
+// "Parcial: … ainda não votaram"). Ninguém mais vai votar: o que cabe é "não votaram N de M", o mesmo texto do
+// telão (sessoes/[id]/plenario `PlacarMeta`). Aberta não muda.
+describe("PlacarMini — quem não votou, em votação aberta e encerrada", () => {
+  const meta = (c: HTMLElement) => c.querySelector(".placar-mini .quem-nao-votou")?.textContent;
+  const nominalEncerrada = (over: Partial<PlacarVotacao> = {}) =>
+    nominalAberto({
+      encerrada: true, resultado: "aprovada", baseMembros: 3,
+      votosNominais: { a: "sim", b: "nao" }, totais: { sim: 1, nao: 1, abstencao: 0 }, ...over,
+    });
+  const secretaEncerrada = (over: Partial<PlacarVotacao> = {}) =>
+    secretaAberta({
+      encerrada: true, resultado: "aprovada", baseMembros: 3, votosSecretos: 2,
+      totais: { sim: 1, nao: 1, abstencao: 0 }, ...over,
+    });
+
+  it("nominal ABERTA: segue 'faltam N · parcial'", () => {
+    const { container } = render(
+      <PlacarMini placar={derivarPlacar(nominalAberto({ baseMembros: 3 }), false)} />,
+    );
+    expect(container.querySelector(".leg .parcial")?.textContent?.replace(/\s+/g, " ").trim()).toBe("faltam 2 · parcial");
+    expect(container.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Parcial: 1 sim, 0 não, 2 ainda não votaram");
+  });
+
+  it("nominal ENCERRADA com quem não votou: 'não votaram N de M', nunca 'faltam' nem 'Parcial'", () => {
+    const { container } = render(<PlacarMini placar={derivarPlacar(nominalEncerrada(), false)} />);
+    expect(meta(container)).toBe("não votaram 1 de 3");
+    expect(container.textContent).not.toMatch(/faltam|parcial/i);
+    expect(container.querySelector("[role=img]")?.getAttribute("aria-label")).toBe("Resultado: 1 sim, 1 não; não votaram 1 de 3");
+  });
+
+  it("nominal ENCERRADA em que todos votaram: 'todos os M votaram', sem 'faltam 0'", () => {
+    const { container } = render(
+      <PlacarMini placar={derivarPlacar(nominalEncerrada({ totais: { sim: 2, nao: 1, abstencao: 0 } }), false)} />,
+    );
+    expect(meta(container)).toBe("todos os 3 votaram");
+    expect(container.textContent).not.toMatch(/faltam/i);
+  });
+
+  it("nominal ENCERRADA sem base de membros: nenhuma linha de quem não votou (nunca inventada)", () => {
+    const { container } = render(
+      <PlacarMini placar={derivarPlacar(nominalEncerrada({ baseMembros: null }), false)} />,
+    );
+    expect(meta(container)).toBeUndefined();
+    expect(container.textContent).not.toMatch(/faltam/i);
+  });
+
+  it("secreta ENCERRADA com quem não votou: 'não votaram N de M' como o telão, e o sigilo segue", () => {
+    const { container } = render(<PlacarMini placar={derivarPlacar(secretaEncerrada(), false)} />);
+    expect(container.querySelector(".voto-nota")?.textContent).toBe("Resultado: 1 sim, 1 não, 0 abstenção.");
+    expect(meta(container)).toBe("não votaram 1 de 3");
+    expect(container.textContent).not.toMatch(/faltam/i);
+  });
+
+  it("secreta ENCERRADA em que todos votaram: 'todos os M votaram'", () => {
+    const { container } = render(
+      <PlacarMini placar={derivarPlacar(secretaEncerrada({ totais: { sim: 2, nao: 1, abstencao: 0 } }), false)} />,
+    );
+    expect(meta(container)).toBe("todos os 3 votaram");
+  });
+
+  it("secreta ABERTA: não muda (só o contador anônimo, sem linha de quem falta)", () => {
+    const { container } = render(
+      <PlacarMini placar={derivarPlacar(secretaAberta({ baseMembros: 3 }), false)} />,
+    );
+    expect(container.querySelector(".voto-nota")?.textContent).toBe("2 votos lançados (contador anônimo).");
+    expect(meta(container)).toBeUndefined();
+  });
+});

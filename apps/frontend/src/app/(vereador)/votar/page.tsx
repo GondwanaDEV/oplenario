@@ -273,6 +273,27 @@ export function TrocaDeSessao({ sessoes, atual, token }: { sessoes: SessaoViva[]
   );
 }
 
+/** Votação ENCERRADA: ninguém mais vai votar, então não se diz "faltam N" — diz-se quantos não votaram. É o
+ * mesmo texto do telão (`PlacarMeta` em sessoes/[id]/plenario/page.tsx). Sem base de membros, nada (nunca inventado). */
+function QuemNaoVotou({
+  faltam, baseMembros, className, tag: Tag,
+}: { faltam: number | null; baseMembros: number | null; className: string; tag: "span" | "p" }) {
+  if (faltam === null || baseMembros === null) return null;
+  return (
+    <Tag className={className}>
+      {faltam > 0 ? (
+        <>
+          não votaram <b>{faltam}</b> de <b>{baseMembros}</b>
+        </>
+      ) : (
+        <>
+          todos os <b>{baseMembros}</b> votaram
+        </>
+      )}
+    </Tag>
+  );
+}
+
 /** Placar-mini do cockpit do vereador. §22.6 SIGILO: a NOMINAL mostra sim/não; a SECRETA só o contador —
  * a distinção mora em `derivarPlacar` (testado), aqui só mapeamento. Extraído do corpo de `VotarPage`
  * (review adversarial, frente 'truncamento-familia') para ser testável com um `VistaPlacar` direto, sem
@@ -292,9 +313,17 @@ export function PlacarMini({ placar }: { placar: VistaPlacar }) {
           <div
             className="barra"
             role="img"
-            aria-label={`Parcial: ${placar.sim} sim, ${placar.nao} não${
-              placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
-            }`}
+            aria-label={
+              placar.encerrada
+                ? `Resultado: ${placar.sim} sim, ${placar.nao} não${
+                    placar.faltam !== null && placar.faltam > 0
+                      ? `; não votaram ${placar.faltam} de ${placar.baseMembros}`
+                      : ""
+                  }`
+                : `Parcial: ${placar.sim} sim, ${placar.nao} não${
+                    placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
+                  }`
+            }
           >
             <span className="seg-sim" style={{ width: `${pctSim}%` }} />
             <span className="seg-nao" style={{ width: `${pctNao}%` }} />
@@ -306,10 +335,14 @@ export function PlacarMini({ placar }: { placar: VistaPlacar }) {
             <span>
               Não <b>{placar.nao}</b>
             </span>
-            {placar.faltam !== null && (
-              <span className="parcial">
-                faltam <b>{placar.faltam}</b> {placar.encerrada ? "" : "· parcial"}
-              </span>
+            {placar.encerrada ? (
+              <QuemNaoVotou faltam={placar.faltam} baseMembros={placar.baseMembros} className="parcial quem-nao-votou" tag="span" />
+            ) : (
+              placar.faltam !== null && (
+                <span className="parcial">
+                  faltam <b>{placar.faltam}</b> · parcial
+                </span>
+              )
             )}
           </div>
         </div>
@@ -322,6 +355,9 @@ export function PlacarMini({ placar }: { placar: VistaPlacar }) {
               ? `Resultado: ${placar.totais.sim} sim, ${placar.totais.nao} não, ${placar.totais.abstencao} abstenção.`
               : `${placar.registrados} votos lançados (contador anônimo).`}
           </p>
+          {placar.encerrada && (
+            <QuemNaoVotou faltam={placar.faltam} baseMembros={placar.baseMembros} className="voto-nota quem-nao-votou" tag="p" />
+          )}
         </div>
       )}
 
