@@ -56,6 +56,51 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(document.body.textContent ?? "").not.toMatch(/aguardando_orgao|portabilidade_dos_dados|pedido_especial/);
   });
 
+  // O defeito (05/10/2026): o chip só conhecia "aberto" e "indeferido"; todo o resto caía em `chip-aprovada` (verde),
+  // inclusive a manifestação ARQUIVADA e o estado que a tela não conhece. Vocabulário real: CHECK das migrations
+  // 20260620000039 (e-SIC), 20260620000041 (LGPD) e 20260620000042 (ouvidoria).
+  describe("o chip do estado: cor e palavra coerentes com o desfecho", () => {
+    const chipDe = (protocolo: string) => screen.getByText(protocolo).closest("li")!.querySelector(".chip")!;
+    const ESPERADO: Array<["pedidosEsic" | "solicitacoesLgpd" | "manifestacoes", string, string, string]> = [
+      ["pedidosEsic", "protocolado", "Protocolado", "chip-aguarda"],
+      ["pedidosEsic", "em_analise", "Em análise", "chip-aguarda"],
+      ["pedidosEsic", "respondido", "Respondido", "chip-aprovada"],
+      ["pedidosEsic", "indeferido", "Indeferido", "chip-neutro"],
+      ["solicitacoesLgpd", "protocolada", "Protocolada", "chip-aguarda"],
+      ["solicitacoesLgpd", "em_analise", "Em análise", "chip-aguarda"],
+      ["solicitacoesLgpd", "respondida", "Respondida", "chip-aprovada"],
+      ["solicitacoesLgpd", "indeferida", "Indeferida", "chip-neutro"],
+      ["manifestacoes", "protocolada", "Protocolada", "chip-aguarda"],
+      ["manifestacoes", "em_analise", "Em análise", "chip-aguarda"],
+      ["manifestacoes", "respondida", "Respondida", "chip-aprovada"],
+      ["manifestacoes", "arquivada", "Arquivada", "chip-neutro"],
+    ];
+
+    it.each(ESPERADO)("%s · %s → %s no chip %s", (grupo, estado, texto, variante) => {
+      const item = { ...base, id: "x1", protocolo: "PROT-2026-000001", tipo: "reclamacao", assunto: "Assunto", estado, diasRestantes: 5, anonima: false };
+      const dados = { pedidosEsic: [], solicitacoesLgpd: [], manifestacoes: [], [grupo]: [item] } as unknown as MeusProtocolos;
+      render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+      const chip = chipDe("PROT-2026-000001");
+      expect(chip.textContent).toBe(texto);
+      expect(chip.classList.contains(variante)).toBe(true);
+      // só "respondido/respondida" usa o verde de aprovado
+      expect(chip.classList.contains("chip-aprovada")).toBe(variante === "chip-aprovada");
+    });
+
+    it("estado que a tela não conhece: texto humanizado no chip NEUTRO, nunca o verde de aprovado", () => {
+      const dados = {
+        pedidosEsic: [{ ...base, id: "p9", protocolo: "ESIC-2026-000009", assunto: "Obras", estado: "aguardando_orgao", diasRestantes: 4 }],
+        solicitacoesLgpd: [],
+        manifestacoes: [],
+      } as unknown as MeusProtocolos;
+      render(<ListaProtocolos dados={dados} token="tok" aoMudar={() => {}} />);
+      const chip = chipDe("ESIC-2026-000009");
+      expect(chip.textContent).toBe("Aguardando orgao");
+      expect(chip.classList.contains("chip-neutro")).toBe(true);
+      expect(chip.classList.contains("chip-aprovada")).toBe(false);
+    });
+  });
+
   it("a resposta da Câmara aparece, e só o e-SIC respondido oferece recurso", () => {
     render(<ListaProtocolos dados={DADOS} token="tok" aoMudar={() => {}} />);
     const p2 = screen.getByText("ESIC-2026-000002").closest("li")!;

@@ -22,6 +22,16 @@ import { AnexarAoProtocolo } from "./anexar-ao-protocolo";
 const ABERTOS = new Set(["protocolado", "protocolada", "em_analise"]);
 const RECORRIVEIS = new Set(["respondido", "indeferido"]);
 const INDEFERIDOS = new Set(["indeferido", "indeferida"]);
+const RESPONDIDOS = new Set(["respondido", "respondida"]);
+
+/** A cor do chip. Só "em aberto" (amarelo) e "respondido" (verde) têm cor própria; indeferido, arquivado e qualquer
+ * estado que esta tela não conhece ficam no NEUTRO: o verde de "aprovado" não pode mentir sobre um desfecho que a
+ * tela nem sabe ler. (Prorrogação e recurso não são estados do protocolo: aparecem em blocos próprios do item.) */
+function variante(estado: string): "chip-aguarda" | "chip-aprovada" | "chip-neutro" {
+  if (ABERTOS.has(estado)) return "chip-aguarda";
+  if (RESPONDIDOS.has(estado)) return "chip-aprovada";
+  return "chip-neutro";
+}
 
 function Prazo({ estado, dias }: { estado: string; dias: number | null }) {
   if (!ABERTOS.has(estado) || dias === null) return null;
@@ -202,7 +212,7 @@ function Item({
     <li className="mp-item">
       <div className="mp-item-topo">
         <span className="mp-protocolo">{protocolo}</span>
-        <span className={`chip ${ABERTOS.has(estado) ? "chip-aguarda" : INDEFERIDOS.has(estado) ? "chip-neutro" : "chip-aprovada"}`}>
+        <span className={`chip ${variante(estado)}`}>
           {rotuloEstado(estado)}
         </span>
       </div>
