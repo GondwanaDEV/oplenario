@@ -910,7 +910,7 @@ function JustificativasPainel({
               const linha = dados.linhas.find((l) => l.vereadorId === j.vereadorId);
               return (
                 <li key={j.id}>
-                  <span className="nome">{linha ? nomeDaLinha(linha) : j.vereadorId.slice(0, 8)}</span>
+                  <span className="nome">{linha ? nomeDaLinha(linha) : "Vereador(a) fora da composição"}</span>
                   <span className="txt">{j.motivo}</span>
                   {podeDecidir && (
                     <span className="acoes">
@@ -957,7 +957,7 @@ function Atos({ dados }: { dados: ChamadaOut }) {
               <li key={a.id}>
                 <span className="qdo">{horaCurta(a.ocorridoEm) ?? "—"}</span>
                 <span className="qm">
-                  Chamada · <b>{a.conduzidaPor.slice(0, 8)}</b>
+                  Chamada · <b>{a.conduzidaPorNome ?? "Servidor(a) da Câmara"}</b>
                 </span>
                 <span className="det">Casa com {a.membrosDaCasa} membros</span>
               </li>

@@ -123,10 +123,11 @@ describe("PaginaFolha — lista com versões", () => {
     expect(screen.queryByText(/8b6f1c2a/)).toBeNull();
   });
 
-  it("sem o nome (fora da Casa ou leitura indisponível), cai para o id curto rotulado", () => {
+  it("sem o nome (fora da Casa ou leitura indisponível), texto neutro — nunca o prefixo do id", () => {
     mockRetorno([versao()]);
     render(<PaginaFolha />);
-    expect(screen.getByText("Congelada por usuário 8b6f1c2a")).toBeTruthy();
+    expect(screen.getByText("Congelada por servidor(a) da Câmara")).toBeTruthy();
+    expect(screen.queryByText(/8b6f1c2a/)).toBeNull();
   });
 
   it("aciona `gerar` ao clicar em 'Gerar nova versão'", async () => {

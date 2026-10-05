@@ -275,8 +275,8 @@ function VersaoItem({
         </span>
       </div>
       <span className="versao-por">
-        {/* O nome vem do servidor só para quem tem vínculo nesta Casa (docs/23 Fatia 5); sem ele, o id curto. */}
-        Congelada por {versao.geradaPorNome ?? `usuário ${versao.geradaPor.slice(0, 8)}`}
+        {/* O nome vem do servidor só para quem tem vínculo nesta Casa (docs/23 Fatia 5); sem ele, texto neutro. */}
+        Congelada por {versao.geradaPorNome ?? "servidor(a) da Câmara"}
       </span>
       {selecionada && <span className="chip chip-ok" style={{ width: "fit-content" }}>Selecionada</span>}
 
