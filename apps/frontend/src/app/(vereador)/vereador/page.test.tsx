@@ -3,6 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import PaginaHomeVereador from "./page";
 import { AuthProvider } from "@/lib/auth";
 import { TemaProvider } from "@/lib/tema";
+import { MolduraDaClara } from "../../(interno)/clara/moldura-da-clara";
 
 function renderComProviders(tokenQuery: string | null) {
   return render(
@@ -69,6 +70,38 @@ describe("PaginaHomeVereador", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+  });
+
+  it("'Pedir à Clara' abre a Clara expandida no próprio app (não leva mais a uma tela cheia)", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelFake }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["vereador"]}'>
+        <TemaProvider>
+          <MolduraDaClara publico="vereador">
+            <PaginaHomeVereador />
+          </MolduraDaClara>
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const pedir = await screen.findByRole("button", { name: "Pedir à Clara" });
+    expect(screen.queryByRole("link", { name: "Pedir à Clara" })).toBeNull();
+    pedir.click();
+    await waitFor(() => expect(document.documentElement.dataset.clara).toBe("expandido"));
+    await waitFor(() => expect(pedir.getAttribute("aria-expanded")).toBe("true"));
+    expect(document.getElementById(pedir.getAttribute("aria-controls") ?? "")?.tagName).toBe("ASIDE");
+  });
+
+  it("sem a Clara na tela (fora da moldura), o botão não aparece", async () => {
+    global.fetch = fetchRoteado({
+      "GET /api/meu/painel": () => ({ ok: true, json: async () => painelFake }) as Response,
+      "GET /api/sessoes": semSessoes,
+    });
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getByText("Suas proposições")).toBeTruthy());
+    expect(screen.queryByText("Pedir à Clara")).toBeNull();
   });
 
   it("renderiza o herói fora-de-sessão, a ciência pendente e as proposições (sessões: pronto e vazia)", async () => {

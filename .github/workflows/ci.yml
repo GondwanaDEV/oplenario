@@ -215,6 +215,22 @@ jobs:
           npx playwright install --with-deps chromium
           npx playwright test t3/
 
+      # O app deste job roda como `oplenario_pool` (o papel de producao); a suite do backend roda como o dono do
+      # banco. Privilegio que falta so' aparece AQUI — e, quando o codigo engole a falha (o gatilho de compliance
+      # loga e segue), aparece so' no log. Foi assim que `permission denied for table template_compliance` passou
+      # verde. O passo afirma quantas linhas leu: log vazio nao e' "nenhum erro".
+      - name: Nenhum "permission denied" do banco no log do backend
+        if: always()
+        working-directory: apps/backend
+        run: |
+          docker compose logs app --no-color > /tmp/app.log 2>&1
+          linhas=$(wc -l < /tmp/app.log)
+          echo "linhas de log do backend lidas: $linhas"
+          [ "$linhas" -gt 0 ] || { echo "log do backend vazio: nada foi conferido"; exit 1; }
+          if grep -n "permission denied for" /tmp/app.log; then
+            echo "o papel de runtime do banco nao tem um privilegio que o codigo usa"; exit 1
+          fi
+
       - name: Logs da stack (so em falha)
         if: failure()
         working-directory: apps/backend
