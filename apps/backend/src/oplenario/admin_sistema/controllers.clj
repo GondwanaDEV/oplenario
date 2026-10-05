@@ -102,6 +102,55 @@
   (repo/registrar-atuacao! repo-op {:operador-id (:operador-id ator) :ente-id ente-id :acao "realm-reprovisionado"})
   (repo/casa-por-id repo-op ente-id))
 
+(def acao-reaplicar-tentativa "realm-reprovisionamento-iniciado")
+(def acao-reaplicar-falhou "realm-reprovisionamento-falhou")
+
+(defn- primeira-linha [^Throwable e]
+  (let [l (first (str/split-lines (or (ex-message e) (.getName (class e)))))]
+    (subs l 0 (min 200 (count l)))))
+
+(defn- sem-realm-para-reaplicar
+  "Por que a Casa fica de fora, ou nil. Encerrada ou com o apagamento iniciado o realm foi (ou esta' sendo) apagado:
+  provisionar de novo o RECRIARIA."
+  [casa]
+  (cond (= "encerrado" (:estado casa)) "encerrada"
+        (:apagamento-iniciado-em casa) "apagamento iniciado"))
+
+(defn- reaplicar-na-casa! [repo-op idp-casa {:keys [operador-id origem]} {:keys [ente-id nome] :as casa}]
+  (if-let [motivo (sem-realm-para-reaplicar casa)]
+    {:ente-id ente-id :nome nome :resultado :pulada :motivo motivo}
+    (let [base {:origem origem}
+          tentativa (repo/registrar-atuacao! repo-op {:operador-id operador-id :ente-id ente-id
+                                                      :acao acao-reaplicar-tentativa :detalhe base})
+          aponta (assoc base :tentativa (str (:id tentativa)))]
+      (try (idp-casa/provisionar-realm! idp-casa ente-id {:nome nome})
+           (repo/registrar-atuacao! repo-op {:operador-id operador-id :ente-id ente-id :acao "realm-reprovisionado"
+                                             :detalhe aponta})
+           {:ente-id ente-id :nome nome :resultado :reaplicado}
+           (catch Exception e
+             (log/warn e "admin-sistema: a configuracao de login nao foi reaplicada" {:ente-id ente-id})
+             (try (repo/registrar-atuacao! repo-op {:operador-id operador-id :ente-id ente-id
+                                                    :acao acao-reaplicar-falhou
+                                                    :detalhe (assoc aponta :motivo (primeira-linha e))})
+                  (catch Exception e2
+                    (log/error e2 "admin-sistema: o desfecho de FALHA da reaplicacao nao foi gravado na atuacao"
+                               {:ente-id ente-id :tentativa (:tentativa aponta)})))
+             {:ente-id ente-id :nome nome :resultado :falhou :motivo (primeira-linha e)})))))
+
+(defn reaplicar-login!
+  "ADR-0025: o mesmo efeito de `reprovisionar-realm!` (o botao \"Reaplicar configuracao de login\" do console), pela
+  linha de comando, em TODAS as Casas do registro (ou so' em `ente-id`). E' o passo de producao que liga o tema, o
+  portugues, a politica de senha, a trava de forca bruta e a ordem senha -> codigo nos realms que ja' existiam.
+
+  Comando sobre uma Casa, entao o PAR da ADR-0017 (adendo de 05/10/2026) na atuacao, como o `ia-orcamento`: a
+  tentativa ANTES (se nao grava, a Casa nao e' tocada), o desfecho depois (`realm-reprovisionado`, o mesmo do console,
+  ou `realm-reprovisionamento-falhou` com o motivo), apontando a tentativa. Sem pessoa: `:operador-id` nulo e
+  `origem: linha-de-comando`. Uma Casa que falha nao para as outras. Devolve [{:ente-id :nome :resultado :motivo}],
+  `:resultado` em #{:reaplicado :falhou :pulada}."
+  [repo-op {:keys [idp-casa]} {:keys [ente-id operador-id origem] :or {origem "linha-de-comando"}}]
+  (let [casas (if ente-id [(casa-ou-404! repo-op ente-id)] (repo/listar-casas repo-op))]
+    (mapv #(reaplicar-na-casa! repo-op idp-casa {:operador-id operador-id :origem origem} %) casas)))
+
 ;; ---------------------------------------------------------------------------------------------
 ;; ADR-0018 (fatia 1): suspender, reativar e iniciar o encerramento. Two-person rule (Eixo 1b): um operador pede, OUTRO
 ;; aprova — o incidente de seguranca suspende com um so' e exige a 2a aprovacao em 24 h. A sessao ao vivo nunca cai no

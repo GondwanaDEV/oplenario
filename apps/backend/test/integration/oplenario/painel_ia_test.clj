@@ -3,7 +3,8 @@
   (historico append-only; a definicao vai a IA no feed, na mesma transacao); o painel do admin da Casa mostra o
   orcamento, o consumo que o satelite mede e o que as pessoas fizeram com notas e propostas no mes — e, com a IA fora,
   mostra o que o core sabe, sem inventar gasto."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -79,9 +80,6 @@
   (is (= :validacao/invalido (erro #(logic-ia/mes "fevereiro" (Instant/now))))))
 
 ;; ---------- o painel ----------
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa! [ente & papeis]
   (let [iid (random-uuid)]

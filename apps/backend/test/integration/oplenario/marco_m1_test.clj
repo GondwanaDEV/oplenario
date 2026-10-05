@@ -3,7 +3,8 @@
   (cadastros + identidade + relacoes + autenticacao), que duas Casas existem ISOLADAS, com login resolvivel
   e fatos de cadastro respondendo por relacao. E' o criterio-de-feito da F1 materializado como teste.
   (Sem Keycloak vivo: as claims sao injetadas como ja-verificadas — os fluxos vivos sao carry F1.4.)"
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.cadastros.db.comissao :as comissao]
@@ -32,8 +33,6 @@
 ;; RepoIdentidade sobre o *ds* (resolver-sessao recebe o Repo, nao o ds — §3-bis).
 (defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
 
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 (defn- d [s] (LocalDate/parse s))
 (def ini (d "2025-01-01"))
 

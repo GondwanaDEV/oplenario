@@ -1,7 +1,8 @@
 (ns oplenario.agente-http-test
   "INTEGRACAO (PG real + borda HTTP): B.3 — a tela pergunta ao assistente pelo core. A credencial delegada nasce para
   a execucao, vai ao satelite (falso aqui) e morre ao fim, com resposta ou com a IA fora. A conversa volta em SSE."
-  (:require [clojure.string :as str]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
@@ -36,9 +37,6 @@
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
 
 (defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa! [ente & papeis]
   (let [iid (random-uuid)]

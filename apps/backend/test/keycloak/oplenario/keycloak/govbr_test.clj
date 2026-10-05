@@ -4,7 +4,8 @@
   `kc_idp_hint=govbr`, cai na tela de login do gov.br, entra com CPF e senha, volta pelo broker (o 1o login cria o
   usuario `govbr-<cpf>`) e troca o code por token (PKCE). O token tem de dizer `idp=govbr` + o CPF + o nome, e o
   mint tem de fazer dele um cidadao."
-  (:require [clojure.string :as str]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [govbr-simulado :as simulado]
@@ -37,9 +38,6 @@
                      :client-secret config/govbr-simulado-client-secret})))
 
 (def ^:private redirect-uri (first (:redirect-uris kc-cfg)))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- b64url [^bytes b] (.encodeToString (.withoutPadding (Base64/getUrlEncoder)) b))
 (defn- enc [s] (URLEncoder/encode (str s) "UTF-8"))

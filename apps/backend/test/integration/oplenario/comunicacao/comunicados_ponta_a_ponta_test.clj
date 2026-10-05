@@ -3,7 +3,8 @@
   ADR-0020 de ponta a ponta. O admin_ente cria o setor e lota as pessoas; a secretaria envia ao setor; a servidora ve
   na caixa (/meu/comunicados) e da ciencia. Casa SUSPENSA (ADR-0018): dar ciencia segue (allowlist), enviar leva 423.
   E o AGENTE: le a caixa sem marcar `recebido` e so' PROPOE o envio (ADR-0012)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido] :rename {cpf-valido cpf}]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -40,9 +41,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*c* c] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- rp-op [] (assoc (repo-op/repositorio) :datasource *c*))
 (defn- rp-id [] (assoc (repo-id/repositorio) :datasource *c*))

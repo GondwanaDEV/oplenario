@@ -89,6 +89,8 @@ describe("console do operador — rótulos", () => {
   it("o orçamento de IA da Casa aparece em palavras, e não como a chave da ação", () => {
     expect(rotuloAcao("ia-orcamento-iniciado")).toBe("Orçamento de IA: definição iniciada");
     expect(rotuloAcao("ia-orcamento-definido")).toBe("Orçamento de IA definido");
+    expect(rotuloAcao("realm-reprovisionamento-iniciado")).toBe("Configuração de login: reaplicação iniciada");
+    expect(rotuloAcao("realm-reprovisionamento-falhou")).toBe("Configuração de login: a reaplicação falhou");
     expect(rotuloAcao("ia-orcamento-falhou")).toBe("Orçamento de IA: a definição falhou");
   });
 

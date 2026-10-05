@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real): ADR-0010 — a credencial delegada do agente e a sessao das telas sao portas separadas. A
   credencial so' abre o interceptor de agente (as rotas do catalogo); o interceptor das telas nao a reconhece nem
   como cookie nem como bearer. E o interceptor de agente nao aceita a sessao de uma pessoa."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [oplenario.config :as config]
             [oplenario.identidade.autenticacao :as auten]
@@ -25,9 +26,6 @@
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
 
 (defn- repo [] (assoc (repo-id/repositorio) :datasource {:ds *ds*}))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- secretaria! [ente]
   (let [iid (random-uuid)]

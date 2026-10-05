@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real + borda HTTP): B.3 — o servidor MCP do core servindo o catalogo ao agente. A credencial
   delegada abre a porta; `tools/list` devolve o conjunto do publico em JSON Schema; `tools/call` executa como a
   pessoa; erro de ferramenta volta como resultado, erro de protocolo como JSON-RPC."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -43,9 +44,6 @@
                                                            (repo-ia/map->RepoIntegracaoIAPg {:datasource {:ds *ds*}}))}})
                     it/globais)
       ph/create-server ::ph/service-fn))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- credencial! [ente papel publico]
   (let [iid (random-uuid)]
