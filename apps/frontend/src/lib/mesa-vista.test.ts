@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarMesaVista } from "./mesa-vista";
+import { derivarMesaVista, diasAteVencer, frasePrazo } from "./mesa-vista";
 
 const mesaBase = {
   complianceTce: {
@@ -264,5 +264,55 @@ describe("derivarMesaVista", () => {
       tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: 5, sliSessoes: [], relatoresPendentes: [],
     });
     expect(v.oQueVence.truncamentoPendencias).toBeNull();
+  });
+});
+
+// ---- Dashboard da Mesa: prazo em dias do calendário da CASA e frases com plural de verdade ----
+
+describe("diasAteVencer — dias do calendário no fuso da Casa", () => {
+  // 15/09/2026 às 12h em Fortaleza.
+  const meioDia = new Date("2026-09-15T15:00:00Z");
+  // 15/09/2026 às 23h em Fortaleza = 16/09 02h UTC: o relógio UTC já virou o dia, o da Casa não.
+  const noiteNaCasa = new Date("2026-09-16T02:00:00Z");
+
+  it("date-only: hoje é 0, ontem é -1, amanhã é 1", () => {
+    expect(diasAteVencer("2026-09-15", meioDia)).toBe(0);
+    expect(diasAteVencer("2026-09-14", meioDia)).toBe(-1);
+    expect(diasAteVencer("2026-09-16", meioDia)).toBe(1);
+  });
+
+  it("às 23h na Casa o prazo de HOJE continua sendo hoje (o relógio UTC já virou o dia)", () => {
+    expect(diasAteVencer("2026-09-15", noiteNaCasa)).toBe(0);
+  });
+
+  it("instante com hora: conta pelo DIA da Casa, não pelo quociente de milissegundos", () => {
+    // 16/09 01h UTC = 15/09 22h em Fortaleza: ainda é o dia 15 na Casa.
+    expect(diasAteVencer("2026-09-16T01:00:00Z", meioDia)).toBe(0);
+  });
+
+  it("vencido há 36 dias", () => {
+    expect(diasAteVencer("2026-08-10", meioDia)).toBe(-36);
+  });
+
+  it("data inválida -> null, nunca NaN nem lança", () => {
+    expect(diasAteVencer("não-é-data", meioDia)).toBeNull();
+  });
+});
+
+describe("frasePrazo — plural de verdade, sem parênteses", () => {
+  it.each([
+    [-36, "venceu há 36 dias"],
+    [-2, "venceu há 2 dias"],
+    [-1, "venceu ontem"],
+    [0, "vence hoje"],
+    [1, "vence amanhã"],
+    [2, "vence em 2 dias"],
+    [15, "vence em 15 dias"],
+  ])("%i -> %s", (dias, frase) => {
+    expect(frasePrazo(dias)).toBe(frase);
+  });
+
+  it("data sem leitura -> frase honesta, sem número inventado", () => {
+    expect(frasePrazo(null)).toBe("prazo sem data válida");
   });
 });

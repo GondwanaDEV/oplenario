@@ -20,6 +20,32 @@ function vista(remessas: NonNullable<MesaVista["saude"]["remessas"]>): MesaVista
   return { estado: "disponivel", resumo, emAberto: [], truncamento: null, remessas };
 }
 
+describe("SaudeInstitucional — a manchete diz a verdade no singular e no plural", () => {
+  afterEach(() => cleanup());
+  const comVencidas = (vencida: number): MesaVista["saude"] => ({
+    estado: "disponivel", resumo: { ...resumo, vencida }, emAberto: [], truncamento: null,
+    remessas: { itens: [], total: 0, truncado: false, rejeitadas: 0 },
+  });
+
+  it("uma obrigação vencida: 'venceu', no singular", () => {
+    render(<SaudeInstitucional vista={comVencidas(1)} />);
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toBe("1 obrigação venceu o prazo no TCE-CE.");
+  });
+
+  it("várias vencidas: 'venceram', no plural", () => {
+    render(<SaudeInstitucional vista={comVencidas(3)} />);
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toBe("3 obrigações venceram o prazo no TCE-CE.");
+    expect(document.body.textContent).not.toMatch(/\(ões\)|\(ram\)/);
+  });
+
+  it("nenhuma vencida: a Casa está em dia", () => {
+    render(<SaudeInstitucional vista={comVencidas(0)} />);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("A Casa está em dia com o TCE-CE.");
+  });
+});
+
 describe("SaudeInstitucional — remessas ao TCE", () => {
   afterEach(() => cleanup());
 

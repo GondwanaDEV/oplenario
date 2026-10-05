@@ -119,6 +119,22 @@ describe("ProximaSessaoRail", () => {
     expect(screen.getByText(/Agendada para 19\/09\/2026 às 22h30/)).toBeDefined();
   });
 
+  it("a hora vem sem segundos, mesmo quando o instante os traz", () => {
+    render(
+      <ProximaSessaoRail
+        sliSessoes={[
+          { sessaoId: "em-curso", estadoAtual: "aberta", situacao: "em_curso", abertaEm: "2026-09-20T01:30:45.123Z" },
+          agendada("a", "2026-09-21T13:05:59Z"),
+        ]}
+        sliSessoesTotal={2}
+        agora={new Date("2026-09-01T00:00:00Z")}
+      />,
+    );
+    expect(screen.getByText("Aberta em 19/09/2026 às 22h30.")).toBeDefined();
+    expect(screen.getByText("Agendada para 21/09/2026 às 10h05.")).toBeDefined();
+    expect(document.body.textContent).not.toMatch(/\d{1,2}:\d{2}:\d{2}|\d{2}h\d{2}min\d{2}/);
+  });
+
   it("escolhe a agendada mais próxima no futuro, não a primeira da lista (a lista vem por 'mais antiga primeiro')", () => {
     render(
       <ProximaSessaoRail

@@ -5,6 +5,7 @@
 // tem rota hoje) e NÃO viram bullet points inventados: aparecem como uma nota honesta, não itens fake.
 
 import { derivarRef } from "@/lib/materia-vista";
+import { contar } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
 import type { RelatorPendenteOut } from "@/lib/contrato-mesa.gen";
 
@@ -23,7 +24,7 @@ export function DespachosDaMesa({ vista }: { vista: MesaVista["despachos"] }) {
     <section className="bloco" aria-labelledby="fila-titulo">
       <div className="bloco-cabeca">
         <h2 id="fila-titulo">O que só a Mesa despacha</h2>
-        <span className="selo-n mono">{relatorItens.length}{vista.relator.truncado ? "+" : ""} item(ns)</span>
+        <span className="selo-n mono">{vista.relator.truncado ? `${relatorItens.length}+ itens` : contar(relatorItens.length, "item", "itens")}</span>
       </div>
       <div className="bloco-corpo">
         {vista.relator.estado === "indisponivel" && <p>Fila de relatores indisponível no momento.</p>}

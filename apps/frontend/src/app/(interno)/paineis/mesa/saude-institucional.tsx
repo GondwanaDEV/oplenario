@@ -11,6 +11,7 @@
 // existe para consertar — fingir INCOMPLETUDE onde há completude. O aviso real mora em OQueVence, onde a
 // lista truncada de fato aparece na tela.
 
+import { contar } from "@/lib/mesa-vista";
 import type { MesaVista, RemessasVista } from "@/lib/mesa-vista";
 import { rotularEstadoRemessa, rotularObrigacao } from "@/lib/rotulos-compliance";
 
@@ -67,7 +68,7 @@ export function SaudeInstitucional({ vista }: { vista: MesaVista["saude"] }) {
           {vencidas === 0 ? (
             <>A Casa está em dia com o <em>TCE-CE</em>.</>
           ) : (
-            <>{vencidas} obrigação(ões) venceu(ram) o prazo no <em>TCE-CE</em>.</>
+            <>{contar(vencidas, "obrigação venceu", "obrigações venceram")} o prazo no <em>TCE-CE</em>.</>
           )}
         </h1>
         <div className="placar">

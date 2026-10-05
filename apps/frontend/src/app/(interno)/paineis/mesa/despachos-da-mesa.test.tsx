@@ -55,7 +55,22 @@ describe("DespachosDaMesa — a fila de relatores para de fingir completude", ()
     expect(container.querySelector(".aviso-corte")).not.toBeNull();
     // achado da revisão adversarial (MENOR): o selo do card imprimia `{itens.length} item(ns)` como se
     // fosse o tamanho da fila — a mesma forma de total nu que o aviso logo abaixo já corrige.
-    expect(container.querySelector(".selo-n")?.textContent).toBe("1+ item(ns)");
+    // "+" já diz "e talvez mais": o selo vai no plural, sem parênteses.
+    expect(container.querySelector(".selo-n")?.textContent).toBe("1+ itens");
+  });
+
+  it("selo do cabeçalho: singular com um item, plural com vários, sem parênteses", () => {
+    const um = render(
+      <DespachosDaMesa vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never], truncado: false })} />,
+    );
+    expect(um.container.querySelector(".selo-n")?.textContent).toBe("1 item");
+    cleanup();
+    const dois = render(
+      <DespachosDaMesa
+        vista={vistaCom({ estado: "disponivel", itens: [itemDisponivel as never, itemOrfao as never], truncado: false })}
+      />,
+    );
+    expect(dois.container.querySelector(".selo-n")?.textContent).toBe("2 itens");
   });
 
   it("truncado=false não mostra o aviso de corte", () => {

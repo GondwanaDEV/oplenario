@@ -52,11 +52,37 @@ describe("OQueVence — o prazo em palavras", () => {
   // RTL, entao o `screen` enxerga o DOM acumulado de todos os `render` anteriores do arquivo — o
   // "nao existe X" de um teste passaria a ler o X que outro teste montou. Mesma convencao de
   // `despachos-da-mesa.test.tsx`.
-  it("prazo JÁ VENCIDO diz há quantos dias venceu — nunca 'vence em 0 dia(s)'", () => {
+  it("prazo JÁ VENCIDO diz há quantos dias venceu — nunca 'vence em 0 dias'", () => {
     // 30/08/2026 é o vencimento real da obrigação de 2026-07 na Casa da demo.
     const { getByText, queryByText } = render(<OQueVence vista={vista([item("2026-08-30", "a")])} />);
-    expect(getByText(/venceu há 16 dia\(s\)/)).toBeTruthy();
-    expect(queryByText(/vence em 0 dia\(s\)/)).toBeNull();
+    expect(getByText("venceu há 16 dias")).toBeTruthy();
+    expect(queryByText(/vence em 0 dia/)).toBeNull();
+  });
+
+  it("plural de verdade: ontem, amanhã e 2 dias não usam parênteses nem '1 dias'", () => {
+    const { getByText, container } = render(
+      <OQueVence vista={vista([item("2026-09-14", "a"), item("2026-09-16", "b"), item("2026-09-17", "c")])} />,
+    );
+    expect(getByText("venceu ontem")).toBeTruthy();
+    expect(getByText("vence amanhã")).toBeTruthy();
+    expect(getByText("vence em 2 dias")).toBeTruthy();
+    expect(container.textContent ?? "").not.toMatch(/\(s\)|\(ns\)|\(ões\)|1 dias/);
+  });
+
+  it("o selo do cabeçalho conta no singular quando há um só item", () => {
+    const { container } = render(<OQueVence vista={vista([item("2026-09-30", "a")])} />);
+    expect(container.querySelector(".selo-n")?.textContent).toBe("1 item");
+  });
+
+  it("o selo do cabeçalho conta no plural quando há vários", () => {
+    const { container } = render(<OQueVence vista={vista([item("2026-09-30", "a"), item("2026-10-01", "b")])} />);
+    expect(container.querySelector(".selo-n")?.textContent).toBe("2 itens");
+  });
+
+  it("23h na Casa: o prazo de hoje continua 'vence hoje' (relógio UTC já virou o dia)", () => {
+    vi.setSystemTime(new Date("2026-09-16T02:00:00Z")); // 15/09 23h em Fortaleza
+    const { getByText } = render(<OQueVence vista={vista([item("2026-09-15", "n")])} />);
+    expect(getByText("vence hoje")).toBeTruthy();
   });
 
   it("prazo de HOJE não se confunde com prazo vencido", () => {
@@ -67,7 +93,7 @@ describe("OQueVence — o prazo em palavras", () => {
 
   it("prazo FUTURO segue dizendo em quantos dias vence", () => {
     const { getByText } = render(<OQueVence vista={vista([item("2026-09-30", "c")])} />);
-    expect(getByText(/vence em 15 dia\(s\)/)).toBeTruthy();
+    expect(getByText("vence em 15 dias")).toBeTruthy();
   });
 
   it("a obrigação aparece pelo NOME (ADR-0021), não pela chave do template", () => {

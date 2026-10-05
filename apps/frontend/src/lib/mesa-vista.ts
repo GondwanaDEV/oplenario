@@ -2,6 +2,7 @@
 // página mostra", incluindo os 3 estados por seção (disponivel/indisponivel/em-breve). Nenhum componente
 // React sabe interpretar MesaOut diretamente; eles só leem daqui (mesmo padrão de placar-vista.ts).
 
+import { diaLocal, hojeLocal } from "./calendario-vista";
 import type { ItemBoardOut, PendenciaOut, SliSessaoOut } from "./use-mesa";
 import { ehCardIndisponivel } from "./use-mesa";
 import type { MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
@@ -273,6 +274,39 @@ const OBJETO_PRAZO_ROTULO: Record<string, string> = {
 
 export function rotularObjetoPrazo(objetoTipo: string): string {
   return OBJETO_PRAZO_ROTULO[objetoTipo] ?? objetoTipo;
+}
+
+/** "1 item" / "3 itens": o número com a palavra no singular ou no plural. Nunca "item(ns)". */
+export function contar(n: number, um: string, varios: string): string {
+  return n === 1 ? `1 ${um}` : `${n} ${varios}`;
+}
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/** Dias de CALENDÁRIO entre hoje e o vencimento, no relógio da Casa (America/Fortaleza): negativo = já venceu.
+ *
+ *  Não é o quociente de milissegundos: `Math.ceil((alvo - agora) / dia)` tratava o date-only "2026-09-15"
+ *  como meia-noite UTC e, às 23h em Fortaleza (já 16/09 em UTC), dizia "venceu há 1 dia" para um prazo que
+ *  vence HOJE. Aqui os dois lados viram dia da Casa (`AAAA-MM-DD`) e a diferença é entre dias inteiros.
+ *  Data que não se lê -> `null`, nunca NaN. */
+export function diasAteVencer(venceEm: string, agora: Date = new Date()): number | null {
+  const alvo = diaLocal(venceEm);
+  if (alvo === null) return null;
+  const hoje = hojeLocal(agora);
+  const [ay, am, ad] = alvo.split("-").map(Number);
+  const [hy, hm, hd] = hoje.split("-").map(Number);
+  return Math.round((Date.UTC(ay, am - 1, ad) - Date.UTC(hy, hm - 1, hd)) / MS_POR_DIA);
+}
+
+/** O prazo em palavras. Atrasado, hoje e futuro são frases distintas: "vence em 0 dias" não distingue "vence
+ *  hoje" de "venceu há um mês", e as duas exigem ações opostas da Mesa. Singular e plural de verdade. */
+export function frasePrazo(dias: number | null): string {
+  if (dias === null) return "prazo sem data válida";
+  if (dias === -1) return "venceu ontem";
+  if (dias < 0) return `venceu há ${-dias} dias`;
+  if (dias === 0) return "vence hoje";
+  if (dias === 1) return "vence amanhã";
+  return `vence em ${dias} dias`;
 }
 
 export type MesaVista = ReturnType<typeof derivarMesaVista>;
