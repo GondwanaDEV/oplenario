@@ -27,7 +27,7 @@ describe("ia-casa-vista", () => {
   it("agrupa pelo nome que a Casa conhece, mais caro primeiro", () => {
     const l = porCapacidade([op("agente.planejar", "1"), op("agente.responder", "2"), op("ata.redigir", "10"),
       op("conferencia.redigir", "0.5", { indisponiveis: 1 })]);
-    expect(l.map((x) => x.nome)).toEqual(["Rascunho da ata", "Assistente da Casa", "Conferência das proposições"]);
+    expect(l.map((x) => x.nome)).toEqual(["Rascunho da ata", "Clara, a assistente da Casa", "Conferência das proposições"]);
     expect(l[1]).toMatchObject({ execucoes: 2, custo: 3 });
     expect(l[2]).toMatchObject({ segundoPlano: true, naoRodaram: 1 });
   });

@@ -34,7 +34,7 @@
 
 (def ^:private publico-por-papel {"secretario" :secretaria "vereador" :vereador})
 
-(def mensagem-indisponivel "O assistente está indisponível agora. Siga pela tela — nada do seu trabalho depende dele.")
+(def mensagem-indisponivel "A Clara está indisponível agora. Siga pela tela — nada do seu trabalho depende dela.")
 
 (defn- invalido! [msg] (throw (ex-info msg {:tipo :validacao/invalido})))
 
@@ -239,7 +239,7 @@
                                        :recurso-id (str cid)}))))))
 
 (defn rotas
-  "POST /agente/perguntas — a secretaria ou o vereador perguntam ao assistente da Casa. POST
+  "POST /agente/perguntas — a secretaria ou o vereador perguntam a' Clara, a assistente da Casa. POST
   /ia/execucoes/:execucao-id/reportes — quem recebeu uma resposta de IA diz que ela esta' errada (feature 8.4).
   GET /agente/historico e GET /agente/conversas/:conversa-id — o historico da Clara (ADR-0024): cada pessoa le o seu;
   o `auditor` le o da Casa, e essa leitura vai a' trilha."

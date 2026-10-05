@@ -1,0 +1,169 @@
+/* A Clara, a assistente da Casa — painel retrátil de toda tela interna. Porte da prancha
+   produto/design-system/o-plenario/telas/assistente-da-casa.html: o que lá é `html[data-assistente]` aqui é
+   `html[data-clara]`, e o `#conteudo` é a `.clara-moldura` do layout interno. Identidade da IA = cobalto (a mesma
+   do copiloto do editor). --topo-altura vem medida do cabeçalho real (clara.tsx). */
+
+:root { --topo-altura: 68px; --ast-margem: 1rem; --ast-largura: 400px; }
+
+/* ---------- a página por baixo ---------- */
+.clara-moldura { transition: padding-right .22s ease-out; }
+/* o botão recolhido não cobre o fim da página: sobra espaço para rolar o último bloco acima dele */
+.clara-moldura[data-clara-ativa] { padding-bottom: 5rem; }
+/* aberto (computador): empurra o CONTEÚDO, não o cabeçalho — a janela começa abaixo dele */
+html[data-clara="aberto"] .clara-moldura[data-clara-ativa] { padding-right: calc(var(--ast-largura) + var(--ast-margem)); }
+html[data-clara="aberto"] .clara-moldura[data-clara-ativa] .topo { margin-right: calc(-1 * (var(--ast-largura) + var(--ast-margem))); }
+/* expandido (computador): a Clara ocupa a área abaixo do cabeçalho; a página some, o cabeçalho fica */
+html[data-clara="expandido"] .clara-moldura[data-clara-ativa] { visibility: hidden; }
+html[data-clara="expandido"] .clara-moldura[data-clara-ativa] .topo { visibility: visible; }
+
+/* ---------- o botão recolhido ---------- */
+.ast-lancador {
+  position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 42;
+  display: inline-flex; align-items: center; gap: .55rem;
+  min-height: 48px; padding: .45rem 1.1rem .45rem .5rem;
+  border-radius: var(--raio-capsula); border: 1px solid var(--linha);
+  background: var(--surface-solida); color: var(--texto);
+  font: 600 var(--t-13)/1.2 var(--corpo); cursor: pointer;
+  box-shadow: var(--sombra-alta);
+}
+.ast-lancador:hover { border-color: var(--cobalto-texto); }
+.ast-lancador .glifo-ia { width: 34px; height: 34px; }
+.ast-lancador kbd { font: 500 var(--t-11)/1 var(--mono); color: var(--texto-2); border: 1px solid var(--linha); border-radius: 6px; padding: .2rem .35rem; }
+html[data-clara="aberto"] .ast-lancador,
+html[data-clara="expandido"] .ast-lancador { display: none; }
+
+/* o glifo da IA (o mesmo do copiloto do editor): quadrado cobalto + faísca */
+.glifo-ia { width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
+[data-tema="escuro"] .glifo-ia { background: var(--cobalto-fundo); }
+
+/* ---------- o painel (aberto = janela no canto, até 680px, nunca a tela toda) ---------- */
+.ast {
+  position: fixed; right: var(--ast-margem); bottom: var(--ast-margem); z-index: 41;
+  width: var(--ast-largura); max-width: calc(100vw - 2 * var(--ast-margem));
+  height: min(680px, calc(100vh - var(--topo-altura) - 2 * var(--ast-margem)));
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--surface-solida); color: var(--texto);
+  border: 1px solid var(--linha); border-top: 3px solid var(--cobalto);
+  border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra-alta);
+}
+.ast[hidden] { display: none; }
+[data-tema="escuro"] .ast { border-top-color: var(--cobalto-texto); }
+
+.ast-cabe { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; padding: .6rem .75rem .65rem 1rem; border-bottom: 1px solid var(--linha); }
+.ast-cabe .titulo { flex: 1; min-width: 0; font-family: var(--display); font-size: var(--t-16); font-weight: 700; line-height: 1.15; margin: 0; }
+.ast-cabe .ast-sub { flex: 1 0 100%; margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+.ast-icone { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto; border: 0; border-radius: var(--raio-sm); background: transparent; color: var(--texto-2); cursor: pointer; }
+.ast-icone:hover { background: var(--realce); color: var(--texto); }
+.ast-icone[aria-pressed="true"] { background: var(--texto); color: var(--surface-solida); }
+
+.ast-corpo { overflow-y: auto; padding: 1rem; display: grid; align-content: start; gap: 1rem; overscroll-behavior: contain; }
+.ast-turno { display: grid; gap: .6rem; }
+.ast-nota { margin: 0; font-size: var(--t-13); color: var(--texto-2); display: grid; gap: .5rem; justify-items: start; }
+.ast-nota p { margin: 0; }
+.ast-voltar { justify-self: start; }
+.ast-pensando { margin: 0; color: var(--texto-2); font-size: var(--t-13); }
+
+/* pergunta da pessoa */
+.ast-pergunta { justify-self: end; max-width: 88%; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm) var(--raio-sm) 4px var(--raio-sm); padding: .6rem .8rem; font-size: var(--t-13); overflow-wrap: anywhere; white-space: pre-wrap; }
+.ast-quem { display: block; font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); margin-bottom: .2rem; white-space: normal; }
+
+/* resposta da IA */
+.ast-resposta { display: grid; gap: .6rem; font-size: var(--t-13); line-height: 1.6; min-width: 0; }
+.ast-resposta .selo-ia { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--t-12); font-weight: 600; color: var(--cobalto-texto); }
+.ast-passos { list-style: none; margin: 0; padding: .55rem .7rem; display: grid; gap: .25rem; border-left: 3px solid var(--cobalto-texto); background: var(--surface-2); border-radius: 0 var(--raio-sm) var(--raio-sm) 0; font-size: var(--t-12); color: var(--texto-2); }
+.ast-passos li { display: flex; gap: .4rem; align-items: baseline; }
+.ast-passos li::before { content: "✓"; color: var(--cobalto-texto); font-weight: 700; }
+.ast-passos li.falha::before { content: "!"; color: var(--acento-texto); }
+.ast-resposta p { margin: 0; color: var(--texto); overflow-wrap: anywhere; }
+.ast-sem-fonte { border-left: 3px solid var(--amarelo-traco); padding-left: .6rem; }
+.ast-selo-sem-fonte { display: block; font-size: var(--t-11); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--aviso-texto); }
+.cit { font: 600 var(--t-11)/1 var(--mono); color: var(--cobalto-texto); text-decoration: none; border: 1px solid currentColor; border-radius: 6px; padding: .1rem .3rem; margin-left: .15rem; vertical-align: .1em; }
+.cit-falha, .cit.cit-falha { color: var(--acento-texto); }
+.ast-fontes { margin: 0; padding: 0 0 0 1.2rem; list-style: decimal; font-size: var(--t-12); color: var(--texto-2); display: grid; gap: .2rem; overflow-wrap: anywhere; }
+.ast-fontes b { color: var(--texto); font-weight: 600; }
+.ast-incerteza { margin: 0; font-size: var(--t-12); color: var(--aviso-texto); border-left: 3px solid var(--amarelo-traco); padding-left: .6rem; }
+.ast-confianca { margin: 0; font-size: var(--t-12); color: var(--texto-2); display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: center; }
+.ast-resposta .sinal { box-shadow: none; }
+
+/* proposta de ato (B.6): nada é feito pela IA */
+.ast-proposta { border: 1px solid var(--linha); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); padding: .7rem .8rem; display: grid; gap: .45rem; justify-items: start; background: var(--surface); }
+.ast-proposta .aviso { font-size: var(--t-12); color: var(--aviso-texto); font-weight: 600; margin: 0; }
+.ast-proposta b { font-size: var(--t-13); }
+
+/* vazio: convida a perguntar */
+.ast-vazio h2 { font-size: var(--t-16); margin: 0 0 .3rem; }
+.ast-vazio p { margin: 0 0 .8rem; font-size: var(--t-13); color: var(--texto-2); }
+.ast-sugestoes { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+.ast-sugestoes button { width: 100%; text-align: left; min-height: 44px; padding: .55rem .75rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); font: 500 var(--t-13)/1.4 var(--corpo); cursor: pointer; }
+.ast-sugestoes button:hover { border-color: var(--cobalto-texto); }
+
+/* campo + aviso de registro: o rótulo ACIMA; campo e botão dividem a linha com a mesma altura */
+.ast-campo { border-top: 1px solid var(--linha); padding: .75rem 1rem .85rem; display: grid; gap: .45rem; }
+.ast-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
+.ast-campo .linha-envio { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: end; }
+.ast-campo textarea { display: block; resize: none; min-height: 48px; max-height: 160px; width: 100%; box-sizing: border-box; padding: .6rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13)/1.45 var(--corpo); }
+.ast-campo .btn { height: 48px; min-height: 48px; padding-block: 0; margin: 0; }
+.ast-registro-aviso { margin: 0; font-size: var(--t-11); line-height: 1.45; color: var(--texto-2); display: flex; gap: .35rem; align-items: flex-start; }
+.ast-registro-aviso svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* ---------- histórico ---------- */
+.ast-hist { display: grid; gap: .9rem; align-content: start; }
+.ast-hist > .btn { justify-self: start; }
+.ast-hist h3 { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); margin: 0 0 .35rem; }
+.ast-hist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+.ast-hist li button { width: 100%; text-align: left; display: grid; gap: .25rem; padding: .55rem .7rem; border: 1px solid transparent; border-radius: var(--raio-sm); background: transparent; color: var(--texto); cursor: pointer; font: inherit; min-height: 44px; }
+.ast-hist li button:hover { background: var(--realce); }
+.ast-hist li button[aria-current="true"] { border-color: var(--linha); background: var(--surface-2); }
+.ast-hist .q { font-size: var(--t-13); font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ast-hist .meta { font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); }
+.ast-gap { margin: 0; font-size: var(--t-12); color: var(--texto-2); border: 1px dashed var(--linha); border-radius: var(--raio-sm); padding: .55rem .7rem; }
+
+/* o registro de uma conversa guardada (auditável) */
+.ast-registro { border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); padding: .7rem .8rem; font-size: var(--t-12); }
+.ast-registro p { margin: 0 0 .45rem; font-weight: 600; color: var(--texto); display: flex; gap: .4rem; align-items: center; }
+.ast-registro dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .2rem .8rem; }
+.ast-registro dt { color: var(--texto-2); }
+.ast-registro dd { margin: 0; color: var(--texto); font-family: var(--mono); font-size: var(--t-11); overflow-wrap: anywhere; }
+.ast-registro dd.ast-quebra { color: var(--acento-texto); font-weight: 700; }
+.ast-registro a { color: var(--texto); }
+
+/* ---------- expandido (computador): ocupa a área abaixo do cabeçalho, histórico à esquerda ---------- */
+html[data-clara="expandido"] .ast {
+  width: auto; max-width: none; height: auto; left: 0; right: 0; bottom: 0; top: var(--topo-altura);
+  border-radius: 0; border-right: 0; border-bottom: 0; border-left: 0;
+  grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+}
+html[data-clara="expandido"] .ast-cabe { grid-column: 1 / -1; }
+.ast-lateral { grid-row: 2 / 4; grid-column: 1; border-right: 1px solid var(--linha); overflow-y: auto; padding: 1rem; }
+html[data-clara="expandido"] .ast-corpo,
+html[data-clara="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width: 760px; justify-self: center; box-sizing: border-box; }
+
+/* véu atrás da folha no celular (só existe lá) */
+.ast-veu { position: fixed; inset: 0; z-index: 40; background: rgba(11, 20, 12, .45); border: 0; padding: 0; cursor: pointer; }
+
+/* ---------- celular: folha que sobe de baixo; expandido = tela cheia ---------- */
+@media (max-width: 760px) {
+  html[data-clara="aberto"] .clara-moldura[data-clara-ativa] { padding-right: 0; }
+  html[data-clara="aberto"] .clara-moldura[data-clara-ativa] .topo { margin-right: 0; }
+  html[data-clara="expandido"] .clara-moldura[data-clara-ativa] .topo { visibility: hidden; }
+  html[data-clara="aberto"] .ast {
+    width: 100vw; max-width: none; left: 0; right: 0; bottom: 0; top: auto;
+    height: 88dvh; border: 0; border-top: 3px solid var(--cobalto);
+    border-radius: var(--raio-lg) var(--raio-lg) 0 0; padding-top: 14px;
+  }
+  html[data-clara="aberto"] .ast::before {
+    content: ""; position: absolute; top: 6px; left: 50%; width: 40px; height: 4px; margin-left: -20px;
+    border-radius: 2px; background: var(--texto-2);
+  }
+  html[data-clara="expandido"] .ast {
+    width: 100vw; top: 0; left: 0; right: 0; bottom: 0; border: 0; border-top: 3px solid var(--cobalto);
+    grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  html[data-clara="expandido"] .ast-corpo, html[data-clara="expandido"] .ast-campo { grid-column: 1; max-width: none; }
+  .ast-lancador .rotulo-longo, .ast-lancador kbd { display: none; }
+  /* abaixo de 16px o Safari do iPhone dá zoom ao focar o campo */
+  .ast-campo textarea { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) { .clara-moldura { transition: none; } }
+@media print { .ast-lancador, .ast, .ast-veu { display: none !important; } }
