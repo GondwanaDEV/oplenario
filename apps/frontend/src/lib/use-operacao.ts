@@ -423,10 +423,23 @@ const ACOES: Record<string, string> = {
   "apagamento-iniciado": "Apagamento iniciado: a câmara fechou",
   "apagamento-interrompido": "O apagamento parou no meio",
   "casa-encerrada": "Câmara encerrada: dados apagados",
+  // ADR-0014 x ADR-0016: o orçamento de IA da Casa, definido pelo operador (hoje, pela linha de comando)
+  "ia-orcamento-iniciado": "Orçamento de IA: definição iniciada",
+  "ia-orcamento-definido": "Orçamento de IA definido",
+  "ia-orcamento-falhou": "Orçamento de IA: a definição falhou",
 };
 
 export function rotuloAcao(acao: string): string {
   return ACOES[acao] ?? acao;
+}
+
+/**
+ * Quem fez o ato, para a lista de atuação da Câmara. Sem operador há duas coisas diferentes: a linha de comando da
+ * Operação (que diz isso em `detalhe.origem`) e o que a própria Câmara fez (ex.: o 1º administrador entrou).
+ */
+export function quemAtuou(a: { operador: string | null; detalhe: Record<string, unknown> }): string {
+  if (a.operador) return a.operador;
+  return a.detalhe?.origem === "linha-de-comando" ? "linha de comando da Operação" : "pela própria câmara";
 }
 
 /** O selo no formato curto do desenho: primeiros e últimos 4 caracteres. */

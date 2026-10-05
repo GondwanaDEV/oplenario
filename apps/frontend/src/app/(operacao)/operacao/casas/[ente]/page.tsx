@@ -14,6 +14,7 @@ import {
   type FichaDaCasa,
   reaplicarLogin,
   reenviarConvite,
+  quemAtuou,
   rotuloAcao,
   rotuloEstadoCasa,
   seloCurto,
@@ -167,7 +168,7 @@ function Ficha({ ficha, token, recemProvisionada, aoMudar }: {
               <span className="q">{dataHora(a.em)}</span>
               <span className="o">
                 <b>{rotuloAcao(a.acao)}</b>
-                <span>{a.operador ?? "pela própria câmara"}</span>
+                <span>{quemAtuou(a)}</span>
               </span>
               <span className="selo" title={`selo ${a.selo}`}>selo {seloCurto(a.selo)}</span>
             </div>
