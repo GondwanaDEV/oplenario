@@ -28,14 +28,15 @@ import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
 import { useContagemDaCaixa } from "@/lib/use-comunicados";
+import { useAbrirClara } from "./clara/moldura-da-clara";
 import "./topo.css";
 
 type Grupo = "Matérias" | "Sessões" | "Cidadão" | "Casa";
 
-/** A ordem dos grupos na barra. Os destinos SEM grupo (Central, Caixa, Busca, Assistente) ficam soltos, antes deles. */
+/** A ordem dos grupos na barra. Os destinos SEM grupo (Central, Caixa, Busca, Clara) ficam soltos, antes deles. */
 const GRUPOS: Grupo[] = ["Matérias", "Sessões", "Cidadão", "Casa"];
 
-const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; todos?: true; grupo?: Grupo }[] = [
+const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; todos?: true; grupo?: Grupo; abreClara?: true }[] = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
@@ -46,10 +47,11 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; t
   // Faixa A / A.5 da Track IA — busca intra-câmara (proposições + o que foi dito em plenário). Gated "secretario"
   // (GuardSecretaria + exige-papel no backend). Logo depois da Central: é a outra porta de entrada da secretaria.
   { rotulo: "Busca", href: "/busca" },
-  // Faixa B / B.3 da Track IA — o assistente da Casa: pergunta em palavras, ele consulta o sistema com as permissoes de
-  // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
-  // aceita secretario ou vereador).
-  { rotulo: "Clara", href: "/assistente" },
+  // A Clara, a assistente da Casa (ADR-0024): não é uma tela, é o painel que acompanha toda tela interna. A entrada
+  // abre o painel expandido ali mesmo (`useAbrirClara`), sem sair da página; o `href` é o endereço antigo da tela
+  // cheia, que hoje só leva à Central com a Clara expandida (fatia 5). Dos mesmos papéis que têm a Clara (a moldura), inclusive
+  // quem só consulta (jurídico, controle interno, administração); sem a Clara na tela, a entrada some (`claraDe`).
+  { rotulo: "Clara", href: "/assistente", papel: ["secretario", "vereador", "juridico", "auditor", "admin_ente"], abreClara: true },
   { rotulo: "Proposições", href: "/proposicoes", grupo: "Matérias" },
   { rotulo: "Tramitação", href: "/tramitacao", grupo: "Matérias" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
@@ -120,7 +122,7 @@ export function destinosVisiveis(papeis: string[]) {
     d.todos ? true : d.papel ? [d.papel].flat().some((p) => papeis.includes(p)) : !soAdministracao);
 }
 
-/** Até este número de entradas a barra fica plana: quem só administra, só audita ou só dá parecer vê 2 a 4 links e
+/** Até este número de entradas a barra fica plana: quem só administra, só audita ou só dá parecer vê 3 a 5 links e
  *  não ganha nada com um clique a mais. */
 const MAX_SEM_GRUPOS = 6;
 
@@ -148,6 +150,7 @@ export function TopoInterno({ area }: { area: string }) {
   const { token } = useAuth();
   const { dados, estado } = useMeuIdentidade(token);
   const porLer = useContagemDaCaixa(token);
+  const clara = useAbrirClara();
   // Nunca um nome inventado: "carregando"/"erro" são rótulos HONESTOS, não um ator fixo. `estado==="erro"`
   // cobre tanto a falha de rede quanto a resposta não-ok (ver docstring de useMeuIdentidade).
   const nome = estado === "pronto" && dados ? dados.nome : estado === "carregando" ? "Carregando…" : "Sessão";
@@ -181,7 +184,26 @@ export function TopoInterno({ area }: { area: string }) {
     };
   }, [aberto, idBase]);
 
-  const linkDe = (d: Destino) => (
+  // A Clara (ADR-0024) não é uma tela: a entrada dela abre o painel expandido ali mesmo. Com a Clara fora da tela
+  // (papéis carregando), a entrada não aparece — quem a abre só existe com ela (`useAbrirClara`).
+  const claraDe = (d: Destino) =>
+    clara.disponivel ? (
+      <button
+        key={d.href}
+        type="button"
+        className="nav-grupo-btn"
+        aria-controls={clara.painelId}
+        aria-expanded={clara.aberta}
+        onClick={(e) => {
+          setAberto(null);
+          clara.abrir("expandido", e.currentTarget);
+        }}
+      >
+        {d.rotulo}
+      </button>
+    ) : null;
+
+  const linkDe = (d: Destino) => d.abreClara ? claraDe(d) : (
     <Link
       key={d.href}
       href={comToken(d.href, token)}

@@ -2,13 +2,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import PaginaAta from "./page";
 
+// A Clara (ADR-0024): sem papel nos testes de sempre; o bloco da Clara liga a secretaria.
+const papeisDaClara = vi.hoisted(() => ({ atual: [] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 vi.mock("@/lib/tema", () => ({ useTema: () => ({ tema: "claro", alternar: vi.fn() }) }));
 
@@ -184,5 +188,26 @@ describe("PaginaAta", () => {
     render(<PaginaAta />);
     fireEvent.click(await screen.findByRole("button", { name: "Pedir rascunho à IA" }));
     expect((await screen.findByRole("alert")).textContent).toContain("transcricao concluida");
+  });
+});
+
+describe("PaginaAta — a Clara (ADR-0024, fatia 5)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    papeisDaClara.atual = [];
+    delete document.documentElement.dataset.clara;
+  });
+
+  it("a secretaria tem a Clara, recolhida, ao revisar a ata", async () => {
+    papeisDaClara.atual = ["secretario"];
+    rede(() => ({ status: 200, body: { "sessao-id": "s1", "pode-ter-ata": true, atual: null, versoes: [] } }));
+    render(<PaginaAta />);
+    expect(await screen.findByRole("button", { name: "Redigir a ata" })).toBeTruthy();
+    const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
+    expect(lancador.getAttribute("aria-expanded")).toBe("false");
+    // a tela da ata não lê o nome da sessão (a rota da ata não o traz): sem dica, em vez de uma leitura só para ela
+    fireEvent.click(lancador);
+    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).not.toContain("Nesta tela");
   });
 });

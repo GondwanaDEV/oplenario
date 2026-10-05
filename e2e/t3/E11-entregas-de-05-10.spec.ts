@@ -65,8 +65,10 @@ const cab = (t: string) => ({ Authorization: `Bearer ${t}`, "Content-Type": "app
 
 // ---------------------------------------------------------------------------- a página abriu de verdade?
 // As specs da Trilha 3 rodam em paralelo no MESMO banco: outra spec cria vereador, matéria e votação enquanto esta lê.
-// Por isso (a) `aquecer` só faz o `next dev` compilar cada rota antes dos testes — qualquer resposta abaixo de 500
-// serve (a ficha de uma matéria que não existe é 404 de verdade); (b) `abrir` confere o status do documento na hora,
+// Por isso (a) `aquecer` faz o `next dev` compilar cada rota antes dos testes e exige 200: nenhuma destas páginas
+// chama `notFound()` (a ficha de uma matéria que não existe abre com 200 e quem degrada é a seção), então 404 aqui é
+// o `next dev` sem a rota na tabela dele (ver `apps/frontend/scripts/dev.mjs`), e não "não encontrado" da aplicação;
+// (b) `abrir` confere o status do documento na hora,
 // então 404/500 reprova em segundos dizendo qual; (c) toda comparação "a tela bate com a API" relê a API e recarrega
 // a página até as duas concordarem (`toPass`), em vez de comparar duas leituras feitas em instantes diferentes.
 const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
@@ -74,17 +76,24 @@ const UUID_QUALQUER = "00000000-0000-0000-0000-000000000abc";
 
 async function aquecer(rotas: string[]) {
   for (const rota of rotas) {
+    const onde = rota.split("?")[0];
     let status = 0;
-    const compilou = () => status >= 200 && status < 500;
-    for (let i = 0; i < 10 && !compilou(); i++) {
+    // só repete enquanto o servidor não responde ou responde 5xx (compilação a frio); 404 é veredito e reprova na hora
+    for (let i = 0; i < 10 && (status === 0 || status >= 500); i++) {
+      if (i > 0) await new Promise((ok) => setTimeout(ok, 1_000));
       try {
         status = (await fetch(`${BASE}${rota}`, { redirect: "manual", signal: AbortSignal.timeout(90_000) })).status;
       } catch {
         status = 0;
       }
-      if (!compilou()) await new Promise((ok) => setTimeout(ok, 1_000));
     }
-    expect(compilou(), `aquecer ${rota}: o frontend nunca serviu a rota (último status ${status})`).toBe(true);
+    expect(
+      status,
+      status === 404
+        ? `aquecer ${onde}: 404 numa página que nunca chama notFound(). O next dev subiu sem esta rota na tabela dele ` +
+            `(procure "[dev]" no log do frontend; apps/frontend/scripts/dev.mjs é quem confere a tabela)`
+        : `aquecer ${onde}: o frontend respondeu ${status} (esperado 200)`,
+    ).toBe(200);
   }
 }
 

@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { derivarAta, derivarLivro, type LinhaLivroVista } from "@/lib/livro-atas-vista";
 import { hrefAta, useAtaDoLivro, useLivroAtas, type FonteLivro } from "@/lib/use-livro-atas";
+import { dicaDaAta, useDicaDaClara } from "@/app/(interno)/clara/dica";
 import "./livro-atas.css";
 
 export function LivroAtas({
@@ -107,6 +108,9 @@ function AtaAberta({
   nomeCasa?: string | null;
 }) {
   const ata = useAtaDoLivro(fonte, sessaoId, versao);
+  // A dica da Clara ("Nesta tela: Ata da 15ª Sessão Ordinária"), só na tela interna e com a ata já lida: o portal não
+  // tem Clara.
+  useDicaDaClara(fonte.tipo === "interno" && ata.fase === "pronto" ? dicaDaAta(ata.dado.sessao) : null);
   if (ata.fase === "carregando") return <p className="estado">Abrindo a ata…</p>;
   if (ata.fase === "erro") {
     return (

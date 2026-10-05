@@ -7,6 +7,26 @@
   (:require [malli.core :as m]
             [oplenario.kernel.eventos :as eventos]))
 
+(def EtapaDoRitoPublica
+  "Uma etapa do rito como a Casa a declarou, no que o PORTAL pode saber: a `chave` (texto livre por Casa, a mesma que o
+  portal ja' guarda em `estado`), o `rotulo` (o nome que a Casa deu) e se `terminal` (encerra o processo). NADA mais:
+  nem responsavel, nem comissao, nem id interno — o evento alimenta uma projecao PUBLICA."
+  [:map {:closed true}
+   [:chave :string]
+   [:rotulo :string]
+   [:terminal :boolean]])
+
+(def RitoPublicoPayload
+  "A linha do rito da materia (`legislativo.logic.rito/rito-da-materia`) no payload dos eventos que movem a faixa 'Onde
+  esta' a materia' do portal. `ordem-unica` true = `etapas` e' a linha do rito em ordem; false = so' o entorno
+  (`anteriores` · `atual` · `proximas`). `atual` nil = o rito nao declara o estado da materia."
+  [:map {:closed true}
+   [:ordem-unica :boolean]
+   [:etapas [:sequential EtapaDoRitoPublica]]
+   [:atual [:maybe EtapaDoRitoPublica]]
+   [:anteriores [:maybe [:sequential EtapaDoRitoPublica]]]
+   [:proximas [:sequential EtapaDoRitoPublica]]])
+
 (def protocolada-tipo
   "Nome do evento emitido no PROTOCOLO da proposicao (gate eixo H). Carrega o SNAPSHOT PUBLICO — o que o
   read-model do portal (transparencia, §16.5) precisa p/ exibir a materia SEM consultar o legislativo (§22.10:
@@ -36,7 +56,11 @@
    ;; evento emitido antes dos campos existirem segue valido; o consumer do portal descarta (com log) o que nao
    ;; os traz, em vez de inventar data ou nome de etapa.
    [:estado-nome {:optional true} [:maybe :string]]
-   [:protocolada-em {:optional true} :string]])
+   [:protocolada-em {:optional true} :string]
+   ;; A linha do rito da Casa no protocolo (a atual e' o estado inicial): a faixa "Onde esta' a materia" do portal a
+   ;; desenha pela ordem do rito, nao por um mapa de nome de estado. OPCIONAL (evento anterior segue valido; nil = a
+   ;; materia nao tem rito). So' ACRESCENTA chave ao payload.
+   [:rito {:optional true} [:maybe RitoPublicoPayload]]])
 
 (defn protocolada
   "Constroi o envelope de `proposicao.protocolada` p/ o tenant `ente-id`, VALIDANDO o payload. Lanca
@@ -76,6 +100,9 @@
    ;; tempo da materia em palavras, e a chave (`para`) e' texto livre por Casa que nunca vai a tela. OPCIONAL: ausente
    ;; = o rito nao declara o estado de destino (ou evento anterior ao campo).
    [:para-nome {:optional true} [:maybe :string]]
+   ;; A linha do rito da Casa DEPOIS desta transicao (a atual e' o destino): a faixa do portal anda junto com o estado.
+   ;; OPCIONAL: ausente/nil = o rito nao pode ser montado (materia sem rito) e o portal cai no mapa fixo.
+   [:rito {:optional true} [:maybe RitoPublicoPayload]]
    [:ator-id {:optional true} [:maybe :uuid]]])
 
 (defn transicionou

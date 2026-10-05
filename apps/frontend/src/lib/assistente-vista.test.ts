@@ -106,7 +106,7 @@ describe("rótulos", () => {
   });
 
   it("erros em linguagem de quem usa", () => {
-    expect(mensagemDeErroAssistente(403)).toBe("A Clara é da secretaria e dos vereadores.");
+    expect(mensagemDeErroAssistente(403)).toBe("A Clara não está disponível para o seu acesso nesta Casa.");
     expect(mensagemDeErroAssistente(500)).toMatch(/Siga pela tela/);
   });
 });

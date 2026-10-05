@@ -18,7 +18,10 @@
 .conduzir {
   display: grid;
   gap: clamp(1rem, 2.4vw, 1.6rem);
-  padding: clamp(1.2rem, 3vw, 2rem) 0 4rem;
+  /* só em cima e embaixo: o respiro lateral é o do .envelope (o atalho `padding: … 0 …` o zerava e os cartões
+     encostavam na borda abaixo de 1360px e ao lado da Clara aberta) */
+  padding-top: clamp(1.2rem, 3vw, 2rem);
+  padding-bottom: 4rem;
   align-content: start;
 }
 
@@ -317,4 +320,14 @@
 .votacao-contas-resultado {
   margin: 0; padding: 0.7rem 0.85rem; border-left: 4px solid var(--marca); background: var(--surface);
   font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto);
+}
+
+/* A Clara (ADR-0024, fatia 5). O Comando da Mesa é operado ao vivo: o botão da Clara nunca fica por cima de um comando.
+   No computador quem garante é a moldura (clara.css, `data-clara-discreta`). No celular os controles daqui são de
+   largura inteira e passariam por baixo de um botão flutuante ao rolar: a entrada vai para o cabeçalho, ao lado do
+   Modo TV (`BotaoClaraNoTopo`), e o botão flutuante some. */
+.tema-btn.clara-no-topo { display: none; }
+@media (max-width: 760px) {
+  .tema-btn.clara-no-topo { display: inline-flex; }
+  .clara-moldura[data-clara-ativa][data-clara-discreta]:has(.clara-no-topo) ~ .ast-lancador { display: none; }
 }

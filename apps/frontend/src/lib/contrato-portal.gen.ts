@@ -45,6 +45,20 @@ export interface ResumoPublicoOut {
   publicadoEm: string;
 }
 
+export interface EtapaDoRitoPublicoOut {
+  chave: string;
+  rotulo: string;
+  terminal: boolean;
+}
+
+export interface RitoPublicoOut {
+  ordemUnica: boolean;
+  etapas: EtapaDoRitoPublicoOut[];
+  atual: EtapaDoRitoPublicoOut | null;
+  anteriores: EtapaDoRitoPublicoOut[] | null;
+  proximas: EtapaDoRitoPublicoOut[];
+}
+
 export interface FichaOut {
   proposicaoId: string;
   tipo: string;
@@ -58,6 +72,7 @@ export interface FichaOut {
   desfecho: string | null;
   norma?: NormaOut | null;
   resumo?: ResumoPublicoOut | null;
+  rito?: RitoPublicoOut | null;
 }
 
 export interface MovimentacaoOut {

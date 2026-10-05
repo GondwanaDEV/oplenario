@@ -192,3 +192,23 @@ html[data-clara="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width
 .ast-modelo { font-family: var(--mono); font-size: var(--t-11); }
 .ast-pela-tela { margin: .9rem 0 0; font-size: var(--t-12); color: var(--texto-2); }
 .ast-pela-tela a { color: var(--texto); text-decoration: underline; text-underline-offset: 2px; }
+
+/* As telas da sessão (fatia 5: Comando da Mesa, chamada, ata, transcrição), operadas ao vivo pela Mesa. O botão
+   recolhido é só o glifo (o nome continua no aria-label e no title), e no computador o conteúdo (`main.envelope`) fica
+   estreito o bastante para terminar antes da faixa do botão: em nenhuma rolagem um comando da Mesa passa por baixo
+   dele. A conta: botão de 48px a 1.25rem da borda, mais .75rem de folga = 5rem de cada lado, sem contar com o respiro
+   interno do envelope (o Comando da Mesa o zera). No celular não há faixa livre: vale o espaço no fim da página
+   (padding-bottom acima), que deixa rolar o último comando para cima do botão. */
+.clara-moldura[data-clara-discreta] ~ .ast-lancador { gap: 0; padding: .45rem; }
+.clara-moldura[data-clara-discreta] ~ .ast-lancador > :not(.glifo-ia) { display: none; }
+@media (min-width: 761px) {
+  html[data-clara="recolhido"] .clara-moldura[data-clara-ativa][data-clara-discreta] > main.envelope {
+    max-width: min(var(--max), calc(100% - 10rem));
+  }
+}
+/* No celular, numa tela com barra de comando fixa (a chamada), o botão entra na própria barra, à direita, que a barra
+   deixa livre: a lista (linhas de largura inteira, com Presente/Remoto/Ausente) nunca passa por baixo dele. */
+@media (max-width: 760px) {
+  .clara-moldura[data-clara-ativa][data-clara-discreta]:has(.comando) ~ .ast-lancador { bottom: .55rem; }
+  .clara-moldura[data-clara-ativa][data-clara-discreta] .comando .envelope { padding-right: calc(48px + 1.25rem + .5rem); }
+}

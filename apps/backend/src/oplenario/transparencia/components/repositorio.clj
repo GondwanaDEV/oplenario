@@ -34,6 +34,7 @@
   importar o schema do produtor)."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [malli.core :as m]
             [oplenario.kernel.eventos :as eventos]
             [oplenario.kernel.outbox :as outbox]
             [oplenario.kernel.tempo :as tempo]
@@ -47,7 +48,8 @@
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.events.notificacao :as ev-notif]
             [oplenario.transparencia.logic.desfecho :as desfecho]
-            [oplenario.transparencia.logic.notificacao :as logic-notif])
+            [oplenario.transparencia.logic.notificacao :as logic-notif]
+            [oplenario.transparencia.models.materia :as models-materia])
   (:import (java.time Instant)
            (java.util UUID)))
 
@@ -126,6 +128,19 @@
        (instance? ClassCastException t)
        (:transparencia/payload-malformado? (ex-data t)))))
 
+(defn- rito-tolerante
+  "O `rito` do evento, se for um rito do contrato publico (`models.materia/RitoDaMateria`, fechado: so' chave, rotulo e
+  terminal das etapas); senao nil. TOLERANTE por desenho — este e' o relay COMPARTILHADO: payload sem `rito` (evento
+  anterior ao campo, materia sem rito) e' o caso normal e vira nil em silencio; rito PRESENTE e malformado (ou com campo
+  alem do contrato, que o portal publico nao pode guardar) vira LOG e nil, nunca excecao. Nunca ha' rito parcial."
+  [tx-ente proposicao-id tipo rito]
+  (cond
+    (nil? rito) nil
+    (m/validate models-materia/RitoDaMateria rito) rito
+    :else (do (log/warn "transparencia: rito da materia fora do contrato publico — descartado"
+                        {:tipo tipo :ente-id tx-ente :proposicao-id proposicao-id})
+              nil)))
+
 (defn- registrar-movimentacao!
   "Projeta UMA movimentacao na linha do tempo publica da materia (`transparencia.materia_movimentacao`). TOLERANTE por
   desenho — este e' o relay COMPARTILHADO: instante ausente/invalido (evento anterior ao campo, deploy rolling) ou
@@ -189,6 +204,7 @@
   (case tipo
     "proposicao.protocolada"
     (let [m (-> payload (uuid-payload [:proposicao-id :autor-id]) (assoc :ente-id ente-id))
+          m (assoc m :rito (rito-tolerante ente-id (:proposicao-id m) "proposicao.protocolada" (:rito payload)))
           r (db-materia/inserir! tx m)]
       ;; a ABERTURA da linha do tempo publica. Sem rotulo no rito, a etapa de abertura e' "Protocolada": e' o ato.
       (registrar-movimentacao! tx ente-id (:proposicao-id m)
@@ -219,7 +235,8 @@
       (registrar-movimentacao! tx ente-id pid {:ocorrido-em (:ocorrido-em payload) :chave (:para payload)
                                                :nome (:para-nome payload) :inicial? false
                                                :tipo "proposicao.transicionou"})
-      (or (db-materia/atualizar-estado! tx {:ente-id ente-id :proposicao-id pid :estado (:para payload)})
+      (or (db-materia/atualizar-estado! tx {:ente-id ente-id :proposicao-id pid :estado (:para payload)
+                                            :rito (rito-tolerante ente-id pid "proposicao.transicionou" (:rito payload))})
           (log/warn "transparencia: proposicao.transicionou sem materia projetada (protocolada ausente?)"
                     {:ente-id ente-id :proposicao-id pid :para (:para payload)})))
 

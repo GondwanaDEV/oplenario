@@ -128,8 +128,9 @@ A retenção por classe está decidida. Falta:
   - (iii) Não guardar IP.
 - **4c. O cidadão na trilha da Casa:**
   - (i) Os atos do cidadão (protocolo de e-SIC, manifestação, comentário) entram **pseudonimizados** — "cidadão
-    #a1b2", com o link para o protocolo, que já identifica quem precisa. O login do cidadão não entra (é da sessão
-    dele). **Recomendado.**
+    #a1b2", com o link para o protocolo, que já identifica quem precisa. **Recomendado.** O login do cidadão também
+    entra, pseudonimizado como os outros atos ("entrou pelo gov.br"; ver o adendo "Eixo 4c" no fim). *(O texto original
+    dizia que o login não entrava; o código o registra desde a fatia 1 e isso foi mantido em 05/10/2026.)*
   - (ii) Entram com o nome.
   - (iii) Não entram.
 - **4d. Apagamento a pedido:** segue o Eixo G. O registro apagado vira "[registro removido a pedido do titular — base
@@ -503,9 +504,9 @@ existir.
 
 - **ADR-0016 / Operação:** `ia-orcamento` não grava na atuação e não nomeia o operador; a entrada do operador grava na
   atuação depois da sessão, sem tentativa.
-- **Eixo 4c × código:** a ADR diz que o login do cidadão **não entra** na trilha; o código o registra desde a fatia 1
-  (`entrou pelo gov.br`) e a tentativa passa a dobrar essa linha. Decidir: aceitar o login do cidadão (e corrigir o
-  texto do Eixo 4c) ou tirá-lo, o que apaga o dobro e o original.
+- **Eixo 4c × código:** a ADR dizia que o login do cidadão **não entra** na trilha; o código o registra desde a fatia
+  1 (`entrou pelo gov.br`) e a tentativa passa a dobrar essa linha. **Decidido em 05/10/2026: fica.** Ver o adendo
+  "Eixo 4c" abaixo.
 
 ## Adendo de 05/10/2026 — o resumo do efeito de toda escrita
 
@@ -530,3 +531,15 @@ apareciam em `/auditoria` e no CSV só com a ação em palavras soltas ("concede
 - **Teste estrutural:** `auditoria/resumo_de_toda_escrita_test` lê a tabela de rotas do host (a mesma do teste da
   tentativa) e reprova escrita nova sem rótulo nem motivo, entrada que sobrou de rota que sumiu, rótulo que parece
   rota/enum/UUID e rótulo repetido. Provado tirando uma entrada: o vermelho nomeia a ação.
+
+## Adendo de 05/10/2026 — Eixo 4c: o login do cidadão fica na trilha
+
+O texto do Eixo 4c dizia que o login do cidadão não entrava na trilha da Casa. O código o registra desde a fatia 1, e
+a decisão foi manter o que já existe: corrigir o texto, não o código.
+
+- A entrada pelo gov.br grava o par tentativa/desfecho como qualquer entrada, com `ator_tipo = "cidadao"`; a tela e o
+  CSV mostram "Cidadão #a1b2c3d4e5f6" (o pseudônimo por Casa), nunca o nome nem o CPF.
+- Vale o resto do Eixo 4: IP completo por 6 meses e truncado na tela. O apagamento a pedido do titular (4d) ainda
+  não existe no código para nenhum registro da trilha; quando existir, alcança essas linhas como os outros atos do
+  cidadão, mantendo o selo.
+- Prova: `auditoria/entrada_com_tentativa_test` afirma as duas linhas como `cidadao` e o rótulo "entrou pelo gov.br".

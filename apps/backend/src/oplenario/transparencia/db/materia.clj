@@ -16,6 +16,11 @@
    :projetado_em :atualizado_em :resumo_texto :resumo_versao :resumo_gerado_com_ia :resumo_publicado_em
    :desfecho])
 
+(def ^:private cols-ficha
+  "As colunas da ficha PUBLICA de UMA materia: as das listas + o `rito` (jsonb), que so' a ficha desenha. As listas (ate'
+  200 linhas) nao carregam o jsonb."
+  (conj cols :rito))
+
 (def ^:private teto-listagem
   "Teto server-side (anti unbounded-read, mesmo racional de teto-listagem/comentario) — sem paginacao nesta
   fatia (decisao registrada no plano; paginacao e' refino de UX, nao de correcao)."
@@ -29,7 +34,7 @@
   de dominio com uma idempotency-key NOVA (kernel.eventos/evento gera uma por chamada, nao derivada da
   chave de negocio) — sem isto, o redrive lancaria PK-violation e envenenaria o RELAY COMPARTILHADO (ver
   atualizar-estado!)."
-  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto autor-id estado]}]
+  [tx {:keys [ente-id proposicao-id tipo ano sequencial urn-lex ementa autor-tipo autor-texto autor-id estado rito]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? tipo) (some? ano) (some? sequencial)
          (some? urn-lex) (some? ementa) (some? estado)]}
   (comum/linha->kebab
@@ -37,7 +42,9 @@
      (sql/format {:insert-into :transparencia.materia
                   :values [{:ente_id ente-id :proposicao_id proposicao-id :tipo tipo :ano ano
                             :sequencial sequencial :urn_lex urn-lex :ementa ementa
-                            :autor_tipo autor-tipo :autor_texto autor-texto :autor_id autor-id :estado estado}]
+                            :autor_tipo autor-tipo :autor_texto autor-texto :autor_id autor-id :estado estado
+                            ;; o rito da Casa no protocolo (ja' conferido pelo consumer); sem ele, SQL NULL
+                            :rito (some-> rito comum/->jsonb)}]
                   :on-conflict [:ente_id :proposicao_id]
                   :do-nothing []
                   :returning [:*]}))))
@@ -55,11 +62,13 @@
   evento novo, ou sobre um banco com dado pre-existente, pode legitimamente ver a excecao). O caller
   (components/repositorio) loga a anomalia; a materia so' fica temporariamente desatualizada (read-model
   derivado, sem verdade propria) em vez de travar o barramento inteiro."
-  [tx {:keys [ente-id proposicao-id estado]}]
+  [tx {:keys [ente-id proposicao-id estado rito]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? estado)]}
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :transparencia.materia
-                         :set {:estado estado :atualizado_em [:now]}
+                         ;; o `rito` anda junto com o `estado` e e' SEMPRE reescrito, NULL quando o evento nao o traz:
+                         ;; um rito velho ao lado do estado novo apontaria a etapa ANTERIOR na faixa do portal.
+                         :set {:estado estado :rito (some-> rito comum/->jsonb) :atualizado_em [:now]}
                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
@@ -112,13 +121,15 @@
       {:proposicao-id proposicao-id :versao versao})))
 
 (defn buscar
-  "Ficha PUBLICA de uma materia (RLS via ente-id). Devolve o mapa kebab-case ou nil."
+  "Ficha PUBLICA de uma materia (RLS via ente-id). Devolve o mapa kebab-case ou nil. `:rito` sai como dado (chaves
+  keyword) ou nil quando a materia nao teve evento com rito."
   [tx ente-id proposicao-id]
   {:pre [(some? ente-id) (some? proposicao-id)]}
-  (comum/linha->kebab
-   (jdbc/execute-one! tx
-     (sql/format {:select cols :from [:transparencia.materia]
-                  :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
+  (some-> (comum/linha->kebab
+           (jdbc/execute-one! tx
+             (sql/format {:select cols-ficha :from [:transparencia.materia]
+                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]})))
+          (update :rito comum/jsonb->kw)))
 
 (defn por-ids
   "As materias PUBLICADAS no portal entre os `ids` (so' o cabecalho: tipo, numero, ano, ementa). Id sem materia

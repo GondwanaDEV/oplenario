@@ -11,7 +11,9 @@ RUN npm ci
 FROM deps AS dev
 WORKDIR /app
 EXPOSE 3000
-CMD ["npx", "next", "dev", "--hostname", "0.0.0.0"]
+# `scripts/dev.mjs` (vem do bind-mount) sobe o `next dev` e confere que a tabela de rotas dele ficou completa:
+# sob disputa de CPU na subida ela às vezes sai sem as rotas mais fundas, que respondem 404 a rodada inteira.
+CMD ["node", "scripts/dev.mjs", "--hostname", "0.0.0.0"]
 
 # ---- build: gera o output standalone ----
 FROM deps AS build
