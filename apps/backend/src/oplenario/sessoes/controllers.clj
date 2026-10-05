@@ -1163,7 +1163,7 @@
   Devolve {:sessao-id :orador-atual :marcos-cronometro :inscritos} ou nil (sessao inexistente -> 404 no
   diplomat)."
   [repo-sessoes ator sessao-id]
-  (when-let [{:keys [sessao fala-em-curso marcos inscricoes]}
+  (when-let [{:keys [sessao fala-em-curso marcos inscricoes inscricoes-atendidas]}
              (repo/tribuna-da-sessao repo-sessoes (:ente-id ator) sessao-id)]
     (authz/check! ator :sessao/ver-tribuna sessao logic/pode-ver-quorum-da-sessao?)
     {:sessao-id (:id sessao)
@@ -1175,8 +1175,11 @@
      :marcos-cronometro (->> marcos
                              (filter #(contains? logic/tipos-evento-cronometro-manual (:tipo %)))
                              (mapv marco-da-tribuna))
+     ;; a FILA e' quem ainda vai falar: sai a desistencia (terminal) E a inscricao ja' cumprida por uma fala
+     ;; ENCERRADA. A da fala EM CURSO segue — o cockpit marca "Falando" na linha dela.
      :inscritos (->> inscricoes
                      (remove #(contains? logic/estados-inscricao-terminais (:estado %)))
+                     (remove #(contains? (or inscricoes-atendidas #{}) (:id %)))
                      (mapv inscrito-da-tribuna))}))
 
 ;; ---------- §22.6 eixo C — o ATO da CHAMADA CONDUZIDA (Etapa 2d) ----------

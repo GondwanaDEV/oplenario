@@ -222,7 +222,7 @@
   (tribuna-da-sessao [this ente-id sessao-id]
     "A leitura inteira da tribuna (sessao + fala em curso + marcos do cronometro DAQUELA fala + fila de
      inscritos) numa UNICA tx — molde de `chamada-da-sessao`. Devolve {:sessao :fala-em-curso :marcos
-     :inscricoes} ou nil (sessao inexistente neste tenant -> 404 no diplomat).")
+     :inscricoes :inscricoes-atendidas} (os ids das inscricoes ja' cumpridas por fala encerrada) ou nil (sessao inexistente neste tenant -> 404 no diplomat).")
   ;; §16.13 — incidentes processuais (mesa de conducao ao vivo)
   (registrar-incidente! [this ente-id m] "Registra incidente processual (append-only) + emite incidente.registrado (SSE) na MESMA tx.")
   (buscar-incidente [this ente-id id])
@@ -703,7 +703,9 @@
              ;; marcos so' fazem sentido presos a UMA fala — sem fala em curso, nao ha' cronometro de
              ;; ninguem para ler (e ler `fala-id nil` seria uma query sem sentido, nao "zero marcos").
              :marcos (if fala (tribuna/listar-eventos-cronometro tx ente-id (:id fala)) [])
-             :inscricoes (tribuna/listar-inscricoes tx ente-id sessao-id)})))))
+             :inscricoes (tribuna/listar-inscricoes tx ente-id sessao-id)
+             ;; quais inscricoes ja' se cumpriram (fala ENCERRADA ligada a elas): o controller as tira da fila
+             :inscricoes-atendidas (tribuna/inscricoes-atendidas tx ente-id sessao-id)})))))
   ;; §16.13 — compoe o ato append-only + a emissao do evento de tempo real na MESMA tx (atomicidade §22.9 E2):
   ;; o painel da mesa de conducao reage ao incidente ao vivo (SSE canal plenario).
   (registrar-incidente! [this ente-id m]
