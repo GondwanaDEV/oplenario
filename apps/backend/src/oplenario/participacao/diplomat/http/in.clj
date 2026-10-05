@@ -425,6 +425,12 @@
   "O interceptor do upload: o generico do host com o teto de 10 MB do anexo do atendimento (413 acima, 400 sem arquivo)."
   (it/anexo-multipart {:max-bytes anexo/max-bytes-anexo}))
 
+(def ^:private substituicao-multipart
+  "O mesmo upload, para SUBSTITUIR um anexo: alem do arquivo, le o campo de texto `motivo` (ate' 4 KB), em
+  `(:request :campos-do-envio)`. Nome distinto no cadeia (o do anexo comum e' outro interceptor)."
+  (assoc (it/anexo-multipart {:max-bytes anexo/max-bytes-anexo :campos #{"motivo"}})
+         :name ::substituicao-multipart))
+
 (defn- erro-de-anexo
   "Os conflitos de anexo -> a resposta nomeada em portugues (nunca 500). nil = nao e' conflito daqui. `quem` = `:casa` (a
   secretaria anexa a RESPOSTA) ou `:requerente` (o cidadao anexa ao PEDIDO): o mesmo conflito, a frase de cada lado."
@@ -448,6 +454,13 @@
     (http/json-resposta 409 {:erro (if (= :requerente quem)
                                      (str "Este protocolo já tem " anexo/max-anexos-do-requerente " anexos seus.")
                                      (str "Este protocolo já tem " anexo/max-anexos-da-casa " anexos da Casa."))})
+    :conflito/anexo-nao-substituivel
+    (http/json-resposta 409 {:erro (case (:motivo (ex-data e))
+                                     :anexo-do-requerente "Só se substitui o arquivo da Casa. O que o requerente anexou pode ser retirado, mas não trocado."
+                                     :ja-substituido "Este arquivo já foi substituído por outro."
+                                     "Este arquivo já foi retirado e não pode ser substituído.")})
+    :conflito/anexo-igual
+    (http/json-resposta 409 {:erro "Este mesmo arquivo já está anexado ao protocolo. Escolha o arquivo certo para a troca."})
     nil))
 
 (defn- pre-conferir-anexo
@@ -468,6 +481,23 @@
                   (recusa (http/json-resposta 404 {:erro "protocolo nao encontrado"})))
                 (catch clojure.lang.ExceptionInfo e
                   (if-let [resp (erro-de-anexo quem e)] (recusa resp) (throw e))))))})
+
+(defn- pre-conferir-substituicao
+  "O interceptor que roda ANTES do multipart da substituicao (nenhum byte do corpo lido): o protocolo e o anexo existem nesta
+  Casa (senao 404) e o anexo pode ser substituido (senao 409). Sem janela de tempo: substituir vale a qualquer hora."
+  [repo-participacao relogio especie]
+  {:name (keyword "oplenario.participacao.diplomat.http.in" (str "pre-conferir-substituicao-" (name especie)))
+   :enter (fn [ctx]
+            (let [req (:request ctx)
+                  id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+                  aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))
+                  recusa (fn [resp] (chain/terminate (assoc ctx :response resp)))]
+              (try
+                (if (controllers/pre-conferir-substituir-anexo repo-participacao relogio (:ator req) especie id aid)
+                  ctx
+                  (recusa (http/json-resposta 404 {:erro "anexo nao encontrado"})))
+                (catch clojure.lang.ExceptionInfo e
+                  (if-let [resp (erro-de-anexo :casa e)] (recusa resp) (throw e))))))})
 
 (defn- anexar-handler
   "POST /atendimento/<especie>/:id/anexos (SERVIDOR, exige-papel; multipart, UM arquivo). 201 com o anexo (sem chave, sem
@@ -541,6 +571,26 @@
                :auditoria {:rotulo "retirou um anexo do protocolo" :recurso-tipo (anexo/objeto-tipo-da-especie especie)
                            :recurso-id (str id)})
         (http/json-resposta 404 {:erro "anexo nao encontrado"})))))
+
+(defn- substituir-anexo-handler
+  "POST /atendimento/<especie>/:id/anexos/:anexo/substituir (SERVIDOR, exige-papel; multipart com UM arquivo e o campo
+  `motivo`, obrigatorio). Troca o anexo da CASA pelo arquivo novo num so' ato, a qualquer tempo: o antigo e' retirado (motivo
+  gravado, blob fora, download 404) e o novo ocupa a vaga dele. 201 com o anexo NOVO; 404 protocolo/anexo inexistente ou de
+  outra Casa; 409 do requerente, ja' substituido, ja' retirado ou o mesmo arquivo; 400 sem motivo (conferido ANTES de gravar
+  o blob); 415 tipo; 413 acima de 10 MB (no interceptor)."
+  [repo-participacao objeto-store relogio especie]
+  (fn [req]
+    (let [id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          aid (adapters-in/id-param->uuid (get-in req [:path-params :anexo]))
+          {:keys [motivo]} (adapters-in-atendimento/coagir-substituir-anexo (:campos-do-envio req))]
+      (try
+        (if-let [{:keys [novo]} (controllers/substituir-anexo! repo-participacao objeto-store relogio (:ator req) especie id aid
+                                                               motivo (:anexo req))]
+          (assoc (http/json-resposta 201 (adapters-out-atendimento/anexo->wire novo))
+                 :auditoria {:rotulo (str "substituiu um anexo em " (:protocolo novo)) :recurso-tipo (anexo/objeto-tipo-da-especie especie)
+                             :recurso-id (str id)})
+          (http/json-resposta 404 {:erro "anexo nao encontrado"}))
+        (catch clojure.lang.ExceptionInfo e (or (erro-de-anexo :casa e) (throw e)))))))
 
 (defn- baixar-meu-anexo-handler
   "GET /portal/meus-protocolos/<especie>/:id/anexos/:anexo (REQUERENTE, so-auth): o anexo do PROPRIO protocolo. Quem nao e'
@@ -626,6 +676,20 @@
       ["/atendimento/lgpd/:id/anexos/:anexo/retirar" :post
        (servidor it/corpo-json (retirar-anexo-handler repo-participacao objeto-store relogio :lgpd))
        :route-name :participacao/retirar-anexo-lgpd]
+      ;; SUBSTITUIR um anexo da Casa (ADR-0022): multipart com o arquivo novo + o campo `motivo`; so' a secretaria, a qualquer tempo.
+      ;; Alvo e estado conferidos ANTES de ler o corpo.
+      ["/atendimento/esic/:id/anexos/:anexo/substituir" :post
+       (servidor (pre-conferir-substituicao repo-participacao relogio :esic)
+                substituicao-multipart (substituir-anexo-handler repo-participacao objeto-store relogio :esic))
+       :route-name :participacao/substituir-anexo-esic]
+      ["/atendimento/ouvidoria/:id/anexos/:anexo/substituir" :post
+       (servidor (pre-conferir-substituicao repo-participacao relogio :ouvidoria)
+                substituicao-multipart (substituir-anexo-handler repo-participacao objeto-store relogio :ouvidoria))
+       :route-name :participacao/substituir-anexo-ouvidoria]
+      ["/atendimento/lgpd/:id/anexos/:anexo/substituir" :post
+       (servidor (pre-conferir-substituicao repo-participacao relogio :lgpd)
+                substituicao-multipart (substituir-anexo-handler repo-participacao objeto-store relogio :lgpd))
+       :route-name :participacao/substituir-anexo-lgpd]
       ["/atendimento/esic/:id/anexos/:anexo" :get
        (servidor (baixar-anexo-handler repo-participacao objeto-store :esic))
        :route-name :participacao/baixar-anexo-esic]

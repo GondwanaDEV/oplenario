@@ -180,6 +180,7 @@ export type AcaoAtendimento =
   | "anexar"
   | "baixar-anexo"
   | "retirar-anexo"
+  | "substituir-anexo"
   | "encarregado"
   | "salvar-encarregado";
 
@@ -195,6 +196,7 @@ const CONFLITO: Record<AcaoAtendimento, string> = {
   anexar: "A Casa não pode anexar agora: o protocolo ainda não tem resposta, passaram os 10 minutos depois dela ou já são 5 anexos.",
   "baixar-anexo": "",
   "retirar-anexo": "",
+  "substituir-anexo": "",
   encarregado: "",
   "salvar-encarregado": "",
 };
@@ -204,6 +206,7 @@ export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento,
   if (status === 0) {
     if (acao === "anexar") return MENSAGEM_DE_REDE_NO_ANEXO;
     if (acao === "retirar-anexo") return "Falha de rede: não deu para confirmar a retirada. Tente de novo; retirar duas vezes tem o mesmo efeito de uma.";
+    if (acao === "substituir-anexo") return "Falha de rede: não deu para confirmar a troca. Recarregue a página para ver se o arquivo novo já aparece antes de tentar de novo.";
     return "Falha de rede. Nada foi gravado; tente de novo em instantes.";
   }
   if (status === 401) return "Sua sessão expirou. Entre de novo.";
@@ -213,6 +216,16 @@ export function mensagemDeErroAtendimento(status: number, acao: AcaoAtendimento,
     if (status === 400) return "Escreva o motivo da retirada.";
     if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
     return "Não foi possível retirar agora. Tente de novo em instantes.";
+  }
+  if (acao === "substituir-anexo") {
+    if (status === 413) return "O arquivo passa de 10 MB, o limite por anexo.";
+    if (status === 415) return erroDoServidor || `Tipo de arquivo não aceito. Aceitamos ${TIPOS_ACEITOS_EM_TEXTO}.`;
+    if (status === 409) return erroDoServidor || "Este arquivo não pode mais ser substituído. Recarregue a página para ver o que mudou.";
+    if (status === 403) return "Só a secretaria substitui anexos.";
+    if (status === 404) return "Não encontramos este anexo — ele pode não existir neste protocolo.";
+    if (status === 400) return "Escreva o motivo e escolha um arquivo (não vazio) para a troca.";
+    if (status === 423) return "O sistema desta Casa está com acesso restrito. Fale com a administração.";
+    return "Não foi possível substituir agora. Tente de novo em instantes.";
   }
   if (acao === "anexar" || acao === "baixar-anexo") return mensagemDeErroDeAnexo(status, acao, erroDoServidor);
   if (status === 403) return "Esta área é da secretaria. Seu acesso não permite ver ou responder estes protocolos.";

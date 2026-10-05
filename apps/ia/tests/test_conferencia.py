@@ -139,6 +139,17 @@ def test_le_a_materia_e_as_normas_e_registra_a_nota_com_citacoes_conferidas() ->
     assert r["modelo"].startswith("fake:")
 
 
+def test_o_registro_leva_o_id_da_execucao_na_ia_para_o_reportar_erro() -> None:
+    """O core guarda `execucao-ia` como chave de correlacao do 'Reportar erro' (8.4): e' o id da execucao do NUCLEO,
+    o mesmo do registro da Camada de Confianca, e nao o da credencial delegada."""
+    registro = RegistroMemoria()
+    mcp = McpConferencia()
+    conferir(Nucleo(PortaFake({OPERACAO: fake.redigir}), registro), mcp, ENTE, P1, "c")
+    execucoes = {e.execucao_id for e in registro.eventos()}
+    assert len(execucoes) == 1
+    assert mcp.registrado()["execucao-ia"] == execucoes.pop()
+
+
 def test_sem_dispositivo_a_nota_diz_e_sai_marcada_para_revisar() -> None:
     mcp = McpConferencia(achados=False)
     conferir(_nucleo(), mcp, ENTE, P1, "c")

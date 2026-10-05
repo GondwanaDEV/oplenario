@@ -53,4 +53,6 @@
    [:modelo-llm-id :string]
    [:texto-final [:maybe :string]]
    [:criada-em :string]
-   [:decidida-em [:maybe :string]]])
+   [:decidida-em [:maybe :string]]
+   ;; feature 8.4: o id da execucao NA IA — so' ele permite o 'Reportar erro'; ausente (nota anterior), a tela nao oferece
+   [:execucao-ia {:optional true} [:maybe :string]]])

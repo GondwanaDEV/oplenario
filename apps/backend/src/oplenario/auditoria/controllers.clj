@@ -10,19 +10,35 @@
 
 (set! *warn-on-reflection* true)
 
+(defn- gravar!
+  "Grava `r` na corrente e, se ele fechou um dia, ancora o selo desse dia (a ancora falhar nao desfaz o registro)."
+  [repo-auditoria {:keys [ancorar!]} r]
+  (let [{:keys [registro dia-fechado]} (repo/registrar! repo-auditoria r)]
+    (when (and dia-fechado ancorar!)
+      (try (ancorar! (:ente-id r) dia-fechado)
+           (catch Exception e (log/error e "auditoria: falha ao ancorar o selo do dia" (:ente-id r)))))
+    registro))
+
+(defn registrar-tentativa!
+  "ANTES do handler de uma escrita: grava a tentativa na corrente, em transacao propria ja' commitada, e devolve o seq
+  dela (nil quando a requisicao nao tem tentativa). LANCA se nao gravar — quem chama decide: por padrao loga e deixa o
+  ato seguir; com AUDITORIA_EXIGIR_TENTATIVA recusa o pedido (ADR-0017, adendo de 04/10/2026)."
+  [repo-auditoria seams req acao]
+  (when-let [r (logic/registro-da-tentativa req acao)]
+    (:seq (gravar! repo-auditoria seams r))))
+
 (defn registrar-requisicao!
   "Do par requisicao/resposta ja' respondido -> o registro na corrente (quando entra na trilha). Uma falha aqui NAO
-  desfaz o ato nem muda a resposta: e' logada como erro (ADR-0017, materializacao — o registro e' gravado logo depois
-  do ato, na mesma requisicao, antes da resposta sair)."
-  [repo-auditoria {:keys [ancorar!]} req resp acao]
-  (try
-    (when-let [r (logic/registro-da-requisicao req resp acao)]
-      (let [{:keys [dia-fechado]} (repo/registrar! repo-auditoria r)]
-        (when (and dia-fechado ancorar!)
-          (try (ancorar! (:ente-id r) dia-fechado)
-               (catch Exception e (log/error e "auditoria: falha ao ancorar o selo do dia" (:ente-id r)))))))
-    (catch Exception e
-      (log/error e "auditoria: registro NAO gravado" {:acao acao :status (:status resp)}))))
+  desfaz o ato nem muda a resposta: e' logada como erro. `tentativa` = o seq da tentativa gravada antes do handler
+  (nil quando nao houve): o desfecho a aponta, e se ele nao for gravado a tentativa fica na corrente SEM desfecho — e'
+  o que a leitura e a conferencia acusam."
+  ([repo-auditoria seams req resp acao] (registrar-requisicao! repo-auditoria seams req resp acao nil))
+  ([repo-auditoria seams req resp acao tentativa]
+   (try
+     (when-let [r (logic/registro-da-requisicao req resp acao tentativa)]
+       (gravar! repo-auditoria seams r))
+     (catch Exception e
+       (log/error e "auditoria: desfecho NAO gravado" {:acao acao :status (:status resp) :tentativa tentativa})))))
 
 (defn- com-nomes
   "Os registros com o nome de quem agiu (pessoa) ou o pseudonimo (cidadao). Uma consulta por pessoa distinta."
@@ -51,9 +67,11 @@
      :limite    limite}))
 
 (defn integridade
-  "A corrente da Casa conferida inteira + os ultimos 30 selos do dia (so' o `auditor`)."
+  "A corrente da Casa conferida inteira + os ultimos 30 selos do dia + as tentativas sem desfecho (so' o `auditor`)."
   [repo-auditoria ente-id]
-  (assoc (repo/verificar repo-auditoria ente-id) :selos-do-dia (repo/selos-do-dia repo-auditoria ente-id 30)))
+  (assoc (repo/verificar repo-auditoria ente-id)
+         :selos-do-dia (repo/selos-do-dia repo-auditoria ente-id 30)
+         :sem-desfecho (repo/sem-desfecho repo-auditoria ente-id)))
 
 (defn selos-publicos
   "O que o portal publica: os ultimos 30 selos do dia (sem nenhum registro)."

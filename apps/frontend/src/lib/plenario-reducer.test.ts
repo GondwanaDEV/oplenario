@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
@@ -47,6 +47,27 @@ describe("sessao.transicionou", () => {
     ]);
     expect(e.estado).toBe("suspensa");
     expect(e.ultimoSeq).toBe(1);
+  });
+});
+
+describe("hidratarSessao — o estado da sessão por snapshot (GET /sessoes/:id), para o `sessao.transicionou` que o canal perdeu", () => {
+  it("o snapshot corrige o estado quando nenhum evento de transição chegou no meio", () => {
+    const e = estadoInicial(sessao({ estado: "aberta" }));
+    expect(hidratarSessao(e, { estado: "encerrada" }, e.sessaoEventoSeq).estado).toBe("encerrada");
+  });
+
+  it("PRECEDÊNCIA — um `sessao.transicionou` chegado com o GET em voo não é desfeito pelo snapshot atrasado", () => {
+    const e = estadoInicial(sessao({ estado: "aberta" }));
+    const seqNoDisparo = e.sessaoEventoSeq;
+    const depois = aplicarEvento(e, { tipo: "sessao.transicionou", seq: 1, dados: { "sessao-id": "s1", de: "aberta", para: "suspensa" } });
+    expect(hidratarSessao(depois, { estado: "aberta" }, seqNoDisparo).estado).toBe("suspensa");
+  });
+
+  it("corpo de forma inesperada devolve o estado inalterado (TOTAL: roda dentro de updater do React)", () => {
+    const e = estadoInicial(sessao({ estado: "aberta" }));
+    expect(hidratarSessao(e, {} as never, e.sessaoEventoSeq)).toBe(e);
+    expect(hidratarSessao(e, { estado: 7 } as never, e.sessaoEventoSeq)).toBe(e);
+    expect(hidratarSessao(e, null as never, e.sessaoEventoSeq)).toBe(e);
   });
 });
 
@@ -372,6 +393,30 @@ describe("votação — recuperação de estado sem nenhum evento SSE (fatia 'de
   it("T2 — sem votação aberta (cru null) é estado LEGÍTIMO: não muda nada, não inventa placar", () => {
     const e = hidratarVotacao(aberta(), null, seq0);
     expect(e.placar).toBeNull();
+  });
+
+  it("T2b — 404 com um placar ABERTO no estado: o servidor diz que não há votação aberta, então o encerramento foi perdido e o placar sai (senão o telão diz 'em curso' para sempre)", () => {
+    const comAbertura = aplicarEvento(aberta(), votacaoAberta(1));
+    expect(comAbertura.placar?.encerrada).toBe(false);
+    const e = hidratarVotacao(comAbertura, null, comAbertura.votacaoEventoSeq);
+    expect(e.placar).toBeNull();
+  });
+
+  it("T2c — 404 NÃO apaga o resultado de uma votação já ENCERRADA (404 é o esperado depois do encerramento)", () => {
+    const encerrada = aplicarEvento(aplicarEvento(aberta(), votacaoAberta(1)), {
+      tipo: "votacao.encerrada",
+      seq: 2,
+      dados: { "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", "total-sim": 2, "total-nao": 1, "total-abstencao": 0, "base-membros": 3 },
+    } as EventoPlenario);
+    const e = hidratarVotacao(encerrada, null, encerrada.votacaoEventoSeq);
+    expect(e.placar).toEqual(encerrada.placar);
+  });
+
+  it("T2d — o 404 de T0 NÃO derruba uma votação aberta pelo SSE enquanto a resposta estava em voo (precedência)", () => {
+    const antes = aberta();
+    const seqNoDisparo = antes.votacaoEventoSeq;
+    const comAbertura = aplicarEvento(antes, votacaoAberta(1)); // chegou DEPOIS de T0
+    expect(hidratarVotacao(comAbertura, null, seqNoDisparo).placar?.votacaoId).toBe("vt1");
   });
 
   it("T3 (MAJOR) — corpo de forma inesperada não lança e não inventa placar: TOTAL, como hidratarTribuna", () => {

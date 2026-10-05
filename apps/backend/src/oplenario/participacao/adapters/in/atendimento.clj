@@ -53,3 +53,14 @@
       (invalido! "corpo da retirada do anexo invalido" {:campos (keys (me/humanize erros))}))
     (when (str/blank? (:motivo mp)) (invalido! "o motivo da retirada e obrigatorio" {:campo :motivo}))
     {:motivo (str/trim (:motivo mp))}))
+
+(defn coagir-substituir-anexo
+  "Campos de texto do multipart da substituicao (`(:request :campos-do-envio)`, chaves keyword, so' as pedidas pela rota) ->
+  {:motivo}, aparado. Motivo obrigatorio (ausente, vazio ou so' espacos -> 400), com o teto da retirada. E' conferido ANTES de o
+  blob subir: um motivo faltando nao deixa rastro no object storage."
+  [campos]
+  (let [mp (cond-> {} (some? (get campos :motivo)) (assoc :motivo (get campos :motivo)))]
+    (when-let [erros (m/explain wire/SubstituirAnexoIn mp)]
+      (invalido! "motivo da substituicao do anexo invalido" {:campos (keys (me/humanize erros))}))
+    (when (str/blank? (:motivo mp)) (invalido! "o motivo da substituicao e obrigatorio" {:campo :motivo}))
+    {:motivo (str/trim (:motivo mp))}))

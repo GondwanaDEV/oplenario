@@ -200,3 +200,23 @@
     (is (= 1 (count (anexo/da-origem anexos "requerente"))))
     (is (= 1 (count (anexo/da-casa anexos))))
     (is (true? (anexo/pode-anexar-requerente? (t "2026-07-03T12:00:00Z") (count (anexo/da-origem anexos "requerente")) (t "2026-07-03T12:01:00Z"))))))
+
+;; ---------- substituir um anexo da Casa (ADR-0022) ----------
+
+(deftest so-o-anexo-da-casa-e-vigente-pode-ser-substituido
+  (let [em (t "2026-07-03T12:00:00Z")]
+    (testing "o vigente da Casa cabe, a qualquer tempo: a regra nem recebe relogio nem janela"
+      (is (nil? (anexo/motivo-de-nao-substituir {:origem "casa"})))
+      (is (true? (anexo/pode-substituir? {:origem "casa" :enviado-em em}))))
+    (testing "o que o requerente anexou nao se substitui (so' se retira)"
+      (is (= :anexo-do-requerente (anexo/motivo-de-nao-substituir {:origem "requerente"})))
+      (is (false? (anexo/pode-substituir? {:origem "requerente"}))))
+    (testing "ja' substituido: a mensagem e' a da substituicao, mesmo com a retirada que a substituicao carrega"
+      (let [a {:origem "casa" :retirado-em em :substituido-por (random-uuid)}]
+        (is (= :ja-substituido (anexo/motivo-de-nao-substituir a)))
+        (is (false? (anexo/pode-substituir? a)))))
+    (testing "ja' retirado (sem troca)"
+      (is (= :ja-retirado (anexo/motivo-de-nao-substituir {:origem "casa" :retirado-em em}))))
+    (testing "origem ausente ou estranha nunca cabe (fail-closed)"
+      (is (= :anexo-do-requerente (anexo/motivo-de-nao-substituir {})))
+      (is (= :anexo-do-requerente (anexo/motivo-de-nao-substituir {:origem "outra"}))))))

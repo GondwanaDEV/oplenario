@@ -5,6 +5,7 @@ name: Fumaca das telas novas (homolog)
 # presentes). Nao faz nenhuma escrita. Cada checagem e independente (flag [OK]/[ERRO]).
 # A unica requisicao de escrita (caso 14, envio de arquivo) vai a uma prestacao de contas que nao existe: o
 # parser le o arquivo e a rota responde 404 sem gravar nada (so' a trilha de auditoria registra a tentativa).
+# O caso 15 (complemento da resposta) segue a mesma regra: so' envia pedidos que a rota tem de recusar (404, 400, 409, 403).
 
 on:
   workflow_dispatch:
@@ -432,6 +433,41 @@ jobs:
               rec('envio de arquivo (parser)', ok ? 'OK' : 'ERRO',
                   `nome-longo(${[...nomeLongo].length} car, ${Buffer.byteLength(nomeLongo)} bytes)=${longo.status} "${longo.erro}" cabecalho-4KB=${grande.status} "${grande.erro}"`);
             } catch (e) { rec('envio de arquivo (parser)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 15) COMPLEMENTO DA RESPOSTA (ADR-0022) — SEM gravar nada: a rota existe, le o corpo e recusa o que nao cabe.
+            //     - protocolo que nao existe -> 404 "nao encontrado" (texto valido: passou pela validacao e pela Casa);
+            //     - o controle: texto so' de espacos -> 400. A validacao vem antes da busca, entao os dois pedidos ao mesmo
+            //       protocolo inexistente so' diferem pelo corpo: se a rota respondesse sem ler o corpo, dariam o mesmo status;
+            //     - protocolo AINDA ABERTO (acoes.pode-complementar = false no detalhe) -> 409 em palavras. So' e' enviado a
+            //       um protocolo que o proprio detalhe diz que nao aceita: nunca a um ja' respondido, que gravaria;
+            //     - a vereadora -> 403.
+            try {
+              const postar = async (ctx, id, corpo) => {
+                const r = await ctx.request.post(`${B}/api/atendimento/esic/${id}/complementos`, {
+                  headers: { 'content-type': 'application/json', accept: 'application/json' },
+                  data: JSON.stringify({ corpo }), timeout: 25000 });
+                let j = null; try { j = await r.json(); } catch {}
+                return { status: r.status(), erro: j?.erro ?? '' };
+              };
+              const fantasma = crypto.randomUUID();
+              const inexistente = await postar(cSec, fantasma, 'fumaça: complemento a um protocolo que não existe');
+              const vazio = await postar(cSec, fantasma, '   ');
+              const ver = await postar(cVer, fantasma, 'fumaça');
+              const fila = (await api(cSec, '/api/atendimento/esic')).body?.itens ?? [];
+              let aberto = null, chave = false;
+              for (const it of fila) {
+                const d = await api(cSec, `/api/atendimento/esic/${it.id}`);
+                const pode = d.body?.acoes?.['pode-complementar'];
+                if (typeof pode === 'boolean') chave = true;
+                if (pode === false) { aberto = it.id; break; }
+              }
+              const semResposta = aberto ? await postar(cSec, aberto, 'fumaça: complemento a um protocolo ainda aberto') : null;
+              const ok = inexistente.status === 404 && /n[aã]o encontrado/i.test(inexistente.erro)
+                && vazio.status === 400 && ver.status === 403 && chave
+                && (!semResposta || (semResposta.status === 409 && /antes de complementar/i.test(semResposta.erro)));
+              rec('complemento da resposta', ok ? 'OK' : 'ERRO',
+                  `inexistente=${inexistente.status} "${inexistente.erro}" vazio=${vazio.status} vereadora=${ver.status} pode-complementar-no-detalhe=${chave} aberto=${semResposta ? `${semResposta.status} "${semResposta.erro}"` : 'nenhum protocolo aberto na fila'}`);
+            } catch (e) { rec('complemento da resposta', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);

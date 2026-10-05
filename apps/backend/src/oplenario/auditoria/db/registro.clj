@@ -39,14 +39,25 @@
 (defn- texto-array [tx xs]
   (.createArrayOf ^java.sql.Connection tx "text" (to-array (map str xs))))
 
+(defn- cabeca-e-agora
+  "A cabeca da corrente da Casa e o relogio do banco numa consulta so': com a tentativa, cada escrita grava duas vezes
+  na corrente, e cada gravacao custa o lock, esta leitura e o INSERT."
+  [tx ente-id]
+  (let [l (jdbc/execute-one! tx ["SELECT now() AS agora, c.seq, c.selo, c.ocorrido_em
+                                  FROM (SELECT 1) AS um
+                                  LEFT JOIN LATERAL (SELECT seq, selo, ocorrido_em FROM auditoria.registro
+                                                     WHERE ente_id = ? ORDER BY seq DESC LIMIT 1) c ON true" ente-id]
+                             {:builder-fn rs/as-unqualified-lower-maps})]
+    {:agora    (->instant (:agora l))
+     :anterior (when (:seq l) {:seq (:seq l) :selo (:selo l) :ocorrido-em (->instant (:ocorrido_em l))})}))
+
 (defn gravar!
   "Acrescenta `r` a corrente da Casa (na tx `tx`, de tenant). Devolve {:registro :dia-fechado}: `:dia-fechado` =
   {:dia :seq :selo} quando este e' o primeiro registro de um dia novo — a cabeca anterior e' o selo daquele dia."
   [tx r]
   (lock! tx (:ente-id r))
-  (let [anterior (cabeca tx (:ente-id r))
-        agora    (->instant (:now (jdbc/execute-one! tx ["SELECT now() AS now"])))
-        reg      (assoc r :id (random-uuid) :seq (inc (long (or (:seq anterior) 0))) :ocorrido-em agora)
+  (let [{:keys [agora anterior]} (cabeca-e-agora tx (:ente-id r))
+        reg     (assoc r :id (random-uuid) :seq (inc (long (or (:seq anterior) 0))) :ocorrido-em agora)
         selo     (logic/selo-de (or (:selo anterior) "") reg)]
     (jdbc/execute-one! tx [(str "INSERT INTO auditoria.registro (ente_id, seq, id, ocorrido_em, ator_tipo, identidade_id,"
                                 " papeis, via_agente, acao, classe, recurso_tipo, recurso_id, rotulo, campos, decisao,"
@@ -79,27 +90,55 @@
 
 ;; ---- leitura ----
 
-(defn- filtro-where [ente-id {:keys [escopo desde ate ator-tipo classe objeto antes-de]}]
-  (cond-> [:and [:= :ente_id ente-id]]
-    (= :propria (:tipo escopo)) (conj [:= :identidade_id (:identidade-id escopo)])
-    (= :acessos (:tipo escopo)) (conj [:or [:like :acao (str logic/prefixo-dos-acessos "%")]
-                                       [:= :identidade_id (:identidade-id escopo)]])
-    desde     (conj [:>= :ocorrido_em (Timestamp/from ^Instant desde)])
-    ate       (conj [:< :ocorrido_em (Timestamp/from ^Instant ate)])
-    ator-tipo (conj [:= :ator_tipo ator-tipo])
-    classe    (conj [:= :classe classe])
-    objeto    (conj [:like :acao (str objeto "/%")])
-    antes-de  (conj [:< :seq antes-de])))
+;; A TENTATIVA (decisao = iniciado) na leitura (ADR-0017, adendo): a que TEM desfecho nao e' linha da tela — o desfecho
+;; e' a linha do ato; a que NAO tem aparece, porque e' o ato que pode ter acontecido sem registro. Uma tentativa mais
+;; nova que a tolerancia ainda pode estar em curso (o handler rodando) e so' e' acusada depois dela. O desfecho aponta a
+;; tentativa em detalhe.tentativa (indice parcial idx_registro_tentativa, migration 0188).
+
+(def tolerancia-padrao-s
+  "Quanto tempo uma tentativa pode ficar sem desfecho antes de ser acusada: o pedido ainda pode estar em curso."
+  120)
+
+(defn- tentativa-oculta-sql
+  "A tentativa que NAO se mostra: a que ainda esta' dentro da tolerancia ou a que tem desfecho. `a` = o alias da linha."
+  [a tolerancia-s]
+  (str a ".decisao = 'iniciado' AND (" a ".ocorrido_em > now() - interval '"
+       (long (or tolerancia-s tolerancia-padrao-s)) " seconds'"
+       " OR EXISTS (SELECT 1 FROM auditoria.registro d WHERE d.ente_id = " a ".ente_id"
+       " AND (d.detalhe->>'tentativa') IS NOT NULL AND (d.detalhe->>'tentativa')::bigint = " a ".seq))"))
+
+(defn- filtro-where [ente-id {:keys [escopo desde ate ator-tipo classe objeto antes-de sem-desfecho tolerancia-s]}]
+  (cond-> [:and [:= :r.ente_id ente-id] [:raw (str "NOT (" (tentativa-oculta-sql "r" tolerancia-s) ")")]]
+    (= :propria (:tipo escopo)) (conj [:= :r.identidade_id (:identidade-id escopo)])
+    (= :acessos (:tipo escopo)) (conj [:or [:like :r.acao (str logic/prefixo-dos-acessos "%")]
+                                       [:= :r.identidade_id (:identidade-id escopo)]])
+    desde     (conj [:>= :r.ocorrido_em (Timestamp/from ^Instant desde)])
+    ate       (conj [:< :r.ocorrido_em (Timestamp/from ^Instant ate)])
+    ator-tipo (conj [:= :r.ator_tipo ator-tipo])
+    classe    (conj [:= :r.classe classe])
+    sem-desfecho (conj [:= :r.decisao logic/iniciado])
+    objeto    (conj [:like :r.acao (str objeto "/%")])
+    antes-de  (conj [:< :r.seq antes-de])))
 
 (defn listar
-  "Uma pagina da trilha, mais recente primeiro, e o total do filtro."
+  "Uma pagina da trilha, mais recente primeiro, e o total do filtro. A tentativa com desfecho nao e' linha da tela."
   [tx ente-id filtro limite]
   (let [onde (filtro-where ente-id filtro)]
-    {:registros (mapv ->registro (jdbc/execute! tx (sql/format {:select [:*] :from [:auditoria.registro] :where onde
-                                                                :order-by [[:seq :desc]] :limit limite})))
-     :total (:n (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :n]] :from [:auditoria.registro]
+    {:registros (mapv ->registro (jdbc/execute! tx (sql/format {:select [:r.*] :from [[:auditoria.registro :r]]
+                                                                :where onde :order-by [[:r.seq :desc]] :limit limite})))
+     :total (:n (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :n]] :from [[:auditoria.registro :r]]
                                                    :where (filtro-where ente-id (dissoc filtro :antes-de))})
                                    {:builder-fn rs/as-unqualified-lower-maps}))}))
+
+(defn sem-desfecho
+  "As tentativas da Casa sem desfecho registrado, fora da tolerancia: {:total :primeiro} (`:primeiro` = o seq da mais
+  antiga, ou nil). E' o que a conferencia acusa ao lado do selo: a corrente pode estar integra e faltar um desfecho."
+  [tx ente-id tolerancia-s]
+  (let [l (jdbc/execute-one! tx [(str "SELECT count(*) AS n, min(r.seq) AS primeiro FROM auditoria.registro r"
+                                      " WHERE r.ente_id = ? AND r.decisao = 'iniciado'"
+                                      " AND NOT (" (tentativa-oculta-sql "r" tolerancia-s) ")") ente-id]
+                             {:builder-fn rs/as-unqualified-lower-maps})]
+    {:total (long (:n l)) :primeiro (:primeiro l)}))
 
 (defn total-da-casa [tx ente-id]
   (:n (jdbc/execute-one! tx ["SELECT count(*) AS n FROM auditoria.registro WHERE ente_id = ?" ente-id]

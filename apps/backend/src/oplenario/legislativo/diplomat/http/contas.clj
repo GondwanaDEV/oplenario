@@ -117,6 +117,16 @@
   (it/anexo-multipart {:max-bytes logic-contas/max-bytes-documento
                        :mensagem-do-teto "O documento passa de 10 MB."}))
 
+(def ^:private tipo-antes-do-corpo
+  "O `?tipo=` conferido ANTES de o parser ler o corpo: sem isto, um tipo errado so' era recusado depois de ate' 10 MB lidos
+  para a memoria, segurando uma das vagas de envio do processo. So' o tipo: se a prestacao existe continua sendo visto
+  DEPOIS do corpo, e a fumaca de producao depende disso (envia a uma prestacao inexistente para exercitar o parser sem
+  gravar nada — `fumaca-hml`, caso 14)."
+  {:name ::tipo-antes-do-corpo
+   :enter (fn [ctx]
+            (adapters-in/tipo-do-documento (get-in ctx [:request :query-params]))
+            ctx)})
+
 (defn- anexar-handler [{:keys [repo-legislativo objeto-store]}]
   (fn [req]
     (let [tipo (adapters-in/tipo-do-documento (:query-params req))
@@ -214,7 +224,7 @@
       ["/contas/:id" :patch [auth papel it/corpo-json (editar-handler deps)] :route-name :legislativo/editar-contas]
       ["/contas/:id/notificacao" :post [auth papel it/corpo-json (notificacao-handler deps)]
        :route-name :legislativo/notificar-contas]
-      ["/contas/:id/documentos" :post [auth papel documento-multipart (anexar-handler deps)]
+      ["/contas/:id/documentos" :post [auth papel tipo-antes-do-corpo documento-multipart (anexar-handler deps)]
        :route-name :legislativo/anexar-documento-contas]
       ["/contas/:id/documentos/:doc-id" :get [auth papel-leitura (baixar-handler deps)]
        :route-name :legislativo/baixar-documento-contas]

@@ -28,3 +28,9 @@
   trilha). O teto espelha a CHECK de tamanho de participacao.anexo_retirada."
   [:map {:closed true}
    [:motivo [:string {:min 1 :max 1000}]]])
+
+(def SubstituirAnexoIn
+  "O campo de texto `motivo` do multipart que substitui um anexo (o arquivo vem na outra parte). Closed: so' `motivo`,
+  obrigatorio, com o mesmo teto da retirada (a substituicao grava a retirada do antigo com este motivo)."
+  [:map {:closed true}
+   [:motivo [:string {:min 1 :max 1000}]]])

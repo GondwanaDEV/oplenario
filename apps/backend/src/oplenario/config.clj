@@ -46,6 +46,12 @@
      (get env "DB_USER")      (assoc-in [:db :user]     (get env "DB_USER"))
      (get env "DB_PASSWORD")  (assoc-in [:db :password] (get env "DB_PASSWORD"))
      (get env "VALKEY_URI")       (assoc-in [:valkey :uri]            (get env "VALKEY_URI"))
+     ;; A senha do Valkey vem SO' do ambiente (cofre do deploy) — o config.edn nao tem default. `rediss://` na
+     ;; VALKEY_URI liga o TLS. Fora de dev/test, backplane :valkey sem senha SOBE avisando em nivel error; com
+     ;; VALKEY_EXIGIR_SENHA=true (so' o literal "true") passa a recusar o boot (sistema/novo-sistema).
+     (get env "VALKEY_EXIGIR_SENHA") (assoc-in [:valkey :exigir-senha] (= "true" (get env "VALKEY_EXIGIR_SENHA")))
+     (get env "VALKEY_USERNAME")  (assoc-in [:valkey :username]       (get env "VALKEY_USERNAME"))
+     (get env "VALKEY_PASSWORD")  (assoc-in [:valkey :password]       (get env "VALKEY_PASSWORD"))
      (get env "TEMPO_REAL_BACKPLANE") (assoc-in [:tempo-real :backplane] (keyword (get env "TEMPO_REAL_BACKPLANE")))
      (get env "MINIO_ENDPOINT")   (assoc-in [:objeto-store :endpoint]   (get env "MINIO_ENDPOINT"))
      (get env "MINIO_ACCESS_KEY") (assoc-in [:objeto-store :access-key] (get env "MINIO_ACCESS_KEY"))
@@ -55,6 +61,9 @@
      ;; ADR-0008: segredo de servico core<->satelite de IA (vem do cofre). Ausente = rotas /integracao/ia desligadas.
      (get env "OPLENARIO_IA_SEGREDO") (assoc-in [:integracao-ia :segredo] (get env "OPLENARIO_IA_SEGREDO"))
      (get env "OPLENARIO_IA_URL")     (assoc-in [:integracao-ia :url]     (get env "OPLENARIO_IA_URL"))
+     ;; ADR-0017 (adendo): so' o valor exato "true" liga o modo que RECUSA a escrita quando a tentativa da trilha nao
+     ;; grava. Ausente ou qualquer outro valor = nao bloqueia (a trilha fora nao para a Casa).
+     (= "true" (get env "AUDITORIA_EXIGIR_TENTATIVA")) (assoc-in [:auditoria :exigir-tentativa] true)
      (get env "KEYCLOAK_BASE_URL")        (assoc-in [:keycloak :base-url]        (get env "KEYCLOAK_BASE_URL"))
      (get env "KEYCLOAK_REALM_PREFIXO")   (assoc-in [:keycloak :realm-prefixo]   (get env "KEYCLOAK_REALM_PREFIXO"))
      (get env "KEYCLOAK_AUDIENCIA")       (assoc-in [:keycloak :audiencia]       (get env "KEYCLOAK_AUDIENCIA"))

@@ -64,6 +64,13 @@
     (is (= "oplenario-web" (get-in c [:keycloak :web-client-id])) "client id publico default do edn")
     (is (= "http://localhost:8090" (get-in c [:keycloak :base-url-publico])) "base-url publico default do edn")))
 
+(deftest a-trilha-so-bloqueia-a-escrita-com-opt-in-explicito
+  ;; ADR-0017 (adendo): o padrao e' NAO bloquear; so' o valor exato "true" liga o modo que recusa
+  (is (false? (get-in (config/carregar {}) [:auditoria :exigir-tentativa])))
+  (is (true? (get-in (config/carregar {"AUDITORIA_EXIGIR_TENTATIVA" "true"}) [:auditoria :exigir-tentativa])))
+  (doseq [v ["" "false" "1" "TRUE" "sim"]]
+    (is (false? (get-in (config/carregar {"AUDITORIA_EXIGIR_TENTATIVA" v}) [:auditoria :exigir-tentativa])) (pr-str v))))
+
 (deftest govbr-so-existe-com-ambiente
   ;; ADR-0015: sem GOVBR_AMBIENTE o realm nao ganha o broker (fail-closed)
   (is (nil? (get-in (config/carregar {}) [:keycloak :govbr])))
@@ -91,3 +98,16 @@
     (is (= "direct" (get-in prod [:operacao :atestacao]))))
   (is (= "none" (get-in (config/carregar {"OPERACAO_ATESTACAO" "none"}) [:operacao :atestacao])))
   (is (thrown? clojure.lang.ExceptionInfo (config/carregar {"OPERACAO_ATESTACAO" "talvez"}))))
+
+(deftest valkey-senha-so-vem-do-ambiente
+  (is (nil? (get-in (config/carregar {}) [:valkey :password])) "o config.edn nao traz senha padrao do Valkey")
+  (is (nil? (get-in (config/carregar {}) [:valkey :username])))
+  (let [c (config/carregar {"VALKEY_URI" "rediss://cache.interno:6380" "VALKEY_USERNAME" "oplenario"
+                            "VALKEY_PASSWORD" "s3nha"})]
+    (is (= {:uri "rediss://cache.interno:6380" :username "oplenario" :password "s3nha"} (:valkey c)))))
+
+(deftest valkey-exigir-senha-so-liga-com-true
+  (is (nil? (get-in (config/carregar {}) [:valkey :exigir-senha])) "ausente por padrao: o boot so' avisa")
+  (is (true? (get-in (config/carregar {"VALKEY_EXIGIR_SENHA" "true"}) [:valkey :exigir-senha])))
+  (is (false? (get-in (config/carregar {"VALKEY_EXIGIR_SENHA" "1"}) [:valkey :exigir-senha]))
+      "so' o literal true liga"))

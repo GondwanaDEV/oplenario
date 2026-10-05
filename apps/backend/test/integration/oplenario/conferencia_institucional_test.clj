@@ -182,6 +182,30 @@
         (ligar! a (random-uuid))
         (is (= (:id c1) (:id (repo-id/concessao-agente (repo-identidade) a agente))))))))
 
+;; ---------- o id da execucao na IA: so' correlacao do "Reportar erro" (8.4) ----------
+
+(deftest execucao-ia-e-so-chave-de-correlacao-do-reporte
+  (let [ente (random-uuid)
+        _ (ligar! ente (pessoa! ente "admin_ente"))
+        c (auten/emitir-credencial-institucional! (repo-identidade) ente agente)
+        ator (ator-da c)
+        exec-ia (random-uuid)
+        registrar (fn [p extra]
+                    (catalogo/executar! (deps) ator "registrar_nota_tecnica"
+                                        (como-json (merge nota {:proposicao-id (str (:id p))} extra))))
+        nota-do (fn [r] (controllers/nota-tecnica (repo-legislativo) ente (parse-uuid (:nota-id r))))]
+    (testing "com o campo, o core grava; a identidade da execucao continua vindo so' da credencial"
+      (let [n (nota-do (registrar (proposicao! ente "Com id da IA.") {:execucao-ia (str exec-ia)}))]
+        (is (= exec-ia (:execucao-ia n)))
+        (is (= (:execucao-id c) (:execucao-id n)) "a execucao da credencial nao sai da entrada")
+        (is (not= exec-ia (:execucao-id n)))))
+    (testing "satelite antigo (sem o campo): aceita, e a nota fica sem o id"
+      (is (nil? (:execucao-ia (nota-do (registrar (proposicao! ente "Sem id da IA.") {}))))))
+    (testing "valor que nao e' UUID: recusado como os outros campos, nada gravado"
+      (let [p (proposicao! ente "Com id invalido.")]
+        (is (= :validacao/invalido (erro #(registrar p {:execucao-ia "nao-e-uuid"}))))
+        (is (empty? (filter #(= (:id p) (:proposicao-id %)) (controllers/notas-tecnicas (repo-legislativo) ente nil))))))))
+
 ;; ---------- a decisao da secretaria ----------
 
 (defn- nota! [ente]
@@ -279,3 +303,18 @@
                                    {:desfecho "descartada"}))))
         (is (= [] (:itens (:corpo (pedir svc :get "/legislativo/notas-tecnicas" ente secretaria)))))
         (is (= 1 (count (:itens (:corpo (pedir svc :get "/legislativo/notas-tecnicas?estado=todas" ente secretaria))))))))))
+
+(deftest a-leitura-da-nota-devolve-execucao-ia-so-quando-ha
+  (let [svc (servico)
+        ente (random-uuid)
+        secretaria (pessoa! ente "secretario")
+        exec-ia (random-uuid)
+        base {:ente-id ente :via {:agente agente :execucao-id (random-uuid)}}
+        com (controllers/registrar-nota-tecnica! (repo-legislativo) base
+                                                 (assoc nota :proposicao-id (:id (proposicao! ente "Com."))
+                                                             :execucao-ia exec-ia))
+        sem (controllers/registrar-nota-tecnica! (repo-legislativo) base
+                                                 (assoc nota :proposicao-id (:id (proposicao! ente "Sem."))))
+        ler (fn [n] (:corpo (pedir svc :get (str "/legislativo/notas-tecnicas/" (:id n)) ente secretaria)))]
+    (is (= (str exec-ia) (:execucao-ia (ler com))))
+    (is (not (contains? (ler sem) :execucao-ia)) "sem valor, a chave nao sai (a tela nao oferece o botao)")))

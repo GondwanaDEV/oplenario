@@ -140,6 +140,8 @@
     :participacao/anexar-meu-esic :participacao/anexar-meu-ouvidoria :participacao/anexar-meu-lgpd
     ;; retirar anexo = contencao de incidente de conteudo (a Casa suspensa pode)
     :participacao/retirar-anexo-esic :participacao/retirar-anexo-ouvidoria :participacao/retirar-anexo-lgpd
+    ;; substituir anexo (ADR-0022) = retirar o errado e por o certo, num ato: a mesma contencao
+    :participacao/substituir-anexo-esic :participacao/substituir-anexo-ouvidoria :participacao/substituir-anexo-lgpd
     :participacao/moderar-comentario :paineis/marcar-notificacao-lida
     ;; ADR-0020: a ciencia de um comunicado recebido (enviar segue bloqueado)
     :comunicacao/ciencia

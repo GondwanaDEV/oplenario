@@ -155,3 +155,47 @@
         (is (= 413 (:status r)))
         (is (= "{\"erro\":\"O documento passa do teto.\"}" (:body r)))))
     (is (= it/max-envios-simultaneos (vagas-livres)) "as recusas devolveram a vaga")))
+
+;; ---------------------------------------------------------------- campos de texto junto do arquivo (`:campos`)
+
+(defn- corpo-com-campos ^bytes [campos arquivo-antes? & {:keys [segundo-arquivo?]}]
+  (let [campo (fn [[k v]] (str "--" fronteira "\r\nContent-Disposition: form-data; name=\"" k "\"\r\n\r\n" v "\r\n"))
+        arquivo (str "--" fronteira "\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"a.txt\"\r\n"
+                     "Content-Type: text/plain\r\n\r\nconteudo\r\n")
+        outro (when segundo-arquivo?
+                (str "--" fronteira "\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"b.txt\"\r\n"
+                     "Content-Type: text/plain\r\n\r\nb\r\n"))]
+    (.getBytes (str (when-not arquivo-antes? (apply str (map campo campos))) arquivo outro
+                    (when arquivo-antes? (apply str (map campo campos))) "--" fronteira "--\r\n")
+               "UTF-8")))
+
+(defn- entrar [opcoes ^bytes corpo]
+  (let [{:keys [enter leave]} (it/anexo-multipart (merge {:max-bytes 1024} opcoes))
+        ctx (enter (ctx-de-upload (random-uuid) (java.io.ByteArrayInputStream. corpo)))]
+    ;; a vaga de envio e' do PROCESSO (semaforo global): quem passou segura a vaga ate' o :leave, e sem devolver aqui os
+    ;; outros testes deste arquivo (e o resto da suite) levariam 503
+    (when-not (:response ctx) (leave ctx))
+    ctx))
+
+(deftest campos-de-texto-so-sao-lidos-quando-pedidos
+  (testing "sem `:campos`: o campo e' ignorado (como sempre) e o mapa vem vazio"
+    (let [ctx (entrar {} (corpo-com-campos {"motivo" "errei"} false))]
+      (is (nil? (:response ctx)))
+      (is (= "a.txt" (get-in ctx [:request :anexo :nome])))
+      (is (= {} (get-in ctx [:request :campos-do-envio])))))
+  (testing "com `:campos #{\"motivo\"}`: o motivo (UTF-8, antes ou depois do arquivo) vem em `:campos-do-envio`"
+    (doseq [antes? [false true]]
+      (let [ctx (entrar {:campos #{"motivo"}} (corpo-com-campos {"motivo" "Versão errada: março"} antes?))]
+        (is (nil? (:response ctx)))
+        (is (= {:motivo "Versão errada: março"} (get-in ctx [:request :campos-do-envio])) (str "arquivo-antes? " antes?)))))
+  (testing "so' os nomes pedidos: outro campo segue ignorado e nao vira chave"
+    (let [ctx (entrar {:campos #{"motivo"}} (corpo-com-campos {"motivo" "m" "intruso" "x"} false))]
+      (is (= {:motivo "m"} (get-in ctx [:request :campos-do-envio])))))
+  (testing "o arquivo continua sendo UM: um segundo arquivo e' 400 mesmo com campos"
+    (is (= 400 (:status (:response (entrar {:campos #{"motivo"}} (corpo-com-campos {"motivo" "m"} false :segundo-arquivo? true))))))))
+
+(deftest campo-de-texto-grande-demais-e-400
+  (let [r (:response (entrar {:campos #{"motivo"}} (corpo-com-campos {"motivo" (apply str (repeat (inc it/max-bytes-do-campo) "m"))} false)))]
+    (is (= 400 (:status r)))
+    (is (= "{\"erro\":\"O texto enviado com o arquivo é grande demais.\"}" (:body r)))
+    (is (= it/max-envios-simultaneos (vagas-livres)) "a recusa devolveu a vaga")))
