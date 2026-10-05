@@ -49,7 +49,7 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; t
   // Faixa B / B.3 da Track IA — o assistente da Casa: pergunta em palavras, ele consulta o sistema com as permissoes de
   // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
   // aceita secretario ou vereador).
-  { rotulo: "Assistente", href: "/assistente" },
+  { rotulo: "Clara", href: "/assistente" },
   { rotulo: "Proposições", href: "/proposicoes", grupo: "Matérias" },
   { rotulo: "Tramitação", href: "/tramitacao", grupo: "Matérias" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:

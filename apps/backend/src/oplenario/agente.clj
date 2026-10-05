@@ -34,7 +34,7 @@
 
 (def ^:private publico-por-papel {"secretario" :secretaria "vereador" :vereador})
 
-(def mensagem-indisponivel "O assistente está indisponível agora. Siga pela tela — nada do seu trabalho depende dele.")
+(def mensagem-indisponivel "A Clara está indisponível agora. Siga pela tela — nada do seu trabalho depende dela.")
 
 (defn- invalido! [msg] (throw (ex-info msg {:tipo :validacao/invalido})))
 
@@ -171,12 +171,86 @@
                 (http/json-resposta 503 {:erro mensagem-reporte-indisponivel}))
             (throw e)))))))
 
+;; ---------- ADR-0024 (fatia 2): ler o historico ----------
+
+(def ^:private limite-padrao 30)
+(def ^:private limite-maximo 50)
+
+(defn- auditor? [ator] (contains? (set (:papeis ator)) "auditor"))
+
+(defn- texto-instante [m k] (cond-> m (get m k) (update k str)))
+
+(defn pedido-historico
+  "Query (chaves keyword) -> {:pessoa :escopo-casa? :antes :limite}, ou `:validacao/invalido`. Quem nao e' auditor so'
+  le o proprio historico: pedir o de outra pessoa, ou o da Casa, e' `:autorizacao/negado`."
+  [ator q]
+  (let [pessoa (some-> (:pessoa q) str (#(or (parse-uuid %) (invalido! "pessoa deve ser um uuid"))))
+        casa? (= "casa" (:escopo q))
+        antes (some-> (:antes q) str (#(try (java.time.Instant/parse %)
+                                            (catch java.time.format.DateTimeParseException _
+                                              (invalido! "antes deve ser um instante ISO-8601")))))
+        limite (if-let [l (:limite q)]
+                 (let [n (parse-long (str l))]
+                   (when-not (and n (<= 1 n limite-maximo)) (invalido! (str "limite de 1 a " limite-maximo)))
+                   n)
+                 limite-padrao)]
+    (when (and (or casa? (and pessoa (not= pessoa (:identidade-id ator)))) (not (auditor? ator)))
+      (authz/negar! :historico-de-outra-pessoa {}))
+    {:pessoa (if casa? nil (or pessoa (:identidade-id ator))) :escopo-casa? casa? :antes antes :limite limite}))
+
+(defn- nomes [repo-identidade ids]
+  (into {} (for [i (distinct ids) :when i] [i (:nome (repo-id/nome-por-id repo-identidade i))])))
+
+(defn- historico-handler [{:keys [repo-integracao-ia repo-identidade]}]
+  (fn [req]
+    (let [ator (:ator req)
+          {:keys [pessoa escopo-casa? antes limite]} (pedido-historico ator (:query-params req))
+          linhas (repo-ia/historico-assistente repo-integracao-ia (:ente-id ator) pessoa antes (inc limite))
+          pagina (take limite linhas)
+          de-outro? (or escopo-casa? (not= pessoa (:identidade-id ator)))
+          nome-de (if de-outro? (nomes repo-identidade (map :identidade-id pagina)) {})]
+      (cond-> (http/json-resposta 200 {:interacoes (mapv (fn [i] (cond-> (texto-instante i :ocorrido-em)
+                                                                   de-outro? (assoc :nome (nome-de (:identidade-id i)))))
+                                                         pagina)
+                                       :mais (> (count linhas) limite)
+                                       :antes (some-> (last pagina) :ocorrido-em str)})
+        ;; o auditor lendo o historico de outra pessoa (ou da Casa) e' leitura sensivel: vai a' trilha
+        de-outro? (assoc :auditoria {:classe "leitura_sensivel" :recurso-tipo "historico_assistente"
+                                     :recurso-id (if escopo-casa? "casa" (str pessoa))})))))
+
+(defn- conversa-handler [{:keys [repo-integracao-ia repo-identidade]}]
+  (fn [req]
+    (let [ator (:ator req)
+          cid (or (parse-uuid (str (get-in req [:path-params :conversa-id]))) (invalido! "conversa-id invalido"))
+          linhas (repo-ia/conversa-assistente repo-integracao-ia (:ente-id ator) cid)
+          dona (:identidade-id (first linhas))
+          de-outro? (not= dona (:identidade-id ator))]
+      (if (or (empty? linhas) (and de-outro? (not (auditor? ator))))
+        ;; a conversa de outra pessoa nao existe para quem nao e' auditor: 404, sem dizer que existe
+        (http/json-resposta 404 {:erro "conversa nao encontrada"})
+        (cond-> (http/json-resposta 200 {:conversa-id (str cid) :identidade-id (str dona)
+                                         :nome (:nome (repo-id/nome-por-id repo-identidade dona))
+                                         :interacoes (mapv (fn [i] (-> i
+                                                                       (assoc :integra (logic-ia/conferir-interacao i))
+                                                                       (texto-instante :ocorrido-em)
+                                                                       (dissoc :ente-id)))
+                                                           linhas)})
+          de-outro? (assoc :auditoria {:classe "leitura_sensivel" :recurso-tipo "conversa_assistente"
+                                       :recurso-id (str cid)}))))))
+
 (defn rotas
-  "POST /agente/perguntas — a secretaria ou o vereador perguntam ao assistente da Casa. POST
-  /ia/execucoes/:execucao-id/reportes — quem recebeu uma resposta de IA diz que ela esta' errada (feature 8.4)."
+  "POST /agente/perguntas — a secretaria ou o vereador perguntam a' Clara, a assistente da Casa. POST
+  /ia/execucoes/:execucao-id/reportes — quem recebeu uma resposta de IA diz que ela esta' errada (feature 8.4).
+  GET /agente/historico e GET /agente/conversas/:conversa-id — o historico da Clara (ADR-0024): cada pessoa le o seu;
+  o `auditor` le o da Casa, e essa leitura vai a' trilha."
   [{:keys [auth] :as deps}]
   #{["/agente/perguntas" :post [auth (it/exige-algum-papel ["secretario" "vereador"]) it/corpo-json
                                  (perguntar-handler deps)]
      :route-name :agente/perguntar]
     ["/ia/execucoes/:execucao-id/reportes" :post [auth it/corpo-json (reportar-handler deps)]
-     :route-name :agente/reportar-erro-ia]})
+     :route-name :agente/reportar-erro-ia]
+    ["/agente/historico" :get [auth (it/exige-algum-papel ["secretario" "vereador" "auditor"]) (historico-handler deps)]
+     :route-name :agente/historico]
+    ["/agente/conversas/:conversa-id" :get [auth (it/exige-algum-papel ["secretario" "vereador" "auditor"])
+                                            (conversa-handler deps)]
+     :route-name :agente/conversa]})

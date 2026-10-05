@@ -211,7 +211,7 @@ export default function PaginaHomeVereador() {
         {/* fatia 2a: o requerimento nasce aqui, no login do vereador (modelo da Casa + assinatura) */}
         <span className="secao-acoes">
           <Link className="btn btn-contorno btn-mini" href={comToken("/vereador/assistente", token)}>
-            Pedir ao assistente
+            Pedir à Clara
           </Link>
           <Link className="btn btn-primaria btn-mini" href={comToken("/requerimento/novo", token)}>
             Novo requerimento
