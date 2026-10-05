@@ -120,7 +120,8 @@ export function ProximaSessaoRail({
           ) : truncado ? (
             <p role="status" className="aviso-corte">
               Mostrando <b>{lista.length} de {sliSessoesTotal}</b> sessões — pode haver uma sessão
-              agendada fora desta lista. Confira o painel de sessões completo.
+              agendada fora desta lista.{" "}
+              <Link href={comToken("/calendario", token)}>Veja todas as sessões no calendário.</Link>
             </p>
           ) : (
             <p>Nenhuma sessão agendada.</p>

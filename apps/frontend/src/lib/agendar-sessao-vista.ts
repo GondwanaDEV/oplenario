@@ -7,6 +7,7 @@
 import type { SessaoOut } from "./contrato-sessoes.gen";
 import { FINALIDADES, QUADRIMESTRES, REFERENCIA_VALIDA, type Finalidade } from "./contrato-audiencia";
 import { LIMITE_TEMA, tempoFalaEmSegundos } from "./audiencia-vista";
+import { diaLocal } from "./calendario-vista";
 
 export const TIPOS_SESSAO: { valor: string; rotulo: string }[] = [
   { valor: "ordinaria", rotulo: "Ordinária" },
@@ -30,6 +31,9 @@ export interface SessaoLegislativaOpcao {
   id: string;
   sessoesCount: number;
   ultimoNumero: number;
+  /** Menor e maior ano (relógio da Casa) entre as datas das sessões do período; `null` se nenhuma tem data. */
+  anoInicio: number | null;
+  anoFim: number | null;
 }
 
 /** As sessões legislativas presentes nas sessões existentes (distintas por id), com quantas sessões cada
@@ -40,14 +44,39 @@ export function sessoesLegislativasDisponiveis(sessoes: SessaoOut[]): SessaoLegi
   for (const s of sessoes) {
     const id = s.sessaoLegislativaId;
     if (!id) continue;
-    const atual = por.get(id) ?? { id, sessoesCount: 0, ultimoNumero: 0 };
+    const atual = por.get(id) ?? { id, sessoesCount: 0, ultimoNumero: 0, anoInicio: null, anoFim: null };
     atual.sessoesCount += 1;
     atual.ultimoNumero = Math.max(atual.ultimoNumero, s.numeroSequencial ?? 0);
+    const dia = diaLocal(s.agendadaPara ?? s.abertaEm ?? s.encerradaEm ?? "");
+    if (dia !== null) {
+      const ano = Number(dia.slice(0, 4));
+      atual.anoInicio = atual.anoInicio === null ? ano : Math.min(atual.anoInicio, ano);
+      atual.anoFim = atual.anoFim === null ? ano : Math.max(atual.anoFim, ano);
+    }
     por.set(id, atual);
   }
   return [...por.values()].sort(
     (a, b) => b.sessoesCount - a.sessoesCount || b.ultimoNumero - a.ultimoNumero,
   );
+}
+
+/** O período em palavras, para o seletor. Não há rota que devolva número/ano da sessão legislativa (a
+ *  `legislatura-vigente` é outro id), então o ano sai das datas das próprias sessões do período; sem data,
+ *  o texto diz isso. Dois períodos com o mesmo texto se distinguem pela última sessão numerada. Nunca o id. */
+export function rotuloDaSessaoLegislativa(o: SessaoLegislativaOpcao, todas: SessaoLegislativaOpcao[]): string {
+  const base = rotuloBase(o);
+  const repetido = todas.some((outra) => outra !== o && rotuloBase(outra) === base);
+  return repetido ? `${base} (última: nº ${o.ultimoNumero})` : base;
+}
+
+function rotuloBase(o: SessaoLegislativaOpcao): string {
+  const periodo =
+    o.anoInicio === null || o.anoFim === null
+      ? "Sessão legislativa sem datas registradas"
+      : o.anoInicio === o.anoFim
+        ? `Sessão legislativa de ${o.anoInicio}`
+        : `Sessão legislativa de ${o.anoInicio} a ${o.anoFim}`;
+  return `${periodo} · ${o.sessoesCount === 1 ? "1 sessão" : `${o.sessoesCount} sessões`}`;
 }
 
 export interface FormAgendar {

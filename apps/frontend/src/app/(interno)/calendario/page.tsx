@@ -128,8 +128,8 @@ export default function PaginaCalendario() {
         {truncamentoPrazos && (
           <p role="status" className="aviso-fonte">
             A lista de prazos veio <b>cortada em {truncamentoPrazos.exibidos} de {truncamentoPrazos.total}</b>{" "}
-            em aberto — a grade pode estar sem prazos que existem, inclusive os mais distantes. Confira no
-            painel de compliance antes de contar com o calendário.
+            em aberto — a grade pode estar sem prazos que existem, inclusive os mais distantes. Não conte
+            com ela como a lista completa dos prazos.
           </p>
         )}
         {carregando && (
