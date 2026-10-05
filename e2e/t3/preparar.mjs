@@ -33,6 +33,11 @@ function bloqueio(chave, texto) {
 }
 function passo(txt) { console.log(txt); passos.push(txt); }
 
+// A especie que tem regra propria de votacao (CF art. 29: a emenda a Lei Organica so' abre com 2/3 e se aprova em dois
+// turnos, regra `emenda_lom`). As votacoes deste preparar sao fixtures em maioria simples, com uma aprovacao so':
+// sobre a emenda, o backend recusaria a abertura (422) e uma aprovacao nao a aprovaria.
+const votaComOQuorumDaMesa = (p) => p.tipo !== "proposta_emenda_lom";
+
 // ---------------------------------------------------------------- demo-ids.edn (SO LEITURA)
 function lerDemoIds() {
   const edn = readFileSync(ARQ_DEMO, "utf8");
@@ -215,8 +220,11 @@ if (sessaoVotar) {
 
   // (c) a votacao NOMINAL aberta (E6 nao tem no que votar sem ela; E5-confirmar tambem depende
   //     dela, porque o CTA de presenca so aparece dentro do bloco de votacao do cockpit).
+  //     A emenda a Lei Organica fica de fora: ela so' abre votacao com 2/3 e em dois turnos (CF art. 29, regra
+  //     `emenda_lom`), e esta votacao e' fixture de cockpit em maioria simples (`votaComOQuorumDaMesa`).
   const lista = exigir(await api(TOK.secretaria, "GET", "/legislativo/proposicoes"), "GET /legislativo/proposicoes");
-  const objeto = lista.itens.find((p) => p.estado === "em_pauta") ?? lista.itens[0];
+  const votaveis = lista.itens.filter(votaComOQuorumDaMesa);
+  const objeto = votaveis.find((p) => p.estado === "em_pauta") ?? votaveis[0];
   const rec = exigir(await api(TOK.secretaria, "POST", `/sessoes/${sessaoVotar}/votacoes`, {
     "objeto-tipo": "proposicao", "objeto-id": objeto.id,
     modalidade: "nominal", "quorum-tipo": "maioria_simples",
@@ -341,7 +349,8 @@ const reservadosNestaCorrida = new Set(
   [autografoAlvo?.id, votacaoAberta?.objetoId, editaveis[0]?.id, ...pareceres.map((p) => p.proposicaoId)]
     .filter(Boolean),
 );
-const candidataAprovar = naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
+const candidataAprovar =
+  naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id) && votaComOQuorumDaMesa(p)) ?? null;
 
 // aprovarDeVerdade — o RITO REAL (abrir votacao + registrar voto + encerrar com resultado='aprovada'),
 // fatorado pra servir os DOIS alvos que passam por ele: proposicaoAprovada (E7 caminho feliz) e
