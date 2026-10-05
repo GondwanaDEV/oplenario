@@ -444,3 +444,83 @@
     (doseq [q ["?limite=0" "?limite=51" "?limite=abc" "?antes=ontem" "?pessoa=abc"]]
       (is (= 400 (:status (ler svc ente ana (str "/agente/historico" q)))) q))
     (is (= 400 (:status (ler svc ente ana "/agente/conversas/nao-e-uuid"))))))
+
+;; ---------- ADR-0024: buscar no historico ----------
+
+(defn- ia-com-texto
+  "O satelite falso cuja resposta depende da pergunta (`texto-de` pergunta -> texto)."
+  [texto-de]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify plataforma-ia/PlataformaIA
+    (executar-agente [_ _ pedido]
+      (assoc-in resposta-ia [:resposta :texto] (texto-de (:pergunta pedido))))))
+
+(defn- perguntas-de [svc ente iid caminho]
+  (let [{:keys [status json]} (ler svc ente iid caminho)]
+    (is (= 200 status) caminho)
+    (mapv :pergunta (:interacoes json))))
+
+(defn- q [s] (java.net.URLEncoder/encode ^String s "UTF-8"))
+
+(deftest buscar-no-historico-pela-pergunta-e-pela-resposta
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        svc (servico (ia-com-texto {"Qual a Situação do PL 12/2026?" "Está em comissão."
+                                    "E a pauta de amanhã?" "A pauta traz a Merenda escolar."
+                                    "Quanto é 100% do teto?" "Não sei."
+                                    "O que é 100 do teto?" "Também não sei."}))]
+    (doseq [p ["Qual a Situação do PL 12/2026?" "E a pauta de amanhã?" "Quanto é 100% do teto?" "O que é 100 do teto?"]]
+      (perguntar svc ente ana {:pergunta p}))
+    (testing "pela pergunta, sem caixa nem acento"
+      (is (= ["Qual a Situação do PL 12/2026?"] (perguntas-de svc ente ana "/agente/historico?q=situacao")))
+      (is (= ["Qual a Situação do PL 12/2026?"] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "SITUAÇÃO"))))))
+    (testing "pelo texto da resposta"
+      (is (= ["E a pauta de amanhã?"] (perguntas-de svc ente ana "/agente/historico?q=merenda")))
+      (is (= ["Qual a Situação do PL 12/2026?"] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "esta em comissao")))))
+      (is (= ["Qual a Situação do PL 12/2026?"] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "  EM COMISSÃO  "))))
+          "o q e' aparado"))
+    (testing "% e _ sao literais, nunca curinga"
+      (is (= ["Quanto é 100% do teto?"] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "100%")))))
+      (is (= [] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "100_do")))))
+      (is (= [] (perguntas-de svc ente ana (str "/agente/historico?q=" (q "%%"))))))
+    (testing "em branco = sem busca"
+      (is (= 4 (count (perguntas-de svc ente ana "/agente/historico?q=%20%20")))))
+    (testing "a busca pagina como a lista"
+      (let [p1 (:json (ler svc ente ana "/agente/historico?q=teto&limite=1"))
+            p2 (:json (ler svc ente ana (str "/agente/historico?q=teto&limite=1&antes=" (:antes p1))))]
+        (is (= ["O que é 100 do teto?"] (mapv :pergunta (:interacoes p1))))
+        (is (true? (:mais p1)))
+        (is (= ["Quanto é 100% do teto?"] (mapv :pergunta (:interacoes p2))))
+        (is (false? (:mais p2)))))))
+
+(deftest a-busca-respeita-de-quem-e-o-historico
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        rui (pessoa! ente "vereador")
+        aud (pessoa! ente "auditor")
+        svc (com-trilha)]
+    (perguntar svc ente ana {:pergunta "Ana: pauta da sessão?"})
+    (perguntar svc ente ana {:pergunta "Ana: outra coisa?"})
+    (perguntar svc ente rui {:pergunta "Rui: pauta da sessão?"})
+    (testing "a pessoa busca so' no proprio historico"
+      (is (= ["Rui: pauta da sessão?"] (perguntas-de svc ente rui "/agente/historico?q=sessao"))))
+    (testing "o auditor busca na Casa e no historico de uma pessoa"
+      (is (= #{"Ana: pauta da sessão?" "Rui: pauta da sessão?"}
+             (set (perguntas-de svc ente aud "/agente/historico?escopo=casa&q=sessao"))))
+      (is (= ["Ana: pauta da sessão?"] (perguntas-de svc ente aud (str "/agente/historico?q=sessao&pessoa=" ana)))))
+    (testing "buscar nao abre o historico de outra pessoa a quem nao e' auditor"
+      (is (= 403 (:status (ler svc ente rui (str "/agente/historico?q=sessao&pessoa=" ana)))))
+      (is (= 403 (:status (ler svc ente rui "/agente/historico?q=sessao&escopo=casa")))))
+    (is (= [[aud "historico_assistente" "casa"]
+            [aud "historico_assistente" (str ana)]]
+           (mapv (juxt :identidade_id :recurso_tipo :recurso_id) (leituras-sensiveis ente)))
+        "a busca do auditor sobre outra pessoa (ou a Casa) segue indo a' trilha; a da pessoa no proprio, nao")))
+
+(deftest buscar-no-historico-recusa-q-torto
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        svc (servico (ia (atom [])))]
+    (doseq [s ["a" " a " (apply str (repeat 101 "a"))]]
+      (is (= 400 (:status (ler svc ente ana (str "/agente/historico?q=" (q s))))) (pr-str s)))
+    (is (= 200 (:status (ler svc ente ana (str "/agente/historico?q=" (q (apply str (repeat 100 "a"))))))) "100 cabe")
+    (is (= 200 (:status (ler svc ente ana "/agente/historico?q=ab"))) "2 cabe")))

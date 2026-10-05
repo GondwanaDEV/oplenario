@@ -180,11 +180,19 @@
 
 (defn- texto-instante [m k] (cond-> m (get m k) (update k str)))
 
+(def ^:private busca-minima 2)
+(def ^:private busca-maxima 100)
+
 (defn pedido-historico
-  "Query (chaves keyword) -> {:pessoa :escopo-casa? :antes :limite}, ou `:validacao/invalido`. Quem nao e' auditor so'
-  le o proprio historico: pedir o de outra pessoa, ou o da Casa, e' `:autorizacao/negado`."
+  "Query (chaves keyword) -> {:pessoa :escopo-casa? :antes :limite :busca}, ou `:validacao/invalido`. Quem nao e'
+  auditor so' le o proprio historico: pedir o de outra pessoa, ou o da Casa, e' `:autorizacao/negado`. `q` (opcional)
+  procura na pergunta e no texto da resposta: aparado, de 2 a 100 caracteres; em branco = sem busca."
   [ator q]
-  (let [pessoa (some-> (:pessoa q) str (#(or (parse-uuid %) (invalido! "pessoa deve ser um uuid"))))
+  (let [busca (some-> (:q q) (#(if (string? %) % (invalido! "q deve ser um texto so'"))) str/trim not-empty
+                      (#(if (<= busca-minima (.codePointCount ^String % 0 (count %)) busca-maxima)
+                          %
+                          (invalido! (str "q de " busca-minima " a " busca-maxima " caracteres")))))
+        pessoa (some-> (:pessoa q) str (#(or (parse-uuid %) (invalido! "pessoa deve ser um uuid"))))
         casa? (= "casa" (:escopo q))
         antes (some-> (:antes q) str (#(try (java.time.Instant/parse %)
                                             (catch java.time.format.DateTimeParseException _
@@ -196,7 +204,8 @@
                  limite-padrao)]
     (when (and (or casa? (and pessoa (not= pessoa (:identidade-id ator)))) (not (auditor? ator)))
       (authz/negar! :historico-de-outra-pessoa {}))
-    {:pessoa (if casa? nil (or pessoa (:identidade-id ator))) :escopo-casa? casa? :antes antes :limite limite}))
+    {:pessoa (if casa? nil (or pessoa (:identidade-id ator))) :escopo-casa? casa? :antes antes :limite limite
+     :busca busca}))
 
 (defn- nomes [repo-identidade ids]
   (into {} (for [i (distinct ids) :when i] [i (:nome (repo-id/nome-por-id repo-identidade i))])))
@@ -204,8 +213,9 @@
 (defn- historico-handler [{:keys [repo-integracao-ia repo-identidade]}]
   (fn [req]
     (let [ator (:ator req)
-          {:keys [pessoa escopo-casa? antes limite]} (pedido-historico ator (:query-params req))
-          linhas (repo-ia/historico-assistente repo-integracao-ia (:ente-id ator) pessoa antes (inc limite))
+          {:keys [pessoa escopo-casa? antes limite busca]} (pedido-historico ator (:query-params req))
+          linhas (repo-ia/historico-assistente repo-integracao-ia (:ente-id ator)
+                                               {:identidade-id pessoa :antes antes :busca busca} (inc limite))
           pagina (take limite linhas)
           de-outro? (or escopo-casa? (not= pessoa (:identidade-id ator)))
           nome-de (if de-outro? (nomes repo-identidade (map :identidade-id pagina)) {})]

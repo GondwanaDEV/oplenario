@@ -165,6 +165,38 @@
     (testing "outra Casa nao ve nada desta (RLS)"
       (is (zero? (:total (trilha svc (random-uuid) ana)))))))
 
+(def outra-prop "30000000-0000-0000-0000-000000000004")
+
+(deftest filtrar-a-trilha-pelo-recurso
+  (let [ente (random-uuid) svc (servico ente (atom []))
+        despachar! (fn [iid p] (pt/response-for svc :post (str "/materias/" p "/despachar") :body "{}" :headers (como ente iid)))]
+    (despachar! maria prop)
+    (despachar! maria outra-prop)
+    (despachar! rui prop)
+    (despachar! rui outra-prop)
+    (testing "o auditor ve so' o que caiu sobre aquele objeto, com o total do mesmo filtro"
+      (let [t (trilha svc ente ana (str "recurso-tipo=proposicao&recurso-id=" prop))]
+        (is (= 2 (:total t)))
+        (is (= #{["proposicao" prop]} (set (map (juxt (comp :tipo :recurso) (comp :id :recurso)) (:registros t)))))
+        (is (= #{"Maria Secretária" "Rui Vereador"} (set (map (comp :nome :ator) (:registros t)))))))
+    (testing "o filtro soma ao escopo: a pessoa continua vendo so' os proprios atos"
+      (let [t (trilha svc ente rui (str "recurso-tipo=proposicao&recurso-id=" prop))]
+        (is (= ["propria" 1] [(:escopo t) (:total t)]))
+        (is (= [["Rui Vereador" prop]] (mapv (juxt (comp :nome :ator) (comp :id :recurso)) (:registros t))))))
+    (testing "outro tipo com o mesmo id nao confunde"
+      (is (zero? (:total (trilha svc ente ana (str "recurso-tipo=sessao&recurso-id=" prop))))))
+    (testing "so' um dos dois, ou fora do formato: 400 — tambem na exportacao"
+      (doseq [q ["recurso-tipo=proposicao" (str "recurso-id=" prop) (str "recurso-tipo=Proposicao&recurso-id=" prop)
+                 "recurso-tipo=proposicao&recurso-id=a%20b"]]
+        (is (= 400 (:status (pt/response-for svc :get (str "/auditoria?" q) :headers (como ente ana)))) q))
+      (is (= 400 (:status (pt/response-for svc :get "/auditoria/exportar.csv?recurso-tipo=proposicao"
+                                           :headers (como ente ana))))))
+    (testing "a exportacao usa o mesmo filtro"
+      (let [csv (:body (pt/response-for svc :get (str "/auditoria/exportar.csv?recurso-tipo=proposicao&recurso-id=" outra-prop)
+                                        :headers (como ente ana)))]
+        (is (str/includes? csv outra-prop))
+        (is (not (str/includes? csv prop)))))))
+
 (defn- registro-de-ontem! [ente]
   (let [r {:ente-id ente :seq 1 :id (random-uuid) :ocorrido-em (.truncatedTo (.minus (Instant/now) 2 ChronoUnit/DAYS) ChronoUnit/MICROS)
            :ator-tipo "pessoa" :identidade-id maria :papeis ["secretario"] :acao "legislativo/despachar"

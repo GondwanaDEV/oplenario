@@ -107,7 +107,10 @@
        " OR EXISTS (SELECT 1 FROM auditoria.registro d WHERE d.ente_id = " a ".ente_id"
        " AND (d.detalhe->>'tentativa') IS NOT NULL AND (d.detalhe->>'tentativa')::bigint = " a ".seq))"))
 
-(defn- filtro-where [ente-id {:keys [escopo desde ate ator-tipo classe objeto antes-de sem-desfecho tolerancia-s]}]
+(defn- filtro-where
+  "O WHERE da leitura: a Casa, o escopo do papel e os filtros da tela, todos em AND (o filtro estreita, nunca alarga o
+  escopo). `recurso-tipo`/`recurso-id` vem juntos do gate de entrada."
+  [ente-id {:keys [escopo desde ate ator-tipo classe objeto recurso-tipo recurso-id antes-de sem-desfecho tolerancia-s]}]
   (cond-> [:and [:= :r.ente_id ente-id] [:raw (str "NOT (" (tentativa-oculta-sql "r" tolerancia-s) ")")]]
     (= :propria (:tipo escopo)) (conj [:= :r.identidade_id (:identidade-id escopo)])
     (= :acessos (:tipo escopo)) (conj [:or [:like :r.acao (str logic/prefixo-dos-acessos "%")]
@@ -118,6 +121,8 @@
     classe    (conj [:= :r.classe classe])
     sem-desfecho (conj [:= :r.decisao logic/iniciado])
     objeto    (conj [:like :r.acao (str objeto "/%")])
+    recurso-tipo (conj [:= :r.recurso_tipo recurso-tipo])
+    recurso-id   (conj [:= :r.recurso_id recurso-id])
     antes-de  (conj [:< :r.seq antes-de])))
 
 (defn listar
