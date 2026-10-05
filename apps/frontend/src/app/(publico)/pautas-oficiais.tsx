@@ -6,12 +6,13 @@
 // públicas e não secretas; as republicações ficam no histórico, nenhuma versão é apagada.
 
 import { useEffect, useState } from "react";
-import type { PautaOficialOut, PautasPublicasOut, SessaoPautaPublicaOut } from "@/lib/contrato-sessoes.gen";
+import type { ItemPautaOficialOut, PautaOficialOut, PautasPublicasOut, SessaoPautaPublicaOut } from "@/lib/contrato-sessoes.gen";
+import { FASES_DO_RITO } from "@/lib/pauta-convocacao-vista";
 import { buscarPublico } from "@/lib/portal-api";
 import { posicoesNaFase } from "@/lib/posicao-na-fase";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { quando, seloDaPublicacao } from "@/lib/publicacao-pauta-vista";
-import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
+import { nomeDaSessao } from "@/lib/rotulos-sessao";
 import { formatarData, formatarHora } from "@/lib/formatar-data";
 import "./pautas-oficiais.css";
 
@@ -34,8 +35,19 @@ function useBusca<T>(segmentos: string[] | null): Carga<T> {
   return r.de === chave ? r.carga : { fase: "carregando" };
 }
 
+// A pauta por fase, na ordem da sessão (Expediente antes da Ordem do Dia), com o nome da fase uma vez só. Antes a
+// lista saía na ordem da resposta, com "Ordem do Dia" repetido em cada item e o Expediente no fim.
+function fasesDaPauta(itens: ItemPautaOficialOut[]): { chave: string; titulo: string; itens: ItemPautaOficialOut[] }[] {
+  const porOrdem = (xs: ItemPautaOficialOut[]) => xs.slice().sort((a, b) => a.ordem - b.ordem);
+  const conhecidas = new Set<string>(FASES_DO_RITO.map((f) => f.fase));
+  const grupos = FASES_DO_RITO.map((f) => ({ chave: f.chave, titulo: f.titulo, itens: porOrdem(itens.filter((i) => i.fase === f.fase)) }));
+  const outras = itens.filter((i) => !conhecidas.has(i.fase));
+  if (outras.length > 0) grupos.push({ chave: "outras", titulo: "Outras fases", itens: porOrdem(outras) });
+  return grupos.filter((g) => g.itens.length > 0);
+}
+
 function tituloSessao(s: SessaoPautaPublicaOut): string {
-  return `${s.numeroSequencial}ª Sessão ${nomeTipoSessao(s.tipoSessao).replace(/^./, (c) => c.toUpperCase())}`;
+  return nomeDaSessao(s.numeroSequencial, s.tipoSessao);
 }
 
 function dataSessao(s: SessaoPautaPublicaOut): string | null {
@@ -107,25 +119,29 @@ function PautaAberta({ ente, sessaoId }: { ente: string; sessaoId: string }) {
             Pauta oficial · versão {vigente.versao}, publicada em {quando(vigente.publicadaEm)}
             {vigente.justificativa ? ` · ${vigente.justificativa}` : ""}
           </p>
-          <ol className="po-itens">
-            {vigente.itens.map((it) => (
-              <li key={it.id} value={posicoes.get(it.id)}>
-                <span className="po-fase">{nomeFase(it.fase)}</span>
-                {it.proposicaoId ? (
-                  <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(it.proposicaoId)}`}>
-                    <b>
-                      {it.proposicao
-                        ? formatarNumeroProposicao(it.proposicao.tipo, it.proposicao.sequencial, it.proposicao.ano)
-                        : "Matéria"}
-                    </b>
-                    {it.proposicao && <span> — {it.proposicao.ementa}</span>}
-                  </a>
-                ) : (
-                  <span>{it.textoDescricao}</span>
-                )}
-              </li>
-            ))}
-          </ol>
+          {fasesDaPauta(vigente.itens).map((g) => (
+            <section key={g.chave} className="po-grupo" aria-label={g.titulo}>
+              <h3 className="po-fase">{g.titulo}</h3>
+              <ol className="po-itens">
+                {g.itens.map((it) => (
+                  <li key={it.id} value={posicoes.get(it.id)}>
+                    {it.proposicaoId ? (
+                      <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(it.proposicaoId)}`}>
+                        <b>
+                          {it.proposicao
+                            ? formatarNumeroProposicao(it.proposicao.tipo, it.proposicao.sequencial, it.proposicao.ano)
+                            : "Matéria"}
+                        </b>
+                        {it.proposicao && <span> — {it.proposicao.ementa}</span>}
+                      </a>
+                    ) : (
+                      <span>{it.textoDescricao}</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ))}
           {versoes.length > 1 && (
             <details className="po-historico">
               <summary>Publicações anteriores ({versoes.length - 1})</summary>

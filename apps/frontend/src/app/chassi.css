@@ -183,7 +183,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 
 /* ============== BARRA DE COMANDO (.comando) — fixa no rodapé ============== */
 .comando { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); -webkit-backdrop-filter: var(--desfoque); backdrop-filter: var(--desfoque); border-top: 1px solid var(--linha); box-shadow: inset 0 1px 0 var(--vidro-brilho), 0 -18px 44px -30px var(--sombra-cor-2); }
-.comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding: 0.7rem 0; flex-wrap: wrap; }
+.comando-grade { display: flex; align-items: center; gap: 0.7rem 1rem; padding-block: 0.7rem; flex-wrap: wrap; }
+/* `padding-block`, não `padding: 0.7rem 0`: no parecer e no expediente a grade é `.envelope comando-grade` no mesmo
+   elemento, e o atalho (que vem depois do .envelope) zerava a margem lateral — no celular o texto e o botão da barra
+   encostavam na borda da tela. Mesmo defeito do topo (ver .topo-grade). */
 .comando-ctx { color: var(--texto); font-size: var(--t-13); line-height: 1.25; }
 .comando-ctx b { font-family: var(--display); font-weight: 600; color: var(--texto); display: block; }
 .comando-ctx span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }

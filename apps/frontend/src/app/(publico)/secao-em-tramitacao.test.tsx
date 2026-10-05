@@ -74,7 +74,7 @@ describe("SecaoEmTramitacao", () => {
     expect(screen.queryByText(/mostrando/i)).toBeNull();
   });
 
-  it("materiasTotal MAIOR que o exibido -> mostra 'mostrando N de M', com M o total do SERVIDOR (regra 4: nunca uma dedução de itens.length)", async () => {
+  it("materiasTotal MAIOR que o exibido -> o texto traz M, o total do SERVIDOR (regra 4: nunca uma dedução de itens.length)", async () => {
     // a resposta traz so' 1 item (itens.length = 1), mas materias-total = 250 — se a seção alguma vez
     // recaísse numa dedução client-side (ex.: comparar contra itens.length), o corte nunca apareceria
     // aqui (1 item = "tudo que chegou"). O total tem de vir do backend.
@@ -84,6 +84,6 @@ describe("SecaoEmTramitacao", () => {
     })) as unknown as typeof fetch;
     render(<SecaoEmTramitacao ente="fortaleza" />);
     await waitFor(() => expect(screen.getByText("PL 042/2026")).toBeTruthy());
-    expect(screen.getByText(/mostrando 1 de 250 matérias/i)).toBeTruthy();
+    expect(screen.getByText(/mostrando 1 matéria em tramitação, das 250 da Casa/i)).toBeTruthy();
   });
 });

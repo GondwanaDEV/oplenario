@@ -25,6 +25,15 @@ export function nomeTipoSessao(tipo: string | null | undefined): string {
   return NOME_TIPO_SESSAO[tipo] ?? tipo;
 }
 
+// O NOME da sessão numerada, uma fonte só para todas as telas: "15ª Sessão Ordinária". A audiência pública não é
+// "sessão" no nome que a Casa usa: "Audiência pública nº 2", o mesmo do cabeçalho da Mesa da audiência. Antes cada
+// tela montava o seu e o portal e o livro de atas diziam "2ª Sessão Audiência pública".
+export function nomeDaSessao(numeroSequencial: number, tipo: string | null | undefined): string {
+  if (tipo === "audiencia_publica") return `Audiência pública nº ${numeroSequencial}`;
+  const t = nomeTipoSessao(tipo);
+  return `${numeroSequencial}ª Sessão ${t ? t[0].toUpperCase() + t.slice(1) : ""}`.trim();
+}
+
 // A FASE do rito. Mesma mecânica e mesmo motivo do tipo de sessão acima: o backend transporta a chave
 // (`ordem_do_dia`), e a tribuna do plenário renderizava essa chave crua — com o CSS pondo em
 // maiúscula, o painel exibia "ORDEM_DO_DIA" ao público. O mapa vivia local em plenario/page.tsx

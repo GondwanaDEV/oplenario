@@ -56,7 +56,7 @@ export function SecaoEmTramitacao({ ente }: { ente: string }) {
         />
       )}
 
-      {estado === "pronto" && itens && itens.length === 0 && (
+      {estado === "pronto" && !destaque && (
         <EmBreve
           titulo="Em tramitação agora"
           motivo="Nenhuma matéria em tramitação no momento — volte em breve."
