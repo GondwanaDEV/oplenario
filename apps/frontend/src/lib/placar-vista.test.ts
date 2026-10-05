@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { derivarPlacar } from "./placar-vista";
-import type { PlacarVotacao } from "./plenario-reducer";
+import { derivarPlacar, rotularVotos, VEREADOR_SEM_NOME } from "./placar-vista";
+import { estadoInicial, hidratarComposicao, type PlacarVotacao } from "./plenario-reducer";
+import type { SessaoOut } from "./contrato";
 
 // Base de um placar nominal aberto (sem votos), para os testes mutarem.
 function nominalAberto(over: Partial<PlacarVotacao> = {}): PlacarVotacao {
@@ -151,5 +152,36 @@ describe("avisoLacuna — sinal sintético repassado do reducer (frente truncame
 
   it("sem placar nenhum: nada a avisar (não há votação para desconfiar)", () => {
     expect(derivarPlacar(null, true)).toEqual({ kind: "nenhuma" });
+  });
+});
+
+describe("rotularVotos — o nome de quem votou, nunca o prefixo do uuid", () => {
+  const ANA = "64d38c04-1111-4222-8333-aaaaaaaaaaaa";
+  const BRUNO = "e9a7b2c1-2222-4333-8444-bbbbbbbbbbbb";
+  const FORA = "0f1e2d3c-3333-4444-8555-cccccccccccc";
+  const base = estadoInicial({ id: "s1", estado: "aberta" } as unknown as SessaoOut);
+  const comNomes = hidratarComposicao(base, {
+    membros: [
+      { vereadorId: ANA, nomeParlamentar: "Ana Ribeiro", cargoMesa: null, partido: null },
+      { vereadorId: BRUNO, nomeParlamentar: "Bruno Lima", cargoMesa: null, partido: null },
+    ],
+  } as never);
+  const votos = [
+    { vereadorId: BRUNO, voto: "sim" as const },
+    { vereadorId: FORA, voto: "nao" as const },
+    { vereadorId: ANA, voto: "abstencao" as const },
+  ];
+
+  it("resolve pelo índice da composição e ordena por nome (pt-BR), neutros por último", () => {
+    const r = rotularVotos(votos, comNomes);
+    expect(r.map((x) => x.nome)).toEqual(["Ana Ribeiro", "Bruno Lima", VEREADOR_SEM_NOME]);
+    expect(r.map((x) => x.vereadorId)).toEqual([ANA, BRUNO, FORA]);
+    expect(r.map((x) => x.voto)).toEqual(["abstencao", "sim", "nao"]);
+  });
+
+  it("sem composição (ainda não chegou), tudo é o rótulo neutro e nenhum uuid vaza", () => {
+    const r = rotularVotos(votos, base);
+    expect(r.every((x) => x.nome === VEREADOR_SEM_NOME)).toBe(true);
+    expect(JSON.stringify(r.map((x) => x.nome))).not.toMatch(/64d38c04|e9a7b2c1|0f1e2d3c/);
   });
 });

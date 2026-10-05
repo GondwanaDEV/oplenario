@@ -94,7 +94,7 @@ function Nota({ n, token, modo, texto, enviando, erro, setTexto, aproveitar, des
     <>
       <header className="conf-cabeca">
         <p className="conf-numero">{numeroDaNota(n)}</p>
-        <h1>{n.ementa}</h1>
+        <h1 className="titulo-longo">{n.ementa}</h1>
         <p className="conf-sub">
           {linhaDaNota(n)} ·{" "}
           <Link href={comToken(`/ficha-materia/${n.proposicaoId}`, token)}>Abrir a ficha da matéria</Link>

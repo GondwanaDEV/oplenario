@@ -17,7 +17,7 @@ import { Tribuna } from "./tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
 import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-reducer";
 import { exigeQuorumDaSessao, vistaDoQuorum } from "@/lib/plenario-reducer";
-import { derivarPlacar, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
+import { derivarPlacar, rotularVotos, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
@@ -246,7 +246,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
         )}
       </section>
 
-      <Placar placar={estado.placar} avisoLacuna={estado.avisoLacuna} />
+      <Placar estado={estado} />
     </section>
   );
 }
@@ -292,8 +292,8 @@ function MarcaVoto({ voto }: { voto: string }) {
 
 /** Placar da votação corrente. §22.6 SIGILO: a NOMINAL mostra quem votou o quê; a SECRETA só o contador.
  * A escolha do que renderizar mora no view-model puro `derivarPlacar` (testado) — aqui só mapeamento. */
-function Placar({ placar, avisoLacuna }: { placar: PlacarVotacao | null; avisoLacuna: boolean }) {
-  const v = derivarPlacar(placar, avisoLacuna);
+function Placar({ estado }: { estado: EstadoPlenario }) {
+  const v = derivarPlacar(estado.placar, estado.avisoLacuna);
   if (v.kind === "nenhuma") return null;
   // aria-live NÃO fica na section inteira (anunciaria título+grade nominal a cada voto); mora só nos números
   // que mudam (Tally / contador), que já estão montados desde a abertura — review react MAJOR (a11y).
@@ -310,7 +310,7 @@ function Placar({ placar, avisoLacuna }: { placar: PlacarVotacao | null; avisoLa
           </span>
         )}
       </div>
-      {v.kind === "nominal" ? <PlacarNominal v={v} /> : <PlacarSecreta v={v} />}
+      {v.kind === "nominal" ? <PlacarNominal v={v} estado={estado} /> : <PlacarSecreta v={v} />}
       {v.avisoLacuna && (
         <p className="aviso-corte" role="status">
           o sinal do servidor teve uma <b>lacuna</b> durante esta sessão — confira o resultado oficial
@@ -359,7 +359,7 @@ function PlacarMeta({ faltam, baseMembros }: { faltam: number | null; baseMembro
   );
 }
 
-function PlacarNominal({ v }: { v: VistaNominal }) {
+function PlacarNominal({ v, estado }: { v: VistaNominal; estado: EstadoPlenario }) {
   return (
     <>
       <Tally sim={v.sim} nao={v.nao} abstencao={v.abstencao} />
@@ -369,12 +369,12 @@ function PlacarNominal({ v }: { v: VistaNominal }) {
       )}
       {v.votos.length > 0 && (
         <ul className="placar-nominal" aria-label="Votos nominais">
-          {v.votos.map((it) => (
+          {rotularVotos(v.votos, estado).map((it) => (
             <li key={it.vereadorId} className="vt">
               <MarcaVoto voto={it.voto} />
               <span className="vn">
-                {/* só o id (truncado) — não há rota de cadastro p/ nome/partido ainda (mesmo critério da tribuna) */}
-                <b>{it.vereadorId.slice(0, 8)}</b>
+                {/* nome da composição da sessão (a mesma que a tribuna e a TV usam); sem nome, rótulo neutro — nunca o uuid */}
+                <b>{it.nome}</b>
                 <span>{NOME_VOTO[it.voto] ?? it.voto}</span>
               </span>
             </li>

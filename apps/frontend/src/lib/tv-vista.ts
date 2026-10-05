@@ -11,7 +11,7 @@ import type { PautaItemOut, PautaOut, SessaoOut } from "./contrato";
 import { formatarTempo, relogioDaFala, segundosDecorridos, tempoDaFala, type SituacaoTempo } from "./cronometro";
 import { formatarData, formatarHora } from "./formatar-data";
 import { iniciais } from "./iniciais";
-import { derivarPlacar } from "./placar-vista";
+import { derivarPlacar, rotularVotos } from "./placar-vista";
 import type { EstadoPlenario, PlacarVotacao, VotoNominal } from "./plenario-reducer";
 import { identidadeDe } from "./plenario-reducer";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
@@ -256,8 +256,6 @@ export interface VistaVotacaoTv {
   avisoLacuna: boolean;
 }
 
-const VEREADOR_SEM_NOME = "Vereador(a)";
-
 /** A votação ABERTA como a TV mostra. `null` quando não há votação aberta.
  *
  * Por que "podem votar" vem do QUÓRUM e não de `baseMembros`: `baseMembros` só chega no ENCERRAMENTO
@@ -274,9 +272,7 @@ export function vistaVotacaoTv(estado: EstadoPlenario): VistaVotacaoTv | null {
 
   if (v.kind === "nominal") {
     const votaram = v.sim + v.nao + v.abstencao;
-    const nominais = v.votos
-      .map(({ vereadorId, voto }) => ({ nome: identidadeDe(estado, vereadorId)?.nomeParlamentar ?? VEREADOR_SEM_NOME, voto }))
-      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    const nominais = rotularVotos(v.votos, estado).map(({ nome, voto }) => ({ nome, voto }));
     return {
       numero, ementa, modalidade: "nominal", podemVotar, membrosDaCasa, votaram,
       faltam: podemVotar !== null ? Math.max(0, podemVotar - votaram) : null,

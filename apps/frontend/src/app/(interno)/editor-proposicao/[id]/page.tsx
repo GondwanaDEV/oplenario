@@ -59,7 +59,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
         <div className="pagina-cab">
           <div>
             <span className="eyebrow">Editor de proposição</span>
-            <h1>{dados.ementa}</h1>
+            <h1 className="titulo-longo">{dados.ementa}</h1>
           </div>
         </div>
         <FormularioProposicao
