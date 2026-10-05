@@ -899,6 +899,13 @@
           proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
           ano (.getYear (tempo/hoje relogio zona-civil))
           m (adapters-in-pos-aprovacao/gerar-autografo->dominio ator proposicao-id (:json-params req))]
+      ;; O autografo e' append-only (migration 0022): um prazo de sancao/veto errado nao se corrige depois.
+      ;; Prazo ANTERIOR a agora nasceria vencido (o Executivo "sem resposta" desde o envio) — recusado aqui,
+      ;; na borda e antes de qualquer escrita (:validacao/invalido -> 400 pelo interceptor global).
+      (when-let [prazo (:prazo-resposta-em m)]
+        (when (.isBefore ^java.time.Instant prazo ^java.time.Instant (tempo/agora relogio))
+          (throw (ex-info "gerar-autografo: o prazo de resposta do Executivo ja passou"
+                          {:tipo :validacao/invalido :campo :prazo-resposta-em}))))
       (try
         (if (controllers/gerar-autografo repo-leg resolver-municipio ente-id ano m)
           (http/json-resposta 201 (pos-aprovacao->wire
