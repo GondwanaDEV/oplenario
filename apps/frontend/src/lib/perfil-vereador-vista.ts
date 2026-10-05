@@ -261,6 +261,27 @@ export function textosDePresenca(v: PresencaVista): string[] {
 
 /** Iniciais do NOME EXIBIDO (nunca do vereadorId — um UUID no avatar é identificação de fallback, e o §7
  *  do brief proíbe): 1ª letra da primeira e da última palavra, no máximo 2 chars. */
+/** O cargo na Mesa em palavras. O cadastro pode guardar a CHAVE ("1_secretario", "vice"); o cidadão lê o nome do
+ * cargo ("1ª Secretaria", "Vice-presidência") — o nome do cargo, sem supor o gênero de quem o ocupa. Texto já escrito
+ * por extenso no cadastro ("2ª Secretária da Mesa") passa como está; chave desconhecida troca `_` por espaço. */
+const CARGOS_DA_MESA: Record<string, string> = {
+  presidente: "Presidência",
+  vice: "Vice-presidência",
+  vice_presidente: "Vice-presidência",
+  secretario: "Secretaria",
+};
+
+export function rotuloDoCargoNaMesa(cargo: string | null | undefined): string | null {
+  const chave = cargo?.trim();
+  if (!chave) return null;
+  const k = chave.toLowerCase();
+  if (CARGOS_DA_MESA[k]) return CARGOS_DA_MESA[k];
+  const ordinal = /^(\d+)[_ºo°.\s-]*(vice[_\s-]?presidente|secretario|secretário)$/.exec(k);
+  if (ordinal) return `${ordinal[1]}ª ${ordinal[2].startsWith("vice") ? "Vice-presidência" : "Secretaria"}`;
+  const limpo = chave.replace(/_+/g, " ").trim();
+  return limpo.charAt(0).toUpperCase() + limpo.slice(1);
+}
+
 export function derivarIniciais(nome: string): string {
   const palavras = nome.trim().split(/\s+/).filter(Boolean);
   if (palavras.length === 0) return "";
@@ -290,7 +311,7 @@ export function derivarIdentidade(p: PerfilVereadorOut): IdentidadeVista {
     iniciais: derivarIniciais(nome),
     papel,
     // valor livre, cru, sem mapa de rótulos — um mapa engoliria o vocabulário do tenant.
-    cargoMesa: p.cargoMesa,
+    cargoMesa: rotuloDoCargoNaMesa(p.cargoMesa),
     // sem filtrar e SEM CONTADOR: o contrato não expõe o `tipo` de cada comissão, então a entrada da Mesa
     // não é identificável e um "N comissões" contaria a Mesa duas vezes (falso). Carry: expor `tipo`.
     // DEDUPLICADO: `[:vector :string]` não garante unicidade e a origem (`cadastros/db/comissao.clj`,

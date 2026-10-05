@@ -7,7 +7,7 @@
 // iniciais do avatar.
 
 import type { VereadoresOut } from "./contrato-portal.gen";
-import { derivarIniciais } from "./perfil-vereador-vista";
+import { derivarIniciais, rotuloDoCargoNaMesa } from "./perfil-vereador-vista";
 
 export type VereadorDaListaVista = {
   vereadorId: string;
@@ -56,7 +56,7 @@ export function derivarLista(out: VereadoresOut, ente: string): ListaVista {
         nomeSecundario: apelido && apelido !== v.nomeCivil ? v.nomeCivil : null,
         iniciais: derivarIniciais(nome),
         partido: v.partido,
-        cargoMesa: v.cargoMesa,
+        cargoMesa: rotuloDoCargoNaMesa(v.cargoMesa),
         href: hrefDoPerfil(ente, v.vereadorId),
       };
     })

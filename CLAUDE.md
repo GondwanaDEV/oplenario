@@ -68,7 +68,7 @@ abertas, em ordem de importância:
 
 **1. Track IA — base comum ENTREGUE (26/09/2026); Faixas A e B são o maior bloco restante.** O satélite existe:
 `apps/ia/` (Python 3.12, **[ADR-0006](docs/adr/0006-satelite-de-ia-apps-ia.md)**), com porta de inferência (fake por
-padrão + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
+padrão + OpenRouter + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
 incerteza, registro sem conteúdo, revisão humana, R-IA-1), `nucleo.Nucleo` (o pipeline que **toda** capacidade compõe) e
 avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42).
 **Faixa A em curso (26/09/2026):** captação (A.2), transcrição com Caminho C + fronteira core↔IA
@@ -82,9 +82,13 @@ A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedo
 não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
 de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
-`OPENROUTER_API_KEY`), ZDR e "sem coleta" travados em toda requisição, provedor e custo declarados no registro. As 8
-capacidades passam por ele, com `openai/gpt-oss-120b` como modelo padrão provisório; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
-jurídico, agora com o OpenRouter como contratado; o adaptador nunca falou com o OpenRouter real. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+`OPENROUTER_API_KEY`), ZDR, "sem coleta" e `require_parameters` travados em toda requisição, provedor e custo
+declarados no registro. As 8 capacidades passam por ele; transcrição e embeddings seguem self-host. O satélite só sobe
+com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
+**Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
+ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
+reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429); o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
+`[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
@@ -341,12 +345,43 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 - Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
   por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
 
-**Exploratório de 12/09 retriado em 04/10/2026:** 84 achados · 43 conferidos no código · 19 abertos · 24 fechados · 41
-não conferidos. Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
-o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda); gerar remessa ao TCE sem rota;
-convocação oficial inexistente. **Promulgar e publicar a norma ENTREGUES (05/10/2026):** em `/pos-aprovacao/:id`, a matéria
-sancionada (ou com veto derrubado) vira lei com número da espécie no ano, URN LexML e o texto do autógrafo; registrar a
-publicação (o veículo é a prova) emite `norma.publicada` e a lei vai ao portal. Quem promulga e o prazo seguem `[GAP]` por LOM.
+**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 39 abertos · 45 fechados · 0 sem decidir.
+Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
+- o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
+- gerar remessa ao TCE sem rota; convocação oficial inexistente;
+- **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
+  O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
+
+**Frentes de 05/10/2026 (do exploratório), todas na `main`:**
+- **Portal do cidadão:** `/portal/casa/[ente]/leis` (lista filtrável e ficha da norma), `/vereadores` (quem está em
+  exercício) e `/votacoes` (votações encerradas de sessões públicas, com o voto por vereador quando nominal). A regra
+  de sessão secreta da página de votações é a do livro de atas e é conferida na lista e no detalhe. A raiz `/` deixou
+  de dizer "em construção".
+- **Revogar acesso (adendo da ADR-0005):** em `/administracao`, o `admin_ente` revoga, com motivo, o acesso de
+  vereador, controle interno e jurídico. A linha revogada fica como histórico e conceder de novo abre outra. Sem papel
+  ativo na Casa, o vínculo é encerrado e a sessão cai na chamada seguinte; as credenciais do agente da pessoa caem
+  junto. `admin_ente` e `secretario` não são revogáveis por essa rota. O Keycloak não é tocado.
+- **Promulgar e publicar a norma:** em `/pos-aprovacao/:id`, a matéria sancionada (ou com veto derrubado) vira lei
+  com número da espécie no ano, URN LexML e o texto do autógrafo; registrar a publicação (o veículo é a prova) emite
+  `norma.publicada` e a lei vai ao portal. Quem promulga e o prazo seguem `[GAP]` por LOM.
+- **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
+  criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
+- **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
+- **Dashboard da Mesa:** "em tramitação" vem do rito (`template_estado.terminal`, levado pelo evento
+  `proposicao.transicionou`); a sessão em curso aparece primeiro, com a hora no fuso da Casa; as remessas ao TCE
+  aparecem no card de compliance.
+- **Votos:** `votos.vereador_id` segue sem FK (ADR-0001 §6 proíbe FK entre schemas); a integridade é a recusa na
+  aplicação, provada com Postgres real, mais um CHECK contra UUID nulo.
+- **Falta:**
+  - o cockpit com duas sessões vivas ainda abre a mais antiga (o conserto por data reprovou a Trilha 3 e foi desfeito;
+    depende de o evento de sessão carregar o tipo);
+  - voto nominal em sessão secreta sai no CSV de dados abertos e no perfil público do vereador;
+  - trocar o e-mail de quem já tem conta (o reconvite vai para o e-mail antigo);
+  - a lista de leis corta em 200 sem paginar; a ficha da matéria não leva às votações dela;
+  - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
+    acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
+    (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,
+    tema claro, o ato de revogar e o telão com o nome.
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás
