@@ -338,7 +338,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
                           "Veto derrubado pela Câmara — a lei segue para promulgação."}
                         {(tramitacaoExecutiva.estado === "sancionado" ||
                           tramitacaoExecutiva.estado === "sancao_tacita") &&
-                          "A matéria foi sancionada e segue para promulgação e publicação."}
+                          "A matéria foi sancionada e segue para promulgação/publicação."}
                       </p>
                     </div>
                   )}
