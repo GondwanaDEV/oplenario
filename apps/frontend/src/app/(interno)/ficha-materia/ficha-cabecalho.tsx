@@ -8,22 +8,27 @@
 // FORA (Global Constraint "sem dado falso").
 
 import { formatarNumeroProposicao, formatarEspecieProposicao, categorizarSituacao } from "@/lib/proposicoes-vista";
-import { derivarTramitacao, descreverFaixa } from "@/lib/tramitacao-vista";
+import { derivarTramitacao, descreverFaixa, faixaDoRito } from "@/lib/tramitacao-vista";
 import { AzulejoFaixa } from "@/lib/charts/azulejo-faixa";
 import { formatarData } from "@/lib/formatar-data";
-import type { CoautorOut, ProposicaoDetalheOut } from "@/lib/contrato-legislativo.gen";
+import type { CoautorOut, ProposicaoDetalheOut, RitoDaMateriaOut } from "@/lib/contrato-legislativo.gen";
 
 export function FichaCabecalho({
   proposicao,
   coautores = [],
+  rito,
 }: {
   proposicao: ProposicaoDetalheOut;
+  /** O rito da Casa para esta matéria (rota da ficha): ordem e rótulo das etapas. Sem ele, a faixa ilustrativa. */
+  rito?: RitoDaMateriaOut | null;
   /** fatia 2c: quem subscreveu o requerimento coletivo (assinou antes do protocolo). */
   coautores?: CoautorOut[];
 }) {
   const numero = formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano);
   const especie = formatarEspecieProposicao(proposicao.tipo);
-  const { estagios, rotuloSituacao } = derivarTramitacao(proposicao.estado);
+  // a ordem e os nomes das etapas vêm do rito da Casa; sem rito (ou sem a etapa atual nele), o mapa ilustrativo
+  const { estagios: estagiosFixos, rotuloSituacao } = derivarTramitacao(proposicao.estado);
+  const estagios = faixaDoRito(rito)?.estagios ?? estagiosFixos;
   const categoria = categorizarSituacao(proposicao.estado);
 
   return (

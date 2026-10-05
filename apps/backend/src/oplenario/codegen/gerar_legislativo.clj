@@ -35,6 +35,9 @@
    ["EmendaResumoOut" ficha/EmendaResumoOut]
    ["ParecerResumoOut" ficha/ParecerResumoOut]
    ["CoautorOut" ficha/CoautorOut]
+   ;; faixa "Onde esta' a materia" — ANTES de FichaMateriaOut, que referencia o rito
+   ["EtapaDoRitoOut" ficha/EtapaDoRitoOut]
+   ["RitoDaMateriaOut" ficha/RitoDaMateriaOut]
    ["FichaMateriaOut" ficha/FichaMateriaOut]
    ;; Onda B Slice 5 (editor de parecer) — schema PROPRIO (nao reusa ParecerResumoOut, que e' o resumo
    ;; dentro da ficha da materia).

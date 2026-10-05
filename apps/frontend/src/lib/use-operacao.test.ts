@@ -4,6 +4,7 @@ import {
   corpoProvisionar,
   cpfValido,
   provisionarCasa,
+  quemAtuou,
   reenviarConvite,
   rotuloAcao,
   rotuloEstadoCasa,
@@ -83,5 +84,17 @@ describe("console do operador — rótulos", () => {
     expect(rotuloAcao("casa-ativada")).toMatch(/a Casa assumiu/i);
     expect(rotuloAcao("acao-nova")).toBe("acao-nova");
     expect(seloCurto("e4c78a09ffff00001111")).toBe("e4c7·1111");
+  });
+
+  it("o orçamento de IA da Casa aparece em palavras, e não como a chave da ação", () => {
+    expect(rotuloAcao("ia-orcamento-iniciado")).toBe("Orçamento de IA: definição iniciada");
+    expect(rotuloAcao("ia-orcamento-definido")).toBe("Orçamento de IA definido");
+    expect(rotuloAcao("ia-orcamento-falhou")).toBe("Orçamento de IA: a definição falhou");
+  });
+
+  it("sem operador: a linha de comando da Operação não passa por ato da própria câmara", () => {
+    expect(quemAtuou({ operador: "Rafaela Operação", detalhe: {} })).toBe("Rafaela Operação");
+    expect(quemAtuou({ operador: null, detalhe: { origem: "linha-de-comando" } })).toBe("linha de comando da Operação");
+    expect(quemAtuou({ operador: null, detalhe: {} })).toBe("pela própria câmara");
   });
 });

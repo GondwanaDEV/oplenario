@@ -175,3 +175,42 @@
     (is (= "## Art. 1o" (:texto r)))
     (is (= [{:gatilho "despachar" :recebimento nil}] (:tramitacao r))
         "fatia 2b: cada movimentacao sai anotada com o recibo de carga (nil = nao recebida)")))
+
+;; "Onde esta' a materia": o controller compoe o rito da Casa (lido pelo Repo) com o historico e a etapa atual da
+;; materia, e devolve `:rito` pronto para o wire — o bruto (`:rito-do-template`) nao sai.
+(def ^:private rito-bruto
+  {:estado-inicial "entrada"
+   :estados [{:chave "entrada" :nome "Entrada" :terminal false :ordem 1}
+             {:chave "instrucao" :nome "Instrução" :terminal false :ordem 2}
+             {:chave "promulgada" :nome "Promulgada" :terminal true :ordem 3}]
+   :transicoes [{:de-estado "entrada" :para-estado "instrucao"}
+                {:de-estado "instrucao" :para-estado "promulgada"}]})
+
+(deftest buscar-ficha-materia-compoe-o-rito-da-casa
+  (let [repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p" :estado "instrucao"} :texto nil
+                                           :tramitacao [] :tramitacao-truncado false :apensadas [] :emendas []
+                                           :pareceres [] :rito-do-template rito-bruto}))
+        r (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))]
+    (is (= ["entrada" "instrucao"] (mapv :chave (:etapas (:rito r)))))
+    (is (= "Instrução" (:rotulo (:atual (:rito r)))))
+    (is (not (contains? r :rito-do-template)) "o dado bruto do template nao atravessa o controller")))
+
+(deftest buscar-ficha-materia-sem-rito-devolve-rito-nil
+  (let [repo (fake-repo :ficha (fn [_id] {:proposicao {:id "p" :estado "protocolada"} :texto nil :tramitacao []
+                                           :apensadas [] :emendas [] :pareceres [] :rito-do-template nil}))
+        r (controllers/buscar-ficha-materia repo sem-nomes (random-uuid) (random-uuid))]
+    (is (contains? r :rito))
+    (is (nil? (:rito r)))))
+
+(deftest buscar-ficha-materia-passa-o-corte-do-historico-ao-rito
+  ;; sem ordem unica, "por onde passou" vem do historico; cortado pelo teto, nao se afirma lista parcial
+  (let [ramifica {:estado-inicial "a"
+                  :estados [{:chave "a" :nome "A" :terminal false :ordem 0} {:chave "b" :nome "B" :terminal false :ordem 0}
+                            {:chave "c" :nome "C" :terminal false :ordem 0}]
+                  :transicoes [{:de-estado "a" :para-estado "b"} {:de-estado "a" :para-estado "c"}]}
+        ficha (fn [truncado] (fn [_id] {:proposicao {:id "p" :estado "b"} :texto nil
+                                        :tramitacao [{:de-estado "a" :para-estado "b"}] :tramitacao-truncado truncado
+                                        :apensadas [] :emendas [] :pareceres [] :rito-do-template ramifica}))
+        buscar #(controllers/buscar-ficha-materia (fake-repo :ficha (ficha %)) sem-nomes (random-uuid) (random-uuid))]
+    (is (= ["a"] (mapv :chave (:anteriores (:rito (buscar false))))))
+    (is (nil? (:anteriores (:rito (buscar true)))))))

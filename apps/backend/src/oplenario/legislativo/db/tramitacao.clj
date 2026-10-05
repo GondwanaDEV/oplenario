@@ -287,6 +287,35 @@
                            [:= :de_estado de-estado]]
                    :order-by [[:ordem :asc] [:id :asc]]}))))
 
+(defn rito-do-template
+  "O RITO inteiro de `template-id` para desenhar a faixa da ficha: `{:estado-inicial :estados :transicoes}` — estados
+  (`chave nome terminal ordem`) e transicoes (`de-estado para-estado`, so' o que desenha o grafo; guarda, gatilho e
+  autorizacao ficam de fora), na ordem de cadastro. nil = o template nao existe NESTE tenant (a RLS esconde o do
+  vizinho, entao 'do vizinho' e 'nao existe' sao a mesma resposta).
+
+  SEM TETO, pelo mesmo motivo de `transicoes-do-estado`: e' configuracao escrita por humano (unidades de linhas), e
+  cortar esconderia uma etapa que a Casa declara. Quem decide a ORDEM e o que e' passo ou desfecho e' o
+  `logic.rito` (puro): esta fn so' le'."
+  [tx ente-id template-id]
+  (when-let [{:keys [estado-inicial]}
+             (comum/linha->kebab
+               (jdbc/execute-one! tx
+                 (sql/format {:select [:estado_inicial] :from [:legislativo.template_tramitacao]
+                              :where [:and [:= :ente_id ente-id] [:= :id template-id]]})))]
+    {:estado-inicial estado-inicial
+     :estados (comum/linhas->kebab
+                (jdbc/execute! tx
+                  (sql/format {:select [:chave :nome :terminal :ordem]
+                               :from [:legislativo.template_estado]
+                               :where [:and [:= :ente_id ente-id] [:= :template_id template-id]]
+                               :order-by [[:ordem :asc] [:criado_em :asc] [:chave :asc]]})))
+     :transicoes (comum/linhas->kebab
+                   (jdbc/execute! tx
+                     (sql/format {:select [:de_estado :para_estado]
+                                  :from [:legislativo.template_transicao]
+                                  :where [:and [:= :ente_id ente-id] [:= :template_id template-id]]
+                                  :order-by [[:ordem :asc] [:criado_em :asc] [:id :asc]]})))}))
+
 ;; `estado-no-template` e `estado+lock+rito` DESCERAM p/ `db/proposicao.clj` (ver as docstrings de la').
 ;; Motivo: a mesma consulta passou a ter tres leitores — esta engine, o guard de `proposicao/editar!` e a
 ;; leitura composta do Repo — e o guard nao podia requerer ESTE ns sem fechar um ciclo (tramitacao ->

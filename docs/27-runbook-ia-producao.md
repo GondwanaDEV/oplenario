@@ -81,6 +81,12 @@ Para definir (valores comerciais do plano, na moeda da tabela de preços da IA):
 java -jar oplenario.jar ia-orcamento <ente-id> <mensal> <teto-duro> [moeda=USD]
 ```
 
+O comando deixa dois registros na atuação da Operação da Casa (aparecem na ficha dela no console): `ia-orcamento-iniciado`
+(antes de mexer, com o que valia e o que se pretende) e `ia-orcamento-definido` (depois, apontando o primeiro). A linha de
+comando não tem pessoa: o registro diz `origem: linha-de-comando`. Se a atuação estiver fora, o comando **não roda**; se só
+o registro final falhar, o comando termina com erro dizendo que o orçamento **foi** definido e a tentativa fica sem
+desfecho (a conferência `tentativas-sem-desfecho` a acusa). Rodar de novo é seguro: define de novo e registra outro par.
+
 ### Observabilidade da plataforma (Onda E)
 
 O operador vê a saúde da IA de todas as Casas em `/operacao/ia` (console, 24 h ou 7 dias): execuções, tempo de

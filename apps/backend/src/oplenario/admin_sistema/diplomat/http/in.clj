@@ -6,6 +6,7 @@
   O login espelha o da Casa (`identidade/diplomat/http/auth_in`): descoberta publica -> PKCE no BFF -> o token
   e' RE-VERIFICADO aqui (nunca se confia no BFF) -> sessao opaca em `admin_sistema.sessao_operador`."
   (:require [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [oplenario.admin-sistema.adapters.in.ente :as in-ente]
             [oplenario.admin-sistema.adapters.out.ente :as out-ente]
             [oplenario.admin-sistema.adapters.out.ia :as out-ia]
@@ -32,19 +33,41 @@
       (throw (ex-info "token ausente ou invalido" {:tipo :validacao/invalido :campo :token})))
     token))
 
+(defn- registrar-sem-trancar!
+  "Grava na atuacao e devolve o registro, ou nil se nao gravou (vai para o `log/error`). NUNCA lanca: a entrada do operador
+  nao pode ficar trancada porque a corrente da atuacao caiu — quem entra pode ser quem vai consertar (mesma regra da
+  entrada da Casa, ADR-0017, adendo de 05/10/2026)."
+  [repo-op registro]
+  (try (repo/registrar-atuacao! repo-op registro)
+       (catch Exception e
+         (log/error e "admin-sistema: registro da ENTRADA do operador nao gravado na atuacao; a entrada SEGUE"
+                    {:acao (:acao registro) :operador-id (:operador-id registro)})
+         nil)))
+
 (defn- mint-handler
-  "POST /operacao/sessoes — token do realm do operador -> operador ATIVO -> sessao opaca. A entrada fica na
-  atuacao (retencao maxima, 12.5)."
+  "POST /operacao/sessoes — token do realm do operador -> operador ATIVO -> sessao opaca. A entrada fica na atuacao
+  (retencao maxima, 12.5) como PAR: a TENTATIVA (`entrada-no-console-iniciada`) logo antes de criar a sessao, o desfecho
+  (`entrou-no-console`, ou `entrada-no-console-falhou` se a sessao nao nasceu) depois, apontando a tentativa em
+  `detalhe.tentativa`. Sessao que existe tem tentativa na corrente. A atuacao fora do ar NUNCA tranca a entrada
+  (ADR-0017, adendo de 05/10/2026): nem a tentativa nem o desfecho recusam o login. Operador recusado (401) nao tem
+  tentativa: nada foi concedido."
   [idp repo-op relogio {:keys [absoluta-h ociosa-min]}]
   (fn [req]
     (let [token (corpo->token (:json-params req))]
       (if-let [claims (idp-op/verificar-token-operador idp token)]
         (if-let [ator (auten/ator-do-operador repo-op (:operador-id claims))]
           (let [^Instant agora (tempo/agora relogio)
-                seg (repo/criar-sessao-operador! repo-op {:operador-id (:operador-id ator)
-                                                          :expira-em (.plus agora (Duration/ofHours absoluta-h))
-                                                          :ocioso-ate (.plus agora (Duration/ofMinutes ociosa-min))})]
-            (repo/registrar-atuacao! repo-op {:operador-id (:operador-id ator) :acao "entrou-no-console"})
+                operador-id (:operador-id ator)
+                tentativa (registrar-sem-trancar! repo-op {:operador-id operador-id :acao "entrada-no-console-iniciada"})
+                aponta (when tentativa {:tentativa (str (:id tentativa))})
+                seg (try (repo/criar-sessao-operador! repo-op {:operador-id operador-id
+                                                               :expira-em (.plus agora (Duration/ofHours absoluta-h))
+                                                               :ocioso-ate (.plus agora (Duration/ofMinutes ociosa-min))})
+                         (catch Exception e
+                           (registrar-sem-trancar! repo-op {:operador-id operador-id :acao "entrada-no-console-falhou"
+                                                            :detalhe aponta})
+                           (throw e)))]
+            (registrar-sem-trancar! repo-op {:operador-id operador-id :acao "entrou-no-console" :detalhe aponta})
             (http/json-resposta 200 {:sessao seg}))
           (http/json-resposta 401 {:erro "operador inativo"}))
         (http/json-resposta 401 {:erro "token invalido"})))))

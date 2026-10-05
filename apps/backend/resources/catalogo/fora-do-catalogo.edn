@@ -15,6 +15,10 @@
                     :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
  :agente/reportar-erro-ia {:categoria :so-tela
                            :motivo "a pessoa avalia a resposta da IA que leu (feature 8.4); o agente nao avalia a si mesmo"}
+ :agente/historico {:categoria :so-tela
+                    :motivo "o historico da Clara (ADR-0024) e' registro da pessoa e do controle interno; a Clara nao le o proprio historico"}
+ :agente/conversa {:categoria :so-tela
+                   :motivo "abrir uma conversa guardada da Clara (ADR-0024) e' leitura da pessoa ou do auditor; a Clara nao le o proprio historico"}
  :integracao-ia/norma-dispositivos {:categoria :servico
                                     :motivo "fronteira de servico com o satelite: a IA le os dispositivos vigentes para o indice (B.4b)"}
  :normas/importar-versao {:categoria :so-tela

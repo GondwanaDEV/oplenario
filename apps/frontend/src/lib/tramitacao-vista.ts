@@ -15,10 +15,25 @@
 // portal-cidadao.html:432-453) mais os nomes de fixture observados — é um mapeamento de MELHOR ESFORÇO
 // para a demo/seed (Task 1.4), não uma verdade regulatória. QUALQUER estado fora deste mapa cai no
 // fallback FAIL-CLOSED da Global Constraint do plano: nunca lança, degrada para a faixa mínima honesta.
+//
+// A FICHA INTERNA NÃO DEPENDE MAIS DESTE MAPA (05/10/2026): a rota da ficha devolve o rito da Casa (`rito`, calculado
+// em apps/backend/.../legislativo/logic/rito.clj a partir de template_estado + template_transicao) e a faixa é
+// desenhada por `faixaDoRito`, com a ordem e os nomes que a Casa deu às etapas. `derivarTramitacao` segue sendo a
+// faixa do portal (a projeção pública ainda não carrega o rito), o rótulo único de estado (`rotularEstado`) e o
+// fallback da ficha quando a rota não traz o rito (matéria sem rito, ou rito que não declara a etapa atual).
 
+import type { RitoDaMateriaOut } from "./contrato-legislativo.gen";
 import { situacaoDoDesfecho } from "./desfecho-vista";
 
-export type EstagioTramitacao = { rotulo: string; situacao: "concluido" | "ativo" | "pendente" };
+export type EstagioTramitacao = {
+  rotulo: string;
+  situacao: "concluido" | "ativo" | "pendente";
+  /** Só quando a faixa vem do rito da Casa: a chave da etapa, que distingue duas etapas de mesmo rótulo. */
+  chave?: string;
+  /** Só quando a faixa vem do rito da Casa e o rito não dá ordem única: uma entre várias etapas que podem vir a
+   * seguir (ramo), não o passo seguinte de uma fila. */
+  alternativa?: boolean;
+};
 
 const ESTAGIOS_BASE = ["Protocolo", "Comissões", "1º turno", "2º turno", "Sanção"] as const;
 
@@ -74,6 +89,52 @@ function humanizarEstado(estado: string): string {
 /** Rótulo de um estado de proposição, em palavras. Única fonte para ficha, lista, quadro e painel da Mesa. */
 export function rotularEstado(estado: string): string {
   return ROTULO_SITUACAO_POR_ESTADO[estado] ?? humanizarEstado(estado);
+}
+
+/**
+ * A faixa "Onde está a matéria" a partir do RITO DA CASA (a rota da ficha devolve as etapas; ver `logic/rito.clj`).
+ * É a única faixa que não depende do NOME do estado: a ordem e os rótulos vêm do dado do rito.
+ *
+ * - com ordem única (`ordemUnica`): as etapas do rito, na ordem dele — antes da atual, concluídas; a atual, ativa;
+ *   depois, pendentes. Atual terminal (desfecho): o processo acabou, tudo concluído;
+ * - sem ordem única: só o entorno — anteriores (se o histórico as dá) · atual · próximas possíveis. Nunca uma linha
+ *   reta inventada.
+ *
+ * Devolve null quando não há rito, ou quando o rito não declara a etapa atual (matéria anterior ao rito, rito trocado),
+ * ou a resposta é incoerente: quem chama cai em `derivarTramitacao`, o comportamento anterior.
+ */
+export function faixaDoRito(
+  rito: RitoDaMateriaOut | null | undefined,
+): { estagios: EstagioTramitacao[] } | null {
+  if (!rito?.atual) return null;
+  const atual = rito.atual;
+
+  if (rito.ordemUnica) {
+    const indice = rito.etapas.findIndex((e) => e.chave === atual.chave);
+    if (indice < 0) return null;
+    return {
+      estagios: rito.etapas.map((e, i) => ({
+        chave: e.chave,
+        rotulo: e.rotulo,
+        situacao: atual.terminal || i < indice ? ("concluido" as const) : i === indice ? ("ativo" as const) : ("pendente" as const),
+      })),
+    };
+  }
+
+  const alternativa = rito.proximas.length > 1;
+  return {
+    estagios: [
+      ...(rito.anteriores ?? []).map((e) => ({ chave: e.chave, rotulo: e.rotulo, situacao: "concluido" as const })),
+      // desfecho: o processo acabou, não há "em andamento"
+      { chave: atual.chave, rotulo: atual.rotulo, situacao: atual.terminal ? ("concluido" as const) : ("ativo" as const) },
+      ...rito.proximas.map((e) => ({
+        chave: e.chave,
+        rotulo: e.rotulo,
+        situacao: "pendente" as const,
+        ...(alternativa ? { alternativa: true } : {}),
+      })),
+    ],
+  };
 }
 
 export function derivarTramitacao(
@@ -139,17 +200,20 @@ export function derivarTramitacao(
 // `situacao` e monta uma cláusula por grupo presente; grupos vazios são omitidos (fail-closed da
 // faixa mínima cai aqui de graça — 1 único estágio ativo vira só a cláusula "atual").
 export function descreverFaixa(ref: string, estagios: EstagioTramitacao[]): string {
-  const rotulosPor = (situacao: EstagioTramitacao["situacao"]) =>
-    estagios.filter((e) => e.situacao === situacao).map((e) => e.rotulo);
+  const rotulosPor = (situacao: EstagioTramitacao["situacao"], alternativa = false) =>
+    estagios.filter((e) => e.situacao === situacao && Boolean(e.alternativa) === alternativa).map((e) => e.rotulo);
 
   const concluidos = rotulosPor("concluido");
   const ativos = rotulosPor("ativo");
   const pendentes = rotulosPor("pendente");
+  // ramos que o rito permite a seguir: não são fila de pendentes, e a leitura não pode sugerir que serão todos
+  const possiveis = rotulosPor("pendente", true);
 
   const clausulas: string[] = [];
   if (concluidos.length > 0) clausulas.push(`concluídos ${concluidos.join(", ")}`);
   if (ativos.length > 0) clausulas.push(`${ativos.length > 1 ? "atuais" : "atual"} ${ativos.join(", ")}`);
   if (pendentes.length > 0) clausulas.push(`pendente ${pendentes.join(", ")}`);
+  if (possiveis.length > 0) clausulas.push(`próximas possíveis ${possiveis.join(", ")}`);
 
   return clausulas.length > 0 ? `Tramitação de ${ref}: ${clausulas.join("; ")}.` : `Tramitação de ${ref}.`;
 }

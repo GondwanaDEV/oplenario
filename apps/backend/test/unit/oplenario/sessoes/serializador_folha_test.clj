@@ -206,11 +206,31 @@
 
 ;; ---------- D1: quorum e' repassado verbatim, nunca recalculado ----------
 
+(defn- valor-do-quorum
+  "O texto da celula de valor da linha de quorum cujo rotulo comeca em `rotulo` (nil se a linha nao existe).
+  Procurar o numero no documento inteiro nao prova nada: o HTML leva o CSS, datas e numeracao, e qualquer digito
+  de 0 a 9 aparece nele de qualquer jeito."
+  [html rotulo]
+  (second (re-find (re-pattern (str "<tr[^>]*><td>" (java.util.regex.Pattern/quote rotulo)
+                                    "[^<]*(?:<sup[^>]*>\\d+</sup>)?</td><td class=\"valor-quorum\">([^<]*)</td></tr>"))
+                   (marcacao html))))
+
 (deftest todos-os-cinco-campos-do-quorum-aparecem-verbatim
-  (let [{:keys [html]} (render-str documento-base)]
-    (is (str/includes? html "2") "presentes-plenario/total/membros = 2 tem de aparecer")
-    (is (str/includes? html "1") "presencas-fora-do-roster = 1 tem de aparecer")
-    (is (str/includes? html "0") "presentes-remoto = 0 tem de aparecer, zero nao se omite")))
+  ;; cinco valores DISTINTOS e que nao se derivam um do outro (o total nao e' a soma, fora-do-roster nao e' a
+  ;; diferenca): cada linha so' pode trazer o numero do proprio campo, e recalcular qualquer um deles reprova.
+  (let [quorum {:presentes-plenario 7 :presentes-remoto 3 :presentes-total 11 :membros-da-casa 13
+                :presencas-fora-do-roster 5}
+        {:keys [html]} (render-str (assoc documento-base :quorum quorum))]
+    (is (= "7" (valor-do-quorum html "Presentes no plenário")))
+    (is (= "3" (valor-do-quorum html "Presentes em remoto")))
+    (is (= "11" (valor-do-quorum html "Total de presentes")))
+    (is (= "13" (valor-do-quorum html "Membros da Casa nesta apuração")))
+    (is (= "5" (valor-do-quorum html "Presenças fora do roster")))))
+
+(deftest o-zero-do-quorum-nao-se-omite
+  (let [{:keys [html]} (render-str (assoc documento-base :quorum (assoc quorum-ok :presentes-remoto 0)))]
+    (is (= "0" (valor-do-quorum html "Presentes em remoto")) "zero e' dado: a linha traz 0, nao some nem fica em branco")
+    (is (= "2" (valor-do-quorum html "Presentes no plenário")))))
 
 ;; ---------- escape de HTML (dado livre digitado por humano) ----------
 
@@ -383,8 +403,10 @@
 (deftest aviso-stub-icp-esta-presente
   (let [{:keys [html]} (render-str documento-base)]
     (is (str/includes? html "STUB-ICP"))
-    (is (str/includes? html "não")
-        "o aviso tem de negar fe' publica, nao so' citar o carimbo")))
+    ;; "não" solto aparece em dezenas de frases da folha; o que importa e' a negacao DENTRO da frase do carimbo
+    (is (str/includes? html "A marca STUB-ICP-v0 que o sistema aplica não é assinatura com fé pública")
+        "o aviso tem de negar fe' publica, nao so' citar o carimbo")
+    (is (str/includes? html "Esta folha NÃO está assinada digitalmente"))))
 
 ;; ---------- cabecalho nullable: nao pode renderizar em branco ----------
 

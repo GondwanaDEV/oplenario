@@ -31,6 +31,17 @@
        (filter #(= "adapters" (.getName (.getParentFile ^File %))))
        (mapv #(.getPath ^File %))))
 
+(deftest o-lint-enxerga-o-src
+  ;; `file-seq` de uma raiz inexistente (kaocha rodado de outra pasta) devolve vazio: os tres lints deste ns
+  ;; passariam sem olhar um arquivo. Aqui o gate afirma o que varreu.
+  (let [fontes (filter #(and (.isFile ^File %) (str/ends-with? (.getName ^File %) ".clj"))
+                       (file-seq (io/file "src/oplenario")))
+        pastas (filter #(.isDirectory ^File %) (file-seq (io/file "src/oplenario")))]
+    (is (> (count fontes) 300) (str "varreu " (count fontes) " arquivos .clj de src/oplenario"))
+    (is (some #(= "adapters" (.getName ^File %)) pastas) "enxerga as pastas de adapters dos modulos")
+    (is (some #(str/includes? (.getPath ^File %) (str File/separator "kernel" File/separator)) fontes)
+        "enxerga o kernel (o unico lugar onde `app.correcao_auditada` e' permitido)")))
+
 (deftest sem-pasta-port-ou-schema-no-src
   (let [ofensores (proibidas-sob "src/oplenario")]
     (is (empty? ofensores)
@@ -78,6 +89,7 @@
   (let [ofensores (for [^File f (arquivos-clj-fora-do-kernel)
                         :when (str/includes? (slurp f) "app.correcao_auditada")]
                     (.getPath f))]
+    (is (> (count (arquivos-clj-fora-do-kernel)) 300) "o lint varreu os modulos, nao uma pasta vazia")
     (is (empty? ofensores)
         (str "seguranca (ADR-0002 §4b): 'app.correcao_auditada' so pode ser setado no kernel "
              "(com-correcao-auditada* com authz). Ofensores: " (pr-str (vec ofensores))))))

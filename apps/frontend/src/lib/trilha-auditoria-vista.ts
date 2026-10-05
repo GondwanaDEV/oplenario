@@ -142,7 +142,15 @@ export function verbo(r: RegistroTrilha): Verbo {
   if (r.decisao === "falhou") return { rotulo: "Não concluiu", tom: "negado" };
   const nome = r.acao.split("/")[1] ?? r.acao;
   const achado = VERBOS.find(([re]) => re.test(nome));
+  // o título já é a frase do ato ("Definiu os tempos regimentais…"): a etiqueta não repete um segundo verbo, só dá a cor
+  if (ehFraseDoAto(r.recurso?.rotulo)) return { rotulo: "Ato", tom: achado ? achado[1].tom : "entrou" };
   return achado ? achado[1] : { rotulo: "Registrou", tom: "entrou" };
+}
+
+/** O rótulo é uma frase que começa por verbo no passado ("Revogou um acesso à Casa", "complementou a resposta…"),
+ * e não o nome de um objeto ("PL 7/2026"). Vem do resumo por ação (ADR-0017 1-C) ou do handler. */
+export function ehFraseDoAto(rotulo: string | null | undefined): boolean {
+  return !!rotulo && /^\p{L}+(ou|iu|eu|ôs)(-se)?\s/iu.test(rotulo);
 }
 
 const TIPOS_DE_RECURSO: Record<string, string> = {
@@ -163,9 +171,12 @@ export function acaoEmPalavras(acao: string): string {
 
 export function objeto(r: RegistroTrilha): { titulo: string; detalhe: string } {
   const rec = r.recurso;
-  const tipo = rec?.tipo ? TIPOS_DE_RECURSO[rec.tipo] ?? rec.tipo : null;
+  // tipo que a tela não conhece (o parâmetro cru da rota, "id") não vira título: "id 17d4218b" não diz nada a ninguém
+  const tipo = rec?.tipo ? TIPOS_DE_RECURSO[rec.tipo] ?? null : null;
   const titulo = rec?.rotulo ?? (tipo ? `${tipo}${rec?.id ? ` ${rec.id.slice(0, 8)}` : ""}` : acaoEmPalavras(r.acao));
-  const detalhe = [rec?.rotulo || tipo ? acaoEmPalavras(r.acao) : null,
+  const modulo = NOMES_DE_MODULO[r.acao.split("/")[0]] ?? null;
+  // a frase do ato já diz o que foi feito: o detalhe só situa (o módulo), sem repetir a ação em infinitivo
+  const detalhe = [ehFraseDoAto(rec?.rotulo) ? modulo : rec?.rotulo || tipo ? acaoEmPalavras(r.acao) : null,
     r.decisao === "negado" ? "barrado pela política de acesso" : null,
     r.decisao === "falhou" ? "o sistema recusou o pedido" : null,
     r.decisao === "sem_desfecho" ? "ação iniciada, desfecho não registrado" : null].filter(Boolean).join(" · ");
