@@ -353,6 +353,9 @@
     ficha-e-janelas-override :ficha-e-janelas-publicas
     ;; a lista publica dos vereadores em exercicio (mesmo cuidado de nome: a defn de topo tem o mesmo nome)
     vereadores-em-exercicio-override :vereadores-em-exercicio
+    ;; os ids das sessoes publicas da Casa (recorte dos votos nominais do perfil e dos dados abertos); os testes do
+    ;; portal sem o modulo de sessoes montado injetam o seu
+    sessoes-publicas-override :sessoes-publicas
     :as deps-de-montar}]
   (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
         ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
@@ -852,6 +855,13 @@
                                          (fn [ente-id votacao-id]
                                            (when (and repo-sessoes repo-legislativo)
                                              (votacoes-publicas/buscar repo-sessoes repo-legislativo ente-id votacao-id)))
+                                         ;; o recorte dos votos nominais do perfil e dos dados abertos: so' os dados em
+                                         ;; sessao publica e nao secreta (a mesma regra do portal de votacoes). Sem o
+                                         ;; repo de sessoes montado, nenhum voto sai.
+                                         :sessoes-publicas
+                                         (or sessoes-publicas-override
+                                             (fn [ente-id]
+                                               (if repo-sessoes (votacoes-publicas/ids-das-sessoes repo-sessoes ente-id) [])))
                                          ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
                                          ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
                                          ;; mesma inversao de dependencia sobre cadastros (§22.10).

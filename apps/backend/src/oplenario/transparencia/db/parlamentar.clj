@@ -4,10 +4,15 @@
   torrente de eventos de presenca e existe so' para reduzir a cardinalidade do denominador. Funcoes sobre a
   `tx` corrente (FORCE RLS isola). ESCRITA chamada pelo consumer dentro da tx do relay; LEITURA pelo
   Repo-Component. Voto SECRETO nunca chega aqui: o payload do evento (uniao discriminada por :modalidade)
-  nem carrega identidade no ramo secreto."
+  nem carrega identidade no ramo secreto.
+
+  Voto NOMINAL de sessao que o portal nao mostra (secreta, ou fechada ao publico) chega, e fica: a leitura e' que
+  recorta, pelas `sessoes` publicas que o host entrega (`em-sessoes-publicas`). Toda leitura de voto daqui leva o
+  recorte — sem ele, o CSV e o perfil publicavam o voto nominal dado em sessao secreta."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum]))
+            [oplenario.kernel.db-util :as comum])
+  (:import (java.util UUID)))
 
 (set! *warn-on-reflection* true)
 
@@ -15,14 +20,20 @@
   "Teto server-side da secao 'como votou' (anti unbounded-read; mesmo racional dos tetos de materia/comentario)."
   50)
 
+(defn em-sessoes-publicas
+  "Clausula WHERE: o voto foi dado numa das `sessoes` (ids das sessoes publicas da Casa). Colecao vazia nao casa
+  nada, e `sessao_id` NULL nunca casa — o recorte e' fail-closed. `coluna` e' a sessao_id qualificada da query."
+  [coluna sessoes]
+  [:= coluna [:any [:lift (into-array UUID (or (seq sessoes) []))]]])
+
 (defn registrar-voto!
-  "Projeta um voto NOMINAL. ON CONFLICT DO NOTHING: idempotente sob redrive (a chave e' de negocio, nao a
-  idempotency-key do envelope)."
-  [tx {:keys [ente-id votacao-id vereador-id proposicao-id voto ocorrido-em]}]
+  "Projeta um voto NOMINAL, com a SESSAO em que foi dado (a leitura publica recorta por ela). ON CONFLICT DO
+  NOTHING: idempotente sob redrive (a chave e' de negocio, nao a idempotency-key do envelope)."
+  [tx {:keys [ente-id votacao-id sessao-id vereador-id proposicao-id voto ocorrido-em]}]
   {:pre [(some? ente-id) (some? votacao-id) (some? vereador-id) (some? voto) (some? ocorrido-em)]}
   (jdbc/execute-one! tx
     (sql/format {:insert-into :transparencia.voto_parlamentar
-                 :values [{:ente_id ente-id :votacao_id votacao-id :vereador_id vereador-id
+                 :values [{:ente_id ente-id :votacao_id votacao-id :sessao_id sessao-id :vereador_id vereador-id
                            :proposicao_id proposicao-id :voto voto :ocorrido_em ocorrido-em}]
                  :on-conflict [:ente_id :votacao_id :vereador_id]
                  :do-nothing []})))
@@ -115,8 +126,9 @@
   "Secao 'como votou': votos PUBLICOS do vereador, mais recentes primeiro (desempate por votacao_id — achado
   M-6, revisao Task 2: `ocorrido_em` vem de `registrado_em DEFAULT now()`, o instante de INICIO da tx, entao
   votos proximos podem empatar; sem desempate estavel a ordem fica nao-deterministica assim que a Task 3
-  paginar), com a ementa da materia (mesmo schema — JOIN permitido, nao e' cross-schema)."
-  [tx ente-id vereador-id limite]
+  paginar), com a ementa da materia (mesmo schema — JOIN permitido, nao e' cross-schema). So' votos dados em
+  `sessoes` publicas."
+  [tx ente-id vereador-id sessoes limite]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (comum/linhas->kebab
    (jdbc/execute! tx
@@ -126,7 +138,8 @@
                   :from [[:transparencia.voto_parlamentar :v]]
                   :left-join [[:transparencia.materia :m]
                               [:and [:= :m.ente_id :v.ente_id] [:= :m.proposicao_id :v.proposicao_id]]]
-                  :where [:and [:= :v.ente_id ente-id] [:= :v.vereador_id vereador-id]]
+                  :where [:and [:= :v.ente_id ente-id] [:= :v.vereador_id vereador-id]
+                          (em-sessoes-publicas :v.sessao_id sessoes)]
                   :order-by [[:v.ocorrido_em :desc] [:v.votacao_id :desc]]
                   ;; achado I-3 (revisao Task 2): teto RIGIDO — `(or limite teto-votos)` deixava o CHAMADOR
                   ;; passar um limite MAIOR que o teto (so' usava teto-votos quando limite era nil). `min`
@@ -138,29 +151,33 @@
   `teto-votos` (50). Sem este numero a borda nao tem como dizer 'mostrando 50 de N' e o `:closed` do wire
   fecha qualquer outra via de o cliente descobrir o truncamento (achado C-4, revisao Task 4). Mesmo par
   lista+total de `db/materia/listar-por-autor`+`contar-por-autor`. Sem teto de proposito: e' um
-  `count(*)` servido pelo prefixo (ente_id, vereador_id) de `idx_voto_parlamentar_vereador`."
-  [tx ente-id vereador-id]
+  `count(*)` servido pelo prefixo (ente_id, vereador_id) de `idx_voto_parlamentar_vereador`. So' votos dados em
+  `sessoes` publicas, o mesmo recorte da lista."
+  [tx ente-id vereador-id sessoes]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (:contagem
    (comum/linha->kebab
     (jdbc/execute-one! tx
       (sql/format {:select [[[:count :*] :contagem]]
                    :from [:transparencia.voto_parlamentar]
-                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]})))))
+                   :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                           (em-sessoes-publicas :sessao_id sessoes)]})))))
 
 (defn votos-por-opcao-do-vereador
   "\"Como votou\" em numeros: quantos votos PUBLICOS do vereador foram sim, nao e abstencao, e o TOTAL — num
   unico `GROUP BY` sobre o mesmo prefixo (ente_id, vereador_id) de `idx_voto_parlamentar_vereador`. Substitui
   o `count(*)` de `contar-votos-do-vereador` no perfil sem acrescentar statement: o total e' a soma dos grupos
   (inclusive de qualquer valor fora dos tres — o CHECK do legislativo nao deixa haver, mas o total nao depende
-  disso). Votos secretos nao estao aqui: `voto_parlamentar` so' recebe voto nominal (mig 0064)."
-  [tx ente-id vereador-id]
+  disso). Votos secretos nao estao aqui: `voto_parlamentar` so' recebe voto nominal (mig 0064). So' votos dados em
+  `sessoes` publicas, o mesmo recorte da lista."
+  [tx ente-id vereador-id sessoes]
   {:pre [(some? ente-id) (some? vereador-id)]}
   (let [grupos (comum/linhas->kebab
                 (jdbc/execute! tx
                   (sql/format {:select [:voto [[:count :*] :contagem]]
                                :from [:transparencia.voto_parlamentar]
-                               :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]]
+                               :where [:and [:= :ente_id ente-id] [:= :vereador_id vereador-id]
+                                       (em-sessoes-publicas :sessao_id sessoes)]
                                :group-by [:voto]})))
         de (fn [v] (or (some #(when (= v (:voto %)) (:contagem %)) grupos) 0))]
     {:total     (reduce + 0 (map :contagem grupos))

@@ -26,6 +26,12 @@
                                         (assoc v :sessao (da-sessao s)))))
                      votacoes)}))
 
+(defn ids-das-sessoes
+  "Os ids das sessoes que o portal pode mostrar (publicas e nao secretas). E' o recorte dos votos nominais do perfil
+  do vereador e dos dados abertos — o mesmo predicado da lista de votacoes, decidido em `sessoes`."
+  [repo-sessoes ente-id]
+  (mapv :id (ses/sessoes-publicas repo-sessoes ente-id)))
+
 (defn buscar
   "A votacao encerrada com os votos nominais (se nominal) e a `:sessao`, ou nil quando nao existe, nao encerrou, foi
   anulada, e' de outra Casa ou a sessao dela nao e' publica."

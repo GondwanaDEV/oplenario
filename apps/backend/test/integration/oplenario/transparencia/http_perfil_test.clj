@@ -88,6 +88,16 @@
      (when-let [ficha (get cadastrados [ente-id vereador-id])]
        {:ficha ficha :janelas janelas}))))
 
+(def ^:private sessoes-publicas
+  "As sessoes que o host declara publicas (o seam `sessoes-publicas`, sem o modulo de sessoes montado). Um conjunto
+  so' para todas as Casas: o recorte por Casa ja' vem do ente_id e da RLS."
+  (atom #{}))
+
+(defn- sessao-publica!
+  "Uma sessao nova, declarada publica ao seam. Devolve o id."
+  []
+  (let [s (random-uuid)] (swap! sessoes-publicas conj s) s))
+
 (defn- service-fn
   ([ficha-e-janelas-publicas] (service-fn ficha-e-janelas-publicas *repo-transparencia*))
   ([ficha-e-janelas-publicas repo]
@@ -95,7 +105,8 @@
                      (rotas/montar {:idp (idp-dev/idp-dev)
                                     :repo-identidade nil
                                     :repo-transparencia repo
-                                    :ficha-e-janelas-publicas ficha-e-janelas-publicas})
+                                    :ficha-e-janelas-publicas ficha-e-janelas-publicas
+                                    :sessoes-publicas (fn [_] @sessoes-publicas)})
                      it/globais)
        ph/create-server ::ph/service-fn)))
 
@@ -121,7 +132,7 @@
 ;; predicado `v.vereador_id = ?` — a RLS isola por TENANT, nao por vereador.
 (defn- abrir-votacao! [ente pid]
   (:id (legislativo-repo/abrir-votacao! *repo-legislativo* ente
-         {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id (random-uuid)
+         {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id (sessao-publica!)
           :modalidade "nominal" :quorum-tipo "maioria_simples"})))
 
 (defn- registrar-voto! [ente vid vereador voto]
@@ -264,7 +275,7 @@
   (testing "vereador inexistente -> 404, NUNCA 200 com perfil vazio, e o read-model nem e' consultado"
     (let [repo-que-explode #_{:clj-kondo/ignore [:missing-protocol-method]}
                            (reify transparencia-repo/RepoTransparencia
-                             (perfil-parlamentar [_ _ _ _]
+                             (perfil-parlamentar [_ _ _ _ _]
                                (throw (ex-info "o perfil NAO pode ser lido antes do guard de 404" {}))))
           r (pt/response-for (service-fn (seam-escopado {}) repo-que-explode) :get
                              (str "/portal/casa/" (random-uuid) "/vereadores/" (random-uuid)))]
@@ -349,13 +360,15 @@
   ;; round-trips para provar aritmetica de teto — mesmo racional de `projetar-lote!`.
   (testing "acima do teto a lista de votos para em 50 e :votos-total traz o universo inteiro"
     (let [ente     (random-uuid)
-          vereador (random-uuid)]
+          vereador (random-uuid)
+          sessao   (sessao-publica!)]
       (tenancy/com-tenant* *ds* ente
         (fn [tx]
           (doseq [i (range 52)]
             (transparencia-repo/projetar-evento! tx
               {:tipo "voto.registrado" :ente-id ente
-               :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str vereador)
+               :payload {:votacao-id (str (random-uuid)) :sessao-id (str sessao) :modalidade "nominal"
+                         :vereador-id (str vereador)
                          :voto "sim" :proposicao-id (str (random-uuid))
                          :ocorrido-em (format "2026-05-18T14:%02d:00Z" i)}}))))
       (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]
@@ -371,19 +384,22 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)
           outro    (random-uuid)
+          sessao   (sessao-publica!)
           votos    (concat (repeat 30 "sim") (repeat 20 "nao") (repeat 5 "abstencao"))]
       (tenancy/com-tenant* *ds* ente
         (fn [tx]
           (doseq [[i voto] (map-indexed vector votos)]
             (transparencia-repo/projetar-evento! tx
               {:tipo "voto.registrado" :ente-id ente
-               :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str vereador)
+               :payload {:votacao-id (str (random-uuid)) :sessao-id (str sessao) :modalidade "nominal"
+                         :vereador-id (str vereador)
                          :voto voto :proposicao-id (str (random-uuid))
                          :ocorrido-em (format "2026-05-18T%02d:%02d:00Z" (quot i 60) (mod i 60))}}))
           ;; distrator: outro vereador do MESMO ente votando sim
           (transparencia-repo/projetar-evento! tx
             {:tipo "voto.registrado" :ente-id ente
-             :payload {:votacao-id (str (random-uuid)) :modalidade "nominal" :vereador-id (str outro)
+             :payload {:votacao-id (str (random-uuid)) :sessao-id (str sessao) :modalidade "nominal"
+                       :vereador-id (str outro)
                        :voto "sim" :proposicao-id (str (random-uuid))
                        :ocorrido-em "2026-05-19T10:00:00Z"}})))
       (let [body (ler-json (GET (seam-escopado {[ente vereador] (ficha-fixture vereador)}) ente vereador))]

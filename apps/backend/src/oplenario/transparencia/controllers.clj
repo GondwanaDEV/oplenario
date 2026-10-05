@@ -71,9 +71,12 @@
   `cadastros` no instante da requisicao: NAO e' read-model, NAO e' replay-consistente (corrigir uma
   `vigencia_inicio` muda o numero publicado no mesmo segundo, sem evento e sem trilha) e NAO passa por
   este modulo como 'mandato' — aqui sao intervalos anonimos. `[]` significa 'sem periodo de exercicio
-  registrado' e devolve 0/0 declarado; NUNCA e' tratado como 'tudo'."
-  [repo-transparencia ente-id vereador-id janelas]
-  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id janelas))
+  registrado' e devolve 0/0 declarado; NUNCA e' tratado como 'tudo'.
+
+  `sessoes-publicas` e' o seam do host (fn [ente-id] -> ids das sessoes que o portal pode mostrar): os votos do
+  perfil sao so' os dados nelas. Voto nominal de sessao secreta ou fechada ao publico nao aparece nem conta."
+  [repo-transparencia sessoes-publicas ente-id vereador-id janelas]
+  (repo/perfil-parlamentar repo-transparencia ente-id vereador-id janelas (sessoes-publicas ente-id)))
 
 ;; ---------- Slice 2: acompanhamento do cidadao (autenticado; consent-gated) ----------
 
@@ -107,18 +110,22 @@
 
 (defn catalogo-dados-abertos
   "O catalogo dos datasets abertos da Casa: cada um com o dicionario de colunas (da logic) e, do read-model, quantas
-  linhas tem e quando foi atualizado pela ultima vez. Rota PUBLICA (ente do path)."
-  [repo-transparencia ente-id]
-  (let [resumo (repo/resumo-dados-abertos repo-transparencia ente-id)]
+  linhas tem e quando foi atualizado pela ultima vez. Rota PUBLICA (ente do path). `sessoes-publicas` e' o seam do
+  host (fn [ente-id] -> ids): a contagem dos votos nominais e' a do arquivo, so' das sessoes publicas."
+  [repo-transparencia sessoes-publicas ente-id]
+  (let [resumo (repo/resumo-dados-abertos repo-transparencia ente-id (sessoes-publicas ente-id))]
     (mapv (fn [d] (merge d (get resumo (keyword (:chave d))))) dados-abertos/datasets)))
 
 (defn dataset-csv
   "O CSV do dataset `arquivo` (\"proposicoes.csv\"...), ou nil se o arquivo nao existe. `nomes-dos-vereadores` e'
-  o seam do host (fn [ente-id] -> {vereador-id nome}) — so' chamado para o dataset que o usa."
-  [repo-transparencia nomes-dos-vereadores ente-id arquivo]
+  o seam do host (fn [ente-id] -> {vereador-id nome}) — so' chamado para o dataset que o usa. `sessoes-publicas`
+  (fn [ente-id] -> ids) recorta os votos nominais: voto de sessao secreta ou fechada ao publico nao sai."
+  [repo-transparencia nomes-dos-vereadores sessoes-publicas ente-id arquivo]
   (when-let [d (get dados-abertos/por-arquivo arquivo)]
-    (let [linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d))
-          nomes (if (= "votos-nominais" (:chave d)) (nomes-dos-vereadores ente-id) {})]
+    (let [votos? (= "votos-nominais" (:chave d))
+          linhas (repo/linhas-dados-abertos repo-transparencia ente-id (:chave d)
+                                            (if votos? (sessoes-publicas ente-id) []))
+          nomes (if votos? (nomes-dos-vereadores ente-id) {})]
       {:dataset d :csv (dados-abertos/->csv d linhas nomes)})))
 
 ;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------

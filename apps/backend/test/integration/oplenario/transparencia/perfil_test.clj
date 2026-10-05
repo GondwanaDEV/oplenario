@@ -87,15 +87,29 @@
       {:id nid :veiculo-publicacao "Diario Oficial do Municipio" :updated-by nil :lock-version 0})
     nid))
 
+(def ^:private sessoes-publicas
+  "As sessoes que o host declara publicas (o seam `sessoes-publicas`). Um conjunto so' para todas as Casas: o recorte
+  por Casa ja' vem do ente_id e da RLS."
+  (atom #{}))
+
+(defn- publicas
+  "O seam do host: os ids das sessoes publicas da Casa."
+  [_ente]
+  @sessoes-publicas)
+
 (defn- votar!
-  "Voto NOMINAL pelo caminho REAL (abrir-votacao! + registrar-voto! -> `voto.registrado`)."
-  [ente pid vereador]
-  (let [{vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
-                    {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id (random-uuid)
-                     :modalidade "nominal" :quorum-tipo "maioria_simples"})]
-    (legislativo-repo/registrar-voto! *repo-legislativo* ente
-      {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto "sim"})
-    vid))
+  "Voto NOMINAL pelo caminho REAL (abrir-votacao! + registrar-voto! -> `voto.registrado`), numa sessao nova —
+  publica, salvo `:publica? false` (sessao secreta ou fechada ao publico)."
+  ([ente pid vereador] (votar! ente pid vereador {}))
+  ([ente pid vereador {:keys [publica? voto] :or {publica? true voto "sim"}}]
+   (let [sessao (random-uuid)
+         _ (when publica? (swap! sessoes-publicas conj sessao))
+         {vid :id} (legislativo-repo/abrir-votacao! *repo-legislativo* ente
+                     {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id pid :sessao-id sessao
+                      :modalidade "nominal" :quorum-tipo "maioria_simples"})]
+     (legislativo-repo/registrar-voto! *repo-legislativo* ente
+       {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto voto})
+     vid)))
 
 (defn- presenca!
   "Projeta `presenca.registrada` (o modulo `sessoes` nao esta' wireado aqui — o portal so' consome o evento
@@ -190,7 +204,7 @@
       (votar! ente pid vereador)
       (drenar!)
       (presenca! ente (random-uuid) vereador "entrada")
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= 1 (count (:materias p))) "a materia de autoria aparece")
         (is (= 1 (:materias-total p)) "o total do universo (sem teto) acompanha a lista")
         (is (= pid (:proposicao-id (first (:materias p)))))
@@ -201,10 +215,32 @@
         (is (= 1 (:sessoes-presente (:presenca p))) "o numerador de presenca")
         (is (= 1 (:sessoes-com-chamada (:presenca p))) "o denominador de presenca")))))
 
+(deftest voto-nominal-de-sessao-que-o-portal-nao-mostra-nao-aparece-nem-conta
+  (testing "o voto dado em sessao secreta (ou fechada ao publico) nao entra na lista nem nos numeros do perfil"
+    (let [ente     (random-uuid)
+          vereador (random-uuid)
+          pid      (protocolar! ente "Hortas comunitarias" {})]
+      (votar! ente pid vereador)
+      (votar! ente pid vereador {:publica? false :voto "nao"})
+      (drenar!)
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
+        (is (= ["sim"] (mapv :voto (:votos p))) "so' o voto da sessao publica")
+        (is (= 1 (:votos-total p)))
+        (is (= {:sim 1 :nao 0 :abstencao 0} (:votos-por-opcao p)) "o 'nao' da sessao secreta nao conta")))
+    (testing "sem sessao publica nenhuma (o seam devolve vazio), nenhum voto sai"
+      (let [ente     (random-uuid)
+            vereador (random-uuid)
+            pid      (protocolar! ente "Hortas comunitarias" {})]
+        (votar! ente pid vereador)
+        (drenar!)
+        (let [p (controllers/perfil-parlamentar *repo-transparencia* (constantly []) ente vereador janela-larga)]
+          (is (empty? (:votos p)))
+          (is (= 0 (:votos-total p))))))))
+
 (deftest perfil-de-vereador-sem-atuacao-e-vazio-mas-bem-formado
   (testing "vereador sem nenhuma atuacao devolve as quatro chaves, nunca nil"
     (let [ente (random-uuid)
-          p    (controllers/perfil-parlamentar *repo-transparencia* ente (random-uuid) janela-larga)]
+          p    (controllers/perfil-parlamentar *repo-transparencia* publicas ente (random-uuid) janela-larga)]
       (is (empty? (:materias p)))
       (is (= 0 (:materias-total p)))
       (is (= 0 (:normas-de-autoria p)))
@@ -224,7 +260,7 @@
           _        (protocolar! ente-b "Materia do ente B"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente-a vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente-a vereador janela-larga)]
         (is (= 1 (count (:materias p))) "so' a materia do ente consultado")
         (is (= pid-a (:proposicao-id (first (:materias p)))))
         ;; O total tambem e' escopado. NOTA HONESTA (mesma situacao da mutacao M3 da Task 3): este assert
@@ -255,7 +291,7 @@
       ;; ato de COMISSAO a um vereador e' a mesma classe de erro do achado N-1.
       (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
                                        :autor-texto "Comissao de Financas" :ementa "Autoria virou comissao"})
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= 1 (count (:materias p)))
             "as de autoria 'executivo'/'comissao' sao filtradas — so' a parlamentar legitima permanece")
         (is (= 1 (:materias-total p)) "o total tambem so' conta a autoria parlamentar")
@@ -272,7 +308,7 @@
           pid-nova (protocolar! ente "Materia com elo"
                                 {:autor-tipo "vereador" :autor-id vereador :autor-texto "Helena Past"})]
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= 1 (count (:materias p))) "so' a materia COM o elo autor_id")
         (is (= pid-nova (:proposicao-id (first (:materias p)))))))))
 
@@ -310,13 +346,13 @@
       (projetar-materia! ente pid-com {:autor-tipo "comissao" :autor-id (str vereador)
                                        :autor-texto "Comissao de Financas" :ementa "Lei da comissao"})
       (projetar-norma! ente pid-com)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= 1 (:normas-de-autoria p))
             "so' a materia deste vereador, autoria parlamentar, com norma publicada")
         (is (= [pid-nova pid-lei] (mapv :proposicao-id (:materias p)))
             "a lista sai por NUMERACAO decrescente (ano, sequencial) — e so' as parlamentares entram")
         (is (= 2 (:materias-total p)) "o total do universo bate com a lista quando nao ha truncamento"))
-      (is (= 0 (:normas-de-autoria (controllers/perfil-parlamentar *repo-transparencia* (random-uuid) vereador janela-larga)))
+      (is (= 0 (:normas-de-autoria (controllers/perfil-parlamentar *repo-transparencia* publicas (random-uuid) vereador janela-larga)))
           "outro ente nao ve a contagem"))))
 
 ;; ---------- (e) ordem estavel no EMPATE de numeracao ----------
@@ -336,7 +372,7 @@
                    (merge autoria {:id menor :tipo "requerimento" :tipo-requerimento "informacao"}))
       (protocolar! ente "Projeto de lei" (merge autoria {:id maior :tipo "projeto_lei"}))
       (drenar!)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= #{1} (set (map :sequencial (:materias p))))
             "premissa do caso: as duas materias empatam mesmo em (ano, sequencial)")
         (is (= [maior menor] (mapv :proposicao-id (:materias p)))
@@ -352,7 +388,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (projetar-lote! ente vereador 205)
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga)]
         (is (= 200 (count (:materias p))) "a lista para no teto server-side")
         (is (= 205 (:materias-total p)) "o total conta o universo INTEIRO, nao as linhas devolvidas")))))
 
@@ -392,7 +428,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (presenca! ente (random-uuid) vereador "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "com o vocabulario REAL o numerador deixa de ser zero")
         (is (= 1 (:sessoes-com-chamada p)))))))
 
@@ -407,7 +443,7 @@
     (let [ente     (random-uuid)
           vereador (random-uuid)]
       (presenca! ente (random-uuid) vereador "saida")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
         (is (= 1 (:sessoes-com-chamada p)))))))
 
@@ -420,7 +456,7 @@
           outro    (random-uuid)]
       (presenca! ente (random-uuid) vereador "entrada")
       (presenca! ente (random-uuid) outro    "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga))]
         (is (= 1 (:sessoes-presente p)) "so' a sessao em que ESTE vereador tem linha")
         (is (= 2 (:sessoes-com-chamada p)) "as duas sessoes tiveram chamada")))))
 
@@ -445,7 +481,7 @@
       (presenca! ente sessao-a outro    "entrada")
       (presenca! ente sessao-b vereador "entrada")
       (presenca! ente sessao-c outro    "entrada")
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janela-larga))]
         (is (= 2 (:sessoes-presente p))
             "numerador conta SESSOES em que ele tem linha (2), nao 'tem alguma linha' (1)")
         (is (= 3 (:sessoes-com-chamada p))
@@ -485,7 +521,7 @@
           janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2025-01-01" "2028-12-31")] [])]
       (doseq [d ["2026-03-10" "2026-03-17" "2026-03-24"]]
         (presenca! ente (random-uuid) outro "entrada" (dia d)))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 0 (:sessoes-presente p)) "ele nao compareceu a nenhuma")
         (is (= 3 (:sessoes-com-chamada p))
             "o denominador conta as sessoes da JANELA DELE, e nao so' aquelas em que ele tem linha")
@@ -507,7 +543,7 @@
         (let [s (random-uuid)]
           (presenca! ente s titular "entrada" (dia d))
           (presenca! ente s suplente "entrada" (dia d))))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente suplente janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente suplente janelas))]
         (is (= 3 (:sessoes-presente p)))
         (is (= 3 (:sessoes-com-chamada p))
             "as 3 sessoes fora da convocacao NAO entram — '3 de 6' seria a injustica do I-5 de volta")
@@ -522,7 +558,7 @@
       (presenca! ente (random-uuid) outro    "entrada" (dia "2026-05-31"))  ; vespera da posse
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-01"))  ; o proprio dia da posse
       (presenca! ente (random-uuid) outro    "entrada" (dia "2026-06-08"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)))
         (is (= 2 (:sessoes-com-chamada p))
             "a sessao da vespera fica fora; a do PROPRIO dia da posse entra (janela INCLUSIVA nos dois lados)")))))
@@ -537,7 +573,7 @@
           janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2021-01-01" "2024-12-31")] [])]
       (presenca! ente (random-uuid) ex    "entrada" (dia "2024-11-12"))
       (presenca! ente (random-uuid) atual "entrada" (dia "2026-03-10"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente ex janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente ex janelas))]
         (is (= 1 (:sessoes-presente p)))
         (is (= 1 (:sessoes-com-chamada p)) "a sessao de 2026 nao e' dele — ele nao era mais vereador")
         (is (true? (:janela-de-exercicio-conhecida p))
@@ -555,7 +591,7 @@
       (presenca! ente (random-uuid) outro    "entrada" (dia "2026-03-10"))  ; DURANTE a licenca
       (presenca! ente (random-uuid) outro    "entrada" (dia "2026-03-31"))  ; ultimo dia da licenca
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-04-07"))  ; depois da licenca
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 2 (:sessoes-presente p)))
         (is (= 2 (:sessoes-com-chamada p))
             "as duas sessoes do periodo de licenca somem dos DOIS lados — '2 de 4' difamaria o licenciado")))))
@@ -573,7 +609,7 @@
       (presenca! ente (random-uuid) cassado "entrada" (dia "2026-03-10"))
       (presenca! ente (random-uuid) outro   "entrada" (dia "2026-03-20"))
       (presenca! ente (random-uuid) outro   "entrada" (dia "2026-06-02"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente cassado janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente cassado janelas))]
         (is (= 1 (:sessoes-presente p)))
         (is (= 1 (:sessoes-com-chamada p))
             "so' a sessao anterior ao fim efetivo — '1 de 3' contaria faltas de quem ja' nao era vereador")))))
@@ -590,7 +626,7 @@
                                                [])]
       (is (= 1 (count janelas)) "premissa do caso: os stints sobrepostos ja' foram fundidos em UM intervalo")
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-03-10"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)) "o numerador tambem nao duplica")
         (is (= 1 (:sessoes-com-chamada p)) "uma sessao, uma contagem"))
       (testing "e mesmo com intervalos SOBREPOSTOS crus (sem passar pela normalizacao) a sessao conta uma vez"
@@ -599,7 +635,7 @@
         ;; — este caso e' o que garante que a garantia nao depende disso.
         (let [cruas [{:inicio (LocalDate/parse "2026-01-01") :fim (LocalDate/parse "2026-03-31")}
                      {:inicio (LocalDate/parse "2026-03-01") :fim (LocalDate/parse "2026-06-30")}]
-              p     (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador cruas))]
+              p     (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador cruas))]
           (is (= 1 (:sessoes-com-chamada p)))
           (is (= 1 (:sessoes-presente p))))))))
 
@@ -615,7 +651,7 @@
       (presenca! ente (random-uuid) suplente "entrada" (dia "2026-02-10"))
       (presenca! ente (random-uuid) titular  "entrada" (dia "2026-04-14"))  ; no VAO
       (presenca! ente (random-uuid) suplente "entrada" (dia "2026-06-09"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente suplente janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente suplente janelas))]
         (is (= 2 (:sessoes-presente p)))
         (is (= 2 (:sessoes-com-chamada p))
             "a sessao de abril nao entra: fundir os dois stints num intervalo unico a traria de volta")))))
@@ -639,7 +675,7 @@
           outro    (random-uuid)]
       (doseq [d ["2026-03-10" "2026-03-17" "2026-03-24"]]
         (presenca! ente (random-uuid) outro "entrada" (dia d)))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador []))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador []))]
         (is (= 0 (:sessoes-com-chamada p)) "o ente TEM 3 sessoes com chamada e nenhuma delas entra")
         (is (= 0 (:sessoes-presente p)))
         (is (false? (:janela-de-exercicio-conhecida p))
@@ -654,7 +690,7 @@
           janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-06-01" "2026-06-30")] [])]
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-01-20"))  ; ANTES da janela
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-09"))  ; dentro
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)) "so' a sessao de dentro da janela")
         (is (= 1 (:sessoes-com-chamada p)))
         (is (<= (:sessoes-presente p) (:sessoes-com-chamada p))
@@ -669,7 +705,7 @@
           vereador (random-uuid)
           janelas  (rotas/janelas-de-exercicio [(mandato (random-uuid) "2026-01-01" "2026-12-31")] [])]
       (presenca! ente (random-uuid) vereador "saida" (dia "2026-05-18"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)) "quem assinou e saiu compareceu")
         (is (= 1 (:sessoes-com-chamada p)))))))
 
@@ -694,7 +730,7 @@
                     [(mandato (random-uuid) "2025-01-01" "2028-12-31" "2026-03-15")] [])]
       (presenca! ente (random-uuid) cassado "entrada" (dia "2026-03-15"))  ; o PROPRIO dia do fim
       (presenca! ente (random-uuid) outro   "entrada" (dia "2026-03-16"))  ; o dia seguinte
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente cassado janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente cassado janelas))]
         (is (= 1 (:sessoes-presente p))
             "o ultimo dia de exercicio e' exercicio — `<` no lugar de `<=` zeraria o numerador aqui")
         (is (= 1 (:sessoes-com-chamada p))
@@ -717,7 +753,7 @@
       (is (= [nil] (mapv :fim janelas)) "premissa do caso: a janela e' a EM ABERTO, nao uma fechada")
       (presenca! ente (random-uuid) outro    "entrada" (dia "2026-05-31"))  ; vespera da posse
       (presenca! ente (random-uuid) vereador "entrada" (dia "2026-06-02"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 1 (:sessoes-presente p)))
         (is (= 1 (:sessoes-com-chamada p))
             "a sessao da vespera fica fora — sem o `>= inicio` o denominador viraria 2 (o do ente)")))))
@@ -754,7 +790,7 @@
                                                [(licenca mid "2026-01-01" nil)])]
       (is (= [] janelas) "premissa: a licenca consome o stint inteiro — mandato EXISTE, exercicio nao")
       (presenca! ente (random-uuid) outro "entrada" (dia "2026-03-10"))
-      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* ente vereador janelas))]
+      (let [p (:presenca (controllers/perfil-parlamentar *repo-transparencia* publicas ente vereador janelas))]
         (is (= 0 (:sessoes-com-chamada p)) "a sessao do ente nao entra — nada de fallback global")
         (is (false? (:janela-de-exercicio-conhecida p))
             "o wire nao distingue 'sem mandato' de 'mandato inteiro sob licenca' — limite declarado")))))

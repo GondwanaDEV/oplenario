@@ -5,7 +5,8 @@
   compara versoes do arquivo). Funcoes sobre a `tx` do tenant (RLS isola)."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum]))
+            [oplenario.kernel.db-util :as comum]
+            [oplenario.transparencia.db.parlamentar :as db-parlamentar]))
 
 (set! *warn-on-reflection* true)
 
@@ -29,8 +30,9 @@
 
 (defn votos-nominais
   "Os votos NOMINAIS publicos (voto secreto nunca chega aqui: o ramo secreto do evento nao carrega vereador), com
-  a materia votada quando ela foi projetada."
-  [tx ente-id]
+  a materia votada quando ela foi projetada. So' votos dados em `sessoes` publicas: voto nominal de sessao secreta
+  ou fechada ao publico nao entra no dataset."
+  [tx ente-id sessoes]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select [:v.votacao_id :v.ocorrido_em :v.proposicao_id [:m.tipo :materia_tipo]
@@ -38,17 +40,22 @@
                   :from [[:transparencia.voto_parlamentar :v]]
                   :left-join [[:transparencia.materia :m] [:and [:= :m.ente_id :v.ente_id]
                                                            [:= :m.proposicao_id :v.proposicao_id]]]
-                  :where [:= :v.ente_id ente-id]
+                  :where [:and [:= :v.ente_id ente-id] (db-parlamentar/em-sessoes-publicas :v.sessao_id sessoes)]
                   :order-by [[:v.ocorrido_em :asc] [:v.votacao_id :asc] [:v.vereador_id :asc]]}))))
 
-(defn- resumo-de [tx ente-id tabela coluna-data]
-  (comum/linha->kebab
-   (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :linhas] [[:max coluna-data] :atualizado_em]]
-                                      :from [tabela] :where [:= :ente_id ente-id]}))))
+(defn- resumo-de
+  ([tx ente-id tabela coluna-data] (resumo-de tx ente-id tabela coluna-data nil))
+  ([tx ente-id tabela coluna-data recorte]
+   (comum/linha->kebab
+    (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :linhas] [[:max coluna-data] :atualizado_em]]
+                                       :from [tabela] :where (cond-> [:and [:= :ente_id ente-id]]
+                                                               recorte (conj recorte))})))))
 
 (defn resumo
-  "{dataset {:linhas :atualizado-em}} — a ultima PROJECAO de cada dataset (quando o portal soube do dado)."
-  [tx ente-id]
+  "{dataset {:linhas :atualizado-em}} — a ultima PROJECAO de cada dataset (quando o portal soube do dado). Os votos
+  nominais contam so' os das `sessoes` publicas, o mesmo recorte do arquivo."
+  [tx ente-id sessoes]
   {:proposicoes    (resumo-de tx ente-id :transparencia.materia :atualizado_em)
    :legislacao     (resumo-de tx ente-id :transparencia.norma :projetado_em)
-   :votos-nominais (resumo-de tx ente-id :transparencia.voto_parlamentar :projetado_em)})
+   :votos-nominais (resumo-de tx ente-id :transparencia.voto_parlamentar :projetado_em
+                              (db-parlamentar/em-sessoes-publicas :sessao_id sessoes))})

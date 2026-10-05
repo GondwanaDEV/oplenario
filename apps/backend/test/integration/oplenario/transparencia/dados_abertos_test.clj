@@ -1,7 +1,8 @@
 (ns oplenario.transparencia.dados-abertos-test
   "INTEGRACAO (PG real + borda Pedestal) — os DADOS ABERTOS do portal (Onda E, `dados-abertos`): o catalogo conta as
   linhas e a ultima atualizacao do read-model de CADA Casa, o CSV traz o dataset inteiro (com o nome do vereador
-  vindo do seam do host), anonimo, e Casa inexistente ou arquivo fora do catalogo e' 404."
+  vindo do seam do host), anonimo, e Casa inexistente ou arquivo fora do catalogo e' 404. Voto nominal dado em
+  sessao que o portal nao mostra (secreta ou fechada ao publico) nao entra no arquivo nem na contagem."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
@@ -31,10 +32,18 @@
       (binding [*ds* (:ds c) *repo* (transparencia-repo/->RepoTransparenciaPg c)]
         (try (t) (finally (component/stop c)))))))
 
+(def ^:private sessoes-publicas
+  "As sessoes que o host declara publicas (o seam `sessoes-publicas`). Um conjunto so' para todas as Casas: o recorte
+  por Casa ja' vem do ente_id e da RLS."
+  (atom #{}))
+
 (defn- casa!
-  "Uma Casa com 2 proposicoes (uma com virgula e quebra na ementa), 1 norma e 2 votos nominais de 2 vereadores."
+  "Uma Casa com 2 proposicoes (uma com virgula e quebra na ementa), 1 norma e 2 votos nominais de 2 vereadores numa
+  sessao publica — mais 1 voto nominal numa sessao SECRETA, que o portal nao pode mostrar."
   []
-  (let [ente (random-uuid) p1 (random-uuid) p2 (random-uuid) v1 (random-uuid) v2 (random-uuid) vt (random-uuid)]
+  (let [ente (random-uuid) p1 (random-uuid) p2 (random-uuid) v1 (random-uuid) v2 (random-uuid) vt (random-uuid)
+        publica (random-uuid) secreta (random-uuid)]
+    (swap! sessoes-publicas conj publica)
     (tenancy/com-tenant* *ds* ente
       (fn [tx]
         (db-materia/inserir! tx {:ente-id ente :proposicao-id p1 :tipo "projeto_lei" :ano 2026 :sequencial 7
@@ -46,19 +55,26 @@
                                :ano 2026 :urn "urn:lex:br;x:lei:2026;101" :ementa "Institui a Semana da água"
                                :publicado-em (Instant/parse "2026-09-01T12:00:00Z") :veiculo-publicacao "DOM"})
         (doseq [[v voto] [[v1 "sim"] [v2 "nao"]]]
-          (db-parlamentar/registrar-voto! tx {:ente-id ente :votacao-id vt :vereador-id v :proposicao-id p2
-                                              :voto voto :ocorrido-em (Instant/parse "2026-08-20T17:00:00Z")}))))
+          (db-parlamentar/registrar-voto! tx {:ente-id ente :votacao-id vt :sessao-id publica :vereador-id v
+                                              :proposicao-id p2 :voto voto
+                                              :ocorrido-em (Instant/parse "2026-08-20T17:00:00Z")}))
+        (db-parlamentar/registrar-voto! tx {:ente-id ente :votacao-id (random-uuid) :sessao-id secreta :vereador-id v1
+                                            :proposicao-id p1 :voto "abstencao"
+                                            :ocorrido-em (Instant/parse "2026-08-21T17:00:00Z")})))
     {:ente ente :p1 p1 :v1 v1 :v2 v2}))
 
-(defn- servico [casas nomes]
-  (-> (http/servico (config/carregar)
-                    (transparencia-http/rotas {:repo-transparencia *repo* :auth {:name ::sem-auth :enter identity}
-                                               :resolver-ente-publico #(or (parse-uuid (str %))
-                                                                           (throw (ex-info "x" {:tipo :validacao/invalido})))
-                                               :info-ente #(when (contains? casas %) {:nome-oficial "Câmara"})
-                                               :nomes-dos-vereadores nomes})
-                    it/globais)
-      ph/create-server ::ph/service-fn))
+(defn- servico
+  ([casas nomes] (servico casas nomes (fn [_] @sessoes-publicas)))
+  ([casas nomes publicas]
+   (-> (http/servico (config/carregar)
+                     (transparencia-http/rotas (cond-> {:repo-transparencia *repo* :auth {:name ::sem-auth :enter identity}
+                                                        :resolver-ente-publico #(or (parse-uuid (str %))
+                                                                                    (throw (ex-info "x" {:tipo :validacao/invalido})))
+                                                        :info-ente #(when (contains? casas %) {:nome-oficial "Câmara"})
+                                                        :nomes-dos-vereadores nomes}
+                                                 publicas (assoc :sessoes-publicas publicas)))
+                     it/globais)
+       ph/create-server ::ph/service-fn)))
 
 (defn- ler [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
@@ -70,7 +86,7 @@
         por-chave (into {} (map (juxt :chave identity)) (:datasets (ler r)))]
     (is (= 200 (:status r)) "anonimo: sem Authorization")
     (is (= {"proposicoes" 2 "legislacao" 1 "votos-nominais" 2} (update-vals por-chave :linhas))
-        "as linhas desta Casa — a outra Casa, com o mesmo volume, nao soma (RLS)")
+        "as linhas desta Casa — a outra Casa, com o mesmo volume, nao soma (RLS); o voto da sessao secreta nao conta")
     (is (= "proposicoes.csv" (get-in por-chave ["proposicoes" :arquivo])))
     (is (string? (get-in por-chave ["legislacao" :atualizado-em])))
     (is (every? #(seq (:descricao %)) (get-in por-chave ["votos-nominais" :colunas])) "o dicionario de dados vai junto")))
@@ -91,6 +107,23 @@
         (is (str/includes? corpo (str v1 ",Helena Past,sim\r\n")))
         (is (str/includes? corpo (str v2 ",Rui Nogueira,nao\r\n")))
         (is (str/includes? corpo ",projeto_lei 3/2026,"))))))
+
+(deftest voto-nominal-de-sessao-que-o-portal-nao-mostra-nao-sai
+  (let [{:keys [ente v1]} (casa!)
+        nomes (fn [_] {v1 "Helena Past"})]
+    (testing "o voto dado em sessao secreta fica fora do CSV: so' os dois da sessao publica"
+      (let [corpo (:body (pt/response-for (servico #{ente} nomes)
+                                          :get (str "/portal/casa/" ente "/dados-abertos/votos-nominais.csv")))]
+        (is (not (str/includes? corpo "abstencao")) "o voto da sessao secreta era o unico 'abstencao'")
+        (is (not (str/includes? corpo "projeto_lei 7/2026")) "nem a materia votada so' na sessao secreta")
+        (is (= 3 (count (str/split-lines corpo))) "cabecalho + os dois votos da sessao publica")))
+    (testing "sem o seam do host, nenhum voto sai (fail-closed) — o catalogo diz 0 e o arquivo so' tem o cabecalho"
+      (let [svc (servico #{ente} nomes nil)
+            cat (into {} (map (juxt :chave :linhas))
+                      (:datasets (ler (pt/response-for svc :get (str "/portal/casa/" ente "/dados-abertos")))))
+            corpo (:body (pt/response-for svc :get (str "/portal/casa/" ente "/dados-abertos/votos-nominais.csv")))]
+        (is (= 0 (get cat "votos-nominais")))
+        (is (= 1 (count (str/split-lines corpo))))))))
 
 (deftest casa-inexistente-e-arquivo-fora-do-catalogo-sao-404
   (let [{:keys [ente]} (casa!)
