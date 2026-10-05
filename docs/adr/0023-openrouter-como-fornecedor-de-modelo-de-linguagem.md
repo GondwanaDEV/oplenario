@@ -155,3 +155,8 @@ política de dado desta ADR (`zdr` e `data_collection: deny` em toda requisiçã
   - modelo gratuito some ou muda sem aviso; o 404 cai na reserva.
 - **Como sai:** comprado o crédito, `OPLENARIO_IA_OPENROUTER_POLITICA=zdr` e `OPLENARIO_IA_MODELO` de
   `MODELOS_OPENROUTER_PERMITIDOS`, depois da avaliação; a lista da exceção pode ser apagada.
+
+- **05/10/2026, 17h34 UTC:** o `qwen/qwen3.8-27b:free` deixou de ser gratuito (404 "This model is unavailable for
+  free. The paid version is available now") e saiu das duas listas (`MODELOS_OPENROUTER` e a da exceção). A exceção
+  fica com o `nvidia/nemotron-3-super-120b-a12b:free` (padrão) e o `nvidia/nemotron-3-ultra-550b-a55b:free` (reserva)
+  até a triagem pelo laço real; na política `zdr` sobra só o `openai/gpt-oss-120b`.

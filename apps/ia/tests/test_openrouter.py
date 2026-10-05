@@ -262,15 +262,13 @@ def test_config_do_openrouter() -> None:
     )
     assert (c.vendor, c.modelo) == ("openrouter", "openai/gpt-oss-120b"), "sem modelo, o slug do OpenRouter"
     assert c.openrouter_provedores == ["groq", "cerebras"]
-    gratis = carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "qwen/qwen3.8-27b:free"})
-    assert gratis.modelo == "qwen/qwen3.8-27b:free"
     assert Config().modelo == "claude-opus-5", "o padrão dos outros fornecedores não muda"
 
 
 def test_producao_so_sobe_com_modelo_da_lista_mas_a_avaliacao_roda_qualquer_um() -> None:
     with pytest.raises(ValueError, match="lista de modelos permitidos"):
         carregar({"OPLENARIO_IA_VENDOR": "openrouter", "OPLENARIO_IA_MODELO": "anthropic/claude-opus-5"})
-    assert {"openai/gpt-oss-120b", "qwen/qwen3.8-27b:free"} == MODELOS_OPENROUTER_PERMITIDOS
+    assert {"openai/gpt-oss-120b"} == MODELOS_OPENROUTER_PERMITIDOS
     assert Config(vendor="openrouter", modelo="anthropic/claude-opus-5").modelo == "anthropic/claude-opus-5"
     assert (
         carregar({"OPLENARIO_IA_VENDOR": "anthropic", "OPLENARIO_IA_MODELO": "claude-sonnet-5"}).vendor == "anthropic"

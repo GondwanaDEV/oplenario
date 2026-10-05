@@ -95,14 +95,15 @@ não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedo
 de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
 `OPENROUTER_API_KEY`), ZDR, "sem coleta" e `require_parameters` travados em toda requisição, provedor e custo
 declarados no registro. As 8 capacidades passam por ele; transcrição e embeddings seguem self-host. O satélite só sobe
-com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
+com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório; o `qwen/qwen3.8-27b:free` saiu
+em 05/10/2026 porque deixou de ser gratuito).
 **Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
 ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
 reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429) — cada modelo
 da lista ganhou uma folga de raciocínio somada ao `max_tokens` (`MODELOS_OPENROUTER`), ainda não medida ao vivo; o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
 `[GAP]` jurídico, agora com o OpenRouter como contratado. **Exceção temporária (05/10/2026, decisão do Daouda, ADR-0023):** até haver crédito, o
 satélite pode rodar com modelos GRATUITOS sem ZDR (`OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita`):
-`nvidia/nemotron-3-super-120b-a12b:free`, com `qwen/qwen3.8-27b:free` e `nvidia/nemotron-3-ultra-550b-a55b:free` de
+`nvidia/nemotron-3-super-120b-a12b:free`, com `nvidia/nemotron-3-ultra-550b-a55b:free` de
 reserva (`OPLENARIO_IA_MODELOS_RESERVA`, troca em 429/5xx/404). Sem crédito comprado, a conta inteira tem 50 chamadas
 por dia a modelos gratuitos. Avaliação da Clara por papel: `apps/ia/avaliacoes/clara-papeis.json`, prompt `agente-v2`. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**

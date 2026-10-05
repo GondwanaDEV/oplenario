@@ -28,7 +28,7 @@ from oplenario_ia.inferencia.fabrica import criar_porta
 from oplenario_ia.inferencia.modelo import PedidoInferencia
 from oplenario_ia.inferencia.openrouter_adapter import Politica, PortaOpenRouter
 
-# um slug só da lista da exceção (o qwen da lista provisória também está na lista do zdr: o ModelRun aceita ZDR)
+# um slug só da lista da exceção
 SO_DA_EXCECAO = "teste/gratuito-sem-zdr:free"
 
 
@@ -185,11 +185,12 @@ def test_reservas_seguem_a_regra_do_principal_na_politica_vigente(lista_da_excec
     c = carregar(
         {
             "OPLENARIO_IA_VENDOR": "openrouter",
-            "OPLENARIO_IA_MODELO": "openai/gpt-oss-120b",
-            "OPLENARIO_IA_MODELOS_RESERVA": " qwen/qwen3.8-27b:free , ",
+            "OPLENARIO_IA_OPENROUTER_POLITICA": "excecao-gratuita",
+            "OPLENARIO_IA_MODELO": "nvidia/nemotron-3-super-120b-a12b:free",
+            "OPLENARIO_IA_MODELOS_RESERVA": " nvidia/nemotron-3-ultra-550b-a55b:free , ",
         }
     )
-    assert c.modelos_reserva == ["qwen/qwen3.8-27b:free"]
+    assert c.modelos_reserva == ["nvidia/nemotron-3-ultra-550b-a55b:free"]
     with pytest.raises(ValueError, match="MODELOS_RESERVA fora"):
         carregar(
             {
@@ -247,11 +248,11 @@ def test_fabrica_passa_politica_e_reservas_com_a_folga_de_cada_um(
         vendor="openrouter",
         openrouter_politica="excecao-gratuita",
         modelo=SO_DA_EXCECAO,
-        modelos_reserva=["qwen/qwen3.8-27b:free"],
+        modelos_reserva=["nvidia/nemotron-3-ultra-550b-a55b:free"],
     )
     p = criar_porta(cfg)
     assert isinstance(p, PortaOpenRouter)
-    assert p.modelos == [SO_DA_EXCECAO, "qwen/qwen3.8-27b:free"]
+    assert p.modelos == [SO_DA_EXCECAO, "nvidia/nemotron-3-ultra-550b-a55b:free"]
     visto: list[dict[str, Any]] = []
 
     def tratar(req: httpx.Request) -> httpx.Response:
@@ -261,7 +262,10 @@ def test_fabrica_passa_politica_e_reservas_com_a_folga_de_cada_um(
 
     p._cliente = httpx.Client(transport=httpx.MockTransport(tratar))
     p.gerar(pedido(max_tokens=1000))
-    assert [(c["model"], c["max_tokens"]) for c in visto] == [(SO_DA_EXCECAO, 4000), ("qwen/qwen3.8-27b:free", 9000)]
+    assert [(c["model"], c["max_tokens"]) for c in visto] == [
+        (SO_DA_EXCECAO, 4000),
+        ("nvidia/nemotron-3-ultra-550b-a55b:free", 5000),
+    ]
     assert all(c["provider"] == {"require_parameters": True} for c in visto)
 
 
