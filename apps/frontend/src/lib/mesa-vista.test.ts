@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { derivarMesaVista } from "./mesa-vista";
+import { derivarMesaVista, destinoDoPrazo, diasAteVencer, frasePrazo } from "./mesa-vista";
 
 const mesaBase = {
   complianceTce: {
@@ -130,6 +130,27 @@ describe("derivarMesaVista", () => {
     // aprovadas e arquivadas saem do manchete.
     expect(v.orgulho.totalTramitacao).toBe(31);
     expect(v.orgulho.transmissaoAoVivo.estado).toBe("em-breve");
+  });
+
+  it("orgulho devolve o denominador de cada percentual (a rota já o publica)", () => {
+    const v = derivarMesaVista({ mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [] });
+    expect(v.orgulho.presencaSessoes).toBe(10);
+    expect(v.orgulho.esicEncerrados).toBe(49);
+  });
+
+  it("cards de presença e e-SIC indisponíveis -> denominador null (nada a afirmar)", () => {
+    const v = derivarMesaVista({
+      mesa: { ...mesaBase, presencaResumo: { indisponivel: true }, esicCumprimento: { indisponivel: true } },
+      tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.orgulho.presencaSessoes).toBeNull();
+    expect(v.orgulho.esicEncerrados).toBeNull();
+  });
+
+  it("mesa ausente -> o orgulho inteiro é null, denominadores incluídos", () => {
+    const v = derivarMesaVista({ mesa: null, tramitacaoItens: null, pendenciasItens: null, pendenciasTotal: null, sliSessoes: null, relatoresPendentes: null });
+    expect(v.orgulho.presencaSessoes).toBeNull();
+    expect(v.orgulho.esicEncerrados).toBeNull();
   });
 
   it("despachos.relator com itens reais quando relatoresPendentes vem preenchido", () => {
@@ -264,5 +285,83 @@ describe("derivarMesaVista", () => {
       tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: 5, sliSessoes: [], relatoresPendentes: [],
     });
     expect(v.oQueVence.truncamentoPendencias).toBeNull();
+  });
+});
+
+// ---- Dashboard da Mesa: prazo em dias do calendário da CASA e frases com plural de verdade ----
+
+describe("diasAteVencer — dias do calendário no fuso da Casa", () => {
+  // 15/09/2026 às 12h em Fortaleza.
+  const meioDia = new Date("2026-09-15T15:00:00Z");
+  // 15/09/2026 às 23h em Fortaleza = 16/09 02h UTC: o relógio UTC já virou o dia, o da Casa não.
+  const noiteNaCasa = new Date("2026-09-16T02:00:00Z");
+
+  it("date-only: hoje é 0, ontem é -1, amanhã é 1", () => {
+    expect(diasAteVencer("2026-09-15", meioDia)).toBe(0);
+    expect(diasAteVencer("2026-09-14", meioDia)).toBe(-1);
+    expect(diasAteVencer("2026-09-16", meioDia)).toBe(1);
+  });
+
+  it("às 23h na Casa o prazo de HOJE continua sendo hoje (o relógio UTC já virou o dia)", () => {
+    expect(diasAteVencer("2026-09-15", noiteNaCasa)).toBe(0);
+  });
+
+  it("instante com hora: conta pelo DIA da Casa, não pelo quociente de milissegundos", () => {
+    // 16/09 01h UTC = 15/09 22h em Fortaleza: ainda é o dia 15 na Casa.
+    expect(diasAteVencer("2026-09-16T01:00:00Z", meioDia)).toBe(0);
+  });
+
+  it("vencido há 36 dias", () => {
+    expect(diasAteVencer("2026-08-10", meioDia)).toBe(-36);
+  });
+
+  it("data inválida -> null, nunca NaN nem lança", () => {
+    expect(diasAteVencer("não-é-data", meioDia)).toBeNull();
+  });
+});
+
+describe("frasePrazo — plural de verdade, sem parênteses", () => {
+  it.each([
+    [-36, "venceu há 36 dias"],
+    [-2, "venceu há 2 dias"],
+    [-1, "venceu ontem"],
+    [0, "vence hoje"],
+    [1, "vence amanhã"],
+    [2, "vence em 2 dias"],
+    [15, "vence em 15 dias"],
+  ])("%i -> %s", (dias, frase) => {
+    expect(frasePrazo(dias)).toBe(frase);
+  });
+
+  it("data sem leitura -> frase honesta, sem número inventado", () => {
+    expect(frasePrazo(null)).toBe("prazo sem data válida");
+  });
+});
+
+describe("destinoDoPrazo — só leva a tela que existe", () => {
+  const pend = (objetoTipo: string, objetoId = "o1") => ({ origem: "pendencia" as const, objetoTipo, objetoId });
+  const obr = (objetoTipo: string, objetoId = "o1") => ({ origem: "compliance" as const, objetoTipo, objetoId });
+
+  it("pedido e-SIC, solicitação LGPD e manifestação abrem o protocolo no balcão", () => {
+    expect(destinoDoPrazo(pend("pedido_esic", "a b"))).toBe("/atendimento/esic/a%20b");
+    expect(destinoDoPrazo(pend("solicitacao_titular"))).toBe("/atendimento/lgpd/o1");
+    expect(destinoDoPrazo(pend("manifestacao_ouvidoria"))).toBe("/atendimento/ouvidoria/o1");
+  });
+
+  it("recurso e-SIC: o id é o do recurso, que o balcão não abre; leva à fila de e-SIC", () => {
+    expect(destinoDoPrazo(pend("recurso_esic"))).toBe("/atendimento?aba=esic");
+  });
+
+  it("obrigação do julgamento das contas abre a prestação; as demais não têm tela própria", () => {
+    expect(destinoDoPrazo(obr("prestacao_contas", "pc1"))).toBe("/contas/pc1");
+    expect(destinoDoPrazo(obr("competencia"))).toBeNull();
+  });
+
+  it("tipo fora do vocabulário -> null (nunca um link inventado)", () => {
+    expect(destinoDoPrazo(pend("tipo_novo"))).toBeNull();
+  });
+
+  it("tipo de pendência numa obrigação não vira link (os vocabulários são de módulos diferentes)", () => {
+    expect(destinoDoPrazo(obr("pedido_esic"))).toBeNull();
   });
 });

@@ -2,6 +2,7 @@
 // página mostra", incluindo os 3 estados por seção (disponivel/indisponivel/em-breve). Nenhum componente
 // React sabe interpretar MesaOut diretamente; eles só leem daqui (mesmo padrão de placar-vista.ts).
 
+import { diaLocal, hojeLocal } from "./calendario-vista";
 import type { ItemBoardOut, PendenciaOut, SliSessaoOut } from "./use-mesa";
 import { ehCardIndisponivel } from "./use-mesa";
 import type { MesaOut, RelatorPendenteOut } from "./contrato-mesa.gen";
@@ -158,7 +159,9 @@ export function derivarMesaVista(input: MesaVistaInput) {
       orgulho: {
         estado: "indisponivel" as const,
         presencaMedia: null as number | null,
+        presencaSessoes: null as number | null,
         esicPercentual: null as number | null,
+        esicEncerrados: null as number | null,
         totalTramitacao: null as number | null,
         transmissaoAoVivo: { estado: "em-breve" as const },
       },
@@ -241,6 +244,10 @@ export function derivarMesaVista(input: MesaVistaInput) {
       // mesa.presencaResumo/mesa.esicCumprimento no branch positivo.
       presencaMedia: ehCardIndisponivel(mesa.presencaResumo) ? null : mesa.presencaResumo.mediaPercentual,
       esicPercentual: ehCardIndisponivel(mesa.esicCumprimento) ? null : mesa.esicCumprimento.percentual,
+      // O denominador de cada percentual, da MESMA rota: "91%" vindo de 2 sessões não pesa como "91%" de 40.
+      // Mostrado junto na vitrine; nunca inventado quando a rota não o devolve.
+      presencaSessoes: ehCardIndisponivel(mesa.presencaResumo) ? null : mesa.presencaResumo.sessoesConsideradas,
+      esicEncerrados: ehCardIndisponivel(mesa.esicCumprimento) ? null : mesa.esicCumprimento.totalEncerrados,
       // "em tramitação" = o que o RITO da Casa não declara terminal (aprovada/arquivada saem); `total` é a
       // soma de todos os estados do board e fica só no pipeline.
       totalTramitacao: mesa.tramitacao.emTramitacao,
@@ -273,6 +280,66 @@ const OBJETO_PRAZO_ROTULO: Record<string, string> = {
 
 export function rotularObjetoPrazo(objetoTipo: string): string {
   return OBJETO_PRAZO_ROTULO[objetoTipo] ?? objetoTipo;
+}
+
+/** "1 item" / "3 itens": o número com a palavra no singular ou no plural. Nunca "item(ns)". */
+export function contar(n: number, um: string, varios: string): string {
+  return n === 1 ? `1 ${um}` : `${n} ${varios}`;
+}
+
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+/** Dias de CALENDÁRIO entre hoje e o vencimento, no relógio da Casa (America/Fortaleza): negativo = já venceu.
+ *
+ *  Não é o quociente de milissegundos: `Math.ceil((alvo - agora) / dia)` tratava o date-only "2026-09-15"
+ *  como meia-noite UTC e, às 23h em Fortaleza (já 16/09 em UTC), dizia "venceu há 1 dia" para um prazo que
+ *  vence HOJE. Aqui os dois lados viram dia da Casa (`AAAA-MM-DD`) e a diferença é entre dias inteiros.
+ *  Data que não se lê -> `null`, nunca NaN. */
+export function diasAteVencer(venceEm: string, agora: Date = new Date()): number | null {
+  const alvo = diaLocal(venceEm);
+  if (alvo === null) return null;
+  const hoje = hojeLocal(agora);
+  const [ay, am, ad] = alvo.split("-").map(Number);
+  const [hy, hm, hd] = hoje.split("-").map(Number);
+  return Math.round((Date.UTC(ay, am - 1, ad) - Date.UTC(hy, hm - 1, hd)) / MS_POR_DIA);
+}
+
+/** O prazo em palavras. Atrasado, hoje e futuro são frases distintas: "vence em 0 dias" não distingue "vence
+ *  hoje" de "venceu há um mês", e as duas exigem ações opostas da Mesa. Singular e plural de verdade. */
+export function frasePrazo(dias: number | null): string {
+  if (dias === null) return "prazo sem data válida";
+  if (dias === -1) return "venceu ontem";
+  if (dias < 0) return `venceu há ${-dias} dias`;
+  if (dias === 0) return "vence hoje";
+  if (dias === 1) return "vence amanhã";
+  return `vence em ${dias} dias`;
+}
+
+/** A tela que abre o item de "O que vence", ou `null` quando não há uma. Só rota que EXISTE e que a Mesa (papel
+ *  `secretario`, o mesmo gate de GET /paineis/mesa) pode abrir:
+ *   - pedido e-SIC, solicitação LGPD e manifestação de ouvidoria -> o protocolo no balcão (`/atendimento/<espécie>/<id>`);
+ *   - recurso e-SIC -> a fila de e-SIC: `objetoId` é o id do RECURSO e o balcão abre o pedido, não o recurso;
+ *   - obrigação do julgamento das contas (`prestacao_contas`) -> a prestação (`/contas/<id>`);
+ *   - as demais obrigações (remessa ao TCE, audiência de metas fiscais) não têm tela própria: sem link.
+ *  O vocabulário de `objetoTipo` é do módulo dono de cada origem (CHECK de `paineis.pendencia`; objeto do gatilho
+ *  de compliance): por isso o `origem` entra na decisão e um tipo de um lado nunca vira link do outro. */
+export function destinoDoPrazo(item: { origem: "compliance" | "pendencia"; objetoTipo: string; objetoId: string }): string | null {
+  const id = encodeURIComponent(item.objetoId);
+  if (item.origem === "compliance") {
+    return item.objetoTipo === "prestacao_contas" ? `/contas/${id}` : null;
+  }
+  switch (item.objetoTipo) {
+    case "pedido_esic":
+      return `/atendimento/esic/${id}`;
+    case "solicitacao_titular":
+      return `/atendimento/lgpd/${id}`;
+    case "manifestacao_ouvidoria":
+      return `/atendimento/ouvidoria/${id}`;
+    case "recurso_esic":
+      return "/atendimento?aba=esic";
+    default:
+      return null;
+  }
 }
 
 export type MesaVista = ReturnType<typeof derivarMesaVista>;

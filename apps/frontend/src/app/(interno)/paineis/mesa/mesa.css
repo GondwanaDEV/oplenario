@@ -130,10 +130,19 @@
 .estagio-lista .ref { font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); }
 .estagio-lista .tit { font-size: var(--t-12); color: var(--texto); display: block; }
 
-.distribuicao { margin: 1.2rem 0 0; }
+/* Rampa do gráfico "Carga por estágio" (cor por POSIÇÃO — lib/charts/cor-por-posicao.ts). Âncoras por tema:
+   claro = cobalto-fundo -> jade -> telha-fundo (tokens da paleta); escuro = os mesmos matizes CLAREADOS, porque
+   fill escuro sobre o fundo escuro some (GUIDELINES-CHECKLIST §5.1). O número dentro da fatia é branco no claro
+   e quase-preto no escuro. Medido (script de contraste, rampas de 1 a 12 estágios, interpolação sRGB):
+     claro  — texto branco sobre a fatia >= 5,31:1 · fatia sobre o fundo da barra (#E7F0E2) >= 4,54:1
+     escuro — texto #0B140C sobre a fatia >= 7,69:1 · fatia sobre o fundo da barra (#1A251C) >= 6,50:1
+   A barra tem fundo OPACO (--surface-solida) para o contraste ser o medido, e um filete de 2px entre fatias
+   separa vizinhas de tons próximos. */
+.distribuicao { --seg-1: light-dark(var(--cobalto-fundo), #7FB3E6); --seg-2: light-dark(var(--jade), #8FBE92); --seg-3: light-dark(var(--telha-fundo), #F58A60); --seg-texto: light-dark(#FFFFFF, #0B140C); margin: 1.2rem 0 0; }
 .distribuicao .rotulo-d { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8rem; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin: 0 0 0.5rem; }
-.barra-dist { display: flex; height: 26px; border-radius: var(--raio-sm); overflow: hidden; background: var(--bg); border: 1px solid var(--linha); }
-.barra-dist span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: #fff; min-width: 0; }
+.barra-dist { display: flex; height: 26px; border-radius: var(--raio-sm); overflow: hidden; background: var(--surface-solida); border: 1px solid var(--linha); }
+.barra-dist span { display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: var(--t-12); font-weight: 600; color: var(--seg-texto); min-width: 0; }
+.barra-dist span + span { box-shadow: inset 2px 0 0 var(--surface-solida); }
 .dist-legenda { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin: 0.7rem 0 0; font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 .dist-legenda span { display: inline-flex; align-items: center; gap: 0.4rem; }
 .dist-legenda i { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
@@ -154,6 +163,18 @@
 .org-stat .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--texto); font-variant-numeric: var(--numero-destaque); margin: 0; }
 .org-stat .n small { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--marca); letter-spacing: 0; margin-left: 0.35rem; }
 .org-stat .rot { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.35; }
+
+/* ---- LINKS do dashboard (04/10/2026): o painel era só leitura, nada abria nada ---- */
+/* Link de texto para a tela que detalha o cartão. --cobalto-texto é o par AA do azul para tinta (tokens.css);
+   sublinhado sempre, porque cor sozinha não distingue link de texto corrido. */
+.ver-mais { display: inline-block; margin: 0.5rem 0 0; padding: 0.25rem 0; font-size: var(--t-13); font-weight: 600; color: var(--cobalto-texto); text-decoration: underline; text-underline-offset: 3px; }
+.ver-mais:hover { text-decoration-thickness: 2px; }
+.ver-mais-linha { margin: 0.9rem 0 0; }
+.ver-mais-linha .ver-mais { margin: 0; }
+/* O ref + a ementa de cada proposição do quadro e a referência de cada prazo viram o alvo do link, sem mudar o
+   desenho: herdam a cor do texto e ganham sublinhado ao apontar/focar. */
+.estagio-lista a, .prazo-obj b a { color: inherit; text-decoration: none; display: block; }
+.estagio-lista a:hover .tit, .estagio-lista a:focus-visible .tit, .prazo-obj b a:hover, .prazo-obj b a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---- coluna lateral (Próxima sessão) ---- */
 .rail { display: grid; gap: 1.1rem; position: sticky; top: 84px; }
