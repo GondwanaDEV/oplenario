@@ -144,3 +144,14 @@ pessoa segue sem o papel). O histórico revogado se perde no rollback; o ato seg
 - A lista de vereadores do cadastro mostra "Acesso concedido" pelo vínculo do cadastro com a identidade; depois de uma
   revogação o chip segue lá. O estado verdadeiro está em "Quem tem acesso" (o cadastro não carrega o id da identidade).
 - Revogar o acesso não encerra o mandato nem altera o cadastro do vereador.
+
+## Adendo (05/10/2026): conceder acesso em modo dev
+
+Em modo dev (`APP_ENV=dev`, sem Keycloak) a concessão gravava o vínculo e devolvia 500: o `idp-dev` lançava em
+`provisionar-realm!`. Agora o host (`sistema/idp-para`), na mesma decisão que liga o login por token de dev, injeta
+`idp-dev/idp-do-modo-dev`, que **pula** realm, usuário, convite e correção de e-mail de forma explícita
+(`{:provisionamento :pulado-em-dev}`): nenhuma conta, senha ou e-mail é criado. Conceder devolve o mesmo 201 de
+produção e reenviar o convite o mesmo 200; a pessoa entra pelo token de dev. Fora de dev/test nada muda: o host liga o
+`KeycloakIdp`, e Keycloak fora do ar continua 500. O `idp-dev` cru (o dos testes que só precisam do token) segue
+lançando. Revogar não toca o Keycloak. Efeito colateral em dev: o console do operador passa a relatar o convite do 1º
+administrador como enviado (antes, sempre "falhou"). Teste: `identidade/conceder_acesso_modo_dev_test.clj`.
