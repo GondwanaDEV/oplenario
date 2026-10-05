@@ -4,7 +4,7 @@
 // (/api/sessoes/:id/plenario) e dobra cada evento pelo reducer puro. Reconecta com backoff resumindo
 // pelo Last-Event-ID. Todo o IO mora aqui; a lógica de estado é o reducer testado (plenario-reducer).
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
@@ -146,6 +146,9 @@ export function usePlenario(
   // O mesmo espelho síncrono para a precedência de `hidratarMinhaPresenca` — um MAPA por vereador (ver a
   // docstring de `presencaEventoSeq` em `EstadoPlenario`); imutável no reducer, então guardar a referência basta.
   const presencaEventoSeqRef = useRef<Record<string, number>>({});
+  // Ponte para `conferirVotacao` (devolvida pelo hook): o effect a arma com o pedido de re-busca da votação e a
+  // desarma no cleanup. Fora de uma sessão viva é no-op.
+  const conferirVotacaoRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
@@ -421,6 +424,16 @@ export function usePlenario(
      * granularidade — de ~30s (a periódica) pra' quase instantâneo. */
     let pedidoDeRebuscaVotacao = false;
 
+    /** Pedido de conferir o placar feito por QUEM ACABOU DE ESCREVER nele (o cockpit, depois do 201 do próprio
+     * voto — `conferirVotacao`). O voto gravado só chegava à tela pelo evento `voto.registrado`; evento perdido
+     * (rede do plenário, retenção do canal) deixava o vereador até 30s sem o "Você votou", com o voto já no
+     * banco. Diferente de `pedidoDeRebuscaVotacao`: este NÃO é consumido enquanto houver uma busca em voo
+     * (ela pode ter saído ANTES do voto e não o trazer) — espera a em voo acabar e dispara uma nova. */
+    let pedidoDeConferirVotacao = false;
+    conferirVotacaoRef.current = () => {
+      if (vivo && comVotacao) pedidoDeConferirVotacao = true;
+    };
+
     /** Retentativa da presença do próprio vereador quando o snapshot foi descartado por precedência — ver a
      * docstring de `buscarMinhaPresenca`. Escrita só pelo updater daquela busca, nunca por `aoFrame`. */
     let pedidoDeRebuscaMinhaPresenca = false;
@@ -472,6 +485,9 @@ export function usePlenario(
         const desdeVotacao = Date.now() - ultimaBuscaVotacao;
         if (pedidoDeRebuscaVotacao || desdeVotacao >= REBUSCA_PERIODICA_MS) {
           pedidoDeRebuscaVotacao = false;
+          void rehidratarVotacao();
+        } else if (pedidoDeConferirVotacao && !votacaoEmVoo) {
+          pedidoDeConferirVotacao = false;
           void rehidratarVotacao();
         }
       }
@@ -604,13 +620,19 @@ export function usePlenario(
 
     return () => {
       vivo = false;
+      conferirVotacaoRef.current = () => {};
       clearInterval(relogio);
       controller.abort();
     };
   }, [sessaoId, token, idValido, comQuorum, comVotacao, comMinhaPresenca]);
 
+  /** Pede que o placar da votação seja relido do servidor agora (em até 500ms), sem esperar o evento ao vivo
+   * nem a periódica de 30s. Para quem acabou de gravar um voto e precisa ver o resultado oficial. Estável
+   * entre renders; no-op sem `comVotacao`. */
+  const conferirVotacao = useCallback(() => conferirVotacaoRef.current(), []);
+
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
-  if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };
-  if (!idValido) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Identificador de sessão inválido." };
-  return { sessao, estado, conexao, erro };
+  if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token).", conferirVotacao };
+  if (!idValido) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Identificador de sessão inválido.", conferirVotacao };
+  return { sessao, estado, conexao, erro, conferirVotacao };
 }

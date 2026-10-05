@@ -42,7 +42,7 @@ export default function VotarPage() {
   // Trilha 3 vira gate"): a PRÓPRIA presença hidratada por snapshot no page-load e a cada reconexão — sem
   // ela, quem já estava presente e abria o cockpit depois da janela de replay (~5 min) voltava a ver
   // "Confirme sua presença". Só aqui: a rota exige o papel 'vereador', que o telão/TV não têm.
-  const { estado: estadoPlenario, conexao, erro: erroConexao } = usePlenario(sessaoId ?? "", token, {
+  const { estado: estadoPlenario, conexao, erro: erroConexao, conferirVotacao } = usePlenario(sessaoId ?? "", token, {
     comVotacao: true,
     comMinhaPresenca: true,
   });
@@ -121,6 +121,8 @@ export default function VotarPage() {
     if (!sessaoId || !estadoPlenario?.placar) return;
     try {
       await votar(sessaoId, estadoPlenario.placar.votacaoId, voto);
+      // o voto está gravado (201): relê o placar oficial agora, sem depender do evento ao vivo chegar
+      conferirVotacao();
     } catch {
       // erro já exposto via `erroVotar`.
     }
