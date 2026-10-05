@@ -349,8 +349,10 @@ const reservadosNestaCorrida = new Set(
   [autografoAlvo?.id, votacaoAberta?.objetoId, editaveis[0]?.id, ...pareceres.map((p) => p.proposicaoId)]
     .filter(Boolean),
 );
-const candidataAprovar =
-  naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id) && votaComOQuorumDaMesa(p)) ?? null;
+// As duas aprovacoes "de verdade" (E7 e E7-A2) abrem em maioria simples e aprovam com um voto: so' servem materias
+// sem regra propria de votacao (`votaComOQuorumDaMesa`).
+const aprovaveis = naoTerminalSemAutografo.filter(votaComOQuorumDaMesa);
+const candidataAprovar = aprovaveis.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
 
 // aprovarDeVerdade — o RITO REAL (abrir votacao + registrar voto + encerrar com resultado='aprovada'),
 // fatorado pra servir os DOIS alvos que passam por ele: proposicaoAprovada (E7 caminho feliz) e
@@ -417,7 +419,7 @@ if (!candidataAprovar) {
 // autografo, livre de TUDO que ja foi reservado (inclusive candidataAprovar agora, que ja' consumiu seu
 // lugar acima) — nunca a mesma da recusa (autografoAlvo) nem a do caminho feliz simples (candidataAprovar).
 if (candidataAprovar) reservadosNestaCorrida.add(candidataAprovar.id);
-const candidataTextoTrocado = naoTerminalSemAutografo.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
+const candidataTextoTrocado = aprovaveis.find((p) => !reservadosNestaCorrida.has(p.id)) ?? null;
 
 let textoTrocado = null;
 if (!candidataTextoTrocado) {
