@@ -61,7 +61,7 @@
 
 /* o painel de leitura */
 .com-leitura-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.com-leitura-resumo { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+.com-leitura-resumo { margin: 0; font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); font-variant-numeric: var(--numero-destaque); }
 .com-rolagem { overflow-x: auto; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); }
 .com-rolagem:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 .com-tabela { width: 100%; border-collapse: collapse; font-size: var(--t-13); }

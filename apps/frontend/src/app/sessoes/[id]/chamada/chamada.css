@@ -163,7 +163,7 @@
 
 /* ============== 4 · rail ============== */
 .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-.quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+.quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
 
 svg.hemi { width: 100%; height: auto; display: block; margin: 0.7rem 0 0.2rem; }
