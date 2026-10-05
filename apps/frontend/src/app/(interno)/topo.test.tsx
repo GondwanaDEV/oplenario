@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { TopoInterno, destinosVisiveis } from "./topo";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { TopoInterno, arrumarNav, destinosVisiveis } from "./topo";
 import { TemaProvider } from "@/lib/tema";
 import { AuthProvider } from "@/lib/auth";
 
@@ -38,11 +38,40 @@ describe("TopoInterno", () => {
     expect(screen.getByText("Painéis da Mesa", { selector: ".area-tag" })).toBeTruthy();
     await waitFor(() => expect(screen.getByText("Marina Alencar Freire")).toBeTruthy());
     expect(screen.getByText("Secretário(a)")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Painéis da Mesa" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Proposições" })).toBeTruthy();
+    // a secretaria vê mais de 6 entradas: os Painéis da Mesa estão no grupo Sessões, que marca a página atual
+    const sessoes = screen.getByRole("button", { name: /^Sessões/ });
+    expect(sessoes.getAttribute("data-atual")).toBe("true");
+    expect(sessoes.textContent).toContain("contém a página atual");
+    fireEvent.click(sessoes);
+    expect(sessoes.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("link", { name: "Painéis da Mesa" }).getAttribute("aria-current")).toBe("page");
+    fireEvent.click(screen.getByRole("button", { name: "Matérias" }));
+    expect(sessoes.getAttribute("aria-expanded")).toBe("false"); // um grupo aberto por vez
     // Task 14 — comToken deve preservar o ?token= dev na navegação interna via <Link>.
     expect(screen.getByRole("link", { name: "Proposições" }).getAttribute("href")).toBe("/proposicoes?token=abc123");
+  });
+
+  it("o grupo aberto fecha no Esc (o foco volta ao botão) e no clique fora da barra", async () => {
+    global.fetch = vi.fn(
+      async () => ({ ok: true, json: async () => ({ nome: "Marina Alencar Freire", papeis: ["secretario"] }) }) as Response
+    ) as unknown as typeof fetch;
+    render(
+      <AuthProvider tokenQuery="abc123">
+        <TemaProvider>
+          <TopoInterno area="Atendimento" />
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const casa = await screen.findByRole("button", { name: "Casa" });
+    fireEvent.click(casa);
+    expect(screen.getByRole("link", { name: "Vereadores" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(casa.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("link", { name: "Vereadores" })).toBeNull();
+    expect(document.activeElement).toBe(casa);
+    fireEvent.click(casa);
+    fireEvent.pointerDown(document.body);
+    expect(casa.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("enquanto a identidade carrega, mostra um rótulo HONESTO — nunca um nome fixo/inventado", () => {
@@ -159,5 +188,33 @@ describe("TopoInterno — o número da Caixa (ADR-0020)", () => {
     montarCom({ "/api/meu/identidade": { nome: "Renata", papeis: ["auditor"] } });
     await waitFor(() => expect(screen.getByText("Renata")).toBeTruthy());
     expect(screen.getByRole("link", { name: "Caixa" }).querySelector(".nav-contagem")).toBeNull();
+  });
+});
+
+describe("arrumarNav — os grupos da barra", () => {
+  const forma = (papeis: string[]) =>
+    arrumarNav(destinosVisiveis(papeis)).map((i) => (i.tipo === "link" ? i.destino.rotulo : `${i.nome}[${i.destinos.map((d) => d.rotulo).join(",")}]`));
+
+  it("a secretaria: as quatro portas soltas e o resto em Matérias · Sessões · Cidadão · Casa", () => {
+    expect(forma(["secretario"])).toEqual([
+      "Central", "Caixa", "Busca", "Assistente",
+      "Matérias[Proposições,Tramitação,Recebimentos,Conferências,Jurídico,Contas,Normas]",
+      "Sessões[Painéis da Mesa,Agendar sessão,Pauta,Tempos da tribuna,Gravações,Atas,Calendário]",
+      "Cidadão[Atendimento,Moderação]",
+      "Casa[Expediente,Vereadores,Auditoria]",
+    ]);
+  });
+
+  it("nenhuma entrada visível se perde nem se repete ao agrupar", () => {
+    for (const papeis of [["secretario"], ["vereador"], ["secretario", "admin_ente"], []]) {
+      const achatada = arrumarNav(destinosVisiveis(papeis)).flatMap((i) => (i.tipo === "link" ? [i.destino] : i.destinos));
+      expect(achatada.map((d) => d.href).sort()).toEqual(destinosVisiveis(papeis).map((d) => d.href).sort());
+    }
+  });
+
+  it("quem vê poucas entradas (administração, auditoria, jurídico) continua com a barra plana", () => {
+    expect(forma(["admin_ente"])).toEqual(["Caixa", "IA da Casa", "Administração", "Auditoria"]);
+    expect(forma(["auditor"])).toEqual(["Caixa", "Auditoria"]);
+    expect(forma(["juridico"])).toEqual(["Caixa", "Jurídico", "Contas"]);
   });
 });
