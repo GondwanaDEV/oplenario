@@ -490,6 +490,67 @@ describe("usePlenario — a costura de borda da RECUPERAÇÃO de votação (fati
     });
   });
 
+  // O voto do próprio vereador gravado (201) só chegava ao cockpit pelo evento `voto.registrado`. Evento perdido
+  // = até 30s sem o "Você votou" com o voto já no banco (e a Trilha 3, E6, estourando os 15s de vez em quando).
+  // `conferirVotacao` relê o placar oficial em até 500ms, sem esperar o evento nem a periódica.
+  it("conferirVotacao — depois do próprio voto, o placar é relido sem evento SSE e sem esperar os 30s", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado(); // conectado e MUDO: nenhum `voto.registrado` chega
+    let chamadas = 0;
+    const corpo = (votos: unknown[]) => ({ "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1", votos });
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => {
+        chamadas += 1;
+        // a 1a leitura é de antes do voto; da 2a em diante o servidor já tem o voto do vereador `vEu`
+        return Promise.resolve({ ok: true, status: 200, json: async () => corpo(chamadas === 1 ? [] : [{ "vereador-id": "vEu", voto: "sim" }]) } as Response);
+      },
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.estado?.placar?.votacaoId === "vt1");
+    expect(chamadas).toBe(1);
+    expect(result.current.estado!.placar!.votosNominais).toEqual({});
+
+    act(() => result.current.conferirVotacao());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(chamadas).toBe(2); // bem antes da periódica de 30s
+    expect(result.current.estado!.placar!.votosNominais).toEqual({ vEu: "sim" });
+  });
+
+  it("conferirVotacao — com uma leitura EM VOO (saída antes do voto), espera ela acabar e lê de novo", async () => {
+    vi.useFakeTimers();
+    const sse = sseControlado();
+    const emVoo = deferido<Response>();
+    let chamadas = 0;
+    const corpo = (votos: unknown[]) => ({ "votacao-id": "vt1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1", votos });
+    global.fetch = fetchFake({
+      "/plenario": () => ({ ok: true, status: 200, body: sse.body }) as unknown as Response,
+      "/votacao-aberta": () => {
+        chamadas += 1;
+        if (chamadas === 1) return emVoo.promise; // a carga inicial fica pendurada: saiu ANTES do voto
+        return Promise.resolve({ ok: true, status: 200, json: async () => corpo([{ "vereador-id": "vEu", voto: "nao" }]) } as Response);
+      },
+    });
+    const { result } = renderHook(() => usePlenario("s1", "tok", { comVotacao: true }));
+    await ateQue(() => result.current.conexao === "ao-vivo");
+    expect(chamadas).toBe(1);
+
+    act(() => result.current.conferirVotacao());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(chamadas).toBe(1); // não atropela a que está em voo, mas o pedido NÃO se perde
+
+    await act(async () => {
+      emVoo.resolve({ ok: true, status: 200, json: async () => corpo([]) } as Response); // a antiga volta SEM o voto
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    expect(chamadas).toBe(2);
+    expect(result.current.estado!.placar!.votosNominais).toEqual({ vEu: "nao" });
+  });
+
   it("SEM `comVotacao` a rota de recuperação NÃO é chamada", async () => {
     const f = fetchFake({
       "/votacao-aberta": () => ({ ok: true, status: 200, json: async () => votacaoAbertaCrua }) as Response,
