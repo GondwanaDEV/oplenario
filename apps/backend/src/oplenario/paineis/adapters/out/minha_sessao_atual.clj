@@ -24,14 +24,40 @@
   nao abriu) mesmo aparecendo no mesmo grupo nao-encerrado de `sli-sessoes`."
   #{"aberta" "suspensa"})
 
+(defn- instante-ou-epoca
+  "Ordenavel mesmo quando a vista nao traz o instante (linha de vista antiga/incompleta): sem instante = o mais
+  antigo possivel, nunca NPE e nunca 'mais recente' por engano."
+  ^java.time.Instant [^java.time.Instant i]
+  (or i java.time.Instant/EPOCH))
+
+(defn- escolher-sessao-viva
+  "A sessao que o cockpit do vereador deve abrir entre as vivas (aberta/suspensa). `sli-sessoes` entrega o
+  grupo aberto da MAIS ANTIGA para a mais nova (o dashboard da Mesa quer achar a sessao esquecida/travada);
+  o cockpit quer o oposto — com duas em curso ao mesmo tempo, a de agora. Criterio, em ordem:
+    1. 'aberta' antes de 'suspensa' (e' na aberta que se vota agora);
+    2. `aberta-em` mais recente (quando a sessao comecou);
+    3. `transicionou-em` mais recente;
+    4. `sessao-id`, so' para a escolha ser deterministica em empate total.
+  A vista nao guarda o TIPO da sessao (ordinaria/audiencia publica) nem o corpo do vereador, entao este criterio
+  nao consegue preferir a ordinaria a uma audiencia que comecou depois — ver o relatorio da frente."
+  [sessoes]
+  (->> sessoes
+       (filter #(contains? estados-sessao-viva (:estado-atual %)))
+       (sort-by (fn [s] [(if (= "aberta" (:estado-atual s)) 0 1)
+                         (- (.toEpochMilli (instante-ou-epoca (:aberta-em s))))
+                         (- (.toEpochMilli (instante-ou-epoca (:transicionou-em s))))
+                         (str (:sessao-id s))]))
+       first))
+
 (defn minha-sessao-atual->wire
   "{:sessoes [...] :sessoes-total N} (cru, do controller sli-sessoes — MESMO shape que `sli-sessoes->wire`
   consome, fatia 'truncamento-familia') -> MinhaSessaoAtualOut (validado). So' USA `:sessoes` — este
   endpoint devolve UMA sessao, entao `sessoes-total` (o par irmao que sinaliza corte de uma LISTA) nao se
-  aplica aqui. So' a PRIMEIRA entrada cujo `estado-atual` seja realmente 'viva' (`estados-sessao-viva` —
-  nunca uma 'agendada' futura); nenhuma sessao viva -> {:sessao-id nil :situacao nil}."
+  aplica aqui. So' entre as entradas cujo `estado-atual` seja realmente 'viva' (`estados-sessao-viva` —
+  nunca uma 'agendada' futura), a escolhida por `escolher-sessao-viva` (a de agora, nao a mais antiga);
+  nenhuma sessao viva -> {:sessao-id nil :situacao nil}."
   [{:keys [sessoes]}]
-  (let [primeira (first (filter #(contains? estados-sessao-viva (:estado-atual %)) sessoes))
+  (let [primeira (escolher-sessao-viva sessoes)
         out {:sessao-id (some-> primeira :sessao-id str)
              :situacao (some-> primeira :estado-atual situacao/derivar)}]
     (when-not (m/validate wire/MinhaSessaoAtualOut out)

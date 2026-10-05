@@ -93,6 +93,37 @@
     (is (= 200 (:status r)))
     (is (nil? (:sessao-id body)) "'agendada' nao conta como 'sessao atual' — so' aberta/suspensa contam")))
 
+(deftest minha-sessao-com-duas-em-curso-devolve-a-aberta-mais-recentemente
+  ;; `sli-sessoes` ordena o grupo aberto da MAIS ANTIGA p/ a mais nova (proposito do dashboard: achar sessao
+  ;; travada). O cockpit do vereador quer o contrario: com duas sessoes em curso, a de agora, nao a que ficou
+  ;; esquecida desde a semana passada. Antes, tomar a primeira da lista mandava o vereador p/ a mais antiga.
+  (let [antiga {:sessao-id (random-uuid) :estado-atual "aberta"
+                :aberta-em (Instant/parse "2026-07-01T13:00:00Z") :transicionou-em (Instant/parse "2026-07-01T13:00:00Z")
+                :encerrada-em nil}
+        nova   {:sessao-id (random-uuid) :estado-atual "aberta"
+                :aberta-em (Instant/parse "2026-07-08T13:00:00Z") :transicionou-em (Instant/parse "2026-07-08T13:00:00Z")
+                :encerrada-em nil}
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [antiga nova]))
+                           :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= (str (:sessao-id nova)) (:sessao-id body))
+        "a sessao em curso MAIS RECENTE, nao a primeira da lista ordenada da mais antiga")))
+
+(deftest minha-sessao-prefere-aberta-a-suspensa-mesmo-mais-antiga
+  (let [aberta   {:sessao-id (random-uuid) :estado-atual "aberta"
+                  :aberta-em (Instant/parse "2026-07-01T13:00:00Z") :transicionou-em (Instant/parse "2026-07-01T14:00:00Z")
+                  :encerrada-em nil}
+        suspensa {:sessao-id (random-uuid) :estado-atual "suspensa"
+                  :aberta-em (Instant/parse "2026-07-08T13:00:00Z") :transicionou-em (Instant/parse "2026-07-08T15:00:00Z")
+                  :encerrada-em nil}
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [aberta suspensa]))
+                           :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= (str (:sessao-id aberta)) (:sessao-id body))
+        "aberta agora (onde se vota) vence a suspensa, ainda que a suspensa seja mais nova")
+    (is (= "em_curso" (:situacao body)))))
+
 (deftest minha-sessao-sem-papel-vereador-403
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(sessao-em-curso)]))
                            :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))]
