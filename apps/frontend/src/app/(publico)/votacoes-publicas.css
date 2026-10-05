@@ -1,7 +1,10 @@
 /* Votações no portal: a lista das encerradas de sessões públicas e o voto de cada vereador. Tokens do sistema. */
 .votacoes-publicas { padding-block: 2rem 3rem; }
-.votacoes-publicas .pg-cab h1 { font-family: var(--display); margin: 0.2rem 0 0.4rem; }
-.votacoes-publicas .sub { color: var(--texto-2); max-width: 66ch; margin: 0; }
+/* cabeçalho no arquétipo das vizinhas (leis, contas, dados abertos): sem estas regras o rótulo e o h1 saíam como texto corrido */
+.votacoes-publicas .pg-cab { margin-bottom: 1.6rem; }
+.votacoes-publicas .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
+.votacoes-publicas .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.2rem 0 0; }
+.votacoes-publicas .sub { max-width: 72ch; font-size: var(--t-13); color: var(--texto-2); margin: 0.35rem 0 0; line-height: 1.55; }
 .votacoes-publicas .secao-tit { font-family: var(--display); font-size: var(--t-16); margin: 1.6rem 0 0.6rem; }
 .votacoes-publicas .estado { color: var(--texto-2); }
 

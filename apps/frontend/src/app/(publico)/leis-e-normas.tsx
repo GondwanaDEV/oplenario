@@ -78,7 +78,7 @@ export function LeisDaCasa({ ente, filtro }: { ente: string; filtro: FiltroDeLei
           <input id="ln-numero" name="numero" inputMode="numeric" pattern="[0-9]{1,9}" placeholder="12" defaultValue={filtro.numero} key={`n-${filtro.numero}`} />
         </div>
         <div className="ln-acoes">
-          <button type="submit" className="btn">
+          <button type="submit" className="btn btn-contorno">
             Filtrar
           </button>
           {filtrando && <a href={rotaDaLista(ente)}>Limpar filtros</a>}
@@ -177,7 +177,7 @@ export function FichaDaNorma({ ente, normaId }: { ente: string; normaId: string 
             <dd className="ln-urn">{norma.urn}</dd>
           </dl>
           <div className="ln-links">
-            <a className="btn" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
+            <a className="btn btn-primaria" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
               Baixar o texto publicado
             </a>
             <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(norma.proposicaoId)}`}>
