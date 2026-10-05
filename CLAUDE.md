@@ -148,6 +148,10 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   `/inicio`. A 1ª troca (mesma manhã) partia da 26.0.0 contra a **26.3.5 de produção** (o Keycloak não sobe contra banco
   mais novo) e o login caiu ~14 min até a volta automática; a imagem agora parte da versão do compose. Fora: tema da
   página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
+- **Sem sessão, tudo vai ao login (05/10/2026):** o middleware passou a deny-by-default. Só abrem sem sessão `/portal`,
+  `/entrar`, `/status`, `/api`, `/_next`, `/fontes` e arquivo estático; a raiz e qualquer caminho desconhecido levam
+  direto à tela do CPF (com `redirect`, menos a raiz), sem página de passagem. `middleware.test.ts` mede as páginas
+  públicas em disco contra a lista. O console do operador segue com a entrada própria.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:
@@ -416,8 +420,8 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
 **Frentes de 05/10/2026 (do exploratório), todas na `main`:**
 - **Portal do cidadão:** `/portal/casa/[ente]/leis` (lista filtrável e ficha da norma), `/vereadores` (quem está em
   exercício) e `/votacoes` (votações encerradas de sessões públicas, com o voto por vereador quando nominal). A regra
-  de sessão secreta da página de votações é a do livro de atas e é conferida na lista e no detalhe. A raiz `/` deixou
-  de dizer "em construção".
+  de sessão secreta da página de votações é a do livro de atas e é conferida na lista e no detalhe. A raiz `/` não é mais
+  página: sem sessão leva direto a `/entrar` (CPF), com sessão a `/inicio`.
 - **Revogar acesso (adendo da ADR-0005):** em `/administracao`, o `admin_ente` revoga, com motivo, o acesso de
   vereador, controle interno e jurídico. A linha revogada fica como histórico e conceder de novo abre outra. Sem papel
   ativo na Casa, o vínculo é encerrado e a sessão cai na chamada seguinte; as credenciais do agente da pessoa caem
