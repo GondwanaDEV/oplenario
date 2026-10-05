@@ -2801,7 +2801,8 @@ O que a segunda rodada deixou registrado:
 - Linha 30 (autógrafo, sanção e promulgação na linha do tempo da ficha) não foi feita: a rota da ficha não devolve
   esses atos. **Fechada na terceira rodada (#158), pela rota do pós-aprovação.**
 - "Minha atuação" do vereador usa a rota do perfil público; ele também deixa de ver ali o próprio voto de sessão
-  secreta. Se deve ver, falta rota autenticada própria.
+  secreta. Se deve ver, falta rota autenticada própria. **Fechado na terceira rodada (#170): `GET /meu/votos`, lida do
+  módulo dono do voto.**
 - Voto de votação anulada em sessão pública continua saindo nas leituras públicas de voto por vereador (não mudou).
   **Fechado na terceira rodada.**
 - A faixa "Onde está a matéria" segue dependendo do nome do estado; nenhuma rota devolve ordem ou categoria das etapas
@@ -2809,7 +2810,26 @@ O que a segunda rodada deixou registrado:
 - Decisões embutidas, a confirmar: `em_pauta` conta como "Em Plenário" e não como "pronta para pauta" (a Central caiu
   de 4 para 3 na demo); prazo do Executivo sem valor padrão; o backend recusa prazo no passado.
 - Não vistos em browser: o formulário do prazo do Executivo (a demo não tem matéria aprovada sem autógrafo), o telão e
-  a TV ao vivo, a folha em PDF com nome.
+  a TV ao vivo, a folha em PDF com nome. **Vistos na terceira rodada, com `demo/semear-ao-vivo.sh` (#163): o
+  formulário do prazo, o telão com os nomes, a TV e o resultado depois de recarregar. Segue sem ver: a folha em PDF.**
+
+**Terceira rodada de 05/10/2026 (PRs #162 a #171), fora da tabela do exploratório:**
+- #162: o cockpit relê o placar depois do próprio voto. Era a causa da falha intermitente do E6 da Trilha 3 (`Você
+  votou Sim` não aparecia em 15 s), lida no log da tentativa que falhou: a tela dependia só do evento
+  `voto.registrado` e, perdido o evento, esperava a periódica de 30 s.
+- #165: `GET /sessoes/:id/votacao-encerrada` e a recuperação do resultado no telão, na TV e no cockpit.
+- #164: custo da tentativa no voto real, +35,5 ms na mediana pareada (ADR-0017).
+- #167: a entrada tem o par tentativa e desfecho; jobs e consumidores inventariados, sem ato que peça o par.
+- #170: "Minha atuação" com os próprios votos. #171: a ata-IA cita o resultado das votações, conferido por papel.
+- #168: miudezas de tela e o link para trocar o próprio e-mail. #163: semente ao vivo. #166: teste instável do CPF.
+- A revisão de segurança dos commits pegou dois defeitos antes do merge: redirecionamento aberto na rota da conta
+  (#168) e o conferidor de números da ata (#171), refeito três vezes. Um interpretador de prosa sempre lê alguma forma
+  diferente da pessoa (dígito sobrescrito, `10/2`, campos trocados); a lista de proibidos deixava passar "não foi
+  aprovada por…" e "desaprovada por…". Ficou: frase canônica gerada do dado, por substring exata, e sobra por lista
+  de permitidos.
+- Lista interna e quadro pelo desfecho: outra sessão pegou a mesma frente (#169); o subagente desta foi parado.
+- Abertos novos: índice por vereador em `legislativo.votos`; "faltam votar N" num bloco de votação já encerrada; o
+  login do cidadão na trilha contra o texto do Eixo 4c da ADR-0017; `ia-orcamento` fora da atuação da Operação.
 
 **Depois das frentes de 05/10/2026 (primeira rodada): 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
 fechados em código e mergeados com o CI verde; as linhas ficam na tabela, com a numeração de antes, e valem como
