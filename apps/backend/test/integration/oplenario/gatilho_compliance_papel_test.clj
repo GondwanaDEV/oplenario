@@ -65,3 +65,14 @@
                  (jdbc/execute-one! *pool* ["update motor.template_compliance set descricao = descricao"])))
     (is (thrown? PSQLException
                  (jdbc/execute-one! *pool* ["delete from motor.template_compliance where false"])))))
+
+(deftest o-app-le-as-tres-tabelas-do-catalogo-que-a-avaliacao-usa
+  (testing "o prazo de dominio (builtin `prazo_vigente`, regra `remessa_mensal_sim`): sem esta leitura, reavaliar a
+            obrigacao de uma remessa aceita pelo TCE morria com permission denied"
+    (is (nil? (repo-motor/prazo-vigente (:repo-motor *deps*) "tribunal_de_contas" "TCE-CE" "tipo_que_nao_existe"
+                                        "2026-01"))))
+  (testing "os feriados, lidos em toda avaliacao"
+    (is (coll? (repo-motor/feriados (:repo-motor *deps*) "nacional" nil))))
+  (testing "a versao do registry nao e' lida em runtime: segue sem privilegio"
+    (is (thrown-with-msg? PSQLException #"permission denied"
+                          (jdbc/execute-one! *pool* ["select 1 from motor.registry_catalogo_versao limit 1"])))))

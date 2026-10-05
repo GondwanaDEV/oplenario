@@ -215,11 +215,14 @@ código no boot).
     template, sem migration. Só funcionava nos testes, que conectam como dono. O gatilho roda no request com o role
     de runtime (`oplenario_app`), que nunca teve grant no catálogo do motor. O CI da Trilha 3 mostrou o efeito: toda
     leitura do painel logava `permission denied for table template_compliance` e não avaliava nada.
-  - **Agora:** o `migrate`, como dono, chama `gatilho-compliance/garantir-catalogo!`. A migration `20261005000250` dá
-    ao app **só leitura**, e só de `motor.template_compliance` e `motor.calendario_feriado`, as duas tabelas do
-    catálogo que a avaliação lê. O catálogo é de todas as Casas, e o app não grava nele.
+  - **Agora:** o `migrate`, como dono, chama `gatilho-compliance/garantir-catalogo!`. A migration `20261005000270` dá
+    ao app **só leitura**, e só das três tabelas do catálogo que a avaliação lê: `motor.template_compliance`,
+    `motor.calendario_feriado` e `motor.prazo_dominio_vigente` (o builtin `prazo_vigente` da regra
+    `remessa_mensal_sim`, lido quando o gatilho reavalia a remessa aceita). O catálogo é de todas as Casas, e o app não grava nele.
   - **Teste:** `gatilho_compliance_papel_test` roda o gatilho como `oplenario_pool` e confere que escrever no
     catálogo continua negado.
+  - **Guarda no CI:** o job `t3-e2e`, que sobe o app como `oplenario_pool`, reprova se o log do backend tiver
+    `permission denied for`. A suíte do backend roda como dono do banco e não vê privilégio que falta.
 - **Gatilho:** composto em `rotas.clj` sobre as rotas montadas (interceptor antes do handler da leitura; depois do
   handler dos atos, só em 2xx): `GET /compliance/painel` e o card de `/paineis/mesa` (`sob_demanda`), `POST
   /sessoes/:id/ata` de sessão `audiencia_publica`, `POST /contas` e o encerramento de votação (`evento`). Obrigação
