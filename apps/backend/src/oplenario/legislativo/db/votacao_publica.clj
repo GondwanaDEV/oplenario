@@ -15,17 +15,24 @@
   [:id :objeto_tipo :objeto_id :modalidade :quorum_tipo :resultado
    :total_sim :total_nao :total_abstencao :base_membros :sessao_id [:atualizado_em :encerrada_em]])
 
-(defn- onde-encerradas-das-sessoes [ente-id sessao-ids]
-  [:and [:= :ente_id ente-id] [:= :estado [:inline "encerrada"]] [:in :sessao_id (vec sessao-ids)]])
+(defn- onde-encerradas-das-sessoes
+  "O predicado da lista e do total (FONTE UNICA: os dois divergiriam em silencio). `materia-id` (nil = todas) so'
+  RESTRINGE: soma uma condicao a `sessao_id IN (publicas)`, nunca a substitui — o filtro nao abre sessao nenhuma.
+  So' os objetos que SAO a proposicao (`proposicao`, `redacao_final`) casam: o `objeto_id` de parecer/emenda/
+  requerimento aponta outra tabela e um uuid igual por colisao nao pode puxar a votacao para a materia."
+  [ente-id sessao-ids materia-id]
+  (cond-> [:and [:= :ente_id ente-id] [:= :estado [:inline "encerrada"]] [:in :sessao_id (vec sessao-ids)]]
+    materia-id (conj [:in :objeto_tipo votacao/objetos-que-carregam-a-materia-sql] [:= :objeto_id materia-id])))
 
 (defn encerradas-das-sessoes
   "{:votacoes [...] :total n} das votacoes encerradas cujas sessoes estao em `sessao-ids`, a mais recente primeiro
   (instante do encerramento, desempate pelo id para a ordem ser estavel entre paginas). `limite`/`deslocamento`
-  paginam; `:total` conta o MESMO predicado sem pagina. Sem sessoes -> vazio, sem consulta."
-  [tx ente-id sessao-ids limite deslocamento]
+  paginam; `:total` conta o MESMO predicado sem pagina. `materia-id` (nil = todas) restringe as votacoes da
+  proposicao. Sem sessoes -> vazio, sem consulta."
+  [tx ente-id sessao-ids limite deslocamento materia-id]
   (if (empty? sessao-ids)
     {:votacoes [] :total 0}
-    (let [onde (onde-encerradas-das-sessoes ente-id sessao-ids)]
+    (let [onde (onde-encerradas-das-sessoes ente-id sessao-ids materia-id)]
       {:votacoes (comum/linhas->kebab
                   (jdbc/execute! tx (sql/format {:select colunas :from [:legislativo.votacoes] :where onde
                                                  :order-by [[:atualizado_em :desc] [:id :asc]]

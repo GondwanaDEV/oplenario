@@ -16,11 +16,13 @@
 
 (defn listar
   "{:votacoes :total} das votacoes encerradas das sessoes publicas da Casa, a mais recente primeiro, paginadas
-  (`limite`/`deslocamento`). Cada votacao ganha `:sessao`. `:total` e' do mesmo predicado, sem pagina."
-  [repo-sessoes repo-legislativo ente-id limite deslocamento]
+  (`limite`/`deslocamento`). Cada votacao ganha `:sessao`. `:total` e' do mesmo predicado, sem pagina. `materia-id`
+  (nil = todas) restringe as votacoes dessa materia: o filtro SO' RESTRINGE, as sessoes publicas continuam sendo o
+  teto do que sai."
+  [repo-sessoes repo-legislativo ente-id limite deslocamento materia-id]
   (let [sessoes (into {} (map (juxt :id identity)) (ses/sessoes-publicas repo-sessoes ente-id))
         {:keys [votacoes total]} (leg/votacoes-encerradas-das-sessoes repo-legislativo ente-id (keys sessoes)
-                                                                       limite deslocamento)]
+                                                                       limite deslocamento materia-id)]
     {:total total
      :votacoes (into [] (keep (fn [v] (when-let [s (get sessoes (:sessao-id v))]
                                         (assoc v :sessao (da-sessao s)))))

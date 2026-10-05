@@ -149,10 +149,11 @@
 
 (defn votacoes-publicas
   "Portal: {:votacoes :total :pagina :por-pagina} das votacoes ENCERRADAS de sessoes publicas, a mais recente
-  primeiro. `listar-votacoes` e' o seam do host (fn [ente-id limite deslocamento] -> {:votacoes :total}): quem sabe
+  primeiro. `materia-id` (nil = todas) restringe as votacoes dessa materia. `listar-votacoes` e' o seam do host
+  (fn [ente-id limite deslocamento materia-id] -> {:votacoes :total}): quem sabe
   que sessao e' publica (sessoes) e quem guarda a votacao (legislativo) nao sao este modulo."
-  [repo-transparencia listar-votacoes ente-id pagina]
-  (let [{:keys [votacoes total]} (listar-votacoes ente-id por-pagina (* por-pagina (dec pagina)))]
+  [repo-transparencia listar-votacoes ente-id pagina materia-id]
+  (let [{:keys [votacoes total]} (listar-votacoes ente-id por-pagina (* por-pagina (dec pagina)) materia-id)]
     {:votacoes (com-materia repo-transparencia ente-id votacoes)
      :total total :pagina pagina :por-pagina por-pagina}))
 

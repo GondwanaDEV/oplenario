@@ -5,9 +5,10 @@
   pronta do host (§22.10).")
 
 (defprotocol RepoVotacaoPublica
-  (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento]
+  (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento materia-id]
     "{:votacoes :total} das votacoes ENCERRADAS das sessoes dadas, a mais recente primeiro, paginadas; `:total` e'
-     do mesmo predicado, sem pagina. Quem chama decide QUAIS sessoes sao publicas.")
+     do mesmo predicado, sem pagina. `materia-id` (nil = todas) restringe as votacoes dessa proposicao (so' restringe:
+     nunca amplia o conjunto de sessoes). Quem chama decide QUAIS sessoes sao publicas.")
   (votacao-encerrada [this ente-id votacao-id]
     "A votacao ENCERRADA (com sessao) e, se nominal, seus votos {:vereador-id :voto}; nil = inexistente, aberta,
      anulada ou sem sessao. Quem chama confere que a sessao e' publica."))

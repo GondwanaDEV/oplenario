@@ -234,18 +234,21 @@
 ;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------
 
 (defn- listar-votacoes-handler
-  "GET /portal/casa/:ente/votacoes(?pagina=N) — as votacoes ENCERRADAS de sessoes PUBLICAS (nunca secreta, nunca em
+  "GET /portal/casa/:ente/votacoes(?pagina=N&materia=<proposicao-id>) — as votacoes ENCERRADAS de sessoes PUBLICAS (nunca secreta, nunca em
   curso), a mais recente primeiro, 20 por pagina, com o TOTAL: o cliente sabe quantas existem. `:ente` malformado ->
-  400; Casa inexistente -> 404 (a voz da rota-pai); `:pagina` invalida -> 400. `listar-votacoes` e' o seam do host (quem
-  sabe o que e' publico: sessoes; quem guarda a votacao: legislativo)."
+  400; Casa inexistente -> 404 (a voz da rota-pai); `:pagina` invalida -> 400. `:materia` (UUID da proposicao; malformado
+  ou repetido -> 400) restringe a lista as votacoes dessa materia: SO' restringe, a regra de sessao publica e' a mesma.
+  `listar-votacoes` e' o seam do host (quem sabe o que e' publico: sessoes; quem guarda a votacao: legislativo)."
   [repo-transparencia resolver-ente-publico info-ente listar-votacoes]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
-          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))]
+          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))
+          materia (adapters-in/query-materia (get-in req [:query-params :materia]))]
       (if-not (info-ente ente-id)
         (http/json-resposta 404 {:erro "ente nao encontrado"})
         (http/json-resposta 200 (adapters-out-votacao/lista->wire
-                                 (controllers/votacoes-publicas repo-transparencia listar-votacoes ente-id pagina)))))))
+                                 (controllers/votacoes-publicas repo-transparencia listar-votacoes ente-id pagina
+                                                                materia)))))))
 
 (defn- votacao-publica-handler
   "GET /portal/casa/:ente/votacoes/:votacao_id — uma votacao encerrada de sessao publica; se nominal, o voto de cada
@@ -312,7 +315,7 @@
     ;; ---- Portal de VOTACOES: mais um literal no nivel de `materias`/`legislacao` ----
     ["/portal/casa/:ente/votacoes" :get
      [(listar-votacoes-handler repo-transparencia resolver-ente-publico info-ente
-                               (or votacoes-publicas (fn [_ _ _] {:votacoes [] :total 0})))]
+                               (or votacoes-publicas (fn [_ _ _ _] {:votacoes [] :total 0})))]
      :route-name :transparencia/listar-votacoes]
     ["/portal/casa/:ente/votacoes/:votacao_id" :get
      [(votacao-publica-handler repo-transparencia resolver-ente-publico info-ente
