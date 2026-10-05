@@ -55,6 +55,19 @@ export interface FichaOut {
   resumo?: ResumoPublicoOut | null;
 }
 
+export interface MovimentacaoOut {
+  ocorridoEm: string;
+  etapa: string | null;
+  abertura: boolean;
+}
+
+export interface MovimentacoesOut {
+  movimentacoes: MovimentacaoOut[];
+  movimentacoesTotal: number;
+  historicoCompleto: boolean;
+  historicoDesde: string | null;
+}
+
 export interface EncarregadoOut {
   nome: string;
   rotulo: string;

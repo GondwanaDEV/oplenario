@@ -19,6 +19,7 @@ import { descreverFaixa } from "@/lib/tramitacao-vista";
 import { formatarData } from "@/lib/formatar-data";
 import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
+import { MovimentacoesPublicas } from "./movimentacoes-publicas";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
 import "./participacao.css";
 
@@ -95,6 +96,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
         </p>
       </section>
 
+      {/* "Por onde a matéria passou": a linha do tempo com data e etapa (rótulo do rito da Casa); degrada sozinha */}
+      <MovimentacoesPublicas ente={ente} proposicaoId={proposicaoId} />
+
       {vista.normaPublicada && (
         <p className="norma-publicada">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden="true">
@@ -158,7 +162,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
               </svg>
               <p>
                 <b>Esta matéria ainda não tem resumo em linguagem simples.</b> A Câmara publica o resumo depois de
-                revisá-lo. O <b>texto oficial</b> da proposição, com toda a tramitação, já está disponível acima.
+                revisá-lo. Enquanto isso, por onde a matéria já passou está na linha do tempo acima.
               </p>
             </div>
           )}
