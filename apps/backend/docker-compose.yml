@@ -74,11 +74,16 @@ services:
   # SEM `restart:` de proposito. Politica de restart e' do dockerd e IGNORA `profiles` — com
   # `unless-stopped` o keycloak voltaria no religar do daemon mesmo sem `--profile auth`, e ~500 MiB
   # a mais numa VM de 3.9 GiB e' exatamente o que derrubou o Postgres por OOM (ledger, Fase 7).
+  # ADR-0025: o tema de login do O Plenario entra montado (somente leitura) — em `start-dev` o Keycloak le o tema a cada
+  # pagina, entao editar apps/keycloak/temas/ aparece no navegador sem reiniciar. Producao usa a imagem de
+  # apps/keycloak/Dockerfile (o mesmo diretorio copiado para dentro).
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.0
     command: start-dev
     environment: { KEYCLOAK_ADMIN: admin, KEYCLOAK_ADMIN_PASSWORD: admin }
     ports: ["${OPLENARIO_KEYCLOAK_PORT:-8080}:8080"]
+    volumes:
+      - ../keycloak/temas/oplenario:/opt/keycloak/themes/oplenario:ro
     profiles: ["auth"]
 
   # Captura de e-mail em dev/CI: o Keycloak manda o convite p/ ca' e nada sai p/ o mundo.

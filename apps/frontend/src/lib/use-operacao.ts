@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "./api-fetch";
+import { cpfValido } from "./cpf";
 import { camelizarChaves } from "./boundary";
 import type { ObservabilidadeIA } from "./observabilidade-ia-vista";
 import type { Exportacao } from "./contrato-exportacao";
@@ -356,17 +357,8 @@ export function conferirDestino(url: string): string | null {
 
 // ---- conferência no navegador (espelha o backend; o servidor confere de novo) ----
 
-export function cpfValido(entrada: string): boolean {
-  const d = entrada.replace(/\D/g, "");
-  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
-  const dv = (n: number) => {
-    let s = 0;
-    for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i);
-    const r = s % 11;
-    return r < 2 ? 0 : 11 - r;
-  };
-  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
-}
+// a regra mora em ./cpf (a entrada pelo CPF, ADR-0025, usa a mesma)
+export { cpfValido };
 
 export const UFS = [
   "AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB",

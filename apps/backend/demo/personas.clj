@@ -19,11 +19,12 @@
       operacoes) expiraria no meio numa tentativa e falharia numa etapa DIFERENTE na proxima, o que lê
       como flakiness mas e' relogio;
    3. `idp/provisionar-realm!` p/ o ente da demo (idempotente — declara o atributo `identidade-id`,
-      habilita passkey, configura SMTP/Mailpit, cria os clients `oplenario-backend` e `oplenario-web`
-      PKCE);
+      configura SMTP/Mailpit, o nome da Casa, o pt-BR, o tema `oplenario` e a defesa contra forca bruta (ADR-0025),
+      cria os clients `oplenario-backend` e `oplenario-web` PKCE);
    4. p/ cada persona: `idp/criar-usuario!` (idempotente — GET-then-create) + `keycloak-admin/
-      limpar-required-actions!` (o KC crava `webauthn-register-passwordless` sempre; sem limpar,
-      ninguem loga so' com senha) + `keycloak-admin/setar-senha!` (senha fixa de demo, ver `senha-demo`);
+      limpar-required-actions!` (o KC crava a senha + o codigo do primeiro acesso sempre, ADR-0025; sem limpar,
+      ninguem loga so' com a senha semeada) + `keycloak-admin/setar-senha!` (senha fixa de demo, ver `senha-demo`).
+      As personas entram pelo CPF em /entrar (ADR-0025) ou, como antes, pelo identidade-id no Keycloak;
    5. grava `credenciais.edn` em `casa/diretorio-de-artefatos` + imprime um cartao legivel em stdout.
 
   IDEMPOTENCIA: `provisionar-realm!` e `criar-usuario!` sao idempotentes por desenho (GET-then-create);
@@ -50,8 +51,8 @@
   de vazamento por push, isto e' FIXTURE de dev, nao segredo. Se o Keycloak recusar por politica de
   senha do realm, a resposta e' AJUSTAR A POLITICA no provisionamento (`idp/provisionar-realm!` ou um
   passo adicional aqui), nunca enfraquecer a senha silenciosamente — o realm provisionado por
-  `provisionar-realm-impl` nasce SEM `passwordPolicy` (Keycloak 26 default = nenhuma restricao), entao
-  esta senha (12 chars, maiuscula+minuscula+digito+simbolo) passa sob qualquer politica razoavel; se um
+  `provisionar-realm-impl` nasce com `keycloak-idp/politica-de-senha` (ADR-0025: 8 a 128 caracteres, diferente do
+  usuario e do e-mail), entao esta senha (13 chars) passa; se um
   realm pre-existente tiver uma politica mais estrita, o operador ve o erro 400 do KC (`setar-senha!`
   falha alto) e ajusta aqui, nao no valor da senha."
   "Plenario@2026")
@@ -162,7 +163,7 @@
             (govbr-simulado/garantir-cidadao! kc-cfg {:cpf (:cpf cidada) :nome (:nome cidada) :senha senha-demo})
             (println "personas/semear-credenciais!: gov.br simulado — Cidadã entra com CPF" (:cpf cidada)
                      "e a senha de demo")))
-        (idp/provisionar-realm! idp casa/ente-id)
+        (idp/provisionar-realm! idp casa/ente-id {:nome "Câmara Municipal de Fortaleza"})
         (let [realm (str realm-prefixo casa/ente-id)
               ;; token NOVO, obtido DEPOIS da extensao — este e' o que vive 3600s e e' reusado pelas 5
               ;; personas (~8 chamadas admin: limpar-required-actions!+setar-senha! por persona).

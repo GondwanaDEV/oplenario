@@ -50,8 +50,9 @@
 ;; fica visivel ('convite nao saiu') e se retoma por `reenviar-convite!`.
 ;; ---------------------------------------------------------------------------------------------
 
-(defn- convidar-primeiro-admin! [repo-op {:keys [idp-casa]} ator ente-id identidade-id nome email reenvio?]
-  (idp-casa/provisionar-realm! idp-casa ente-id)
+(defn- convidar-primeiro-admin! [repo-op {:keys [idp-casa]} ator ente-id nome-da-casa identidade-id nome email reenvio?]
+  ;; ADR-0025: o nome da Casa vira o titulo da tela de login do realm
+  (idp-casa/provisionar-realm! idp-casa ente-id {:nome nome-da-casa})
   (idp-casa/criar-usuario! idp-casa ente-id {:identidade-id identidade-id :nome nome :email email})
   (idp-casa/convidar! idp-casa ente-id identidade-id)
   (repo/marcar-convite! repo-op ente-id (:operador-id ator) reenvio?))
@@ -65,7 +66,8 @@
     ((:garantir-perfil-da-casa! deps) ente-id casa)
     (let [iid ((:garantir-primeiro-admin! deps) ente-id admin)]
       (repo/marcar-primeiro-admin! repo-op ente-id iid)
-      (let [convite (try (convidar-primeiro-admin! repo-op deps ator ente-id iid (:nome admin) (:email admin) false)
+      (let [convite (try (convidar-primeiro-admin! repo-op deps ator ente-id (:nome casa) iid (:nome admin) (:email admin)
+                                                   false)
                          :enviado
                          (catch Exception e
                            (log/warn e "admin-sistema: convite do 1o administrador nao saiu" {:ente-id ente-id})
@@ -87,15 +89,16 @@
     (when-not iid
       (throw (ex-info "o 1o administrador nao chegou a ser criado — provisione de novo" {:tipo :admin-sistema/conflito})))
     ((:garantir-perfil-da-casa! deps) ente-id casa)
-    (convidar-primeiro-admin! repo-op deps ator ente-id iid ((:nome-da-identidade deps) iid)
+    (convidar-primeiro-admin! repo-op deps ator ente-id (:nome casa) iid ((:nome-da-identidade deps) iid)
                               (:primeiro-admin-email casa) true)
     (repo/casa-por-id repo-op ente-id)))
 
 (defn reprovisionar-realm!
-  "Converge o realm da Casa com a config atual (ex.: gov.br ligado depois, ADR-0015). Idempotente."
+  "Converge o realm da Casa com a config atual (ex.: gov.br ligado depois, ADR-0015; o nome, o portugues, o tema e a
+  defesa contra forca bruta, ADR-0025). Idempotente."
   [repo-op {:keys [idp-casa]} ator ente-id]
-  (casa-ou-404! repo-op ente-id)
-  (idp-casa/provisionar-realm! idp-casa ente-id)
+  (let [casa (casa-ou-404! repo-op ente-id)]
+    (idp-casa/provisionar-realm! idp-casa ente-id {:nome (:nome casa)}))
   (repo/registrar-atuacao! repo-op {:operador-id (:operador-id ator) :ente-id ente-id :acao "realm-reprovisionado"})
   (repo/casa-por-id repo-op ente-id))
 

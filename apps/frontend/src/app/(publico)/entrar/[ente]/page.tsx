@@ -1,25 +1,21 @@
-// Tela /entrar/[ente] (Task 12, Onda D Slice 2 — telas de login PKCE). Valida a Câmara via descoberta
-// (GET ${BACKEND_URL}/auth/descoberta/:ente, backend T3) e, se ela existir, oferece o botão real
-// "Entrar" -> GET /api/auth/login?ente=<uuid> (T8): uma navegação de topo (<a>, NUNCA um fetch) — o
-// browser precisa seguir o 307 até o Keycloak do tenant, o que um fetch client-side não faz.
-//
-// CORREÇÃO DE INTERFACE sobre o brief: o brief prosa dizia "mostra o nome da câmara (via descoberta)",
-// mas a descoberta real do T3 devolve só {ente-id, realm, base-url, client-id} — SEM nome. O `nome` aqui
-// é OPCIONAL e forward-compatible (ver entrar-vista.ts): se ausente, cai num heading neutro
-// ("Entrar na sua Câmara"), nunca exigido.
+// Tela /entrar/[ente] — o link de entrada que a Câmara divulga. Valida a Câmara via descoberta
+// (GET ${BACKEND_URL}/auth/descoberta/:ente) e, se ela existir, pede o CPF (ADR-0025): o formulário posta para
+// /api/auth/entrar com o `ente` escondido, e a pessoa cai direto na senha DESTA Câmara (mesmo que tenha acesso a
+// outras). CPF sem acesso a esta Câmara volta aqui com `?erro=sem-acesso-nesta`.
 //
 // Fail-closed: 404 (`nao-encontrada`) e qualquer outra falha (400 uuid malformado, rede, corpo
-// malformado -> `erro`) NUNCA mostram o botão "Entrar" — nunca oferecemos login para uma Câmara que não
+// malformado -> `erro`) NUNCA mostram o formulário — nunca oferecemos login para uma Câmara que não
 // confirmamos existir.
 //
 // Server Component: o fetch de descoberta roda no SERVIDOR, direto ao backend — mesma convenção de
 // lib/portal-api.ts:buscarNomeCasa (BACKEND_URL, SEM prefixo /api; o prefixo /api só existe para fetches
-// client-side, que passam pelo rewrite same-origin de next.config.ts). `redirect` (se presente na URL,
-// posto pelo middleware T11 ao gatear uma rota protegida) é repassado cru ao login — quem revalida
-// origem/allowlist é o próprio route handler de login (resolveRedirectPath), aqui só encaminhamos.
+// client-side, que passam pelo rewrite same-origin de next.config.ts). `redirect` (se presente na URL)
+// vai escondido no formulário — quem revalida origem é o próprio BFF (pedidoDeRedirect).
 
 import "../entrar.css";
 import { SeloPlenario } from "../selo-plenario";
+import { FormularioCpf } from "../formulario-cpf";
+import { mensagemErroEntrada } from "@/lib/entrar-erro";
 import { derivarVistaEntrada, type RespostaDescoberta } from "@/lib/entrar-vista";
 
 const backend = process.env.BACKEND_URL ?? "http://localhost:8888";
@@ -43,16 +39,13 @@ export default async function PaginaEntrarComEnte({
   searchParams,
 }: {
   params: Promise<{ ente: string }>;
-  searchParams: Promise<{ redirect?: string }>;
+  searchParams: Promise<{ redirect?: string; erro?: string }>;
 }) {
   const { ente } = await params;
-  const { redirect } = await searchParams;
+  const { redirect, erro } = await searchParams;
   const resultado = await buscarDescoberta(ente);
   const vista = derivarVistaEntrada(resultado);
-
-  const loginHref =
-    `/api/auth/login?ente=${encodeURIComponent(ente)}` +
-    (redirect ? `&redirect=${encodeURIComponent(redirect)}` : "");
+  const mensagemErro = mensagemErroEntrada(erro);
 
   return (
     <div className="entrar-pagina">
@@ -70,11 +63,14 @@ export default async function PaginaEntrarComEnte({
             <>
               <div className="entrar-titulo">
                 <h1>{vista.nome ? `Entrar em ${vista.nome}` : "Entrar na sua Câmara"}</h1>
-                <p>Você será redirecionado para o login oficial da sua Câmara.</p>
+                <p>Servidores e vereadores da Câmara.</p>
               </div>
-              <a className="btn btn-primaria entrar-acao" href={loginHref}>
-                Entrar
-              </a>
+              {mensagemErro && (
+                <div className="entrar-erro" role="alert">
+                  {mensagemErro}
+                </div>
+              )}
+              <FormularioCpf ente={vista.enteId ?? ente} redirect={redirect} />
             </>
           )}
 
