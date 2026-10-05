@@ -132,6 +132,27 @@ describe("derivarMesaVista", () => {
     expect(v.orgulho.transmissaoAoVivo.estado).toBe("em-breve");
   });
 
+  it("orgulho devolve o denominador de cada percentual (a rota já o publica)", () => {
+    const v = derivarMesaVista({ mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [] });
+    expect(v.orgulho.presencaSessoes).toBe(10);
+    expect(v.orgulho.esicEncerrados).toBe(49);
+  });
+
+  it("cards de presença e e-SIC indisponíveis -> denominador null (nada a afirmar)", () => {
+    const v = derivarMesaVista({
+      mesa: { ...mesaBase, presencaResumo: { indisponivel: true }, esicCumprimento: { indisponivel: true } },
+      tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [],
+    });
+    expect(v.orgulho.presencaSessoes).toBeNull();
+    expect(v.orgulho.esicEncerrados).toBeNull();
+  });
+
+  it("mesa ausente -> o orgulho inteiro é null, denominadores incluídos", () => {
+    const v = derivarMesaVista({ mesa: null, tramitacaoItens: null, pendenciasItens: null, pendenciasTotal: null, sliSessoes: null, relatoresPendentes: null });
+    expect(v.orgulho.presencaSessoes).toBeNull();
+    expect(v.orgulho.esicEncerrados).toBeNull();
+  });
+
   it("despachos.relator com itens reais quando relatoresPendentes vem preenchido", () => {
     const v = derivarMesaVista({
       mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [],

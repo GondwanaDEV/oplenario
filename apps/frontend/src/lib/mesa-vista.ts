@@ -159,7 +159,9 @@ export function derivarMesaVista(input: MesaVistaInput) {
       orgulho: {
         estado: "indisponivel" as const,
         presencaMedia: null as number | null,
+        presencaSessoes: null as number | null,
         esicPercentual: null as number | null,
+        esicEncerrados: null as number | null,
         totalTramitacao: null as number | null,
         transmissaoAoVivo: { estado: "em-breve" as const },
       },
@@ -242,6 +244,10 @@ export function derivarMesaVista(input: MesaVistaInput) {
       // mesa.presencaResumo/mesa.esicCumprimento no branch positivo.
       presencaMedia: ehCardIndisponivel(mesa.presencaResumo) ? null : mesa.presencaResumo.mediaPercentual,
       esicPercentual: ehCardIndisponivel(mesa.esicCumprimento) ? null : mesa.esicCumprimento.percentual,
+      // O denominador de cada percentual, da MESMA rota: "91%" vindo de 2 sessões não pesa como "91%" de 40.
+      // Mostrado junto na vitrine; nunca inventado quando a rota não o devolve.
+      presencaSessoes: ehCardIndisponivel(mesa.presencaResumo) ? null : mesa.presencaResumo.sessoesConsideradas,
+      esicEncerrados: ehCardIndisponivel(mesa.esicCumprimento) ? null : mesa.esicCumprimento.totalEncerrados,
       // "em tramitação" = o que o RITO da Casa não declara terminal (aprovada/arquivada saem); `total` é a
       // soma de todos os estados do board e fica só no pipeline.
       totalTramitacao: mesa.tramitacao.emTramitacao,

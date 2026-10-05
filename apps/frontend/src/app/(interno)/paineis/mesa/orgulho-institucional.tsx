@@ -3,6 +3,7 @@
 // "O que a Casa entregou" — porta .orgulho-corpo de paineis-mesa.html. presencaMedia/esicPercentual/
 // totalTramitacao são reais; transmissaoAoVivo fica em-breve (nenhuma rota rastreia "transmitida" hoje).
 
+import { contar } from "@/lib/mesa-vista";
 import type { MesaVista } from "@/lib/mesa-vista";
 
 export function OrgulhoInstitucional({ vista }: { vista: MesaVista["orgulho"] }) {
@@ -17,11 +18,21 @@ export function OrgulhoInstitucional({ vista }: { vista: MesaVista["orgulho"] })
           </div>
           <div className="org-stat">
             <p className="n">{vista.presencaMedia !== null ? `${vista.presencaMedia}%` : "—"}</p>
-            <p className="rot">Presença média nas sessões</p>
+            <p className="rot">
+              Presença média nas sessões
+              {vista.presencaMedia !== null && vista.presencaSessoes !== null && (
+                <> · em {contar(vista.presencaSessoes, "sessão", "sessões")}</>
+              )}
+            </p>
           </div>
           <div className="org-stat">
             <p className="n">{vista.esicPercentual !== null ? `${vista.esicPercentual}%` : "—"}</p>
-            <p className="rot">Pedidos de informação respondidos no prazo (LAI)</p>
+            <p className="rot">
+              Pedidos de informação respondidos no prazo (LAI)
+              {vista.esicPercentual !== null && vista.esicEncerrados !== null && (
+                <> · de {contar(vista.esicEncerrados, "pedido encerrado", "pedidos encerrados")}</>
+              )}
+            </p>
           </div>
           <div className="org-stat">
             <p className="rot">Sessões transmitidas ao vivo — em breve.</p>
