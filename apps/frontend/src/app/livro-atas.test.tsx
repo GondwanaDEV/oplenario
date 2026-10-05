@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { LivroAtas } from "./livro-atas";
+import { ProvedorDaDica, useDicaAtual } from "./(interno)/clara/dica";
 
 const t = "2026-09-10T17:00:00Z";
 const sessao = (id: string, n: number) => ({ id, "tipo-sessao": "ordinaria", "numero-sequencial": n, "aberta-em": t });
@@ -81,5 +82,54 @@ describe("LivroAtas", () => {
     render(<LivroAtas fonte={{ tipo: "publico", ente: "casa-1" }} sessao={null} versao={null} />);
     expect(await screen.findByText(/Nenhuma ata publicada ainda/)).toBeTruthy();
     expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  describe("a dica da Clara (ADR-0024)", () => {
+    function Sonda() {
+      const dica = useDicaAtual();
+      return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+    }
+
+    it("interno: depois de lida, a ata aberta vira a dica — e só ela", async () => {
+      mockApi({ "/api/atas": livro, "/api/atas/s13": ata("s13", 13, "Texto da 13ª.") });
+      render(
+        <ProvedorDaDica>
+          <LivroAtas fonte={{ tipo: "interno", token: "tk" }} sessao={null} versao={null} />
+          <Sonda />
+        </ProvedorDaDica>,
+      );
+      expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+      await screen.findByText("Texto da 13ª.");
+      expect(screen.getByTestId("dica").textContent).toBe(
+        "Ata da 13ª Sessão Ordinária | Sobre a ata da 13ª Sessão Ordinária,  | Perguntar sobre esta ata",
+      );
+    });
+
+    it("interno: ata indisponível não vira dica", async () => {
+      mockApi({ "/api/atas": livro });
+      render(
+        <ProvedorDaDica>
+          <LivroAtas fonte={{ tipo: "interno", token: "tk" }} sessao="secreta" versao={null} />
+          <Sonda />
+        </ProvedorDaDica>,
+      );
+      await screen.findByText(/Esta ata não está disponível/);
+      expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    });
+
+    it("portal: nunca publica dica (o portal não tem Clara), nem com o provedor por perto", async () => {
+      mockApi({
+        "/api/portal/casa/casa-1/atas": livro,
+        "/api/portal/casa/casa-1/atas/s13": ata("s13", 13, "Aos dez dias do mês de setembro."),
+      });
+      render(
+        <ProvedorDaDica>
+          <LivroAtas fonte={{ tipo: "publico", ente: "casa-1" }} sessao={null} versao={null} />
+          <Sonda />
+        </ProvedorDaDica>,
+      );
+      await screen.findByText("Aos dez dias do mês de setembro.");
+      expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    });
   });
 });

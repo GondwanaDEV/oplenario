@@ -7,8 +7,9 @@
 // Caminho C soube (a palavra concedida pela Mesa), e avisa quando é preciso revisar com atenção (§16.8). IA fora
 // do ar não quebra a tela: cada gravação mostra a mensagem R-IA-1.
 
-import { useParams, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { SessaoComClara } from "../com-clara";
 import { useTema } from "@/lib/tema";
 import { useTranscricao, type GravacaoTranscrita } from "@/lib/use-transcricao";
 import { avisoDeAtencao, blocosDeFala, relogio, situacao } from "@/lib/transcricao-vista";
@@ -16,11 +17,10 @@ import "./transcricao.css";
 
 export default function PaginaTranscricao() {
   const params = useParams<{ id: string }>();
-  const search = useSearchParams();
   return (
-    <AuthProvider tokenQuery={search.get("token")}>
+    <SessaoComClara>
       <ConteudoTranscricao id={params.id} />
-    </AuthProvider>
+    </SessaoComClara>
   );
 }
 

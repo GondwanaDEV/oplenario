@@ -8,13 +8,17 @@ import { estadoInicial, type EstadoPlenario, type PlacarVotacao } from "@/lib/pl
 // em tv-vista/tv-letreiro (testados). Aqui a prova é que a PÁGINA escolhe a fase certa, mostra o que o
 // público precisa ler e respeita o sigilo e a honestidade ("—" quando não sabe).
 
+// A secretaria em todo teste: se esta tela ganhasse a moldura da Clara, o botão apareceria (e o teste da Clara reprova).
+const papeisDaClara = vi.hoisted(() => ({ atual: ["secretario"] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 
 const usePlenarioMock = vi.fn();
@@ -293,5 +297,14 @@ describe("Modo TV — tempo da fala e campainha (mig 0081)", () => {
     montar({ estado: { quorum, oradorAtual: falaHa(60, 300) } });
     expect(screen.getByRole("button", { name: /Entrar em tela cheia/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Campainha sem som/ })).toBeNull();
+  });
+});
+
+describe("Modo TV — sem a Clara (ADR-0024, fatia 5)", () => {
+  it("projetado ao público: nem botão nem moldura da Clara, mesmo aberto pela secretaria", () => {
+    expect(papeisDaClara.atual).toEqual(["secretario"]);
+    montar();
+    expect(screen.queryByRole("button", { name: /Clara/ })).toBeNull();
+    expect(document.querySelector(".clara-moldura, .ast-lancador, .ast")).toBeNull();
   });
 });

@@ -100,3 +100,11 @@ export function dicaDaPauta(sessao: SessaoDaDica | null | undefined): DicaDaClar
   if (!rotulo) return null;
   return { rotulo: `Pauta da ${rotulo}`, inicio: `Sobre a pauta da ${rotulo}, `, acao: "Perguntar sobre esta pauta" };
 }
+
+/** A dica da ata de uma sessão (a Clara lê atas pela ferramenta `ata_da_sessao`): "Nesta tela: Ata da 15ª Sessão
+ *  Ordinária" → "Sobre a ata da 15ª Sessão Ordinária, ". */
+export function dicaDaAta(sessao: SessaoDaDica | null | undefined): DicaDaClara | null {
+  const rotulo = rotuloDaSessao(sessao);
+  if (!rotulo) return null;
+  return { rotulo: `Ata da ${rotulo}`, inicio: `Sobre a ata da ${rotulo}, `, acao: "Perguntar sobre esta ata" };
+}

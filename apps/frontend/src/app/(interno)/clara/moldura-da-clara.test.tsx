@@ -79,12 +79,26 @@ describe("MolduraDaClara", () => {
     }
   });
 
-  it("enquanto os papéis carregam, e na tela cheia do assistente da secretaria, nada de Clara", () => {
-    Object.assign(estado, { papeis: ["secretario"], fase: "carregando", caminho: "/inicio" });
-    montar();
-    expect(screen.queryByRole("button", { name: /Pergunte à Clara/ })).toBeNull();
+  it("discreta (as telas da sessão): a moldura marca, e o botão segue com o nome acessível e o atalho no title", () => {
+    Object.assign(estado, { papeis: ["secretario"], fase: "pronto", caminho: "/sessoes/s1/conduzir" });
+    render(
+      <MolduraDaClara discreta>
+        <main>a página</main>
+      </MolduraDaClara>,
+    );
+    expect(document.querySelector(".clara-moldura")?.hasAttribute("data-clara-discreta")).toBe(true);
+    const lancador = screen.getByRole("button", { name: "Pergunte à Clara" });
+    expect(lancador.getAttribute("title")).toBe("Pergunte à Clara (Ctrl + /)");
+    // o seletor do CSS (`.clara-moldura[data-clara-discreta] ~ .ast-lancador`) pede o botão como irmão da moldura
+    expect(lancador.matches(".clara-moldura[data-clara-discreta] ~ .ast-lancador")).toBe(true);
     cleanup();
-    Object.assign(estado, { papeis: ["secretario"], fase: "pronto", caminho: "/assistente" });
+    Object.assign(estado, { caminho: "/proposicoes" });
+    montar();
+    expect(document.querySelector(".clara-moldura")?.hasAttribute("data-clara-discreta")).toBe(false);
+  });
+
+  it("enquanto os papéis carregam, nada de Clara", () => {
+    Object.assign(estado, { papeis: ["secretario"], fase: "carregando", caminho: "/inicio" });
     montar();
     expect(screen.queryByRole("button", { name: /Pergunte à Clara/ })).toBeNull();
   });

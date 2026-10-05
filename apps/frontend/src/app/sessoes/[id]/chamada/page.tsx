@@ -35,8 +35,9 @@
 //   - "Ver."/"Ver.ª" (prefixo de tratamento por gênero) não existe no contrato — usa-se o nome como vem.
 
 import { useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { SessaoComClara } from "../com-clara";
 import { useTema } from "@/lib/tema";
 import { useChamada, type EstadoCanal } from "@/lib/use-chamada";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
@@ -92,11 +93,10 @@ function iniciais(nome: string): string {
 
 export default function PaginaChamada() {
   const params = useParams<{ id: string }>();
-  const search = useSearchParams();
   return (
-    <AuthProvider tokenQuery={search.get("token")}>
+    <SessaoComClara>
       <ConteudoChamada id={params.id} />
-    </AuthProvider>
+    </SessaoComClara>
   );
 }
 

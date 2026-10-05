@@ -11,8 +11,9 @@
 // o IO e o CAS de lock-version vêm de `use-conducao-sessao.ts`. Nada de grafo nem de fetch aqui.
 
 import { useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/lib/auth";
+import { useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
+import { BotaoClaraNoTopo, SessaoComClara } from "../com-clara";
 import { useTema } from "@/lib/tema";
 import { useConducaoSessao } from "@/lib/use-conducao-sessao";
 import { usePauta } from "@/lib/use-pauta";
@@ -29,6 +30,7 @@ import { PainelLeituraAta } from "./painel-leitura-ata";
 import { PainelAtosMesa, type MateriaDaPauta } from "./painel-atos-mesa";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { comToken } from "@/lib/nav";
+import { dicaDaSessao, useDicaDaClara } from "@/app/(interno)/clara/dica";
 import "./conduzir.css";
 
 /** "2026-05-21T14:03:00Z" -> "21/05 às 14h03" (fuso do navegador — leitura humana, nunca comparação). */
@@ -52,11 +54,10 @@ const CHIP_SITUACAO: Record<SituacaoSessao, string> = {
 
 export default function PaginaConduzir() {
   const params = useParams<{ id: string }>();
-  const search = useSearchParams();
   return (
-    <AuthProvider tokenQuery={search.get("token")}>
+    <SessaoComClara>
       <ConteudoConduzir id={params.id} />
-    </AuthProvider>
+    </SessaoComClara>
   );
 }
 
@@ -92,6 +93,8 @@ interface ComandoProps {
 
 function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
   const { tema, alternar } = useTema();
+  // A dica da Clara: "Nesta tela: 15ª Sessão Ordinária" (a sessão já está carregada; nenhuma leitura a mais).
+  useDicaDaClara(dicaDaSessao(sessao));
   const { pauta, estado: estadoPauta, recarregar: recarregarPauta } = usePauta(sessao.id, token, sessao.estado);
   const vista = derivarConducaoSessao(sessao);
   // Item extrapauta (docs/23 Fatia 1): com a sessão em curso, a Mesa inclui na pauta o que surgiu na hora —
@@ -183,6 +186,7 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
           </div>
           <div className="topo-dir">
             <BotaoModoTv sessaoId={sessao.id} token={token} />
+            <BotaoClaraNoTopo />
             <button
               className="tema-btn"
               type="button"

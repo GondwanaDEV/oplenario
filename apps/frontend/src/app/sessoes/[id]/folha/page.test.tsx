@@ -14,14 +14,17 @@ import type { FolhaMetadadosOut } from "@/lib/contrato-sessoes.gen";
 // azulejo-faixa.test.tsx): asserções via `.toBeTruthy()`/`.textContent`/`.getAttribute()` cru, nunca
 // `toBeInTheDocument`/`toHaveAttribute`.
 
+// A secretaria em todo teste: se esta tela ganhasse a moldura da Clara, o botão apareceria (e o teste da Clara reprova).
+const papeisDaClara = vi.hoisted(() => ({ atual: ["secretario"] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
-
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 
 vi.mock("@/lib/tema", () => ({
@@ -232,5 +235,15 @@ describe("PaginaFolha — hierarquia de headings", () => {
     mockRetorno([]);
     render(<PaginaFolha />);
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+  });
+});
+
+describe("PaginaFolha — sem a Clara (ADR-0024, fatia 5)", () => {
+  it("para imprimir: nem botão nem moldura da Clara, mesmo aberta pela secretaria", () => {
+    expect(papeisDaClara.atual).toEqual(["secretario"]);
+    mockRetorno([]);
+    render(<PaginaFolha />);
+    expect(screen.queryByRole("button", { name: /Clara/ })).toBeNull();
+    expect(document.querySelector(".clara-moldura, .ast-lancador, .ast")).toBeNull();
   });
 });

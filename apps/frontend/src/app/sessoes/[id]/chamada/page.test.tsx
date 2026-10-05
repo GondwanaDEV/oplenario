@@ -9,14 +9,17 @@ import type { ChamadaOut, LinhaChamadaOut } from "@/lib/contrato-sessoes.gen";
 // registrada vs fechada). Mockar a rede reproduziria o polling/backoff do hook dentro de um teste de
 // página, sem cobrir nada que use-chamada.test.ts já não cubra.
 
+// A Clara (ADR-0024): sem papel nos testes de sempre; o bloco da Clara liga a secretaria.
+const papeisDaClara = vi.hoisted(() => ({ atual: [] as string[] }));
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "s1" }),
   useSearchParams: () => ({ get: () => null }),
+  usePathname: () => "/sessoes/s1",
 }));
-
 vi.mock("@/lib/auth", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth: () => ({ token: "tok" }),
+  useAuth: () => ({ token: "tok", papeis: papeisDaClara.atual }),
+  usePapeis: () => ({ papeis: papeisDaClara.atual, estado: "pronto" }),
 }));
 
 vi.mock("@/lib/tema", () => ({
@@ -327,5 +330,25 @@ describe("PaginaChamada", () => {
     // a linha pendente mostra Deferir/Indeferir (a DECISÃO), nunca um segundo "Lançar justificativa"
     expect(screen.queryByRole("button", { name: "Lançar justificativa" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Deferir" }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("PaginaChamada — a Clara (ADR-0024, fatia 5)", () => {
+  afterEach(() => {
+    cleanup();
+    papeisDaClara.atual = [];
+    delete document.documentElement.dataset.clara;
+  });
+
+  it("a secretaria tem a Clara, recolhida; a tela não sabe o nome da sessão, então não publica dica", () => {
+    papeisDaClara.atual = ["secretario"];
+    mockRetorno(dadosBase());
+    render(<PaginaChamada />);
+    const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
+    expect(lancador.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(lancador);
+    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).not.toContain("Nesta tela");
+    // os comandos da chamada continuam na barra fixa (.comando), que o botão da Clara mede para subir acima dela
+    expect(screen.getByRole("region", { name: "Comandos da chamada" }).classList.contains("comando")).toBe(true);
   });
 });

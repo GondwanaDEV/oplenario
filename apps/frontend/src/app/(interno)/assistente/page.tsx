@@ -1,30 +1,18 @@
-"use client";
+// /assistente — o endereço antigo da tela cheia do assistente da secretaria. A Clara agora é o painel que acompanha toda
+// tela interna (ADR-0024, fatia 5): esta rota só leva à Central da Casa (`/inicio`, a página inicial da secretaria, que
+// era quem abria esta tela) com `?clara=expandida`, que a moldura lê, abre e tira da URL. Fica de pé para os links
+// antigos e para o gate do middleware (que mede as páginas em disco). Mesmo desenho de /vereador/assistente.
+//
+// Server Component: o redirecionamento sai antes de qualquer tela. O `?token=` de dev vai junto (comToken).
 
-// Rota /assistente (interno) — o assistente da Casa (Faixa B / B.3 da Track IA): pergunta em palavras, o agente
-// consulta o sistema COMO a pessoa (credencial delegada, ADR-0010) e responde citando o que consultou. Gate de papel
-// via <GuardSecretaria> (a authz REAL é o backend: POST /agente/perguntas exige secretario ou vereador; a tela do
-// vereador vem com o copiloto do requerimento, B.7).
+import { redirect } from "next/navigation";
+import { comToken } from "@/lib/nav";
 
-import { useAuth } from "@/lib/auth";
-import { GuardSecretaria } from "../guard-secretaria";
-import { TopoInterno } from "../topo";
-import { PainelAssistente } from "./painel-assistente";
-import "./assistente.css";
-
-export default function PaginaAssistente() {
-  return (
-    <GuardSecretaria>
-      <ConteudoAssistente />
-    </GuardSecretaria>
-  );
-}
-
-function ConteudoAssistente() {
-  const { token } = useAuth();
-  return (
-    <>
-      <TopoInterno area="Clara" />
-      <PainelAssistente token={token} />
-    </>
-  );
+export default async function PaginaAssistente({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { token } = await searchParams;
+  redirect(comToken("/inicio?clara=expandida", typeof token === "string" ? token : null));
 }
