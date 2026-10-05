@@ -662,7 +662,9 @@
               ;; registrar-transicao!) — NAO o momento de projecao a jusante.
               (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
                        :de (:de r) :para (:para r) :gatilho (:gatilho args)
-                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))}
+                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))
+                       ;; o rito da Casa diz se o destino encerra o processo (paineis: "em tramitacao")
+                       :para-terminal (boolean (:para-terminal r))}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))

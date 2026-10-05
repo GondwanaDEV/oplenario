@@ -199,7 +199,9 @@ export function derivarMesaVista(input: MesaVistaInput) {
       // mesa.presencaResumo/mesa.esicCumprimento no branch positivo.
       presencaMedia: ehCardIndisponivel(mesa.presencaResumo) ? null : mesa.presencaResumo.mediaPercentual,
       esicPercentual: ehCardIndisponivel(mesa.esicCumprimento) ? null : mesa.esicCumprimento.percentual,
-      totalTramitacao: mesa.tramitacao.total,
+      // "em tramitação" = o que o RITO da Casa não declara terminal (aprovada/arquivada saem); `total` é a
+      // soma de todos os estados do board e fica só no pipeline.
+      totalTramitacao: mesa.tramitacao.emTramitacao,
       transmissaoAoVivo: { estado: "em-breve" as const },
     },
 

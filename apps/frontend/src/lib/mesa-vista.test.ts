@@ -9,7 +9,7 @@ const mesaBase = {
     remessasRecentes: [],
     remessasRecentesTotal: 0,
   },
-  tramitacao: { total: 47, porEstado: [{ estado: "protocolada", n: 12 }] },
+  tramitacao: { total: 47, emTramitacao: 31, porEstado: [{ estado: "protocolada", n: 12 }] },
   pendencias: { abertas: 8, vencidas: 1, pendentes: 7 },
   sessoes: { emCurso: 0, naoRealizadas: 1, porSituacao: [] },
   presencaResumo: { mediaPercentual: 78, sessoesConsideradas: 10, membrosDaCasa: 43 },
@@ -86,7 +86,9 @@ describe("derivarMesaVista", () => {
     const v = derivarMesaVista({ mesa: mesaBase, tramitacaoItens: [], pendenciasItens: [], pendenciasTotal: null, sliSessoes: [], relatoresPendentes: [] });
     expect(v.orgulho.presencaMedia).toBe(78);
     expect(v.orgulho.esicPercentual).toBe(96);
-    expect(v.orgulho.totalTramitacao).toBe(47);
+    // "em tramitação" = as que o rito da Casa não encerrou (31), não a soma de todos os estados do board (47):
+    // aprovadas e arquivadas saem do manchete.
+    expect(v.orgulho.totalTramitacao).toBe(31);
     expect(v.orgulho.transmissaoAoVivo.estado).toBe("em-breve");
   });
 

@@ -71,6 +71,28 @@
           (is (re-find #"despachar" pl) "payload carrega o gatilho")
           (is (re-find (re-pattern (str pid)) pl) "payload carrega a proposicao-id"))))))
 
+(deftest transicao-carrega-se-o-estado-de-destino-e-terminal-no-rito
+  ;; O painel da Mesa precisa separar "em tramitacao" de "encerrada" SEM casar nome de estado (cada Casa
+  ;; nomeia o seu: arquivada, aprovada, promulgada...). Quem diz o que e' fim de rito e' o RITO
+  ;; (`template_estado.terminal`); o evento passa a carregar o fato do estado de DESTINO.
+  (let [ente (random-uuid) tid (random-uuid)]
+    (repo/criar-template! *repo* ente {:id tid :chave "rito_fim" :versao 1 :nome "Rito [FIXTURE]"
+                                       :estado-inicial "protocolada"})
+    (doseq [[ch term] [["protocolada" false] ["em_andamento" false] ["encerrada_do_rito" true]]]
+      (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave ch :nome ch :terminal term}))
+    (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "protocolada"
+                                        :para-estado "em_andamento" :gatilho "andar" :ordem 1})
+    (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "em_andamento"
+                                        :para-estado "encerrada_do_rito" :gatilho "encerrar" :ordem 1})
+    (let [pid (:id (repo/protocolar! *repo* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026
+                                                  :uf "CE" :municipio-nome "Fortaleza" :ementa "Dispoe sobre Y"
+                                                  :template-id tid}))]
+      (repo/transicionar! *repo* ente *registro* {:proposicao-id pid :template-id tid :gatilho "andar" :agora data})
+      (repo/transicionar! *repo* ente *registro* {:proposicao-id pid :template-id tid :gatilho "encerrar" :agora data})
+      (let [[e1 e2] (eventos-transicionou ente)]
+        (is (re-find #"\"para-terminal\": false" (:payload e1)) "andar -> estado nao terminal")
+        (is (re-find #"\"para-terminal\": true" (:payload e2)) "encerrar -> estado que o rito declara terminal")))))
+
 (deftest guard-bloqueado-nao-emite-evento
   (let [ente (random-uuid)
         tid  (montar-template! ente)
