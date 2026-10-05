@@ -26,7 +26,9 @@ export type RegistroTrilha = {
   classe: "escrita" | "negacao" | "entrada" | "leitura_sensivel";
   // "sem_desfecho": a escrita foi iniciada e o desfecho dela não foi registrado — o ato pode ter acontecido (ADR-0017)
   decisao: "permitido" | "negado" | "falhou" | "sem_desfecho";
-  recurso: { tipo: string | null; id: string | null; rotulo: string | null } | null;
+  // doAto: o servidor diz que o rótulo é o resumo da AÇÃO ("Revogou um acesso à Casa") e não o nome de um objeto.
+  // A tela decide por este campo, nunca pelo texto do rótulo (nome de pessoa ou de matéria pode parecer um verbo).
+  recurso: { tipo: string | null; id: string | null; rotulo: string | null; doAto?: boolean } | null;
   campos: string[];
   canal: string;
   ip: string | null;
@@ -143,14 +145,8 @@ export function verbo(r: RegistroTrilha): Verbo {
   const nome = r.acao.split("/")[1] ?? r.acao;
   const achado = VERBOS.find(([re]) => re.test(nome));
   // o título já é a frase do ato ("Definiu os tempos regimentais…"): a etiqueta não repete um segundo verbo, só dá a cor
-  if (ehFraseDoAto(r.recurso?.rotulo)) return { rotulo: "Ato", tom: achado ? achado[1].tom : "entrou" };
+  if (r.recurso?.doAto) return { rotulo: "Ato", tom: achado ? achado[1].tom : "entrou" };
   return achado ? achado[1] : { rotulo: "Registrou", tom: "entrou" };
-}
-
-/** O rótulo é uma frase que começa por verbo no passado ("Revogou um acesso à Casa", "complementou a resposta…"),
- * e não o nome de um objeto ("PL 7/2026"). Vem do resumo por ação (ADR-0017 1-C) ou do handler. */
-export function ehFraseDoAto(rotulo: string | null | undefined): boolean {
-  return !!rotulo && /^\p{L}+(ou|iu|eu|ôs)(-se)?\s/iu.test(rotulo);
 }
 
 const TIPOS_DE_RECURSO: Record<string, string> = {
@@ -176,7 +172,7 @@ export function objeto(r: RegistroTrilha): { titulo: string; detalhe: string } {
   const titulo = rec?.rotulo ?? (tipo ? `${tipo}${rec?.id ? ` ${rec.id.slice(0, 8)}` : ""}` : acaoEmPalavras(r.acao));
   const modulo = NOMES_DE_MODULO[r.acao.split("/")[0]] ?? null;
   // a frase do ato já diz o que foi feito: o detalhe só situa (o módulo), sem repetir a ação em infinitivo
-  const detalhe = [ehFraseDoAto(rec?.rotulo) ? modulo : rec?.rotulo || tipo ? acaoEmPalavras(r.acao) : null,
+  const detalhe = [rec?.doAto ? modulo : rec?.rotulo || tipo ? acaoEmPalavras(r.acao) : null,
     r.decisao === "negado" ? "barrado pela política de acesso" : null,
     r.decisao === "falhou" ? "o sistema recusou o pedido" : null,
     r.decisao === "sem_desfecho" ? "ação iniciada, desfecho não registrado" : null].filter(Boolean).join(" · ");

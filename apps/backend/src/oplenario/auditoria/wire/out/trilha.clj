@@ -21,7 +21,10 @@
    [:classe [:enum "escrita" "negacao" "entrada" "leitura_sensivel"]]
    ;; `sem_desfecho` = a escrita foi iniciada e o desfecho dela nao foi registrado (ADR-0017, adendo de 04/10/2026)
    [:decisao [:enum "permitido" "negado" "falhou" "sem_desfecho"]]
-   [:recurso [:maybe [:map {:closed true} [:tipo [:maybe :string]] [:id [:maybe :string]] [:rotulo [:maybe :string]]]]]
+   [:recurso [:maybe [:map {:closed true} [:tipo [:maybe :string]] [:id [:maybe :string]] [:rotulo [:maybe :string]]
+                      ;; o rotulo e' o resumo da ACAO (`resumos/por-acao`), e nao o nome de um objeto dado pelo handler:
+                      ;; a tela decide por este campo, nunca pelo texto do rotulo (que pode vir de dado de usuario)
+                      [:do-ato :boolean]]]]
    [:campos [:vector :string]]
    [:canal :string]
    [:ip [:maybe :string]]
