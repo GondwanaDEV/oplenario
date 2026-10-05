@@ -324,6 +324,53 @@ transação de tenant própria de ~5 ms; três rodadas, depois de aquecer):
 - Se pesar em produção, o plano B já está no Eixo 5b-ii (selar depois, com um selador único fora do caminho do
   voto). Não foi implementado.
 
+**Medição no voto real (05/10/2026)** (`auditoria/custo_no_voto_real_test`, o mesmo formato de `janela_de_perda_test`;
+só mede e confere, não asserta tempo).
+
+- **Método.**
+  - Uma Casa com 21 vereadores (mandato vigente, vínculo e papel `vereador` pelos repositórios reais) e, por rodada,
+    uma sessão aberta com os 21 presentes e uma votação nominal aberta e nova.
+  - Os 21 `POST /sessoes/:id/votacoes/:votacao-id/meu-voto` saem no mesmo instante, em processo (`pt/response-for`, sem
+    Jetty e sem rede), pela tabela de `rotas/montar` e pelos globais do host: erro, trilha, autenticação sobre o
+    `repo-identidade` real, papel, policy de mandato e presença, escrita do voto sob o lock da votação, outbox na
+    transação do ato e o relay de pé.
+  - Duas condições: **com** a tentativa (a tabela de hoje) e **sem** (a mesma tabela com o interceptor `tentativa`
+    retirado de cada escrita; nenhuma chave de produção foi acrescentada).
+  - Uma Casa por condição, 10 rodadas medidas por condição (mais 2 de aquecimento), ordem das condições alternada a
+    cada rodada, e o teste espera o outbox esvaziar antes de cada disparo. Três corridas, cada uma com banco próprio.
+- **Correção, nas três corridas** (234 asserções, 0 falhas): os 21 responderam 201, 21 votos gravados (um por
+  vereador), a corrente de cada rodada tem 21 pares tentativa+desfecho (com) ou 21 desfechos sem apontamento (sem), a
+  corrente selada confere inteira e nenhuma tentativa ficou sem desfecho. Nenhum voto perdido, deadlock, timeout ou 5xx.
+- **Números** (210 requisições por condição em cada corrida; parede = do disparo até o 21º responder):
+
+| Corrida | Condição | Parede por rodada, mediana (mín–máx), ms | Latência por requisição, mediana / p95 / máx, ms |
+|---|---|---|---|
+| 1 | sem | 198 (167–311) | 129 / 232 / 309 |
+| 1 | com | 222 (139–569) | 125 / 416 / 539 |
+| 2 | sem | 282 (183–1099) | 152 / 1031 / 1091 |
+| 2 | com | 349 (174–651) | 218 / 510 / 595 |
+| 3 | sem | 226 (133–666) | 123 / 561 / 663 |
+| 3 | com | 255 (191–1192) | 169 / 365 / 1190 |
+| 30 rodadas | sem | 212 (133–1099) | |
+| 30 rodadas | com | 255,5 (139–1192) | |
+
+  Pareando cada rodada (com menos sem, mesma rodada, ordem alternada): mediana +35,5 ms, de −705 a +1059 ms; a
+  rodada com a tentativa foi a mais lenta em 19 das 30.
+- **Ambiente.** VM OrbStack de 3,9 GiB e 8 processadores, compartilhada com outras sessões: durante as corridas havia
+  outros containers a 100–213% de CPU. Postgres local em container, pool de trabalho de 10 conexões, Postgres e JVM
+  sem ajuste. Sem Jetty, sem rede e sem 21 celulares de verdade.
+- **O que os números sustentam.**
+  - A mediana da parede com a tentativa ficou acima da sem nas três corridas (+24, +67 e +29 ms).
+  - A mediana de "sem" varia mais entre corridas (198 a 282 ms) do que essa diferença, e as duas condições têm rodadas
+    lentas sem relação com a tentativa: acima de 650 ms, "sem" teve 3 (666, 803, 1099) e "com" teve 2 (651, 1192).
+  - O p95 e o máximo por requisição não separam as condições: dependem de qual corrida pegou carga alheia na VM.
+  - Em resumo: o custo mediano da tentativa nos 21 votos é de dezenas de milissegundos (+35,5 ms pareado, +43,5 ms entre
+    as medianas das 30 rodadas) e fica dentro do ruído do ambiente na cauda. Toda rodada, das duas condições, terminou
+    em menos de 1,2 s.
+- **O que não foi medido:** Jetty e rede reais, o Postgres de produção, escritas de outros tipos ao mesmo tempo na
+  mesma Casa e mais de uma Casa votando ao mesmo tempo. O plano B (Eixo 5b-ii) continua não implementado e, com estes
+  números, sem gatilho.
+
 **A garantia:** o ato só fica fora da trilha se a própria trilha estiver fora no momento do ato, e isso fica no log.
 
 **O que ela cobre:**

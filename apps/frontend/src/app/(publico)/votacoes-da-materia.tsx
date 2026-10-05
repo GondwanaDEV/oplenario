@@ -87,7 +87,7 @@ function VotacoesDaMateriaQueBusca({ ente, proposicaoId }: { ente: string; propo
 function VotacoesDaMateriaVista({ ente, proposicaoId, total }: { ente: string; proposicaoId: string; total: number }) {
   if (total < 1) return null;
   return (
-    <section className="secao vm" aria-labelledby="vm-titulo">
+    <section className="secao ficha-secao vm" aria-labelledby="vm-titulo">
       <h2 id="vm-titulo">Votações desta matéria</h2>
       <p className="vm-texto">
         {total === 1
