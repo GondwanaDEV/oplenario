@@ -40,6 +40,7 @@ export default function PaginaCriarProposicao() {
           enviando={estado === "enviando"}
           erro={erro}
           rotuloAcaoPrimaria="Protocolar"
+          token={token}
         />
       </main>
     </>

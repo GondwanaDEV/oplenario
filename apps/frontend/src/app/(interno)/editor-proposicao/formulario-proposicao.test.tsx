@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { FormularioProposicao } from "./formulario-proposicao";
+import { ESPECIES_PROPOSICAO } from "@/lib/proposicoes-vista";
 
 // Nota de adaptação ao brief (Task 17): o brief usa matchers de @testing-library/jest-dom
 // (toBeInTheDocument/toBeDisabled/toHaveTextContent), mas este projeto NÃO tem jest-dom instalado
@@ -20,6 +21,14 @@ describe("FormularioProposicao", () => {
     expect(screen.getByLabelText(/espécie/i)).toBeTruthy();
     expect(screen.getByLabelText(/ementa/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Protocolar" })).toBeTruthy();
+  });
+
+  it("a lista de espécies do formulário é a MESMA do filtro da lista (uma fonte só)", () => {
+    render(<FormularioProposicao aoSubmeter={vi.fn()} enviando={false} erro={null} rotuloAcaoPrimaria="Protocolar" />);
+    const select = screen.getByLabelText(/espécie/i) as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => [o.value, o.textContent])).toEqual(
+      ESPECIES_PROPOSICAO.map((e) => [e.valor, e.rotulo]),
+    );
   });
 
   it("mostra o campo condicional 'objeto da indicação' so' quando a especie e' indicacao", () => {

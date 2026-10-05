@@ -505,7 +505,8 @@ describe("derivarAutoria", () => {
       { ...perfilBase, materias: [{ ...perfilBase.materias[0], estado: "vocabulario_de_tenant" }] },
       "fortaleza",
     );
-    expect(exotico.linhas[0].estagios).toEqual([{ rotulo: "Protocolo", situacao: "ativo" }]);
+    // 05/10/2026: era [{Protocolo, ativo}] — a faixa não aponta etapa para estado que não conhece.
+    expect(exotico.linhas[0].estagios).toEqual([{ rotulo: "Em tramitação", situacao: "ativo" }]);
   });
 
   it("href aponta para a ficha pública da matéria no mesmo ente", () => {

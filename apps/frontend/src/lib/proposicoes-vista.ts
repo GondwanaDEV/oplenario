@@ -3,9 +3,14 @@
 // livre/template-driven) — nenhum vocabulário novo de estado é inventado aqui.
 
 import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
-import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
+import type { ProposicaoDetalheOut, ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
-const SIGLA_POR_TIPO: Record<string, string> = {
+// `ProposicaoDetalheOut["tipo"]` é a união gerada de `logic/tipos` do backend (km/enum-de): sigla e espécie
+// são `Record` sobre ela, então espécie nova no backend, com o contrato regenerado, reprova o tsc aqui até
+// ganhar sigla e rótulo.
+type TipoProposicao = ProposicaoDetalheOut["tipo"];
+
+const SIGLA_POR_TIPO: Record<TipoProposicao, string> = {
   projeto_lei: "PL",
   projeto_lei_complementar: "PLC",
   projeto_resolucao: "PR",
@@ -16,14 +21,15 @@ const SIGLA_POR_TIPO: Record<string, string> = {
   mocao: "MOÇ",
 };
 
-const ESPECIE_POR_TIPO: Record<string, string> = {
+const ESPECIE_POR_TIPO: Record<TipoProposicao, string> = {
   projeto_lei: "Projeto de Lei",
   projeto_lei_complementar: "Projeto de Lei Complementar",
   projeto_resolucao: "Projeto de Resolução",
   projeto_decreto_legislativo: "Decreto Legislativo",
   proposta_emenda_lom: "Emenda à LOM",
-  indicacao: "Indicação",
+  // a ordem das chaves É a ordem de exibição do seletor (a mesma que o formulário sempre teve; a Trilha 3, E3, a afirma)
   requerimento: "Requerimento",
+  indicacao: "Indicação",
   mocao: "Moção",
 };
 
@@ -31,16 +37,27 @@ const ESPECIE_POR_TIPO: Record<string, string> = {
 // espécie (ex.: tramitacao-board-vista.ts) em vez de cada tela manter sua própria lista hardcoded.
 export const TIPOS_PROPOSICAO = Object.keys(ESPECIE_POR_TIPO);
 
+/** Espécies na ordem de exibição, com o rótulo em palavras: é a lista do filtro da lista, do quadro de
+ *  tramitação e do formulário de nova proposição. Nenhuma tela mantém a sua. */
+export const ESPECIES_PROPOSICAO: { valor: string; rotulo: string }[] = TIPOS_PROPOSICAO.map((valor) => ({
+  valor,
+  rotulo: ESPECIE_POR_TIPO[valor as TipoProposicao],
+}));
+
 export type CategoriaSituacao = "tram" | "aguarda" | "aprovada" | "arquivada";
+
+// `tipo` chega como string do wire; o índice é por string de propósito (valor fora da união cai no cru).
+const siglaDe: Record<string, string> = SIGLA_POR_TIPO;
+const especieDe: Record<string, string> = ESPECIE_POR_TIPO;
 
 // Exportados (Onda B Slice 3, ficha-materia) — o cabeçalho `.ficha-cab` precisa do MESMO formato "SIGLA
 // sequencial/ano" / rótulo de espécie já usado aqui; reusa em vez de reinventar o mapeamento.
 export function formatarNumeroProposicao(tipo: string, sequencial: number, ano: number): string {
-  return `${SIGLA_POR_TIPO[tipo] ?? tipo} ${sequencial}/${ano}`;
+  return `${siglaDe[tipo] ?? tipo} ${sequencial}/${ano}`;
 }
 
 export function formatarEspecieProposicao(tipo: string): string {
-  return ESPECIE_POR_TIPO[tipo] ?? tipo;
+  return especieDe[tipo] ?? tipo;
 }
 
 export type LinhaProposicaoVista = {
@@ -65,12 +82,18 @@ export type LinhaProposicaoVista = {
 // conjuntos de estado usados aqui pro chip de status; nenhum vocabulário novo é inventado lá.
 export const ESTADOS_APROVADOS = new Set(["aprovada", "sancionado", "sancao_tacita", "veto_derrubado"]);
 export const ESTADOS_ARQUIVADOS = new Set(["arquivada", "rejeitada", "prejudicada", "retirada"]);
-export const ESTADOS_AGUARDANDO_PAUTA = new Set(["em_pauta", "aguardando_pauta"]);
+// "Pronta para pauta": a comissão concluiu e a matéria espera ser incluída. NÃO inclui `em_pauta` — esse já
+// foi incluído (rito da demo: aguardando_pauta -> incluir_pauta -> em_pauta -> aprovar|rejeitar), e contá-lo
+// aqui fazia o quadro e o painel inicial chamarem de "pronta" uma matéria que o Plenário já vai decidir.
+export const ESTADOS_AGUARDANDO_PAUTA = new Set(["aguardando_pauta"]);
+// Já incluída numa pauta de sessão; o Plenário decide. Usado pelo quadro (coluna "Em Plenário").
+export const ESTADOS_EM_PAUTA = new Set(["em_pauta"]);
 
 export function categorizarSituacao(estado: string): CategoriaSituacao {
   if (ESTADOS_APROVADOS.has(estado)) return "aprovada";
   if (ESTADOS_ARQUIVADOS.has(estado)) return "arquivada";
-  if (ESTADOS_AGUARDANDO_PAUTA.has(estado)) return "aguarda";
+  // as duas esperas de pauta compartilham o chip "aguarda" (cor âmbar): a diferença está no rótulo.
+  if (ESTADOS_AGUARDANDO_PAUTA.has(estado) || ESTADOS_EM_PAUTA.has(estado)) return "aguarda";
   return "tram";
 }
 

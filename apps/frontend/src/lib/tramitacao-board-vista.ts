@@ -18,9 +18,11 @@ import {
   ESTADOS_AGUARDANDO_PAUTA,
   ESTADOS_APROVADOS,
   ESTADOS_ARQUIVADOS,
+  ESTADOS_EM_PAUTA,
   formatarEspecieProposicao,
   formatarNumeroProposicao,
 } from "./proposicoes-vista";
+import { rotularEstado } from "./tramitacao-vista";
 import type { ItemBoardOut, TotalPorEstadoOut } from "./contrato-mesa.gen";
 
 export type AzulejoCor = "jade" | "cobalto" | "amarelo" | "telha" | "verde" | "neutro";
@@ -32,6 +34,8 @@ export type ItemDoBoard = {
   ementa: string;
   autor: string;
   estado: string;
+  /** Situação em palavras — o MESMO rótulo da ficha (`rotularEstado`), não um segundo vocabulário do quadro. */
+  situacao: string;
 };
 
 export type ColunaBoard = {
@@ -45,7 +49,9 @@ export type ColunaBoard = {
   total: number;
 };
 
-const ESTADOS_EM_PLENARIO = new Set(["primeiro_turno", "segundo_turno", "em_sancao"]);
+// "Em Plenário" = a matéria já está nas mãos do Plenário: incluída numa pauta (`em_pauta`) ou em turno/sanção.
+// Antes só contava os turnos, e `em_pauta` aparecia como "Pronta p/ pauta" — a ficha dizia outra coisa.
+const ESTADOS_EM_PLENARIO = new Set([...ESTADOS_EM_PAUTA, "primeiro_turno", "segundo_turno", "em_sancao"]);
 
 // As 5 colunas fixas, na ordem do quadro-fonte (tramitacao-board.html). `pertence` decide se um `estado`
 // cru cai nesta coluna — checado em ordem, a primeira que bater vence (sem sobreposição nos conjuntos
@@ -71,6 +77,7 @@ function paraItemDoBoard(item: ItemBoardOut): ItemDoBoard {
     ementa: item.ementa,
     autor: item.autorTexto ?? "—",
     estado: item.estado,
+    situacao: rotularEstado(item.estado),
   };
 }
 
