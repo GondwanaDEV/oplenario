@@ -1257,6 +1257,8 @@
   repo-votacao-publica/RepoVotacaoPublica
   (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento]
     (transacao this ente-id #(votacao-publica/encerradas-das-sessoes % ente-id sessao-ids limite deslocamento)))
+  (ids-das-votacoes-das-sessoes [this ente-id sessao-ids]
+    (transacao this ente-id #(votacao-publica/ids-das-sessoes % ente-id sessao-ids)))
   (votacao-encerrada [this ente-id votacao-id]
     (transacao this ente-id #(votacao-publica/encerrada % ente-id votacao-id)))
 

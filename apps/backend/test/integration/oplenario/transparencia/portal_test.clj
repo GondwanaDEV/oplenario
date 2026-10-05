@@ -314,7 +314,7 @@
       {:id (random-uuid) :votacao-id vid :vereador-id vereador :voto "sim"})
     (drenar!)
     (let [votos (tenancy/com-tenant* *ds* ente
-                  (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador 10)))]
+                  (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador 10 #{vid})))]
       (is (= 1 (count votos)) "1 voto publico projetado")
       (is (= "sim" (:voto (first votos))) "o valor do voto foi projetado")
       (is (= vid (:votacao-id (first votos))) "a votacao-id foi projetada")
@@ -372,9 +372,9 @@
     (is (number? (drenar!))
         "drenar! atravessa o evento legado sem propagar excecao (o relay nao e' envenenado)")
     (let [legado (tenancy/com-tenant* *ds* ente
-                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-legado 10)))
+                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-legado 10 #{vid-legado vid-ok})))
           ok     (tenancy/com-tenant* *ds* ente
-                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-ok 10)))]
+                   (fn [tx] (db-parlamentar/votos-do-vereador tx ente vereador-ok 10 #{vid-legado vid-ok})))]
       ;; (2) o legado nao projeta linha nenhuma (ocorrido_em e' NOT NULL — nao ha estado parcial honesto)
       (is (empty? legado) "o evento legado nao projetou voto (tolerado + logado, nunca gravado pela metade)")
       ;; (3) O PONTO: a cabeca da fila nao travou — o evento POSTERIOR foi projetado
