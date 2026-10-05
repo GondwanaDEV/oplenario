@@ -29,16 +29,16 @@
 (defn- fake-repo-compliance
   "RepoCompliance fake parametrizado por mapa de comportamento:
    {:validar (fn []->row|nil) :submeter (fn []->row|nil) :resposta (fn [estado]->row|nil)
-    :existe (fn []->boolean) — desambigua o nil (CAS perdido vs inexistente)
+    :estado (fn []->estado|nil) — o estado da remessa, que desambigua o nil (CAS perdido vs inexistente)
     :ente-visto (atom) — opcional: captura o ente-id que o controller passa ao Repo (prova de tenant)}.
    Impl parcial proposital (so os metodos exercidos)."
-  [{:keys [validar submeter resposta existe ente-visto]}]
+  [{:keys [validar submeter resposta estado ente-visto]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-compliance/RepoCompliance
     (validar-remessa! [_ ente _id] (when ente-visto (reset! ente-visto ente)) (when validar (validar)))
     (submeter-remessa! [_ _ente _id] (when submeter (submeter)))
     (registrar-resposta-remessa! [_ _ente _id estado] (when resposta (resposta estado)))
-    (remessa-existe? [_ _ente _id] (boolean (when existe (existe))))))
+    (estado-da-remessa [_ _ente _id] (when estado (estado)))))
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -85,16 +85,18 @@
   (let [ente (random-uuid) id (random-uuid)
         ;; CAS perdido (estado != rascunho): transicao devolve nil, mas a remessa EXISTE no tenant.
         repo (fake-repo-compliance {:validar (constantly nil)
-                                    :existe (constantly true)})
+                                    :estado (constantly "validada")})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/compliance/remessas/" id "/validar")
                            :headers (com-bearer (token ente (random-uuid))))]
-    (is (= 409 (:status r)) "remessa em estado incompativel com a transicao -> 409 (nao 500)")))
+    (is (= 409 (:status r)) "remessa em estado incompativel com a transicao -> 409 (nao 500)")
+    (is (= "Esta remessa já foi validada; só uma remessa em rascunho pode ser validada." (:erro (ler-json r)))
+        "o 409 diz o estado atual e o que era esperado, em português")))
 
 (deftest validar-inexistente-404
   (let [ente (random-uuid) id (random-uuid)
         ;; transicao nil + existe false = remessa nao existe no tenant.
-        repo (fake-repo-compliance {:validar (constantly nil) :existe (constantly false)})
+        repo (fake-repo-compliance {:validar (constantly nil) :estado (constantly nil)})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/compliance/remessas/" id "/validar")
                            :headers (com-bearer (token ente (random-uuid))))]
@@ -123,11 +125,12 @@
 (deftest submeter-conflito-409
   (let [ente (random-uuid) id (random-uuid)
         repo (fake-repo-compliance {:submeter (constantly nil)
-                                    :existe (constantly true)})
+                                    :estado (constantly "rascunho")})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/compliance/remessas/" id "/submeter")
                            :headers (com-bearer (token ente (random-uuid))))]
-    (is (= 409 (:status r)) "submeter remessa que nao esta em validada -> 409")))
+    (is (= 409 (:status r)) "submeter remessa que nao esta em validada -> 409")
+    (is (= "Esta remessa ainda é um rascunho; só uma remessa validada pode ser enviada." (:erro (ler-json r))))))
 
 ;; ---------- POST /compliance/remessas/:id/resposta ----------
 
@@ -173,12 +176,14 @@
 (deftest resposta-conflito-409
   (let [ente (random-uuid) id (random-uuid)
         repo (fake-repo-compliance {:resposta (constantly nil)
-                                    :existe (constantly true)})
+                                    :estado (constantly "aceita")})
         r (pt/response-for (service-fn #{"secretario"} repo)
                            :post (str "/compliance/remessas/" id "/resposta")
                            :headers (com-bearer-json (token ente (random-uuid)))
                            :body (json/write-value-as-string {"estado" "aceita"}))]
-    (is (= 409 (:status r)) "registrar resposta de remessa que nao esta em submetida -> 409")))
+    (is (= 409 (:status r)) "registrar resposta de remessa que nao esta em submetida -> 409")
+    (is (= "Esta remessa já foi aceita; só uma remessa enviada pode receber resposta." (:erro (ler-json r)))
+        "o 409 diz o estado atual e o que era esperado, em português")))
 
 ;; ---------- authz: a vertical herda a cadeia de auth/papel ----------
 
