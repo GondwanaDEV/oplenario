@@ -2746,7 +2746,53 @@ quer dizer "o código atual não tem o defeito", não "reproduzi e passou". Os 8
 
 Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as linhas 5, 18–21, 24–37 e 39–49).
 
-**Depois das frentes de 05/10/2026: 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
+**Depois da segunda rodada de 05/10/2026: 84 achados · 15 abertos · 69 fechados.** Dos 39 que estavam abertos
+depois da primeira rodada, 24 fecharam: 22 nas frentes da tabela abaixo, a linha 12 (cockpit com duas sessões, #155)
+e a linha 2 (promulgar e publicar a norma, #139). As linhas ficam na tabela principal, com a numeração de antes.
+
+| Linha | O que fechou | PR |
+|---|---|---|
+| 5 | Aceitar a remessa cumpre a obrigação: o gatilho do host reavalia a competência no aceite e, antes do sweep, em toda leitura do painel (acerta as remessas aceitas antes do conserto). O teste da reprodução está commitado (`aceite_move_placar_test`) | #143 |
+| 44 | O 409 do ciclo da remessa diz o estado atual e o esperado | #143 |
+| 20 | Tramitação pública: `transparencia.materia_movimentacao` e "Por onde a matéria passou" na ficha pública; histórico anterior reconstruído uma vez na migration (só projeção) | #147 |
+| 35 | A frase "toda a tramitação" passou a ser verdadeira (ficha) e saiu da notificação | #147 #149 |
+| 24, 25 | Faixa e quadro com um só rótulo de estado; estado desconhecido cai em "Em tramitação", não em "Protocolo"; `em_pauta` é "Em Plenário" | #150 |
+| 26 | Autor vereador ligado ao cadastro (`autor_id`) na nova proposição | #150 |
+| 39 | Filtro de espécie com as 8 espécies, de uma lista só | #150 |
+| 27 | Número do item por posição dentro da fase, só na apresentação (`lib/posicao-na-fase.ts`); `ordem` e a pauta congelada não mudam | #152 |
+| 28 | Fila da tribuna sem quem já falou (leitura; nenhum estado novo). Quem está com a palavra continua na fila e o aparte não consome inscrição | #152 |
+| 29 | Atos com nome no lugar do prefixo de UUID; sem nome, texto neutro | #152 |
+| 41 | Folha congelada com numeração contínua nas próximas versões; as já congeladas não se reescrevem | #152 |
+| 31 | Prazo de sanção ou veto informado ao gerar o autógrafo (opcional, sem padrão; o backend recusa prazo no passado) | #153 |
+| 32, 33, 45, 46 | Dashboard da Mesa: gráfico colorido por posição, cartões com link, plural de verdade, denominador na vitrine, atraso no anel | #151 |
+| 34 | Exemplo de protocolo do e-SIC no formato que o sistema emite | #149 |
+| 36 | Notificação ao cidadão com sigla e fase em palavras | #149 |
+| 37 | Acompanhamentos da cidadã levam à ficha da matéria | #149 |
+| 48 | Menu do portal com três destinos distintos | #149 |
+| 49 | URN crua trocada pelo título da norma com link | #149 |
+
+Fechados também os achados novos da primeira rodada: voto nominal de sessão secreta não sai mais no CSV de dados
+abertos nem no perfil público (#145: toda leitura pública de `voto_parlamentar` passa por
+`parlamentar/da-votacao-publica`, fail-closed, e um teste estrutural reprova a leitura que esquecer); lista de leis
+paginada, `tem-texto` na norma e `/votacoes?materia=` ligando a ficha às votações dela (#148).
+
+**Abertos (15):** linhas 3, 4, 6 (três achados), 16, 17, 18, 19, 21, 30, 40, 42, 43 e 47. A linha 1 segue de pé como
+resíduo (decisão do fundador).
+
+O que a segunda rodada deixou registrado:
+- Linha 30 (autógrafo, sanção e promulgação na linha do tempo da ficha) não foi feita: a rota da ficha não devolve
+  esses atos.
+- "Minha atuação" do vereador usa a rota do perfil público; ele também deixa de ver ali o próprio voto de sessão
+  secreta. Se deve ver, falta rota autenticada própria.
+- Voto de votação anulada em sessão pública continua saindo nas leituras públicas de voto por vereador (não mudou).
+- A faixa "Onde está a matéria" segue dependendo do nome do estado; nenhuma rota devolve ordem ou categoria das etapas
+  do rito. Na ficha pública, matéria aprovada aparece com todas as etapas concluídas, inclusive "Sanção".
+- Decisões embutidas, a confirmar: `em_pauta` conta como "Em Plenário" e não como "pronta para pauta" (a Central caiu
+  de 4 para 3 na demo); prazo do Executivo sem valor padrão; o backend recusa prazo no passado.
+- Não vistos em browser: o formulário do prazo do Executivo (a demo não tem matéria aprovada sem autógrafo), o telão e
+  a TV ao vivo, a folha em PDF com nome.
+
+**Depois das frentes de 05/10/2026 (primeira rodada): 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
 fechados em código e mergeados com o CI verde; as linhas ficam na tabela, com a numeração de antes, e valem como
 histórico.
 
@@ -2773,22 +2819,22 @@ O que essas frentes deixaram registrado:
     em curso agora" com o link para a outra;
   - a Trilha 3 abre o `/votar` com `?sessao=` explícito, então não depende mais da ordem.
   A vista `sli_sessao` segue sem o tipo da sessão: o rótulo da troca é a hora em que a sessão abriu.
-- **Desfecho da matéria (05/10/2026, linhas 18 e 30):**
-  - evento novo `proposicao.desfecho-registrado`, emitido na tx de cada ato: votação encerrada da matéria ou da
-    redação final (aprovada/rejeitada), autógrafo, resposta do Executivo, apreciação do veto e promulgação. A
-    publicação segue em `norma.publicada`, que agora também entra na linha do tempo;
-  - o portal guarda o último ato em `transparencia.materia.desfecho` (só avança: reentrega fora de ordem não volta
-    atrás) e a situação e a faixa vêm dele; sem desfecho, vêm do estado do rito como antes;
-  - a ficha interna lê os mesmos atos das tabelas donas (`legislativo/db/desfecho.clj`) e os mistura à aba
-    Tramitação; o chip da situação usa o último;
-  - os rótulos estão em dois lugares que mudam juntos: `transparencia/logic/desfecho.clj` (e o backfill SQL da
-    migration 20261005000210, conferido por `desfecho_da_materia_test`) e `lib/desfecho-vista.ts`;
-  - **limites:** matéria de dois turnos aparece "Aprovada em plenário" desde o 1º turno (cada votação encerrada é um
-    ato; o rito não diz quantos turnos faltam); a lista interna de proposições e o quadro de tramitação seguem lendo
-    só o estado do rito; votação corretiva (sem rota hoje) entraria como mais um ato.
-- **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
-  perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
-  o problema: confere a sessão.
+- **Desfecho da matéria (05/10/2026, linhas 18 e 30), em três frentes que se completam:**
+  - **ficha interna (#158):** a aba Tramitação lê `GET /proposicoes/:id/pos-aprovacao` e junta autógrafo, resposta do
+    Executivo, apreciação do veto e norma às transições;
+  - **ficha pública, a votação (#157, `83b19929`):** "Última votação em plenário: a matéria foi aprovada em …". O selo
+    de estado NÃO muda pela votação: numa matéria de dois turnos, "Aguardando pauta" depois do 1º turno é verdade;
+  - **portal, o resto do caminho (este PR):** evento novo `proposicao.desfecho-registrado`, emitido na tx de cada ato
+    (votação encerrada da matéria ou da redação final, autógrafo, resposta do Executivo, apreciação do veto,
+    promulgação); a publicação segue em `norma.publicada`. O portal projeta cada ato em "Por onde a matéria passou" e
+    guarda o último em `transparencia.materia.desfecho` (só avança). O selo muda só a partir do autógrafo ("Enviada
+    ao Executivo", "Sancionada", "Vetada", "Virou lei"). A migration 20261005000210 reconstrói os atos anteriores;
+  - os rótulos da linha do tempo pública estão em `transparencia/logic/desfecho.clj` e no backfill SQL da migration
+    (conferidos um contra o outro por `desfecho_da_materia_test`);
+  - **limites:** a lista interna de proposições e o quadro de tramitação seguem lendo só o estado do rito; votação
+    corretiva (sem rota hoje) entraria como mais um ato.
+- **Achado novo, fechado no #145:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados
+  abertos e o perfil público do vereador publicavam o voto, porque filtravam só pela modalidade.
 - **Achado fechado (05/10/2026, decisão do Daouda "A e B"):** ao reconceder acesso a quem já tem conta, o convite saía
   para o e-mail já cadastrado. Agora:
   - **A:** se a pessoa nunca entrou (sem `primeiro_acesso_em` na Casa e sem credencial no Keycloak), o e-mail informado
@@ -2804,8 +2850,8 @@ O que essas frentes deixaram registrado:
 - Decisões embutidas, a confirmar: a matéria é única por sessão em qualquer fase (linha 8); `admin_ente` não é
   revogável pela rota nova e a revogação com a Casa suspensa devolve 423 (linha 11); o partido aparece na lista pública
   de vereadores (linha 14).
-- Lacunas conhecidas das páginas novas do portal: a lista de leis corta em 200 sem paginar e o wire não diz se o
-  arquivo do texto existe; a ficha da matéria ainda não leva às votações dela.
+- Lacunas das páginas novas do portal (lista de leis sem paginar, wire sem dizer se há texto, ficha sem levar às
+  votações): fechadas no #148.
 
 | # | Achado | Gravidade | Evidência | Só código? |
 |---|---|---|---|---|
@@ -2826,7 +2872,7 @@ O que essas frentes deixaram registrado:
 | 15 | Portal sem página de leis/normas (o backend tem as rotas) | alto | `transparencia/diplomat/http/in.clj:233-241` | sim |
 | 16 | Responder um pedido não notifica o cidadão | alto | `participacao/events/prazo.clj` | espera SMTP/push |
 | 17 | `secretario` não é papel concedível pela tela | alto | `identidade/wire/in/acesso.clj:7` | decisão do fundador |
-| 18 | ~~Matéria aprovada em plenário segue "Aguardando pauta" no portal: encerrar a votação não move o rito e o portal só lê o `estado` (a ficha interna já lê o ato, `aprovada`)~~ **fechado em 05/10/2026:** cada ato depois do plenário emite `proposicao.desfecho-registrado`; o portal guarda o último (`transparencia.materia.desfecho`) e a situação vem dele ("Aprovada em plenário", "Virou lei"). O estado do rito segue intocado: movê-lo continua decisão do fundador | alto | `legislativo/components/repositorio.clj:938-956`; `legislativo/controllers.clj:373` (único chamador de `transicionar!`); `transparencia/db/materia.clj:15` | parte; o portal ler o ato é código, mover o estado é decisão do fundador |
+| 18 | ~~Matéria aprovada em plenário segue "Aguardando pauta" no portal: encerrar a votação não move o rito e o portal só lê o `estado` (a ficha interna já lê o ato, `aprovada`)~~ **fechado em 05/10/2026:** a ficha pública diz a última votação em plenário (#157) e, a partir do autógrafo, o selo vem do último ato (`proposicao.desfecho-registrado` → `transparencia.materia.desfecho`: "Sancionada", "Virou lei"). O estado do rito segue intocado: movê-lo continua decisão do fundador | alto | `legislativo/components/repositorio.clj:938-956`; `legislativo/controllers.clj:373` (único chamador de `transicionar!`); `transparencia/db/materia.clj:15` | parte; o portal ler o ato é código, mover o estado é decisão do fundador |
 | 19 | A obrigação de compliance não conhece nenhuma matéria: só nasce de competência (SIM, metas fiscais) ou de prestação de contas | alto | `gatilho_compliance.clj:85-86` e `:229-237` | decisão do fundador (quais prazos por matéria) |
 | 20 | Não existe tramitação pública: o portal guarda só o `estado`, sem histórico de movimentações | alto | `transparencia/diplomat/http/in.clj:220-253` (nenhuma rota de histórico); `transparencia/db/materia.clj:44-64` | sim |
 | 21 | Nenhum item permanente do art. 8º §1º da LAI no portal (estrutura, competências, endereço, horário, perguntas frequentes) | alto | `(publico)/navegacao-civica.tsx:23-62` (só cartões; "Carta de Serviços" em breve) | parte; o conteúdo vem da Casa |
@@ -2838,7 +2884,7 @@ O que essas frentes deixaram registrado:
 | 27 | O número do item na pauta é um só por sessão, não por fase: o primeiro item lido aparece como "item 5" | médio | `sessoes/db/pauta.clj:~113` (`proxima-ordem` sem fase); `sessoes/[id]/conduzir/painel-votacao.tsx:240`; `sessoes/[id]/tv/page.tsx:330` | sim |
 | 28 | A fila da tribuna nunca esvazia: quem já falou segue inscrito, inclusive com a palavra | médio | `sessoes/logic.clj:1060` (só `desistencia` é terminal); `sessoes/db/tribuna.clj:185-194` (iniciar a fala não consome a inscrição); `sessoes/controllers.clj:1178`; `lib/plenario-reducer.ts:720-733` | sim |
 | 29 | Atos humanos aparecem como prefixo de UUID ("Chamada · dbf001fc", "Conduzida por (id)") | médio | `sessoes/[id]/chamada/page.tsx:960`; `sessoes/components/serializador_folha.clj:358` | sim |
-| 30 | ~~Autógrafo e sanção não aparecem na linha do tempo da matéria~~ **fechado em 05/10/2026:** aprovação, autógrafo, sanção/veto, apreciação do veto, promulgação e publicação entram na linha do tempo da ficha interna (`atos` da ficha) e na pública ("Por onde a matéria passou"); a migration 20261005000210 reconstrói os atos anteriores | médio | `lib/ficha-materia-vista.ts:72-92` (só o histórico de tramitação) | sim |
+| 30 | ~~Autógrafo e sanção não aparecem na linha do tempo da matéria~~ **fechado em 05/10/2026:** na ficha interna pela rota de pós-aprovação (#158); na pública, aprovação, autógrafo, sanção/veto, apreciação do veto, promulgação e publicação entram em "Por onde a matéria passou" (a migration 20261005000210 reconstrói os atos anteriores) | médio | `lib/ficha-materia-vista.ts:72-92` (só o histórico de tramitação) | sim |
 | 31 | O prazo de resposta do Executivo não pode ser informado: a tela gera o autógrafo sem prazo | médio | `pos-aprovacao/conteudo-pos-aprovacao.tsx:77` (`gerar({})`); `legislativo/wire/in/pos_aprovacao.clj:19-23` (o backend aceita); `pos-aprovacao/card-autografo.tsx:23-25` | sim; o prazo por LOM é `[GAP]`, a Casa digita |
 | 32 | O gráfico "Carga por estágio" sai cinza: 5 chaves de cor, e uma (`em_comissao`) nem existe | médio | `paineis/mesa/pipeline-legislativo.tsx:20-26` | sim |
 | 33 | Nada é clicável no Dashboard da Mesa: nenhum link nem botão nos cartões | médio | `paineis/mesa/*.tsx` (nenhum `<a>`, `<button>` ou `Link`) | sim |

@@ -1,3 +1,9 @@
 /* "Votações desta matéria" na ficha pública da matéria — tokens do portal; o botão é o `btn btn-contorno` do chassi. */
-.vm .vm-texto { margin: 0 0 1rem; max-width: 62ch; font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; }
+.vm .vm-texto { margin: 0 0 1rem; max-width: 62ch; color: var(--texto-2); line-height: 1.55; }
 .vm .btn { min-height: 44px; }
+
+/* O ato do plenário no topo da ficha: mesma caixa do "Virou lei." (`.norma-publicada`), em tom neutro — é um fato
+   sobre a votação, não o fim do rito. */
+.ultima-votacao { display: flex; align-items: flex-start; gap: 0.7rem; margin: 1.2rem 0 0; padding: 0.9rem 1.15rem; max-width: 72ch; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); color: var(--texto-2); line-height: 1.55; }
+.ultima-votacao b { color: var(--texto); font-weight: 600; }
+.ultima-votacao a { color: var(--marca); white-space: nowrap; }

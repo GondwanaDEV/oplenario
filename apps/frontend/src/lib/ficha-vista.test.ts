@@ -50,11 +50,9 @@ describe("derivarFicha", () => {
     ]);
   });
 
-  it("matéria aprovada no plenário deixa de dizer 'Aguardando pauta' (docs/16 linha 18)", () => {
+  it("matéria que já foi ao Executivo deixa de dizer 'Aguardando pauta' (docs/16 linha 18)", () => {
     expect(derivarFicha(ficha({ estado: "aguardando_pauta" }), null).situacao).toBe("Aguardando pauta");
-    expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "aprovada" }), null).situacao).toBe(
-      "Aprovada em plenário",
-    );
+    expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "sancionado" }), null).situacao).toBe("Sancionada");
     expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "publicada" }), null).situacao).toBe("Virou lei");
   });
 

@@ -2,8 +2,9 @@
   "Os atos da materia DEPOIS do plenario, lidos das tabelas donas de cada um (docs/16, retriagem linhas 18 e 30):
   a votacao que a aprovou ou rejeitou, o autografo enviado ao Executivo, a resposta do Executivo, a apreciacao do
   veto e a norma (promulgacao e publicacao). Nenhum desses atos move o `estado` do rito, entao a ficha que so' le'
-  o historico de tramitacao parava em 'Aguardando pauta'. `atos-da-proposicao` alimenta a ficha interna; os
-  `ato-de-*` montam o payload de `proposicao.desfecho-registrado` NA tx do proprio ato (o instante e' o gravado).
+  o historico de tramitacao parava em 'Aguardando pauta'. Daqui sai o payload de `proposicao.desfecho-registrado`,
+  montado NA tx do proprio ato (o instante e' o gravado), que o portal projeta. A ficha interna le' os mesmos atos
+  pela rota de pos-aprovacao (PR #158), nao por aqui.
 
   So' votacao ENCERRADA de objeto que carrega a propria materia (proposicao/redacao final) e EFETIVADA (nao a de
   lote de importacao em staging). Votacao de sessao secreta entra: o RESULTADO e' publico, so' o voto e' secreto."

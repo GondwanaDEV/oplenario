@@ -62,19 +62,6 @@
    [:voto-relator {:optional true} [:maybe :string]]
    [:estado :string]])
 
-(def AtoDepoisDoPlenarioOut
-  "Um ato da materia depois do plenario (docs/16, retriagem linha 30): a votacao que a aprovou/rejeitou, o autografo,
-  a resposta do Executivo, a apreciacao do veto, a promulgacao e a publicacao. `ato` e' vocabulario fechado
-  (events.proposicao/atos-de-desfecho + 'publicada'), mas fica :string aqui pela mesma disciplina do ns."
-  [:map {:closed true}
-   [:ato :string]
-   [:ocorrido-em :string]
-   [:redacao-final {:optional true} :boolean]
-   [:veto-tipo {:optional true} :string]
-   [:tipo-norma {:optional true} :string]
-   [:numero {:optional true} :int]
-   [:ano {:optional true} :int]])
-
 (def FichaMateriaOut
   "GET /legislativo/proposicoes/:id/ficha — o envelope agregado (Onda B Slice 3). `:proposicao` reusa
   ProposicaoDetalheOut (o controller ja' gateia nil -> 404 na borda antes de chegar aqui; a wire/out so'
@@ -99,6 +86,4 @@
    [:emendas-truncado :boolean]
    [:pareceres [:sequential ParecerResumoOut]]
    [:pareceres-truncado :boolean]
-   [:coautores [:sequential CoautorOut]]
-   ;; os atos depois do plenario, do mais antigo ao mais novo (vazio = a materia ainda nao foi a votos)
-   [:atos [:sequential AtoDepoisDoPlenarioOut]]])
+   [:coautores [:sequential CoautorOut]]])

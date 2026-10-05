@@ -17,8 +17,9 @@
 import Link from "next/link";
 import { useAuth, usePapeis } from "@/lib/auth";
 import { useFichaMateria } from "@/lib/use-ficha-materia";
+import { usePosAprovacao } from "@/lib/use-pos-aprovacao";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { derivarDadosMateria, desfechoDaFicha } from "@/lib/ficha-materia-vista";
+import { derivarDadosMateria } from "@/lib/ficha-materia-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { FichaCabecalho } from "./ficha-cabecalho";
@@ -34,6 +35,9 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
   // jurídico" também é dela.
   const { papeis } = usePapeis();
   const { dados: ficha, estado, recarregar } = useFichaMateria(token, id);
+  // os atos depois da aprovação (autógrafo, sanção/veto, norma) na linha do tempo; se a leitura falhar, a
+  // ficha segue só com as transições
+  const { dados: posAprovacao } = usePosAprovacao(token, id);
 
   if (estado === "carregando") {
     return (
@@ -74,10 +78,10 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
           <b>{numero}</b>
         </nav>
 
-        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} desfecho={desfechoDaFicha(ficha)} />
+        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} />
 
         <div className="corpo">
-          <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} onTramitou={recarregar} />
+          <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} posAprovacao={posAprovacao} onTramitou={recarregar} />
           <aside className="rail" aria-labelledby="rail-titulo">
             <h2 id="rail-titulo" className="sr-only">
               Dados e ações da matéria

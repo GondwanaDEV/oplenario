@@ -78,8 +78,8 @@ export function rotularEstado(estado: string): string {
 
 export function derivarTramitacao(
   estado: string,
-  // o último ato depois do plenário (aprovada, sancionado, publicada…): quando existe, é ele que diz onde a matéria
-  // está — o rito para no plenário e não sabe da votação, do autógrafo nem da lei (docs/16, retriagem linha 18).
+  // o último ato depois do plenário (portal, docs/16 linha 18): a partir do autógrafo é ele que diz onde a matéria
+  // está — o rito não sabe do Executivo nem da lei. Só a votação não muda o selo (ver desfecho-vista.ts).
   desfecho?: string | null,
 ): {
   estagios: EstagioTramitacao[];

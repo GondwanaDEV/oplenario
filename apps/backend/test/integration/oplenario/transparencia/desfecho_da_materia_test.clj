@@ -3,7 +3,7 @@
   o `estado` do rito: antes, a materia aprovada, sancionada e publicada como lei aparecia no portal como 'Aguardando
   pauta', e a linha do tempo publica e a ficha interna paravam no plenario. Prova a cadeia inteira pelo Repo real do
   legislativo (cada ato emite `proposicao.desfecho-registrado`; a publicacao segue em `norma.publicada`), o relay e a
-  projecao do portal; a ficha interna lendo os mesmos atos; a ordem que nao volta atras; e o backfill da migration
+  projecao do portal; a ordem que nao volta atras; e o backfill da migration
   reconstruindo EXATAMENTE o que o caminho por evento projeta."
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
@@ -90,11 +90,6 @@
     (is (= ["Protocolada" "Aprovada em plenário" "Autógrafo nº 1/2026 enviado ao Executivo" "Vetada pelo Executivo"
             "Veto derrubado pela Câmara" "Promulgação: Lei nº 1/2026" "Publicação: Lei nº 1/2026"]
            (etapas ente pid)))
-    (testing "a ficha interna le' os mesmos atos, na mesma ordem"
-      (let [{:keys [atos]} (leg/ficha-completa-da-proposicao *leg* ente pid)]
-        (is (= ["aprovada" "autografo_enviado" "vetado" "veto_derrubado" "promulgada" "publicada"] (mapv :ato atos)))
-        (is (= "total" (:veto-tipo (nth atos 2))))
-        (is (= {:tipo-norma "lei" :numero 1 :ano 2026} (select-keys (last atos) [:tipo-norma :numero :ano])))))
     (testing "drenar de novo nao duplica nada"
       (drenar!)
       (is (= 7 (count (etapas ente pid)))))))
@@ -118,7 +113,7 @@
     (votar! ente pid "sim" :objeto-tipo "requerimento")
     (drenar!)
     (is (nil? (:desfecho (materia ente pid))) "votacao de requerimento com o mesmo uuid nao aprova a materia")
-    (is (= [] (:atos (leg/ficha-completa-da-proposicao *leg* ente pid))))))
+    (is (= ["Protocolada"] (etapas ente pid)))))
 
 (deftest ato-mais-antigo-reentregue-nao-volta-atras
   (let [ente (random-uuid) pid (protocolar! ente)]
