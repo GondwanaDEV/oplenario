@@ -4,12 +4,18 @@
   APPEND-ONLY (o trigger congela; correcao = nova votacao); `encerrar!` apura (votos OU votos_secretos
   conforme a modalidade), computa o resultado pela aritmetica EXATA do quorum (logic) e grava o snapshot
   (CAS por lock_version). `anular!` leva a 'anulada' (terminal) — usado na correcao (nova votacao aponta a
-  corrigida via votacao_corrige_id)."
+  corrigida via votacao_corrige_id).
+
+  A materia de DOIS TURNOS (a emenda a Lei Organica, CF art. 29): `aprovacao-vigente` le os turnos e o intersticio da
+  regra da materia (`db/regra-votacao`, dado) e faz a conta em `logic/turnos` sobre `votacoes-da-materia`. O instante
+  da abertura que o intersticio mede e' o `efetivado_em` gravado por `abrir!` (`:aberta-em`, o relogio da borda)."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
+            [oplenario.legislativo.db.regra-votacao :as regra-votacao]
             [oplenario.legislativo.db.texto-versao :as texto]
-            [oplenario.legislativo.logic :as logic]))
+            [oplenario.legislativo.logic :as logic]
+            [oplenario.legislativo.logic.turnos :as turnos]))
 
 (set! *warn-on-reflection* true)
 
@@ -48,9 +54,13 @@
   MATERIA (objeto), nao sobre o item (§22.6 eixo B). RETURNING `lock_version` (ledger de prontidao Fase
   8 achado #2): esta e' a UNICA leitura que existe da votacao recem-aberta — nao ha' rota GET de
   detalhe — entao o recibo de abertura tem de carregar o token de CAS que `POST .../encerramento`
-  exige, ou o encerramento fica impossivel de montar so' pela API. Devolve {:id :lock-version}."
+  exige, ou o encerramento fica impossivel de montar so' pela API. Devolve {:id :lock-version}.
+
+  `aberta-em` (Instant, opcional) e' o instante da ABERTURA, gravado em `efetivado_em`: o relogio da borda, o MESMO
+  que a conferencia do turno usou (`db/regra-votacao/conferir-turno!`) — e' dele que o intersticio da materia de dois
+  turnos e' medido de volta em `aprovacao-vigente`. Sem ele, `now()` do banco (o comportamento de sempre)."
   [tx {:keys [id ente-id objeto-tipo objeto-id modalidade quorum-tipo votacao-corrige-id
-              sessao-id pauta-item-id created-by]}]
+              sessao-id pauta-item-id created-by aberta-em]}]
   (let [;; T3-A2 (mig 0075) — CONGELA a versao de texto posta em deliberacao. Resolvida AQUI, server-side,
         ;; dentro da mesma tx do INSERT: nunca vem do corpo do request (mesma disciplina de
         ;; `destinatario-texto` do autografo) e nao ha' janela entre resolver e gravar. O instante certo e' a
@@ -70,7 +80,7 @@
                                     :modalidade modalidade :quorum_tipo quorum-tipo :estado "aberta"
                                     :votacao_corrige_id votacao-corrige-id :sessao_id sessao-id
                                     :pauta_item_id pauta-item-id :texto_versao_id texto-versao-id
-                                    :created_by created-by :efetivado_em [:now]}]
+                                    :created_by created-by :efetivado_em (or aberta-em [:now])}]
                           :returning [:lock_version]})))]
     {:id id :lock-version (:lock-version r)}))
 
@@ -145,12 +155,40 @@
       (sql/format {:select [[[:count :*] :contagem]] :from [:legislativo.votos_secretos]
                    :where [:and [:= :ente_id ente-id] [:= :votacao_id votacao-id]]})))))
 
-(defn aprovacao-vigente
-  "T3-A2 — a votacao que APROVOU `proposicao-id`, ou nil. Devolve {:votacao-id :texto-versao-id}; o
+(defn agora-do-banco
+  "O `now()` da tx (o instante que um `[:now]` gravaria nela). Para quem chama `abrir!` sem relogio da borda."
+  [tx]
+  (:agora (comum/linha->kebab (jdbc/execute-one! tx ["SELECT now() AS agora"]))))
+
+(defn votacoes-da-materia
+  "As votacoes ENCERRADAS de `proposicao-id` que contam para o turno — dos `objetos-que-carregam-a-materia`, nao
+  corrigidas por outra (mesmas exclusoes de `aprovacao-vigente`) —, do encerramento mais antigo ao mais novo, na forma
+  que `logic/turnos` le: {:id :objeto-tipo :resultado :texto-versao-id :aberta-em :encerrada-em}. `aberta-em` e' o
+  `efetivado_em` (ver `abrir!`); `encerrada-em`, o `atualizado_em` que `encerrar!` grava e o trigger congela."
+  [tx ente-id proposicao-id]
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:v.id :v.objeto_tipo :v.resultado :v.texto_versao_id
+                           [:v.efetivado_em :aberta_em] [:v.atualizado_em :encerrada_em]]
+                  :from [[:legislativo.votacoes :v]]
+                  :where [:and [:= :v.ente_id ente-id]
+                               [:in :v.objeto_tipo objetos-que-carregam-a-materia-sql]
+                               [:= :v.objeto_id proposicao-id]
+                               [:= :v.estado "encerrada"]
+                               [:not [:exists {:select [[[:inline 1]]]
+                                               :from [[:legislativo.votacoes :c]]
+                                               :where [:and [:= :c.ente_id ente-id]
+                                                            [:= :c.votacao_corrige_id :v.id]]}]]]
+                  :order-by [[:v.atualizado_em :asc] [:v.id :asc]]}))))
+
+(defn- aprovacao-de-um-turno
+  "T3-A2 — a votacao que APROVOU `proposicao-id`, ou nil (materia sem regra de turnos, ou com 1 turno: ver
+  `aprovacao-vigente` logo abaixo, que escolhe o caminho). Devolve {:votacao-id :texto-versao-id}; o
   `:texto-versao-id` e' a versao que estava na mesa quando a votacao ABRIU (congelada por `abrir!`, mig
   0075) e pode ser nil (votacao anterior a' migration, ou materia que foi a plenario sem texto vigente).
 
-  E' desta fn que sai `aprovada-em-votacao?` — mesma consulta, mesmas exclusoes, uma so' fonte de verdade.
+  E' desta fn (por `aprovacao-vigente`) que sai `aprovada-em-votacao?` — mesma consulta, mesmas exclusoes, uma so'
+  fonte de verdade.
   A separacao existe porque as duas perguntas do sistema sao distintas e nao devem colapsar:
   'a Casa aprovou?' (o read-model, que gateia botao) e 'entao QUAL texto ela aprovou?' (o autografo, que
   precisa do conteudo). Quem precisa do conteudo FALHA FECHADA quando `:texto-versao-id` e' nil — nao se
@@ -198,6 +236,25 @@
                         :limit 1}))
           comum/linha->kebab))
 
+(defn aprovacao-vigente
+  "A votacao que APROVOU `proposicao-id`, ou nil — {:votacao-id :texto-versao-id}. E' desta fn que sai
+  `aprovada-em-votacao?` (a fonte unica de 'a Casa aprovou?'). Dois caminhos, pela regra de votacao da materia
+  (`db/regra-votacao/regra-da-materia`, DADO, Inv.4):
+
+  - regra com `turnos` > 1 (a emenda a Lei Organica, CF art. 29): aprovada so' com TODOS os turnos aprovados, cada um
+    aberto no dia civil da Casa permitido pelo `intersticio_dias` contado do encerramento do anterior, e nenhuma
+    rejeicao de turno. A conta e' `logic/turnos/aprovacao` sobre `votacoes-da-materia` (as mesmas exclusoes da
+    consulta de um turno); o texto e' o do ultimo turno, ou o da redacao final aprovada depois dele. A redacao final
+    sozinha NAO aprova materia de turnos (o limite I-1 de `aprovada-em-votacao?` nao vale para ela).
+  - materia sem regra, ou com 1 turno: `aprovacao-de-um-turno`, a consulta de sempre, INTOCADA — a semantica de quem
+    vota em um turno nao mudou."
+  [tx ente-id proposicao-id]
+  (let [regra (regra-votacao/regra-da-materia tx ente-id proposicao-id)]
+    (if (< 1 (or (:turnos regra) 1))
+      (some-> (turnos/aprovacao regra (votacoes-da-materia tx ente-id proposicao-id))
+              (as-> v {:votacao-id (:id v) :texto-versao-id (:texto-versao-id v)}))
+      (aprovacao-de-um-turno tx ente-id proposicao-id))))
+
 (defn aprovada-em-votacao?
   "T3-A (guarda-autografo-votacao) — a proposicao `proposicao-id` foi APROVADA pela Casa? Devolve booleano.
 
@@ -219,7 +276,11 @@
 
   LIMITES CONHECIDOS, todos declarados (a lista cresceu com a revisao adversarial ecc — o que este
   predicado NAO responde e' tao importante quanto o que responde):
-  - 'houve UMA aprovacao', nao 'o rito se completou': dois turnos e redacao final passam com um turno so'.
+  - 'houve UMA aprovacao', nao 'o rito se completou': a redacao final passa com um turno so'; os DOIS TURNOS tambem,
+    salvo onde sao regra da materia. (RESOLVIDO para a emenda a Lei Organica, CF art. 29) quando a regra de votacao
+    da materia (`legislativo.regra_votacao_materia`) tem `turnos` = 2, so' a segunda aprovacao, aberta depois do
+    `intersticio_dias`, aprova; uma rejeicao de turno impede — ver `aprovacao-vigente`. Turnos que so' o Regimento da
+    Casa pede (projeto de lei em dois turnos em alguma Casa) seguem fora: nao ha' regra por Casa ([GAP]).
   - votacao 'simbolica' (aclamacao) tem o `resultado` vindo do CORPO do request (ver `encerrar!` abaixo) —
     entao uma aprovacao com ZERO votos registrados satisfaz este predicado. Idem 'nominal' com um voto so'
     em maioria_simples, e com `base-membros` do corpo (carry sec MEDIUM-1).

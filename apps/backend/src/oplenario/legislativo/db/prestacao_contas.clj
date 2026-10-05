@@ -1,17 +1,13 @@
 (ns oplenario.legislativo.db.prestacao-contas
   "Persistencia do JULGAMENTO DAS CONTAS (ADR-0021 Parte B, mig 20261003000183): a prestacao, os documentos (insert-only),
-  o parametro de prazos da Casa e a regra de votacao por classe de materia. Funcoes sobre a `tx` do tenant (RLS isola;
-  a regra e' global, sem ente). O estado da prestacao NAO e' coluna (logic/contas/estado); aqui so' se grava o que
+  e o parametro de prazos da Casa. Funcoes sobre a `tx` do tenant (RLS isola). O estado da prestacao NAO e' coluna (logic/contas/estado); aqui so' se grava o que
   aconteceu: o registro (com o prazo de julgamento congelado), a notificacao (com o prazo de defesa congelado), a
-  defesa juntada e — so' pelo encerramento da votacao do PDL — o resultado.
-
-  Importa motor/api (modulo->motor, permitido): a regra de votacao das contas e' uma guarda DSL avaliada pelo MESMO
-  avaliador da tramitacao (disciplina 5), dentro da tx que abre a votacao."
+  defesa juntada e — so' pelo encerramento da votacao do PDL — o resultado. A regra de votacao das contas mora em
+  `db/regra_votacao` (junto com a da emenda a LOM)."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
-            [oplenario.legislativo.logic.contas :as contas]
-            [oplenario.motor.api :as motor]))
+            [oplenario.legislativo.logic.contas :as contas]))
 
 (set! *warn-on-reflection* true)
 
@@ -152,33 +148,6 @@
                                    [:= :tipo [:inline "governo_prefeito"]] [:= :resultado nil]]
                            :returning [:id]}))
             comum/linha->kebab)))
-
-(defn regra
-  "A regra de votacao da classe de materia `chave` ({:chave :guarda :referencia}), ou nil."
-  [tx chave]
-  (comum/linha->kebab
-   (jdbc/execute-one! tx (sql/format {:select [:chave :guarda :referencia] :from [:legislativo.regra_votacao_materia]
-                                      :where [:= :chave chave]}))))
-
-(defn conferir-regra-de-votacao!
-  "Ao ABRIR a votacao (na tx do INSERT): se o objeto e' o PDL de uma prestacao do Prefeito, a abertura tem de passar na
-  guarda da regra `contas_prefeito` (CF art. 31 §2), avaliada pelo MESMO motor da tramitacao (`motor/guarda-dsl`) sobre
-  {\"votacao\" {:quorum_tipo :modalidade}}. Nao passou -> `:conflito/regra-de-votacao` (a borda responde 422 com a
-  regra em palavras). Regra ausente = fail-closed (a mesma recusa, com a causa). Outra materia: no-op."
-  [tx ente-id registro {:keys [objeto-tipo objeto-id quorum-tipo modalidade]}]
-  (when (= "proposicao" objeto-tipo)
-    (when-let [p (da-proposicao tx ente-id objeto-id)]
-      (when (contas/governo? p)
-        (let [r (regra tx contas/chave-da-regra)
-              recusa (fn [motivo]
-                       (throw (ex-info motivo {:tipo :conflito/regra-de-votacao :regra contas/chave-da-regra
-                                               :referencia (:referencia r)})))]
-          (when-not r
-            (recusa "A regra de votação das contas do Prefeito não está configurada."))
-          (when-not ((motor/guarda-dsl {:registro registro :tx tx :expr (:guarda r) :agora nil :ente-id ente-id})
-                     {"votacao" {:quorum_tipo quorum-tipo :modalidade modalidade}})
-            (recusa (str "O julgamento das contas do Prefeito se vota em votação nominal e só rejeita o parecer do "
-                         "TCE com 2/3 dos membros da Câmara (" (:referencia r) ")."))))))))
 
 ;; ---------------- parametro da Casa ----------------
 

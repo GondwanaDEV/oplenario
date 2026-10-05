@@ -156,3 +156,26 @@ export function regraDaVotacaoDeContas(quorum: QuorumContas | null | undefined):
     nota: "Matéria de contas: quórum de 2/3 dos membros e votação nominal, fixados pela CF art. 31 §2. Sem os 2/3, o parecer do TCE prevalece.",
   };
 }
+
+// ---- emenda à Lei Orgânica (CF art. 29) ----
+//
+// A PELOM só é aprovada com 2/3 dos MEMBROS, em dois turnos com interstício de dez dias. A regra é dado no backend
+// (`regra_votacao_materia`, chave `emenda_lom`: 422 ao abrir com outro quórum); aqui o painel só trava o quórum quando a
+// pauta traz a espécie da matéria. A modalidade fica com a Mesa (a CF não a fixa; é cada LOM). Sem o resumo da matéria
+// na pauta, o seletor fica livre e o 422 do backend diz a regra.
+
+export const ESPECIE_EMENDA_LOM = "proposta_emenda_lom";
+export const QUORUM_DE_EMENDA_LOM: QuorumTipo = "maioria_qualificada_2_3";
+
+export interface RegraVotacaoPelaEspecie {
+  quorumTipo: QuorumTipo;
+  nota: string;
+}
+
+export function regraDaVotacaoPelaEspecie(especie: string | null | undefined): RegraVotacaoPelaEspecie | null {
+  if (especie !== ESPECIE_EMENDA_LOM) return null;
+  return {
+    quorumTipo: QUORUM_DE_EMENDA_LOM,
+    nota: "Emenda à Lei Orgânica: só é aprovada com 2/3 dos membros da Câmara, em dois turnos com pelo menos 10 dias entre eles (CF art. 29).",
+  };
+}

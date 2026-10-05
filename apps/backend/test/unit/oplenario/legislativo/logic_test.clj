@@ -43,6 +43,8 @@
   (testing "formato humano PL 042/2026 (zero-pad 3, template default por sigla)"
     (is (= "PL 042/2026" (logic/numero-exibicao {:tipo "projeto_lei" :ano 2026 :sequencial 42})))
     (is (= "PDL 001/2026" (logic/numero-exibicao {:tipo "projeto_decreto_legislativo" :ano 2026 :sequencial 1})))
+    (is (= "PELOM 001/2026" (logic/numero-exibicao {:tipo "proposta_emenda_lom" :ano 2026 :sequencial 1}))
+        "a mesma sigla do portal e da notificacao (antes PELO)")
     (is (= "REQ 1234/2026" (logic/numero-exibicao {:tipo "requerimento" :ano 2026 :sequencial 1234}))
         "sequencial >= 1000 nao trunca o pad"))
 

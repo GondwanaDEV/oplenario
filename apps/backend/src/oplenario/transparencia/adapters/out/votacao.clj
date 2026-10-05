@@ -27,17 +27,19 @@
 
 (defn- campos [v]
   (let [s (:sessao v) mt (:materia v)]
-    {:votacao-id (->str (:id v))
-     :encerrada-em (->str (:encerrada-em v))
-     :sessao {:sessao-id (->str (:sessao-id s)) :tipo-sessao (:tipo-sessao s)
-              :numero-sequencial (:numero-sequencial s) :data (->str (:data s))}
-     :objeto-tipo (:objeto-tipo v)
-     :materia (when mt {:proposicao-id (->str (:proposicao-id mt)) :tipo (:tipo mt) :sequencial (:sequencial mt)
-                        :ano (:ano mt) :ementa (:ementa mt)})
-     :modalidade (:modalidade v)
-     :quorum-tipo (:quorum-tipo v)
-     :resultado (:resultado v)
-     :placar (placar v)}))
+    (cond-> {:votacao-id (->str (:id v))
+             :encerrada-em (->str (:encerrada-em v))
+             :sessao {:sessao-id (->str (:sessao-id s)) :tipo-sessao (:tipo-sessao s)
+                      :numero-sequencial (:numero-sequencial s) :data (->str (:data s))}
+             :objeto-tipo (:objeto-tipo v)
+             :materia (when mt {:proposicao-id (->str (:proposicao-id mt)) :tipo (:tipo mt) :sequencial (:sequencial mt)
+                                :ano (:ano mt) :ementa (:ementa mt)})
+             :modalidade (:modalidade v)
+             :quorum-tipo (:quorum-tipo v)
+             :resultado (:resultado v)
+             :placar (placar v)}
+      ;; so' a votacao de turno (materia de dois turnos, a emenda a Lei Organica) leva o campo
+      (:turno v) (assoc :turno (:turno v)))))
 
 (defn lista->wire
   "{:votacoes :total :pagina :por-pagina} -> VotacoesPublicasOut."

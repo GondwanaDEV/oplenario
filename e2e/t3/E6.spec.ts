@@ -46,7 +46,7 @@ test.describe.serial("E6 — Votar (vereador)", () => {
   let votoIdPresidente: string | undefined;
 
   test.beforeAll(async () => {
-    // 1) abre uma votação NOMINAL fresca sobre a mesma proposição do mapa (a Lei Orgânica da Mesa) — corpo
+    // 1) abre uma votação NOMINAL fresca sobre a mesma proposição do mapa (a que o preparar.mjs escolheu; nunca a emenda à Lei Orgânica, que só abre com 2/3) — corpo
     // idêntico ao de e6.reabrirVotacao em t3-ids.json. Isto NÃO reusa a votação 28585fc7 do preparar.mjs:
     // uma votação por vez no plenário (plenario-reducer.ts:508 "abertura SUBSTITUI o placar anterior"), a
     // nova simplesmente vira a corrente — sem conflito de unicidade no domínio (votacao/abrir! só insere).
