@@ -23,13 +23,14 @@ import { useRegistrarResposta } from "@/lib/use-registrar-resposta";
 import { useApreciarVeto } from "@/lib/use-apreciar-veto";
 import { usePromulgarNorma, usePublicarNorma } from "@/lib/use-norma";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { derivarPipeline, fraseDaNorma, promulgavel } from "@/lib/pos-aprovacao-vista";
+import { derivarPipeline, fraseDaNorma, fraseErroGerarAutografo, promulgavel } from "@/lib/pos-aprovacao-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { PipelinePosAprovacao } from "./pipeline-pos-aprovacao";
 import { CardAutografo } from "./card-autografo";
 import { CardPrazoExecutivo } from "./card-prazo-executivo";
 import { CardNorma } from "./card-norma";
+import { FormGerarAutografo } from "./form-gerar-autografo";
 import { FormRegistrarRetorno, type ValoresRetorno } from "./form-registrar-retorno";
 import { FormApreciarVeto, type ValoresApreciacao } from "./form-apreciar-veto";
 import type { PosAprovacaoOut } from "@/lib/contrato-legislativo.gen";
@@ -65,21 +66,14 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
   const { promulgar, estado: estadoPromulgacao, erro: erroPromulgacao } = usePromulgarNorma(token, id);
   const { publicar, estado: estadoPublicacao, erro: erroPublicacao } = usePublicarNorma(token, norma?.id ?? null);
 
-  // Só a AÇÃO MAIS RECENTE mostra erro (mesma disciplina de expediente/page.tsx).
-  const erro =
-    ultimaAcao === "gerar"
-      ? erroGeracao
-      : ultimaAcao === "registrar"
-        ? erroRegistro
-        : ultimaAcao === "apreciar"
-          ? erroApreciacao
-          : null;
+  // Só a AÇÃO MAIS RECENTE mostra erro (mesma disciplina de expediente/page.tsx): cada form recebe o seu
+  // erro condicionado a `ultimaAcao`.
 
-  async function aoGerarAutografo() {
+  async function aoGerarAutografo(prazoRespostaEm: string | undefined) {
     setUltimaAcao("gerar");
     setMensagemStatus(null);
     try {
-      const resultado = await gerar({});
+      const resultado = await gerar(prazoRespostaEm ? { prazoRespostaEm } : {});
       setPosAprovacaoLocal(resultado);
       setMensagemStatus("Autógrafo gerado e enviado ao Executivo");
     } catch {
@@ -200,11 +194,6 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
             no MESMO render — sem esta região compartilhada, a confirmação de "Gerar autógrafo" nunca
             apareceria (ficaria presa dentro de um card que já deixou de existir). */}
         {mensagemStatus && ultimaAcao === "gerar" && <p role="status">{mensagemStatus}</p>}
-        {erro && ultimaAcao === "gerar" && !autografo && (
-          <p role="alert" className="form-erro">
-            {erro}
-          </p>
-        )}
 
         {/* A rota /pos-aprovacao/:id é navegável direto por URL para QUALQUER proposição — foi assim que
             o achado T3-A fabricou 4 autógrafos de matérias nunca votadas. `proposicao.aprovada` é o MESMO
@@ -216,16 +205,11 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
           <div className="card">
             <h2>Autógrafo</h2>
             <p>Nenhum autógrafo foi gerado ainda para esta matéria.</p>
-            <div className="acoes">
-              <button
-                type="button"
-                className="btn btn-primaria"
-                disabled={estadoGeracao === "enviando"}
-                onClick={aoGerarAutografo}
-              >
-                Gerar autógrafo e enviar ao Executivo
-              </button>
-            </div>
+            <FormGerarAutografo
+              aoGerar={aoGerarAutografo}
+              enviando={estadoGeracao === "enviando"}
+              erro={ultimaAcao === "gerar" && erroGeracao ? fraseErroGerarAutografo(erroGeracao) : null}
+            />
           </div>
         )}
 
@@ -257,7 +241,7 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
 
             <div className="grade">
               <div>
-                <CardAutografo autografo={autografo} />
+                <CardAutografo autografo={autografo} aguardandoResposta={tramitacaoExecutiva?.estado === "aguardando"} />
                 {(norma || promulgavel(tramitacaoExecutiva?.estado)) && (
                   <CardNorma
                     norma={norma}
