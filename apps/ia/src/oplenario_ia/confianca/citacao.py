@@ -3,6 +3,12 @@
 O modelo cita com a marca `[[<id da fonte> | <trecho literal>]]`. A conferência é determinística, sem outro modelo:
 a fonte citada precisa ter sido LIDA nesta execução (uma peça com aquele `id` foi enviada) e o trecho precisa estar
 naquela fonte. Citação inventada, fonte que não foi lida e trecho que a fonte não diz ficam marcados — nunca somem.
+
+Fonte ESTRUTURADA (um fato do core, como o placar de uma votação) pede mais, e sem interpretar prosa: o PARÁGRAFO
+que a cita (sem as marcas de citação, que o texto limpo da ata também tira) precisa conter uma frase canônica da fonte
+e não pode sobrar nenhum sinal numérico fora das frases canônicas e dos identificadores dela (`numeros.py`). Duas
+fontes estruturadas citadas no mesmo parágrafo: nenhuma confere. Reprovado sai `trecho_nao_encontrado`, igual ao trecho
+que a fonte não diz — o dado do sistema é o que vale.
 """
 
 from __future__ import annotations
@@ -12,6 +18,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from oplenario_ia.confianca.numeros import divergencias
 from oplenario_ia.governanca.proveniencia import Fonte
 
 MARCA = re.compile(r"\[\[\s*([^|\]\s\"]+)\s*(?:\|\s*(.*?)\s*)?\]\]", re.DOTALL)
@@ -43,6 +50,17 @@ def _normalizar(s: str) -> str:
     return " ".join(s.strip().strip(_ASPAS).casefold().split())
 
 
+def _paragrafo_confere(texto: str, inicio: int, fonte: Fonte, por_id: dict[str, FonteLida]) -> bool:
+    """A regra da fonte estruturada, no parágrafo (bloco separado por linha em branco) que contém a marca."""
+    bloco = next((b.group() for b in _BLOCO.finditer(texto) if b.start() <= inicio < b.end()), None)
+    if bloco is None:
+        return False
+    citadas = {x.group(1) for x in MARCA.finditer(bloco)}
+    if any(c != fonte.id and c in por_id and por_id[c].fonte.estruturada for c in citadas):
+        return False  # uma votação por parágrafo
+    return not divergencias(MARCA.sub(" ", bloco), fonte.canonicas, fonte.identificadores, fonte.duvidas_canonicas)
+
+
 def conferir(texto: str, lidas: list[FonteLida]) -> list[Citacao]:
     por_id = {f.fonte.id: f for f in lidas}
     citacoes: list[Citacao] = []
@@ -54,10 +72,12 @@ def conferir(texto: str, lidas: list[FonteLida]) -> list[Citacao]:
             status = "fonte_nao_lida"
         elif trecho is None or len(_normalizar(trecho)) < MIN_TRECHO:
             status = "sem_trecho"
-        elif _normalizar(trecho) in _normalizar(lida.texto):
-            status = "conferida"
-        else:
+        elif _normalizar(trecho) not in _normalizar(lida.texto) or (
+            lida.fonte.estruturada and not _paragrafo_confere(texto, m.start(), lida.fonte, por_id)
+        ):
             status = "trecho_nao_encontrado"
+        else:
+            status = "conferida"
         citacoes.append(
             Citacao(
                 fonte_id=fonte_id,

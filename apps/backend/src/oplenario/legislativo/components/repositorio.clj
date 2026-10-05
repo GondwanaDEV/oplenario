@@ -15,6 +15,7 @@
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
+            [oplenario.legislativo.components.repositorio-votacao-ia :as repo-votacao-ia]
             [oplenario.legislativo.components.repositorio-meus-votos :as repo-meus-votos]
             [oplenario.legislativo.components.repositorio-votacao-publica :as repo-votacao-publica]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
@@ -48,12 +49,14 @@
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.legislativo.db.votacao :as votacao]
+            [oplenario.legislativo.db.votacao-para-ia :as votacao-para-ia]
             [oplenario.legislativo.db.votacao-publica :as votacao-publica]
             [oplenario.legislativo.diplomat.producers :as producers]
             [oplenario.legislativo.gerador-publicacao :as ger-pub]
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.logic.contas :as logic-contas]
-            [oplenario.legislativo.logic.notificacao :as logic-notif])
+            [oplenario.legislativo.logic.notificacao :as logic-notif]
+            [oplenario.legislativo.logic.votacao-ia :as logic-votacao-ia])
   (:import (java.security MessageDigest)
            (java.util UUID)
            (org.postgresql.util PSQLException)))
@@ -1313,6 +1316,11 @@
   (votacao-encerrada [this ente-id votacao-id]
     (transacao this ente-id #(votacao-publica/encerrada % ente-id votacao-id)))
 
+  ;; A.6: as votacoes encerradas de uma sessao no contexto da IA — so' resultado e totais, nunca o voto por vereador
+  repo-votacao-ia/RepoVotacaoIA
+  (votacoes-da-sessao-para-ia [this ente-id sessao-id]
+    (transacao this ente-id
+      #(mapv logic-votacao-ia/para-contexto (votacao-para-ia/encerradas-da-sessao % ente-id sessao-id))))
   ;; 'Minha atuacao': os votos do proprio vereador, da fonte (protocolo proprio, mesmo motivo do RepoJuridico)
   repo-meus-votos/RepoMeusVotos
   (meus-votos [this ente-id vereador-id]
