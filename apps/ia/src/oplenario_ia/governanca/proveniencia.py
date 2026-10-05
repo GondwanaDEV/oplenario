@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,12 +29,14 @@ class Proveniencia(BaseModel):
 
 
 class Fato(BaseModel):
-    """Um valor numérico que uma fonte ESTRUTURADA afirma (o total de votos sim de uma votação). `nomes` é como a
-    prosa o chama, sem acento e em minúsculas (`sim`, `favor`, `favoraveis`): é o que a conferência usa para saber
-    que "10 votos favoráveis" está falando deste valor."""
+    """Um valor numérico que uma fonte ESTRUTURADA afirma (o total de votos sim de uma votação), com o PAPEL dele.
+    `nomes` é como a prosa chama o papel (`sim`, `favor`, `favoraveis`; a comparação passa pela mesma normalização do
+    resto, então acento e caixa não importam). `lado`: `depois` = o nome vem depois do número ("9 votos sim");
+    `qualquer` = pode vir antes ou depois ("eram necessários 9 votos", "9 votos necessários" — o quórum)."""
 
     valor: int
     nomes: tuple[str, ...]
+    lado: Literal["depois", "qualquer"] = "depois"
 
 
 class Fonte(BaseModel):
@@ -50,6 +53,13 @@ class Fonte(BaseModel):
     # confere os números da afirmação que a cita contra o texto da fonte e contra `fatos` (confianca/numeros.py).
     estruturada: bool = False
     fatos: list[Fato] = []
+    livres: list[
+        int
+    ] = []  # números que identificam a coisa e se citam sem papel (o da matéria: 8 e 2026 em PL 008/2026)
+    pares: list[tuple[int, int]] = []  # referências a/b que a fonte confirma ("8/2026"): só passam como par
+    unanime: bool = (
+        False  # o registro diz que ninguém votou contra nem se absteve ("unanimidade" só confere se verdade)
+    )
 
 
 class Peca(BaseModel):

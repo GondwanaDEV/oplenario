@@ -16,12 +16,17 @@ import html
 import re
 
 from oplenario_ia.ata.redacao import NOMES_ABSTENCAO, NOMES_NAO, NOMES_SIM
-from oplenario_ia.confianca.numeros import numeros
+from oplenario_ia.confianca.numeros import ler, papel
+from oplenario_ia.governanca.proveniencia import Fato
 from oplenario_ia.inferencia.modelo import PedidoInferencia
 
 FONTE = re.compile(r'<fonte id="([^"]+)" rotulo="([^"]*)"[^>]*>\n(.*?)\n</fonte>', re.DOTALL)
 LINHA = re.compile(r"^(Matéria votada|Modalidade|Placar|Resultado): (.*)$", re.MULTILINE)
-TIPOS = (("sim", NOMES_SIM, "votos sim"), ("não", NOMES_NAO, "votos não"), ("abstenção", NOMES_ABSTENCAO, "abstenções"))
+TIPOS = (
+    ("sim", NOMES_SIM, r"(\d+) votos? sim", "votos sim"),
+    ("não", NOMES_NAO, r"(\d+) votos? não", "votos não"),
+    ("abstenção", NOMES_ABSTENCAO, r"(\d+) abstenç(?:ão|ões)", "abstenções"),
+)
 
 
 def frase(texto: str, teto: int = 160) -> str:
@@ -35,13 +40,15 @@ def _juntar(partes: list[str]) -> str:
     return partes[0] if len(partes) == 1 else f"{', '.join(partes[:-1])} e {partes[-1]}"
 
 
-def _votacao(fonte_id: str, texto: str) -> tuple[str, dict[str, int], str]:
-    """(o parágrafo da votação, os totais por tipo, o trecho do placar), lidos do registro do sistema."""
+def _votacao(fonte_id: str, texto: str) -> tuple[str, list[Fato], str]:
+    """(o parágrafo da votação, os totais como fatos, o trecho citado), lidos do registro do sistema."""
     campos = dict(LINHA.findall(texto))
     placar = campos["Placar"]
-    totais = {
-        nome: n.valor for nome, nomes, _ in TIPOS for n in numeros(placar) if any(p in nomes for p in n.seguintes)
-    }
+    fatos = [
+        Fato(valor=int(m.group(1)), nomes=nomes)
+        for _, nomes, padrao, _ in TIPOS
+        if (m := re.search(padrao, placar)) is not None
+    ]
     if placar.startswith("sem contagem"):
         frase_placar, trecho = "", f"Resultado: {campos['Resultado']}"
     else:
@@ -51,19 +58,19 @@ def _votacao(fonte_id: str, texto: str) -> tuple[str, dict[str, int], str]:
         f"Votação {campos['Modalidade']}: {campos['Matéria votada']}, {campos['Resultado']}{frase_placar}."
         f" [[{fonte_id} | {trecho}]]"
     )
-    return corpo, totais, trecho
+    return corpo, fatos, trecho
 
 
-def _contradicoes(falas: list[str], totais: dict[str, int]) -> list[str]:
+def _contradicoes(falas: list[str], fatos: list[Fato]) -> list[str]:
     """Placar que a gravação diz e o registro do sistema não confirma: `[confirmar: …]` com os dois valores."""
     achados: list[str] = []
     for texto in falas:
-        for n in numeros(texto):
-            for nome, nomes, rotulo in TIPOS:
-                if nome in totais and any(p in nomes for p in n.seguintes) and n.valor != totais[nome]:
-                    achados.append(
-                        f"[confirmar: a gravação indica {n.valor} {rotulo}; o sistema registra {totais[nome]}]"
-                    )
+        for n in ler(texto).numeros:
+            f = papel(n, fatos)
+            if f is None or f.valor == n.valor:
+                continue
+            rotulo = next(r for _, nomes, _, r in TIPOS if nomes == f.nomes)
+            achados.append(f"[confirmar: a gravação indica {n.valor} {rotulo}; o sistema registra {f.valor}]")
     return list(dict.fromkeys(achados))
 
 
@@ -80,8 +87,8 @@ def redigir(pedido: PedidoInferencia) -> str:
         trecho = frase(texto)
         if fonte_id.startswith("sessao:"):
             paragrafos.append(f"Reuniu-se a Câmara Municipal em sessão. [[{fonte_id} | {trecho}]]")
-            for corpo, totais, _ in votacoes:
-                avisos = _contradicoes(falas, totais) if len(votacoes) == 1 else []
+            for corpo, fatos, _ in votacoes:
+                avisos = _contradicoes(falas, fatos) if len(votacoes) == 1 else []
                 paragrafos.append(" ".join([corpo, *avisos]))
             continue
         quem = rotulo.split(",")[0]

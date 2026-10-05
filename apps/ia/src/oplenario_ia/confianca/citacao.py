@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from oplenario_ia.confianca.numeros import afirmacao_antes_da_marca, divergencias
+from oplenario_ia.confianca.numeros import afirmacao_da_marca, divergencias
 from oplenario_ia.governanca.proveniencia import Fonte
 
 MARCA = re.compile(r"\[\[\s*([^|\]\s\"]+)\s*(?:\|\s*(.*?)\s*)?\]\]", re.DOTALL)
@@ -61,7 +61,7 @@ def conferir(texto: str, lidas: list[FonteLida]) -> list[Citacao]:
             status = "sem_trecho"
         elif _normalizar(trecho) not in _normalizar(lida.texto) or (
             lida.fonte.estruturada
-            and divergencias(afirmacao_antes_da_marca(texto, m.start()), lida.texto, lida.fonte.fatos)
+            and divergencias(afirmacao_da_marca(texto, m.start(), m.end()), lida.fonte, lida.texto)
         ):
             status = "trecho_nao_encontrado"
         else:

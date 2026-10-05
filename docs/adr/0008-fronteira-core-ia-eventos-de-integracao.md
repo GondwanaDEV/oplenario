@@ -149,7 +149,10 @@ migration: é o mesmo caminho dos oradores e da pauta.
   que o sistema já publica. Sessão secreta continua 403 e nem consulta votação.
 - **No satélite:** cada votação vira uma fonte `votacao:<id>` estruturada (`Fonte.estruturada` + `Fonte.fatos`), pública
   e **não** de terceiro, que passa pelo filtro B1–B4 como as demais. A Camada de Confiança confere, além do trecho
-  literal, os números da frase que cita a fonte (`confianca/numeros.py`): número que o registro não tem, ou o total de
-  outro tipo ("10 votos favoráveis", ou sim e não trocados), sai `trecho_nao_encontrado`. Se a gravação contradiz o
-  dado, vale o dado e a instrução manda `[confirmar: a gravação indica X; o sistema registra Y]`. Prompt `ata-v2`.
+  literal, os números da frase que cita a fonte (`confianca/numeros.py`), por PAPEL (sim, não, abstenção, quórum,
+  composição) e na votação certa: uma só normalização e uma só leitura para a frase e para o registro (dígitos
+  Unicode, sobrescritos e caracteres invisíveis valem o número que o olho lê); o que a leitura não sabe interpretar com
+  certeza ("1.000", "1,5", "9/2", "-7", "7º", "mil", dúzia) reprova em vez de passar; número que conta votos e não tem
+  papel reprova; casamento por número inteiro. Reprovado sai `trecho_nao_encontrado`. Se a gravação contradiz o dado,
+  vale o dado e a instrução manda `[confirmar: a gravação indica X; o sistema registra Y]`. Prompt `ata-v2`.
 - **Core antigo:** contexto sem `votacoes` vale lista vazia (a ata sai como antes).

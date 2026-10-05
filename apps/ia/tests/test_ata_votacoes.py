@@ -100,7 +100,8 @@ def test_cada_votacao_encerrada_vira_uma_fonte_estruturada_publica_logo_depois_d
         False,
     )
     assert v.fonte is not None and v.fonte.estruturada
-    assert [(f.valor, f.nomes[0]) for f in v.fonte.fatos] == [(9, "sim"), (2, "nao"), (1, "abstencao")]
+    assert [(f.valor, f.nomes[0]) for f in v.fonte.fatos] == [(9, "sim"), (2, "nao"), (1, "abstencao"), (13, "membro")]
+    assert v.fonte.livres == [8, 2026] and v.fonte.pares == [(8, 2026)], "o número da matéria cita-se sem papel"
     assert v.texto == (
         "Matéria votada: PL 008/2026\nModalidade: nominal\n"
         "Quórum exigido: maioria simples (mais votos sim do que não)\n"
@@ -117,7 +118,10 @@ def test_quorum_qualificado_diz_quantos_votos_e_de_quantos_membros() -> None:
 def test_simbolica_nao_inventa_placar() -> None:
     peca = pedido_de_ata(ctx_com(SIMBOLICA), [T1], ENTE, "c").pecas[1]
     assert "Placar: sem contagem individual (votação simbólica)" in peca.texto
-    assert peca.fonte is not None and peca.fonte.fatos == []
+    assert peca.fonte is not None
+    assert [f.nomes[0] for f in peca.fonte.fatos] == ["membro"], (
+        "só a composição: nenhum total de sim, não ou abstenção"
+    )
 
 
 def test_o_voto_de_cada_vereador_nao_entra_nem_se_o_fio_o_trouxesse() -> None:

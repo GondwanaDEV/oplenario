@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 from oplenario_ia.armazem.porta import TranscricaoGuardada
 from oplenario_ia.confianca.citacao import MARCA
+from oplenario_ia.confianca.numeros import identificadores
 from oplenario_ia.fronteira.contrato import ContextoSessao, VotacaoContexto
 from oplenario_ia.governanca.filtro import PedidoGovernado
 from oplenario_ia.governanca.proveniencia import Fato, Fonte, Peca, Proveniencia, Sigilo
@@ -53,6 +54,13 @@ MODALIDADES = {"nominal": "nominal", "simbolica": "simbólica", "secreta": "secr
 NOMES_SIM = ("sim", "favor", "favoravel", "favoraveis")
 NOMES_NAO = ("nao", "contra", "contrario", "contrarios")
 NOMES_ABSTENCAO = ("abstencao", "abstencoes", "abstiveram")
+NOMES_MEMBROS = ("membro", "membros")
+NOMES_QUORUM = ("necessario", "necessarios", "exigido", "exigidos", "preciso", "precisos", "minimo", "quorum")
+# a fração do quórum qualificado também se escreve em palavras ("dois terços"): esses números se citam sem papel
+FRACAO_DO_QUORUM = {
+    "maioria_qualificada_2_3": ([2, 3], [(2, 3)]),
+    "maioria_qualificada_3_5": ([3, 5], [(3, 5)]),
+}
 TIPOS_SESSAO = {
     "ordinaria": "ordinária",
     "extraordinaria": "extraordinária",
@@ -154,11 +162,23 @@ def texto_da_votacao(v: VotacaoContexto) -> str:
 
 
 def fatos_da_votacao(v: VotacaoContexto) -> list[Fato]:
+    """Os papéis numéricos do registro: o placar (sim, não, abstenção), o quórum e a composição da Casa."""
     pares = [(v.total_sim, NOMES_SIM), (v.total_nao, NOMES_NAO), (v.total_abstencao, NOMES_ABSTENCAO)]
-    return [Fato(valor=valor, nomes=nomes) for valor, nomes in pares if valor is not None]
+    fatos = [Fato(valor=valor, nomes=nomes) for valor, nomes in pares if valor is not None]
+    if v.votos_necessarios is not None:
+        fatos.append(Fato(valor=v.votos_necessarios, nomes=NOMES_QUORUM, lado="qualquer"))
+    if v.base_membros is not None:
+        fatos.append(Fato(valor=v.base_membros, nomes=NOMES_MEMBROS))
+    return fatos
+
+
+def _unanime(v: VotacaoContexto) -> bool:
+    return bool(v.total_sim) and v.total_nao == 0 and v.total_abstencao == 0
 
 
 def peca_da_votacao(v: VotacaoContexto) -> Peca:
+    ids, pares_do_objeto = identificadores(v.objeto)
+    fracao, pares_da_fracao = FRACAO_DO_QUORUM.get(v.quorum_tipo, ([], []))
     return Peca(
         texto=texto_da_votacao(v),
         # o sistema já publica o resultado e os totais de toda votação encerrada (inclusive a secreta); o voto de cada
@@ -169,6 +189,9 @@ def peca_da_votacao(v: VotacaoContexto) -> Peca:
             rotulo=f"Votação de {v.objeto}, registrada pelo sistema",
             estruturada=True,
             fatos=fatos_da_votacao(v),
+            livres=[*ids, *fracao],
+            pares=[*pares_do_objeto, *pares_da_fracao],
+            unanime=_unanime(v),
         ),
     )
 
