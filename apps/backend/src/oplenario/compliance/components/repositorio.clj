@@ -113,6 +113,12 @@
      :remessas-recentes-total N}.")
   (buscar-obrigacao [this ente-id id])
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id])
+  (obrigacoes-em-aberto [this ente-id limite]
+    "As obrigacoes EM ABERTO (pendente + vencida) do tenant, a mais urgente primeiro, com TETO `limite` (o mesmo
+     predicado do painel). Le o gatilho do host, que reavalia a que uma remessa aceita ja' cumpre.")
+  (remessas-aceitas [this ente-id limite]
+    "As (template-chave, sistema, competencia) com remessa ACEITA no tenant, distintas, a competencia mais recente
+     primeiro, com TETO `limite`. Devolve [{:template-chave :sistema :competencia}...].")
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id])
   (gerar-remessa! [this ente-id m]
     "Gera o ARTEFATO de remessa (§22.7.8): coleta as fontes do `descritor` -> renderiza (puro) -> serializa
@@ -122,10 +128,10 @@
      :serializador (SerializadorRemessa) :objeto-store (ObjetoStore) :registry-versao-ref}. Devolve a linha.")
   (listar-remessas [this ente-id template-chave competencia]
     "Historico de (re)emissoes de (ente, template, competencia), por versao.")
-  (remessa-existe? [this ente-id id]
-    "A remessa `id` existe no tenant (RLS escopa por ente)? Existence-check p/ a borda HTTP (F5.5b)
-     desambiguar o nil de uma transicao: existe -> conflito de ciclo (409); ausente -> 404. Projeta so
-     `1` (nao traz colunas sensiveis ao heap — review sec BAIXO). Devolve boolean.")
+  (estado-da-remessa [this ente-id id]
+    "O `estado` da remessa `id` no tenant (RLS escopa por ente), ou nil se ela nao existe. Existence-check p/ a
+     borda HTTP (F5.5b) desambiguar o nil de uma transicao: existe -> conflito de ciclo (409, que diz o estado
+     atual); ausente -> 404. Projeta so a coluna `estado` (nao traz colunas sensiveis ao heap — review sec BAIXO).")
   (validar-remessa! [this ente-id id] "Transiciona rascunho->validada (CAS guardado por grafo).")
   (submeter-remessa! [this ente-id id] "Transiciona validada->submetida + carimba submetida_em.")
   (registrar-resposta-remessa! [this ente-id id estado]
@@ -202,6 +208,10 @@
   (buscar-obrigacao [this ente-id id] (transacao this ente-id #(db-obr/buscar % ente-id id)))
   (obrigacoes-do-objeto [this ente-id objeto-tipo objeto-id]
     (transacao this ente-id #(db-obr/listar-do-objeto % ente-id objeto-tipo objeto-id)))
+  (obrigacoes-em-aberto [this ente-id limite]
+    (transacao this ente-id #(db-obr/listar-em-aberto % ente-id limite)))
+  (remessas-aceitas [this ente-id limite]
+    (transacao this ente-id #(db-rem/listar-aceitas % ente-id limite)))
   (avaliacoes-da-obrigacao [this ente-id obrigacao-id]
     (transacao this ente-id #(db-aval/listar-da-obrigacao % ente-id obrigacao-id)))
   (gerar-remessa! [this ente-id {:keys [descritor template-chave sistema competencia contexto
@@ -227,8 +237,8 @@
       row))
   (listar-remessas [this ente-id template-chave competencia]
     (transacao this ente-id #(db-rem/listar % ente-id template-chave competencia)))
-  (remessa-existe? [this ente-id id]
-    (transacao this ente-id #(db-rem/existe? % ente-id id)))
+  (estado-da-remessa [this ente-id id]
+    (transacao this ente-id #(db-rem/estado-de % ente-id id)))
   (validar-remessa! [this ente-id id]
     (transacao this ente-id #(db-rem/transicionar-estado! % ente-id id "rascunho" "validada" {})))
   (submeter-remessa! [this ente-id id]
