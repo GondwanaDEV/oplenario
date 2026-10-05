@@ -467,6 +467,30 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
     `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
     de varredura afirma o volume varrido.
+- **Emenda à Lei Orgânica (CF art. 29):** 2/3 dos membros, dois turnos e interstício de 10 dias.
+  - **A regra é dado.** A linha `emenda_lom` entra em `legislativo.regra_votacao_materia` (mig `20261005000240`), ao
+    lado da linha das contas do Prefeito. A guarda do quórum é DSL do motor. As colunas novas `turnos` e
+    `intersticio_dias` valem 1 turno para as contas e 2 turnos com 10 dias para a emenda.
+  - **A regra se escolhe pela matéria.** A escolha fica em `logic/regra_votacao/chave-da-materia`.
+    `db/regra_votacao/conferir!` (antes estava em `prestacao_contas`) confere o quórum ao abrir a votação, e
+    `conferir-turno!` confere o turno. Fora da regra, a resposta é 422 em palavras; quando falta o interstício, o 422
+    traz `a-partir-de`. Nominal não é exigida, porque a CF não a pede.
+  - **"A Casa aprovou" respeita os turnos.** `db/votacao/aprovacao-vigente` faz a conta em `logic/turnos.clj`. Com 2
+    turnos, a matéria só está aprovada se cada aprovação abriu pelo menos `intersticio_dias` dias civis da Casa depois
+    do encerramento da anterior e se nenhum turno rejeitou. A redação final sozinha não aprova. Matéria com 1 turno
+    segue com a consulta de sempre.
+  - **O interstício se mede pela abertura.** `abrir!` grava o instante da abertura em `efetivado_em`, vindo do relógio
+    da borda; sem relógio, usa o `now()` da tx.
+  - **O portal diz o turno.** O desfecho leva `:turno` e aparece como "Aprovada em 1º turno" / "Aprovada em 2º turno".
+    As votações públicas também levam `turno`. O selo só muda a partir do autógrafo.
+  - **O painel da Mesa trava o quórum.** Para a PELOM, quando a pauta traz a espécie, o quórum fica em 2/3.
+  - **A sigla é PELOM em todo lugar;** o backend dizia "PELO".
+  - **A demo vota a emenda com 2/3** e a deixa aprovada só no 1º turno.
+  - **Não foi mexido:**
+    - a PELOM aprovada antes, por maioria simples, fica como foi votada e passa a contar só como 1º turno;
+    - turnos que só o Regimento pede (PL em dois turnos) e interstício maior que o da CF por LOM são `[GAP]`;
+    - reapresentação depois da rejeição: `[GAP]`;
+    - não vistos em browser: a ficha e as votações públicas com o turno.
 - **Falta:**
   - a faixa do portal ainda é o mapa fixo (a projeção pública não carrega o rito); o chip da ficha usa o rótulo fixo e
     a faixa o nome da Casa ("Em Plenário" e "Em Pauta" na mesma tela, na demo); `template_estado.ordem` não tem
