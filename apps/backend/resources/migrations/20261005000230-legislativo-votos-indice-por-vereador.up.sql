@@ -1,0 +1,26 @@
+-- `GET /meu/votos` ("Minha atuacao", `legislativo/db/meus_votos.clj`) filtra `legislativo.votos` por
+-- `(ente_id, vereador_id)` e ordena por `registrado_em DESC, votacao_id DESC` (a lista, com LIMIT) ou agrupa por
+-- `voto` (a contagem). A tabela so' tinha a UNIQUE `(ente_id, votacao_id, vereador_id)` — o prefixo util e'
+-- `(ente_id, votacao_id)`, que NAO serve a busca por vereador — e o parcial de staging `(ente_id, lote_id)`:
+-- cada abertura da tela varria os votos da Casa inteira para achar os de uma pessoa (~1/21 delas).
+--
+-- O indice tem as duas colunas do predicado e as duas da ordenacao, na mesma direcao da query: a lista sai em
+-- ordem direto do indice (sem Sort) e para no LIMIT. NAO e' parcial: a query nao tem `efetivado_em IS NOT NULL`
+-- (quem filtra o voto de lote e' a policy de RLS, por linha, e um predicado de indice nao a substitui).
+-- `legislativo.votos` NAO e' particionada (ver a mig 20260620000021), entao e' um indice simples.
+--
+-- Responde as tres perguntas de migration:
+--   1. Muda dado existente? NAO. So' cria indice; nenhuma linha de voto (append-only) e' lida nem escrita.
+--   2. Pode falhar conforme o dado ou o relogio? NAO. Indice nao-unico, sem predicado, sem data fixa: qualquer
+--      conteudo da tabela e' indexavel, inclusive vazia ou com dado legado.
+--   3. Enxerga todas as Casas? Nao precisa: `CREATE INDEX` (e o `DROP` do down) e' DDL do dono da tabela, que
+--      indexa a tabela inteira e nao passa pela policy de RLS (RLS filtra as linhas lidas por comando DML, nao a
+--      construcao do indice). Nao ha' UPDATE/DELETE/conferencia, entao nao ha' o par NO FORCE/FORCE.
+--
+-- JANELA DE MANUTENCAO (mesmo tom das migs 0067/0068/0069/0074): sem CONCURRENTLY, porque o migratus roda o
+-- arquivo numa transacao e `CREATE INDEX CONCURRENTLY` nao pode rodar em transacao. `CREATE INDEX` toma
+-- ShareLock em `legislativo.votos` (bloqueia INSERT — o voto — durante a construcao; leituras seguem). A tabela
+-- tem dezenas de votos por votacao, entao a construcao leva milissegundos, mas nao deployar no meio de sessao.
+-- RUNBOOK: `ANALYZE legislativo.votos` depois do deploy, para o planner ter estatisticas do indice novo.
+CREATE INDEX IF NOT EXISTS idx_votos_vereador_registrado
+  ON legislativo.votos (ente_id, vereador_id, registrado_em DESC, votacao_id DESC);
