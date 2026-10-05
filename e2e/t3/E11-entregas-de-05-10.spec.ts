@@ -347,7 +347,8 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
       await expect(cartoes).toHaveCount(vereadores.length, { timeout: 10_000 });
     }).toPass({ timeout: 120_000 });
     const primeiro = vereadores[0]["nome-parlamentar"];
-    if (primeiro) await expect(cartoes.first()).toContainText(primeiro);
+    // a ordem da tela não é a da API, e outra spec cria vereador que entra antes: o nome tem de estar em ALGUM cartão
+    if (primeiro) await expect(cartoes.filter({ hasText: primeiro }).first()).toBeVisible();
     semUuidNemEnumCru(await textoVisivel(page), "/vereadores");
     await ctx.dispose();
   });
