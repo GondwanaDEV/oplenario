@@ -1,8 +1,11 @@
 (ns oplenario.kernel.components.idp-dev
   "Impl DEV/TESTE do IdentityProvider (§22.5): `verificar-token` decodifica o token como JSON de claims —
   CONFIANCA TOTAL, SEM verificacao de assinatura (so dev/teste). A impl Keycloak real (JWKS + realm-por-tenant
-  + IdP do operador fisicamente separado) e' carry F1.4 (infra-gated). Provisionamento lanca aqui (indisponivel
-  em dev). NUNCA usar em producao — o boot de prod deve injetar a impl Keycloak."
+  + IdP do operador fisicamente separado) e' carry F1.4 (infra-gated). O provisionamento e' um NO-OP aqui: dev nao
+  tem realm, usuario nem e-mail, e quem concede acesso (`identidade/diplomat/http/in.clj`) grava o vinculo ANTES de
+  chamar o IdP — lancar aqui deixava o ato gravado com resposta 500. Quem precisa do IdP de verdade usa o
+  KeycloakIdp (a falha dele LANCA e continua visivel; so' o fake de dev e' mudo). NUNCA usar em producao — o boot de
+  prod deve injetar a impl Keycloak."
   (:require [jsonista.core :as json]
             [oplenario.kernel.components.idp :as idp]))
 
@@ -22,15 +25,15 @@
             (:identidade-id c) (update :identidade-id ->uuid)
             (:ente-id c)       (update :ente-id ->uuid))))
       (catch Exception _ nil)))
-  (provisionar-realm! [_ _] (throw (ex-info "idp-dev: provisionamento indisponivel (carry Keycloak)" {})))
-  (provisionar-realm! [_ _ _] (throw (ex-info "idp-dev: provisionamento indisponivel (carry Keycloak)" {})))
-  (criar-usuario! [_ _ _] (throw (ex-info "idp-dev: criar-usuario indisponivel (carry Keycloak)" {})))
-  (convidar! [_ _ente-id _identidade-id]
-    (throw (ex-info "idp-dev nao envia convite (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))
-  (corrigir-email-do-convite! [_ _ _ _]
-    (throw (ex-info "idp-dev nao guarda e-mail (use o KeycloakIdp)" {:tipo :idp/nao-suportado})))
+  ;; Provisionamento: no-op coerente com um IdP que so' finge sessao por token. Nao ha' realm a criar nem e-mail a enviar,
+  ;; e o que o handler de conceder acesso precisa saber (`:existia?`) e' "nao" — a pessoa nunca teve conta no IdP.
+  (provisionar-realm! [_ _] true)
+  (provisionar-realm! [_ _ _] true)
+  (criar-usuario! [_ _ _] {:existia? false})
+  (convidar! [_ _ente-id _identidade-id] true)
+  (corrigir-email-do-convite! [_ _ _ _] true)
   (resetar-mfa! [_ _ _] (throw (ex-info "idp-dev: reset-mfa indisponivel (carry Keycloak)" {})))
-  ;; dev nao provisiona realm nenhum (provisionar-realm! lanca) -> nao ha' o que apagar: o realm "ja' inexistente"
+  ;; dev nao provisiona realm nenhum (provisionar-realm! e' no-op) -> nao ha' o que apagar: o realm "ja' inexistente"
   ;; do contrato. Nunca roda em producao (idp-para so' liga o idp-dev em dev/test).
   (apagar-realm! [_ _] {:realm nil :existia? false}))
 
