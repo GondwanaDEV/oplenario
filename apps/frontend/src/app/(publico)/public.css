@@ -374,6 +374,11 @@
 .ficha-tram { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); box-shadow: var(--sombra); padding: 1.3rem 1.4rem 1.5rem; margin: 1.3rem 0 0; }
 .ficha-tram h2 { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 0 0 1.1rem; }
 
+/* título das seções da ficha — o `.secao > h2` da tela ficha-materia-publica do design. Escopado em `.ficha-secao`,
+   nunca em `.secao h2` solto: o portal inteiro usa `.secao`. Sem esta regra o título saía no corpo (16px, peso 400),
+   menor que a linha do tempo ao lado (`.mov h2`, mesma receita). */
+.ficha-secao > h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); letter-spacing: -0.015em; color: var(--texto); margin: 0 0 0.8rem; }
+
 /* "virou lei" — a norma publicada (ligação matéria->lei; só aparece quando ficha.norma existe). Reusa o
    --marca de .ja-publicado (mesmo racional visual: aviso positivo, borda tracejada). */
 .norma-publicada { display: flex; align-items: flex-start; gap: 0.7rem; margin: 1.2rem 0 0; padding: 1rem 1.15rem; background: color-mix(in srgb, var(--jade) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--jade) 30%, var(--linha)); border-radius: var(--raio); }
