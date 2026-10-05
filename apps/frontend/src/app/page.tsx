@@ -15,7 +15,7 @@ export default function Home() {
       <h1 style={{ fontFamily: "var(--display)", fontSize: "var(--t-40)", lineHeight: 1.1, margin: "0 0 0.4rem", color: "var(--texto)" }}>
         O Plenário
       </h1>
-      <p style={{ fontFamily: "var(--display)", fontSize: "var(--t-20)", margin: "0 0 1.2rem", color: "var(--texto)" }}>
+      <p style={{ fontFamily: "var(--display)", fontSize: "var(--t-21)", margin: "0 0 1.2rem", color: "var(--texto)" }}>
         Onde a câmara acontece.
       </p>
       <p style={{ color: "var(--texto-2)", maxWidth: "46ch" }}>
