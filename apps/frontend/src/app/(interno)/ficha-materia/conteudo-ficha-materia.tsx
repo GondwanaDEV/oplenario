@@ -78,7 +78,7 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
           <b>{numero}</b>
         </nav>
 
-        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} />
+        <FichaCabecalho proposicao={ficha.proposicao} coautores={ficha.coautores} rito={ficha.rito} />
 
         <div className="corpo">
           <FichaMateriaTabs ficha={ficha} token={token} papeis={papeis} posAprovacao={posAprovacao} onTramitou={recarregar} />

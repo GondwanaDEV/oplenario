@@ -16,6 +16,7 @@
             [oplenario.legislativo.logic :as logic]
             [oplenario.legislativo.logic.contas :as logic-contas]
             [oplenario.legislativo.logic.meus-votos :as logic-meus-votos]
+            [oplenario.legislativo.logic.rito :as logic-rito]
             [oplenario.motor.api :as motor])
   (:import (java.security MessageDigest)))
 
@@ -552,8 +553,16 @@
   ([repo-legislativo resolver-comissoes nome-na-casa nomes-de-vereadores ente-id id]
    (let [{:keys [proposicao texto recebimentos] :as ficha} (repo/ficha-completa-da-proposicao repo-legislativo ente-id id)]
      (when proposicao
-       (-> (dissoc ficha :recebimentos)
+       (-> (dissoc ficha :recebimentos :rito-do-template)
            (assoc :texto (:texto-inline texto))
+           ;; a faixa "Onde esta' a materia": o rito da Casa composto com a etapa atual e o historico (nil sem rito)
+           (assoc :rito (logic-rito/rito-da-materia
+                          {:estado-inicial (get-in ficha [:rito-do-template :estado-inicial])
+                           :estados (get-in ficha [:rito-do-template :estados])
+                           :transicoes (get-in ficha [:rito-do-template :transicoes])
+                           :atual (:estado proposicao)
+                           :tramitacao (:tramitacao ficha)
+                           :tramitacao-truncado (boolean (:tramitacao-truncado ficha))}))
            ;; fatia 2b: o historico da ficha mostra quem recebeu cada movimentacao (mesma anotacao da rota irma)
            (update :tramitacao #(anotar-recebimentos nome-na-casa ente-id % (or recebimentos {})))
            (update :pareceres #(nomear-relatores nomes-de-vereadores ente-id (nomear-comissoes resolver-comissoes ente-id %))))))))
