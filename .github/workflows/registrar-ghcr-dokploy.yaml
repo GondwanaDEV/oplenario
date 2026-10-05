@@ -1,0 +1,93 @@
+name: Cadastrar o GHCR no Dokploy (prd)
+
+# ADR-0025, docs/27 secao 9: o Keycloak das Casas e' um COMPOSE no Dokploy, e um compose baixa a imagem com o login do
+# SERVIDOR. As aplicacoes (API, web, IA) baixam as imagens privadas do GHCR com o login que cada uma guarda no proprio
+# app, que nao vale para o compose: sem um registro do ghcr.io no Dokploy, o servidor nao baixa a imagem do Keycloak com
+# o tema (pacote privado).
+#
+# Este workflow cadastra o ghcr.io em Settings -> Registry do Dokploy com O MESMO LOGIN que a aplicacao da API ja' usa
+# (nenhuma credencial nova sai de onde ja' esta'); so' se a API nao guardar login usa o token do GHCR daqui. Antes de
+# cadastrar, testa o login no servidor (registry.testRegistry). Ja' cadastrado = nao faz nada.
+#
+# NUNCA automatico: so' workflow_dispatch, com a frase de confirmacao. Depois dele, o build-keycloak-prd passa na
+# conferencia "o servidor consegue baixar a imagem".
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: 'Digite cadastrar-ghcr para confirmar'
+        required: true
+        type: string
+
+jobs:
+  registrar:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    concurrency:
+      group: registrar-ghcr-dokploy
+      cancel-in-progress: false
+    env:
+      DK: https://${{ vars.DOKPLOY_DOMAIN }}/api
+      DK_KEY: ${{ secrets.DOKPLOY_KEY }}
+      APP_CORE: ${{ secrets.DOKPLOY_APPLICATION_ID_API }}
+    steps:
+      - name: Guarda de confirmacao
+        env:
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: '[ "$CONFIRMAR" = "cadastrar-ghcr" ] || { echo "::error::confirmacao invalida"; exit 1; }'
+
+      - name: Cadastrar o ghcr.io no Dokploy
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          ATOR: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          umask 077
+          get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
+          # resposta do Dokploy fica no arquivo; no log so' o codigo e, em erro, a mensagem (sem o corpo enviado)
+          post() {
+            local c
+            c=$(curl -sS -o "$RUNNER_TEMP/resposta.json" -w '%{http_code}' -X POST -H "x-api-key: $DK_KEY" \
+                  -H 'Content-Type: application/json' -d @"$2" "$DK/$1")
+            if [ "$c" != "200" ]; then
+              echo "::error::$1 respondeu $c: $(jq -r '.message // .error // empty' "$RUNNER_TEMP/resposta.json" 2>/dev/null | head -c 400)"
+              return 1
+            fi
+          }
+
+          n=$(get registry.all | jq '[.[]? | select((.registryUrl // "") | test("ghcr\\.io"))] | length')
+          if [ "$n" -ge 1 ]; then
+            echo "o Dokploy ja' tem registro do ghcr.io: nada a fazer"
+            exit 0
+          fi
+
+          get "application.one?applicationId=$APP_CORE" | jq '{username, password, registryUrl}' > "$RUNNER_TEMP/acesso.json"
+          u=$(jq -r '.username // ""' "$RUNNER_TEMP/acesso.json")
+          p=$(jq -r '.password // ""' "$RUNNER_TEMP/acesso.json")
+          [ -n "$p" ] && echo "::add-mask::$p"
+          if [ -n "$u" ] && [ -n "$p" ]; then
+            echo "login: o mesmo que a aplicacao da API usa (registro: $(jq -r '.registryUrl // "?"' "$RUNNER_TEMP/acesso.json"))"
+          else
+            echo "a API nao guarda login no app: usando o token do GHCR do GitHub"
+            u="$ATOR"; p="$GHCR_TOKEN"
+          fi
+
+          jq -n --arg u "$u" --arg p "$p" \
+            '{registryName: "GHCR (O Plenario)", username: $u, password: $p, registryUrl: "ghcr.io",
+              registryType: "cloud", imagePrefix: null}' > "$RUNNER_TEMP/registro.json"
+          rm -f "$RUNNER_TEMP/acesso.json"
+
+          echo "testando o login no servidor..."
+          post registry.testRegistry "$RUNNER_TEMP/registro.json"
+          echo "login ok; cadastrando"
+          post registry.create "$RUNNER_TEMP/registro.json"
+
+          n=$(get registry.all | jq '[.[]? | select((.registryUrl // "") | test("ghcr\\.io"))] | length')
+          [ "$n" -ge 1 ] || { echo "::error::o cadastro respondeu ok, mas o ghcr.io nao aparece em registry.all"; exit 1; }
+          echo "ghcr.io cadastrado no Dokploy: o servidor baixa as imagens privadas do GHCR"
+
+      - name: Limpar
+        if: always()
+        run: rm -f "$RUNNER_TEMP/registro.json" "$RUNNER_TEMP/acesso.json" "$RUNNER_TEMP/resposta.json"
