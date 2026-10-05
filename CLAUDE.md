@@ -83,7 +83,10 @@ retrátil em toda tela interna e no app do vereador (`app/(interno)/clara/`); ca
 (só inserção, resposta que não grava não sai, hash ancorado na trilha); a pessoa relê e busca o seu histórico, e cada
 pergunta leva à sua linha na trilha (`/auditoria?recurso-tipo=…&recurso-id=…`). O `auditor` lê o da Casa em
 `/auditoria/clara`, cada leitura vai à trilha, e **nunca pela Clara** (decisão de 05/10/2026). A tela publica a dica
-("Nesta tela: PL 42/2026") com `useDicaDaClara`. Prazo de guarda é `[GAP]` jurídico. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
+("Nesta tela: PL 42/2026") com `useDicaDaClara`. **Fatia 4:** jurídico, auditor e `admin_ente` também perguntam, pelo
+público `consulta`, que só lê (credencial sem `ato`, conferido também no banco) e só o que a tela de cada um já lê, mais
+as normas da Casa e os vereadores em exercício; nenhuma ferramenta lê a trilha nem o histórico (`catalogo_consulta_test`).
+No app do vereador, "Pedir à Clara" abre o painel expandido; `/vereador/assistente` redireciona para ele. Prazo de guarda é `[GAP]` jurídico. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
@@ -135,8 +138,13 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
 - o realm ganha nome, pt-BR, tema de login e de e-mail, política de senha e trava temporária de força bruta;
 - **o convite pede senha + código do aplicativo** (antes só passkey, e o login pedia senha: o convidado real ficava sem
   como entrar). A passkey volta quando o domínio definitivo existir — adia o passwordless-first da §22.5 (confirmar);
-- **falta em produção:** a imagem do Keycloak com o tema e "Reaplicar configuração de login" em cada Câmara (`docs/27`,
-  seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
+- **em produção (05/10/2026):** a entrada pelo CPF está no ar e a configuração de login foi reaplicada nas Câmaras pelo
+  workflow `reaplicar-login-prd` (nome, pt-BR, política de senha, força bruta, senha → código). **Falta o tema:** o
+  Keycloak das Casas é um compose no Dokploy e o servidor não tem login no GHCR (o pacote
+  `oplenario-keycloak-prd` é privado); a 1ª troca derrubou o Keycloak por ~14 min até a volta automática. Antes de
+  rodar `build-keycloak-prd` de novo: tornar o pacote público ou cadastrar o `ghcr.io` em Settings → Registry do
+  Dokploy (`docs/27`, seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o
+  segundo fator.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:
@@ -297,8 +305,8 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   têm ato que peça o par (não há agendador em produção; 7 de 9 consumidores só projetam); um teste de inventário
   (`atos_fora_do_http_test`) reprova job, comando ou consumidor novo sem classificação;
 - **resumo em palavras para toda escrita (05/10/2026):** `auditoria/resumos.clj` dá uma frase a cada rota de escrita
-  ("Publicou a pauta da sessão"); das 169, 149 têm rótulo e 20 têm motivo escrito (operador, satélite de IA, duas do
-  assistente). O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
+  ("Publicou a pauta da sessão"); das 169, 151 têm rótulo e 18 têm motivo escrito (operador e satélite de IA; as
+  duas da Clara ganharam rótulo em 05/10/2026: "Perguntou à Clara", "Reportou erro numa resposta da IA"). O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
   selo, então registro anterior segue sem ele. `resumo_de_toda_escrita_test` reprova escrita nova sem rótulo nem
   motivo. A leitura devolve `recurso.do-ato` e a tela decide a etiqueta só por esse campo, nunca pelo texto do rótulo;
 - **na Operação (05/10/2026):** `ia-orcamento` e a entrada do operador gravam na atuação da Operação o par
@@ -306,8 +314,7 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
   `tentativas-sem-desfecho` existe como função de repositório, sem tela;
 - **falta:** a ADR diz que o login do cidadão não entra na trilha, mas o código o registra (agora com duas linhas por
-  entrada): decidir se corrige o texto ou tira o registro; dar rótulo a `agente/perguntar` e
-  `agente/reportar-erro-ia`; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
+  entrada): decidir se corrige o texto ou tira o registro; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
   reabre e a reativação não restaura): decidir a regra.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
@@ -517,7 +524,6 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
     portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
     `template_estado.ordem` não tem validação nem significado documentado;
-  - o cockpit do vereador ainda diz "faltam N" em votação encerrada;
   - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
     cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
     `folha-sessao-v2`;

@@ -79,7 +79,8 @@
                      "ementa) e o item em apreciacao agora, se houver. Sem sessao informada, usa a sessao em curso "
                      "ou, nao havendo, a proxima agendada — para 'o que vai ser votado na proxima sessao?'.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     ;; `GET /sessoes/:id/pauta` so' autentica (a sessao e' da Casa da pessoa): toda pessoa da Casa que tem a Clara
+     :papeis #{"secretario" "vereador" "juridico" "auditor" "admin_ente"}
      :entrada [:map {:closed true}
                [:sessao-id {:optional true :description "Id da sessao; ausente = a sessao em curso ou a proxima."}
                 :uuid]]
@@ -101,7 +102,9 @@
                      "sessao informada, usa a ata publicada mais recente — para 'o que ficou registrado na ultima "
                      "sessao?'. So' atas de sessoes de transmissao publica.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     ;; `GET /atas` e `GET /atas/:sessao-id` so' autenticam e filtram por linha (a secreta, so' a secretaria); a
+     ;; ferramenta le ainda menos (so' o que o portal publica)
+     :papeis #{"secretario" "vereador" "juridico" "auditor" "admin_ente"}
      :entrada [:map {:closed true}
                [:sessao-id {:optional true :description "Id da sessao; ausente = a ata publicada mais recente."}
                 :uuid]]

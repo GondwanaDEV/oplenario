@@ -38,6 +38,7 @@ import type { ProposicaoResumoOut } from "@/lib/contrato-legislativo.gen";
 import { FormItemPauta } from "../../sessoes/[id]/form-item-pauta";
 import { PublicarPauta } from "../../publicar-pauta";
 import { TopoInterno } from "../topo";
+import { dicaDaPauta, useDicaDaClara } from "../clara/dica";
 import "./pauta-convocacao.css";
 
 export default function PaginaPautaConvocacao() {
@@ -78,6 +79,9 @@ function ConteudoPautaConvocacao({ token }: { token: string | null }) {
   const edicao = useEditarPauta(alvo?.sessaoId ?? null, token);
   const [aviso, setAviso] = useState<Aviso>(null);
   const [incluindo, setIncluindo] = useState(false);
+  // A Clara: "Nesta tela: Pauta da 15ª Sessão Ordinária". Só com a sessão escolhida já carregada (ao trocar de sessão,
+  // `sessao` ainda é a anterior enquanto carrega).
+  useDicaDaClara(estadoDetalhe === "pronto" && sessao ? dicaDaPauta(sessao) : null);
 
   if (estadoSessoes === "erro" || estadoDetalhe === "erro") {
     return (
