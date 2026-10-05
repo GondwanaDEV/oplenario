@@ -2729,6 +2729,20 @@ sem causa confirmada: `caixa.test.tsx`, `notificacoes/page.test.tsx` (2 casos), 
 (`vitest.atraso.config.ts` + `vitest.atraso.setup.ts`; `ATRASO_MS`=40, `ATRASO_MOCK`=1, `ATRASO_PINTURA`=1). Os três
 falsos vermelhos conhecidos estão no cabeçalho do setup. Rodar antes de mergear teste novo de tela assíncrona.
 
+**Adendo (05/10/2026): o que o detector não vê, e a desmontagem que faltava.** Dois testes instáveis no CI não caíam
+no `test:atraso`. Os dois eram de arquivo com timers falsos, e o detector não mede esse caso (falso vermelho 2 do
+cabeçalho).
+- `mesa-audiencia.test.tsx`, "o cronômetro regride" (`expected '04:50' to be '00:40'`, CI do PR #182): o relógio
+  aparece na pintura, mas o `setInterval` que o faz andar nasce num efeito que o React roda depois. Sob carga o teste
+  chegava ao `advanceTimersByTime` antes. Reproduzido sempre ao atrasar em 40 ms o `setImmediate` que o Scheduler
+  guarda ao carregar; conserto: esperar o intervalo existir (`vi.waitFor(() => vi.getTimerCount() > 0)`).
+- `use-chamada.test.ts` (estava acima entre os "sem causa confirmada"): o arquivo não desmontava o hook entre os
+  testes. O do caso "falha na carga inicial" seguia vivo com o intervalo real e re-buscava pelo `fetch` do teste
+  seguinte, que contava 3 GET em vez de 2. Reproduzido sempre com o mesmo atraso.
+- A causa do segundo era geral: a suíte não liga `globals`, então o Testing Library não desmonta sozinho, e 74 dos 228
+  arquivos que renderizam não chamavam `cleanup` (o `rotulos-mesa` do PR #169 era outro). O `vitest.setup.ts` passa a
+  chamar `cleanup` depois de cada teste. A suíte inteira seguiu verde.
+
 ## Quarta rodada de 05/10/2026 (PRs #177 a #186) — o que entrou e o que a conferência em browser achou
 
 | PR | O que fez | Como foi verificado |

@@ -3,7 +3,8 @@
   pede a credencial de uma execucao (sem pessoa, so' `leitura`/`rascunho`), le a materia e as normas pelo catalogo e
   deixa um RASCUNHO de nota tecnica na fila da secretaria, que aproveita ou descarta. Desligar derruba o agente na
   chamada seguinte; sem concessao nao ha' credencial; nada vaza de uma Casa para outra."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -45,9 +46,6 @@
 
 (defn- deps []
   {:repo-legislativo (repo-legislativo) :registrar-chamada (catalogo/registrador (repo-integracao))})
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa!
   "Uma pessoa com vinculo ativo e os `papeis` na Casa. Devolve o id."

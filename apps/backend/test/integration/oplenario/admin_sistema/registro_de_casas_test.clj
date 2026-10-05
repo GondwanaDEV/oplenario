@@ -3,7 +3,8 @@
   -> o registro emite o ente_id, o cadastros recebe o perfil, a identidade recebe o 1o administrador (admin_ente) e o
   IdP das Casas convida. A Casa fica 'provisionar' ate' o 1o administrador ENTRAR: o mint emite
   `identidade.vinculo.primeiro_acesso` e o consumidor do admin_sistema a ativa (handoff), selando a atuacao."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -31,9 +32,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- idp-casa-fake
   "Registra as chamadas; `falhar-convite` simula o Keycloak fora do ar no convite. Os tokens de Casa sao dados."

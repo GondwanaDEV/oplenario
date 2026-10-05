@@ -2,7 +2,8 @@
   "INTEGRACAO (PG real, IdP fake): o login pelo gov.br pela borda HTTP (ADR-0015). O mint cria no 1o acesso a
   identidade, o vinculo de cidadao e o consentimento; a sessao — por cookie ou por Bearer — e' SO' de cidadao, mesmo
   quando o CPF e' de uma vereadora da Casa. O token real do Keycloak (broker de verdade) e' prova do suite :keycloak."
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -26,9 +27,6 @@
     (let [c (component/start (datasource/datasource (config/carregar)))]
       (migracao/migrar! (:ds c))
       (binding [*ds* (:ds c)] (try (t) (finally (component/stop c)))))))
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- fake-idp
   "Tokens por nome: o teste diz quais claims VERIFICADAS cada token rende (o Keycloak real fica no suite :keycloak)."
