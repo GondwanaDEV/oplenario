@@ -2746,6 +2746,42 @@ quer dizer "o código atual não tem o defeito", não "reproduzi e passou". Os 8
 
 Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as linhas 5, 18–21, 24–37 e 39–49).
 
+**Depois das frentes de 05/10/2026: 84 achados · 39 abertos · 45 fechados.** Onze achados da tabela abaixo foram
+fechados em código e mergeados com o CI verde; as linhas ficam na tabela, com a numeração de antes, e valem como
+histórico.
+
+| Linha | O que fechou | PR |
+|---|---|---|
+| 7 (resíduo) | `votos.vereador_id`: FK é vetada pela ADR-0001 §6 (sem FK entre schemas); entra o CHECK contra UUID nulo e a prova, com Postgres real, de que toda rota de voto recusa vereador fora da Casa | #124 |
+| 8 | Matéria única por pauta de sessão: índice único parcial para itens criados depois da migration, checagem em código para os antigos, 409 "Esta matéria já está na pauta desta sessão." Nenhum item antigo foi tocado | #127 |
+| 9 | Placar nominal do telão mostra o nome parlamentar; sem nome, "Vereador(a)", nunca o UUID | #123 |
+| 10 | "Em tramitação" passa a vir do rito (`template_estado.terminal`, levado pelo evento `proposicao.transicionou`), não do nome do estado | #133 |
+| 11 | O `admin_ente` revoga o acesso que concedeu (vereador, controle interno, jurídico), com motivo; a linha revogada fica como histórico | #131 |
+| 13 | `/portal/casa/[ente]/votacoes`: votações encerradas de sessões públicas, com placar e voto por vereador quando nominal | #130 |
+| 14 | `/portal/casa/[ente]/vereadores`: lista dos vereadores em exercício | #129 |
+| 15 | `/portal/casa/[ente]/leis`: lista filtrável e ficha da norma | #126 |
+| 22 (2 achados) | O dashboard da Mesa mostra a sessão em curso e a hora no fuso da Casa | #133 |
+| 23 | Remessas ao TCE aparecem no card de compliance da Mesa (o dado já vinha na rota; a tela não lia) | #133 |
+| 38 | A raiz `/` deixou de dizer "em construção" | #129 |
+
+O que essas frentes deixaram registrado:
+- **Linha 12 segue aberta.** A tentativa de fazer o cockpit abrir a sessão viva mais recente reprovou a Trilha 3 (votar
+  e confirmar presença) e foi desfeita no próprio #133. A vista `sli_sessao` não guarda o tipo da sessão nem o corpo do
+  vereador; o conserto certo depende de o evento de sessão carregar o tipo.
+- **Achado novo, aberto:** nada impede uma votação nominal numa sessão secreta, e nesse caso o CSV de dados abertos e o
+  perfil público do vereador publicam o voto, porque filtram só pela modalidade. A página de votações (#130) não tem
+  o problema: confere a sessão.
+- **Achado novo, aberto:** ao reconceder acesso a quem já tem conta, o convite sai para o e-mail já cadastrado; não há
+  como trocar o e-mail de alguém pela tela. Dar esse poder ao `admin_ente` permitiria assumir a conta de outra pessoa,
+  então é decisão, não só código.
+- O módulo `compliance` não emite evento nenhum (`events/remessa.clj`, `events/obrigacao.clj` e `producers.clj` são
+  stubs). Frente que presuma "evento de remessa" parte de premissa falsa.
+- Decisões embutidas, a confirmar: a matéria é única por sessão em qualquer fase (linha 8); `admin_ente` não é
+  revogável pela rota nova e a revogação com a Casa suspensa devolve 423 (linha 11); o partido aparece na lista pública
+  de vereadores (linha 14).
+- Lacunas conhecidas das páginas novas do portal: a lista de leis corta em 200 sem paginar e o wire não diz se o
+  arquivo do texto existe; a ficha da matéria ainda não leva às votações dela.
+
 | # | Achado | Gravidade | Evidência | Só código? |
 |---|---|---|---|---|
 | 1 | Um único papel, `secretario`, abre a votação, vota, encerra e emite o autógrafo; a simbólica aceita o `resultado` do corpo | crítico | `legislativo/diplomat/http/in.clj:1278` e `:1401`; `legislativo/controllers.clj:588-590` | decisão do fundador |

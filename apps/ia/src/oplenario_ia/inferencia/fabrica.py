@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from oplenario_ia.agente import fake as agente_fake
 from oplenario_ia.agente.laco import OPERACAO_PLANEJAR, OPERACAO_RESPONDER
 from oplenario_ia.ata import fake as ata_fake
@@ -34,6 +36,17 @@ def criar_porta(config: Config) -> PortaInferencia:
                 CONFERENCIA_REDIGIR: conferencia_fake.redigir,
                 RELATOR_ANALISAR: parecer_fake.analisar,
             }
+        )
+    if config.vendor == "openrouter":
+        # o fornecedor real da plataforma (ADR-0023): todo modelo de linguagem passa pelo OpenRouter
+        from oplenario_ia.inferencia.openrouter_adapter import PortaOpenRouter
+
+        return PortaOpenRouter(
+            config.modelo,
+            timeout_s=config.timeout_s,
+            chave=os.environ.get("OPENROUTER_API_KEY"),
+            url=config.openrouter_url,
+            provedores=config.openrouter_provedores,
         )
     if config.vendor == "anthropic":
         # import tardio: o SDK do fornecedor só carrega quando o deploy o escolhe

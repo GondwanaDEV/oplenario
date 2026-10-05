@@ -375,6 +375,18 @@ describe("derivarIdentidade", () => {
     expect(r.papel).toBe("19ª Legislatura (2025–2028)");
   });
 
+  it("cargo da Mesa guardado como CHAVE vira o nome do cargo; nunca a chave crua", () => {
+    const de = (c: string | null) => derivarIdentidade({ ...perfilBase, cargoMesa: c }).cargoMesa;
+    expect(de("presidente")).toBe("Presidência");
+    expect(de("vice")).toBe("Vice-presidência");
+    expect(de("1_secretario")).toBe("1ª Secretaria");
+    expect(de("2_secretario")).toBe("2ª Secretaria");
+    expect(de("2_vice_presidente")).toBe("2ª Vice-presidência");
+    expect(de("corregedor_geral")).toBe("Corregedor geral");
+    expect(de("  ")).toBeNull();
+    for (const c of ["presidente", "vice", "1_secretario", "corregedor_geral"]) expect(de(c)).not.toContain("_");
+  });
+
   it("cargoMesa null -> some; valor livre sai cru", () => {
     expect(derivarIdentidade({ ...perfilBase, cargoMesa: null }).cargoMesa).toBeNull();
     expect(derivarIdentidade({ ...perfilBase, cargoMesa: "Vice-Presidenta" }).cargoMesa).toBe(

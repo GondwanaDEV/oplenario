@@ -2,6 +2,8 @@
 
 Medir primeiro: o orçamento mensal por Casa (aviso a 80%, R-IA-1 "cota da Casa") vem na B.9 e lê exatamente isto.
 Modelo sem preço na tabela não vira custo zero em silêncio: o custo sai `None` e o consumo da Casa fica `parcial`.
+Quando o fornecedor declara o custo na resposta (o OpenRouter, ADR-0023), vale o declarado — é o que foi cobrado — com o
+`acrescimo` do fornecedor (a taxa da plataforma) somado; a tabela fica de reserva.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ class TabelaPrecos(BaseModel):
     unidade_tokens: int
     observacao: str = ""
     precos: dict[str, Preco]  # "vendor/modelo"
+    acrescimo: dict[str, Decimal] = {}  # vendor → multiplicador da taxa da plataforma (ex.: "openrouter": "1.055")
 
 
 class Custo(BaseModel):
@@ -42,7 +45,10 @@ def tabela_padrao() -> TabelaPrecos:
     return TabelaPrecos.model_validate(json.loads(texto))
 
 
-def calcular(uso: Uso, vendor: str, modelo: str, tabela: TabelaPrecos) -> Custo:
+def calcular(uso: Uso, vendor: str, modelo: str, tabela: TabelaPrecos, informado: Decimal | None = None) -> Custo:
+    fator = tabela.acrescimo.get(vendor, Decimal(1))
+    if informado is not None:
+        return Custo(valor=informado * fator, moeda=tabela.moeda, tabela=f"informado por {vendor}")
     preco = tabela.precos.get(f"{vendor}/{modelo}")
     if preco is None:
         return Custo(valor=None, moeda=tabela.moeda, tabela=tabela.consultado_em)
@@ -52,4 +58,4 @@ def calcular(uso: Uso, vendor: str, modelo: str, tabela: TabelaPrecos) -> Custo:
         + uso.cache_leitura * preco.cache_leitura
         + uso.cache_escrita * preco.cache_escrita
     )
-    return Custo(valor=bruto / tabela.unidade_tokens, moeda=tabela.moeda, tabela=tabela.consultado_em)
+    return Custo(valor=bruto * fator / tabela.unidade_tokens, moeda=tabela.moeda, tabela=tabela.consultado_em)

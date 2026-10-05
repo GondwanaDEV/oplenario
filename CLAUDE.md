@@ -79,10 +79,12 @@ presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a de
 com o fornecedor fake** (conferência real, texto de roteiro). **Índice único e busca intra-câmara (A.4/A.5)** entregues — PR #49 e o seguinte: a IA devolve ids, o core decide o que se vê; IA fora cai na busca pela ementa. **Resumo cidadão (A.8)** entregue: a IA redige a cada versão do texto, a secretaria revisa e publica, o portal mostra com o selo de revisão humana — **a Faixa A está completa em código**; a A.1 (qualidade medida) espera o áudio de
 Baturité com 15 min anotados. A **Faixa B** (agente, consulta LOM/RI, copiloto) começou pelo **catálogo de ações (B.1, [ADR-0009](docs/adr/0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md))**: uma ferramenta por ação de domínio, declarada em `diplomat/catalogo.clj` de cada módulo; **rota nova sem entrada no catálogo (ou motivo em `resources/catalogo/fora-do-catalogo.edn`) quebra o CI**. A **identidade delegada (B.2, [ADR-0010](docs/adr/0010-identidade-delegada-do-agente.md))** está feita: o core emite uma credencial opaca por execução do agente (o Keycloak 26.0 não delega), a permissão é recalculada a cada chamada e `ato` por agente só vira proposta (B.6). O **assistente da Casa (B.3)** está no ar em `/assistente`: pergunta em palavras, o agente consulta o core pelo servidor MCP como a pessoa e responde citando o que consultou. As **normas da Casa (B.4, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram por texto, quebradas por dispositivo, conferidas pela secretaria em `/normas` e indexadas na IA ao publicar; na **B.5** o assistente lê a LOM e o Regimento pelo artigo (`buscar_dispositivos`, `ler_dispositivo`) e cita o dispositivo com a data até quando o texto foi conferido. Na **B.6 ([ADR-0012](docs/adr/0012-proposta-de-ato.md))** o agente passa a PROPOR atos: nada executa sozinho — a pessoa lê e confirma em `/propostas/:id` (o vereador já pede o requerimento em palavras em `/vereador/assistente`); voto, presença e condução da sessão nem são propostos. Na **B.7** o copiloto entra no "Novo requerimento": o vereador descreve em palavras e o formulário volta preenchido, com a justificativa citando a norma da Casa — ele revisa e assina pelo fluxo de sempre. Na **B.8 ([ADR-0013](docs/adr/0013-agente-institucional-e-conferencia.md))** estreia o agente institucional da Casa (sem pessoa, ligado pelo `admin_ente`): a cada proposição protocolada ele lê a matéria e a LOM/RI e deixa uma nota técnica em rascunho, com citações, na fila `/conferencias` da secretaria, que aproveita ou descarta. Na **B.9 ([ADR-0014](docs/adr/0014-orcamento-de-ia-e-painel-da-casa.md))** entra a cota de IA por Casa (orçamento do plano definido pelo operador; aviso a 80%, segundo plano pausa primeiro, teto duro → "cota da Casa") e o painel `/paineis/ia` do administrador; **a Faixa B está completa em código** — faltam os valores comerciais do orçamento e o fornecedor real. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
-não-treino, LGPD art. 33) — o fake não espera. **OpenRouter avaliado (03/10/2026, [`docs/30`](docs/30-avaliacao-openrouter.md)):**
-fora do caminho de dado de Casa, porque soma um contrato, não tem região no Brasil e a empresa está em troca de controle.
-Usá-lo só para comparar modelos na avaliação (conjuntos sintéticos) espera o "Confirmo". Produção segue o failover do
-Eixo 13 com contrato direto. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
+(05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
+de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
+`OPENROUTER_API_KEY`), ZDR e "sem coleta" travados em toda requisição, provedor e custo declarados no registro. As 8
+capacidades passam por ele, com `openai/gpt-oss-120b` como modelo padrão provisório; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
+jurídico, agora com o OpenRouter como contratado; o adaptador nunca falou com o OpenRouter real. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
@@ -339,10 +341,40 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 - Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
   por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
 
-**Exploratório de 12/09 retriado em 04/10/2026:** 84 achados · 43 conferidos no código · 19 abertos · 24 fechados · 41
-não conferidos. Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
-o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda); promulgar norma e gerar remessa ao
-TCE sem rota; convocação oficial inexistente.
+**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 39 abertos · 45 fechados · 0 sem decidir.
+Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
+- o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
+- promulgar norma e gerar remessa ao TCE sem rota; convocação oficial inexistente;
+- **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
+  O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
+
+**Frentes de 05/10/2026 (do exploratório), todas na `main`:**
+- **Portal do cidadão:** `/portal/casa/[ente]/leis` (lista filtrável e ficha da norma), `/vereadores` (quem está em
+  exercício) e `/votacoes` (votações encerradas de sessões públicas, com o voto por vereador quando nominal). A regra
+  de sessão secreta da página de votações é a do livro de atas e é conferida na lista e no detalhe. A raiz `/` deixou
+  de dizer "em construção".
+- **Revogar acesso (adendo da ADR-0005):** em `/administracao`, o `admin_ente` revoga, com motivo, o acesso de
+  vereador, controle interno e jurídico. A linha revogada fica como histórico e conceder de novo abre outra. Sem papel
+  ativo na Casa, o vínculo é encerrado e a sessão cai na chamada seguinte; as credenciais do agente da pessoa caem
+  junto. `admin_ente` e `secretario` não são revogáveis por essa rota. O Keycloak não é tocado.
+- **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
+  criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
+- **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
+- **Dashboard da Mesa:** "em tramitação" vem do rito (`template_estado.terminal`, levado pelo evento
+  `proposicao.transicionou`); a sessão em curso aparece primeiro, com a hora no fuso da Casa; as remessas ao TCE
+  aparecem no card de compliance.
+- **Votos:** `votos.vereador_id` segue sem FK (ADR-0001 §6 proíbe FK entre schemas); a integridade é a recusa na
+  aplicação, provada com Postgres real, mais um CHECK contra UUID nulo.
+- **Falta:**
+  - o cockpit com duas sessões vivas ainda abre a mais antiga (o conserto por data reprovou a Trilha 3 e foi desfeito;
+    depende de o evento de sessão carregar o tipo);
+  - voto nominal em sessão secreta sai no CSV de dados abertos e no perfil público do vereador;
+  - trocar o e-mail de quem já tem conta (o reconvite vai para o e-mail antigo);
+  - a lista de leis corta em 200 sem paginar; a ficha da matéria não leva às votações dela;
+  - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
+    acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
+    (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,
+    tema claro, o ato de revogar e o telão com o nome.
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

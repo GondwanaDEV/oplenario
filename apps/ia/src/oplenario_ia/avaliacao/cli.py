@@ -47,8 +47,8 @@ def _imprimir(r: Relatorio) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="oplenario-ia-avaliar", description=__doc__.split("\n")[0] if __doc__ else "")
     ap.add_argument("caminhos", nargs="+", help="arquivos .json de conjunto ou diretórios com eles")
-    ap.add_argument("--vendor", choices=["fake", "anthropic"], default="fake")
-    ap.add_argument("--modelo", default=Config().modelo)
+    ap.add_argument("--vendor", choices=["fake", "openrouter", "anthropic"], default="fake")
+    ap.add_argument("--modelo", help="padrão: o do fornecedor (no OpenRouter, o slug `openai/gpt-oss-120b`)")
     ap.add_argument("--saida", type=Path, help="grava o relatório JSON (ex.: avaliacoes/resultados/…)")
     args = ap.parse_args(argv)
 
@@ -62,8 +62,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     porta: PortaInferencia | None = None
     if args.vendor != "fake":
-        print(f"ATENÇÃO: avaliando contra {args.vendor}/{args.modelo} — isto gasta dinheiro.", file=sys.stderr)
-        porta = criar_porta(Config(vendor=args.vendor, modelo=args.modelo))
+        cfg = Config(vendor=args.vendor) if args.modelo is None else Config(vendor=args.vendor, modelo=args.modelo)
+        print(f"ATENÇÃO: avaliando contra {cfg.vendor}/{cfg.modelo} — isto gasta dinheiro.", file=sys.stderr)
+        porta = criar_porta(cfg)
 
     relatorios: list[Relatorio] = []
     for arquivo in arquivos:
