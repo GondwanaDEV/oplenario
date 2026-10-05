@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>O Plenário — Assistente da Casa (painel em toda tela interna)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../sistema/tokens.css" />
+<link rel="stylesheet" href="../sistema/chassi.css" />
+<style>
+  /* ============================================================
+     O PLENÁRIO · Componente "Assistente da Casa" — painel retrátil
+     ARQUÉTIPO: nenhum novo. É uma MOLDURA que acompanha qualquer
+     tela interna (aqui, sobre a Ficha da matéria resumida). Os
+     três estados de tamanho são do mesmo componente:
+       recolhido  -> só o botão "Perguntar à Casa", canto inferior
+       aberto     -> painel lateral de 400px que EMPURRA a tela
+                     (não cobre: o foco nunca some atrás dele)
+       expandido  -> ocupa a área da tela, com o histórico ao lado
+     No celular (<760px) aberto e expandido viram FOLHA em tela
+     cheia, modal (foco preso, Esc fecha).
+     Identidade da IA = cobalto (mesma marca do copiloto do editor).
+     A ousadia continua sendo a página; o painel é disciplina.
+     O HISTÓRICO é registro: toda conversa fica guardada com as
+     fontes, quem perguntou, quando e o modelo — e não se apaga.
+     Quem mais lê e por quanto tempo = [GAP], decisão pendente.
+     ============================================================ */
+
+  /* ---------- a tela de fundo (Ficha da matéria resumida) ---------- */
+  .pagina { transition: padding-right .22s ease-out; }
+  .migalhas { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); padding: 1rem 0 0; display: flex; gap: .4rem; flex-wrap: wrap; }
+  .migalhas a { color: var(--texto-2); text-decoration: none; }
+  .migalhas b { color: var(--texto); }
+  .ficha-cab { padding: 1rem 0 1.4rem; }
+  .ficha-cab .num { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
+  .ficha-cab h1 { margin: .35rem 0 .8rem; }
+  .grade-ficha { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 1.2rem; align-items: start; }
+  .bloco-f { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.2rem; box-shadow: var(--sombra); }
+  .bloco-f h2 { font-size: var(--t-16); margin: 0 0 .6rem; }
+  .bloco-f p { margin: 0 0 .6rem; color: var(--texto-2); font-size: var(--t-13); }
+  .tempo { list-style: none; margin: 0; padding: 0; display: grid; gap: .7rem; }
+  .tempo li { display: grid; grid-template-columns: 92px 1fr; gap: .8rem; font-size: var(--t-13); }
+  .tempo .data { font-family: var(--mono); color: var(--texto-2); font-variant-numeric: tabular-nums; }
+  .tempo b { color: var(--texto); font-weight: 600; }
+  @media (max-width: 1100px) { .grade-ficha { grid-template-columns: 1fr; } }
+
+  /* ---------- o botão recolhido ---------- */
+  .ast-lancador {
+    position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 40;
+    display: inline-flex; align-items: center; gap: .55rem;
+    min-height: 48px; padding: .45rem 1.1rem .45rem .5rem;
+    border-radius: var(--raio-capsula); border: 1px solid var(--linha);
+    background: var(--surface-solida); color: var(--texto);
+    font: 600 var(--t-13)/1.2 var(--corpo); cursor: pointer;
+    box-shadow: var(--sombra-alta);
+  }
+  .ast-lancador:hover { border-color: var(--cobalto-texto); }
+  .ast-lancador .glifo-ia { width: 34px; height: 34px; }
+  .ast-lancador kbd { font: 500 var(--t-11)/1 var(--mono); color: var(--texto-2); border: 1px solid var(--linha); border-radius: 6px; padding: .2rem .35rem; }
+  html[data-assistente="aberto"] .ast-lancador,
+  html[data-assistente="expandido"] .ast-lancador { display: none; }
+
+  /* o glifo da IA (o mesmo do copiloto do editor): quadrado cobalto + faísca */
+  .glifo-ia { width: 30px; height: 30px; border-radius: 9px; flex: 0 0 auto; display: grid; place-items: center; color: #fff; background: var(--cobalto); }
+  [data-tema="escuro"] .glifo-ia { background: var(--cobalto-fundo); }
+
+  /* ---------- o painel ---------- */
+  .ast {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 30;
+    width: 400px; max-width: 100vw;
+    display: none; grid-template-rows: auto auto minmax(0, 1fr) auto;
+    background: var(--surface-solida); color: var(--texto);
+    border-left: 1px solid var(--linha); box-shadow: var(--sombra-alta);
+    border-top: 3px solid var(--cobalto);
+  }
+  [data-tema="escuro"] .ast { border-top-color: var(--cobalto-texto); }
+  html[data-assistente="aberto"] .ast { display: grid; }
+  html[data-assistente="aberto"] .pagina { padding-right: 400px; }
+
+  .ast-cabe { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .6rem; padding: .6rem .75rem .65rem 1rem; border-bottom: 1px solid var(--linha); }
+  .ast-cabe .titulo { flex: 1; min-width: 0; font-family: var(--display); font-size: var(--t-16); font-weight: 700; line-height: 1.15; margin: 0; }
+  .ast-cabe .ast-sub { flex: 1 0 100%; margin: 0; font-size: var(--t-12); color: var(--texto-2); }
+  .ast-icone {
+    width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto;
+    border: 0; border-radius: var(--raio-sm); background: transparent; color: var(--texto-2); cursor: pointer;
+  }
+  .ast-icone:hover { background: var(--realce); color: var(--texto); }
+  .ast-icone[aria-pressed="true"] { background: var(--texto); color: var(--surface-solida); }
+
+  /* contexto da tela: dica, nunca fonte */
+  .ast-contexto { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .6rem 1rem; border-bottom: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+  .ast-contexto b { color: var(--texto); font-family: var(--mono); font-weight: 500; }
+  .ast-contexto .btn { margin-left: auto; }
+
+  .ast-corpo { overflow-y: auto; padding: 1rem; display: grid; align-content: start; gap: 1rem; overscroll-behavior: contain; }
+
+  /* pergunta da pessoa */
+  .ast-pergunta { justify-self: end; max-width: 88%; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm) var(--raio-sm) 4px var(--raio-sm); padding: .6rem .8rem; font-size: var(--t-13); }
+  .ast-quem { display: block; font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); margin-bottom: .2rem; }
+
+  /* resposta da IA */
+  .ast-resposta { display: grid; gap: .6rem; font-size: var(--t-13); line-height: 1.6; }
+  .ast-resposta .selo-ia { display: inline-flex; align-items: center; gap: .4rem; font-size: var(--t-12); font-weight: 600; color: var(--cobalto-texto); }
+  .ast-passos { list-style: none; margin: 0; padding: .55rem .7rem; display: grid; gap: .25rem; border-left: 3px solid var(--cobalto-texto); background: var(--surface-2); border-radius: 0 var(--raio-sm) var(--raio-sm) 0; font-size: var(--t-12); color: var(--texto-2); }
+  .ast-passos li { display: flex; gap: .4rem; align-items: baseline; }
+  .ast-passos li::before { content: "✓"; color: var(--cobalto-texto); font-weight: 700; }
+  .ast-passos li.falha::before { content: "!"; color: var(--acento-texto); }
+  .ast-resposta p { margin: 0; color: var(--texto); }
+  .cit { font: 600 var(--t-11)/1 var(--mono); color: var(--cobalto-texto); text-decoration: none; border: 1px solid currentColor; border-radius: 6px; padding: .1rem .3rem; margin-left: .15rem; vertical-align: .1em; }
+  .ast-fontes { margin: 0; padding: 0 0 0 1.2rem; font-size: var(--t-12); color: var(--texto-2); display: grid; gap: .2rem; }
+  .ast-fontes a { color: var(--texto); }
+  .ast-incerteza { margin: 0; font-size: var(--t-12); color: var(--aviso-texto); border-left: 3px solid var(--amarelo-traco); padding-left: .6rem; }
+  .ast-confianca { margin: 0; font-size: var(--t-12); color: var(--texto-2); display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: center; }
+  .ast-reportar { background: none; border: 0; padding: 0; min-height: 24px; font: 500 var(--t-12)/1 var(--corpo); color: var(--acento-texto); text-decoration: underline; cursor: pointer; }
+
+  /* proposta de ato (B.6): nada é feito pela IA */
+  .ast-proposta { border: 1px solid var(--linha); border-left: 3px solid var(--amarelo-traco); border-radius: var(--raio-sm); padding: .7rem .8rem; display: grid; gap: .45rem; background: var(--surface); }
+  .ast-proposta .aviso { font-size: var(--t-12); color: var(--aviso-texto); font-weight: 600; margin: 0; }
+  .ast-proposta b { font-size: var(--t-13); }
+
+  /* vazio: convida a perguntar */
+  .ast-vazio h2 { font-size: var(--t-16); margin: 0 0 .3rem; }
+  .ast-vazio p { margin: 0 0 .8rem; font-size: var(--t-13); color: var(--texto-2); }
+  .ast-sugestoes { list-style: none; margin: 0; padding: 0; display: grid; gap: .45rem; }
+  .ast-sugestoes button { width: 100%; text-align: left; min-height: 44px; padding: .55rem .75rem; border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); font: 500 var(--t-13)/1.4 var(--corpo); cursor: pointer; }
+  .ast-sugestoes button:hover { border-color: var(--cobalto-texto); }
+
+  /* campo + aviso de registro */
+  .ast-campo { border-top: 1px solid var(--linha); padding: .75rem 1rem .85rem; display: grid; gap: .45rem; }
+  .ast-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
+  .ast-campo .linha-envio { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: end; }
+  .ast-campo textarea { resize: none; min-height: 48px; max-height: 160px; width: 100%; padding: .6rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13)/1.45 var(--corpo); }
+  .ast-campo .btn { min-height: 48px; }
+  .ast-registro-aviso { margin: 0; font-size: var(--t-11); line-height: 1.45; color: var(--texto-2); display: flex; gap: .35rem; align-items: flex-start; }
+  .ast-registro-aviso svg { flex: 0 0 auto; margin-top: 1px; }
+
+  /* ---------- histórico ---------- */
+  .ast-hist { display: grid; gap: .9rem; align-content: start; }
+  .ast-hist .busca input { width: 100%; min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13) var(--corpo); }
+  .ast-hist .busca label { display: block; font-size: var(--t-12); font-weight: 600; margin-bottom: .3rem; }
+  .ast-hist h3 { font-size: var(--t-12); font-weight: 600; color: var(--texto-2); margin: 0 0 .35rem; }
+  .ast-hist ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .35rem; }
+  .ast-hist li button { width: 100%; text-align: left; display: grid; gap: .25rem; padding: .55rem .7rem; border: 1px solid transparent; border-radius: var(--raio-sm); background: transparent; color: var(--texto); cursor: pointer; font: inherit; min-height: 44px; }
+  .ast-hist li button:hover { background: var(--realce); }
+  .ast-hist li button[aria-current="true"] { border-color: var(--linha); background: var(--surface-2); }
+  .ast-hist .q { font-size: var(--t-13); font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ast-hist .meta { font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); }
+  .ast-gap { margin: 0; font-size: var(--t-12); color: var(--texto-2); border: 1px dashed var(--linha); border-radius: var(--raio-sm); padding: .55rem .7rem; }
+  .ast-gap b { color: var(--aviso-texto); }
+
+  /* o registro de uma conversa guardada (auditável) */
+  .ast-registro { border: 1px solid var(--linha); border-radius: var(--raio-sm); background: var(--surface-2); padding: .7rem .8rem; font-size: var(--t-12); }
+  .ast-registro p { margin: 0 0 .45rem; font-weight: 600; color: var(--texto); display: flex; gap: .4rem; align-items: center; }
+  .ast-registro dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: .2rem .8rem; }
+  .ast-registro dt { color: var(--texto-2); }
+  .ast-registro dd { margin: 0; color: var(--texto); font-family: var(--mono); font-size: var(--t-11); overflow-wrap: anywhere; }
+  .ast-registro a { color: var(--texto); }
+
+  /* ---------- expandido: ocupa a área da tela, histórico à esquerda ---------- */
+  html[data-assistente="expandido"] .ast {
+    display: grid; width: auto; left: 0; top: 0;
+    grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+    border-left: 0;
+  }
+  html[data-assistente="expandido"] .pagina { visibility: hidden; }
+  html[data-assistente="expandido"] .ast-cabe { grid-column: 1 / -1; }
+  html[data-assistente="expandido"] .ast-contexto { display: none; }
+  html[data-assistente="expandido"] .ast-lateral { display: block; grid-row: 2 / 4; border-right: 1px solid var(--linha); overflow-y: auto; padding: 1rem; }
+  html[data-assistente="expandido"] .ast-corpo,
+  html[data-assistente="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width: 760px; justify-self: center; }
+  .ast-lateral { display: none; }
+  /* no expandido o histórico mora na lateral: o botão e a vista de histórico do corpo saem */
+  html[data-assistente="expandido"] #ast-historico,
+  html[data-assistente="expandido"] .ast-corpo [data-estado~="historico"] { display: none; }
+
+  /* ---------- celular: folha modal em tela cheia ---------- */
+  @media (max-width: 760px) {
+    html[data-assistente="aberto"] .pagina { padding-right: 0; }
+    html[data-assistente="aberto"] .ast,
+    html[data-assistente="expandido"] .ast { width: 100vw; left: 0; grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    html[data-assistente="expandido"] .ast-lateral { display: none; }
+    html[data-assistente="expandido"] .ast-corpo, html[data-assistente="expandido"] .ast-campo { grid-column: 1; }
+    .ast-expandir { display: none; }
+    .ast-lancador .rotulo-longo, .ast-lancador kbd { display: none; }
+    html[data-assistente="aberto"] .prancha, html[data-assistente="expandido"] .prancha { display: none; }
+  }
+
+  /* ---------- estados da prancha ---------- */
+  .ast [data-estado] { display: none; }
+  html[data-ast-estado="conversa"]     .ast [data-estado~="conversa"],
+  html[data-ast-estado="vazio"]        .ast [data-estado~="vazio"],
+  html[data-ast-estado="historico"]    .ast [data-estado~="historico"],
+  html[data-ast-estado="guardada"]     .ast [data-estado~="guardada"],
+  html[data-ast-estado="indisponivel"] .ast [data-estado~="indisponivel"],
+  html[data-ast-estado="cota"]         .ast [data-estado~="cota"] { display: grid; }
+  html[data-ast-estado="guardada"] .ast-campo,
+  html[data-ast-estado="historico"] .ast-campo { display: none; }
+
+  .prancha { position: fixed; left: 1rem; bottom: 1rem; z-index: 50; }
+  .prancha summary { cursor: pointer; min-height: 32px; display: inline-flex; align-items: center; padding: .2rem .7rem; border: 1px dashed var(--linha); border-radius: var(--raio-capsula); background: var(--surface-solida); font-size: var(--t-12); color: var(--texto-2); }
+  .prancha .opcoes { margin-top: .35rem; display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; max-width: min(640px, calc(100vw - 2rem)); padding: .45rem .55rem; border: 1px dashed var(--linha); border-radius: var(--raio-sm); background: var(--surface-solida); font-size: var(--t-12); color: var(--texto-2); }
+  .prancha span { margin-right: .2rem; }
+  .prancha button { min-height: 32px; padding: .2rem .55rem; border: 1px solid var(--linha); border-radius: var(--raio-capsula); background: transparent; color: var(--texto); font: 500 var(--t-12) var(--corpo); cursor: pointer; }
+  .prancha button[aria-pressed="true"] { background: var(--texto); color: var(--surface-solida); border-color: var(--texto); }
+
+  @media (prefers-reduced-motion: reduce) { .pagina { transition: none; } }
+</style>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+<div class="pagina">
+<header class="topo">
+  <div class="envelope topo-grade">
+    <div class="marca">
+      <svg class="marca-simbolo" viewBox="0 0 34 34" role="img" aria-label="O Plenário"><defs><clipPath id="mcOut"><rect width="34" height="34" rx="8"/></clipPath><clipPath id="mcTL"><rect width="17" height="17"/></clipPath><clipPath id="mcTR"><rect x="17" width="17" height="17"/></clipPath><clipPath id="mcBL"><rect y="17" width="17" height="17"/></clipPath><clipPath id="mcBR"><rect x="17" y="17" width="17" height="17"/></clipPath></defs><g clip-path="url(#mcOut)"><rect width="17" height="17" fill="#3A6A48"/><rect x="17" width="17" height="17" fill="#C0693F"/><rect y="17" width="17" height="17" fill="#3F6E92"/><rect x="17" y="17" width="17" height="17" fill="#CFA65C"/><circle cx="17" cy="17" r="10" fill="#8DA995" clip-path="url(#mcTL)"/><circle cx="17" cy="17" r="10" fill="#DBA890" clip-path="url(#mcTR)"/><circle cx="17" cy="17" r="10" fill="#90ABC0" clip-path="url(#mcBL)"/><circle cx="17" cy="17" r="10" fill="#E3CBA0" clip-path="url(#mcBR)"/></g></svg>
+      <div>
+        <p class="marca-nome">O Plenário</p>
+        <p class="marca-orgao">Câmara Municipal de Fortaleza</p>
+      </div>
+    </div>
+    <div class="topo-sep" aria-hidden="true"></div>
+    <span class="topo-trilha">Processo legislativo</span>
+    <div class="topo-dir">
+      <button id="tema-toggle" class="tema-btn" type="button" aria-pressed="false" aria-label="Alternar para tema escuro" title="Alternar tema claro / escuro">
+        <svg class="sol" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        <svg class="lua" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        <span class="tema-rotulo">Claro</span>
+      </button>
+      <span class="presidente">
+        <span class="avatar" aria-hidden="true">RC</span>
+        <span class="quem"><b>Rita Campos</b><span>Servidora legislativa</span></span>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo" class="envelope">
+  <nav class="migalhas" aria-label="Trilha de navegação">
+    <a href="proposicoes.html">Proposições</a><span aria-hidden="true">/</span><b>PL 042/2026</b>
+  </nav>
+  <div class="ficha-cab">
+    <span class="num">PL 042/2026 · Projeto de lei</span>
+    <h1 class="titulo-longo">Institui o Programa Municipal de Hortas Comunitárias em áreas públicas ociosas</h1>
+    <span class="chip chip-info">Em comissões</span>
+  </div>
+  <div class="grade-ficha">
+    <section class="bloco-f" aria-labelledby="t-tram">
+      <h2 id="t-tram">Tramitação</h2>
+      <ol class="tempo">
+        <li><span class="data">02/10/2026</span><span><b>Parecer pedido à CCJ</b> — relatoria designada ao Ver. Paulo Lima</span></li>
+        <li><span class="data">24/09/2026</span><span><b>Encaminhada às comissões</b> — CCJ e Comissão de Meio Ambiente</span></li>
+        <li><span class="data">18/09/2026</span><span><b>Protocolada</b> — autoria da Ver.ª Helena Matos</span></li>
+      </ol>
+    </section>
+    <aside class="bloco-f" aria-labelledby="t-dados">
+      <h2 id="t-dados">Dados da matéria</h2>
+      <p>Apresentada em 18/09/2026. Última ação em 02/10/2026. Nenhuma matéria apensada.</p>
+    </aside>
+  </div>
+  <div style="height:6rem"></div>
+</main>
+</div><!-- /.pagina -->
+
+<!-- ================= RECOLHIDO ================= -->
+<button class="ast-lancador" id="ast-lancador" type="button" aria-controls="ast" aria-expanded="false" title="Perguntar à Casa (Ctrl + /)">
+  <span class="glifo-ia" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
+  <span>Perguntar <span class="rotulo-longo">à Casa</span></span>
+  <kbd aria-hidden="true">Ctrl /</kbd>
+</button>
+
+<!-- ================= O PAINEL ================= -->
+<aside class="ast" id="ast" aria-labelledby="ast-titulo">
+  <div class="ast-cabe">
+    <span class="glifo-ia" aria-hidden="true"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg></span>
+    <h2 class="titulo" id="ast-titulo">Assistente da Casa</h2>
+    <button class="ast-icone" id="ast-historico" type="button" aria-pressed="false" aria-label="Histórico de conversas" title="Histórico de conversas">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>
+    </button>
+    <button class="ast-icone ast-expandir" id="ast-expandir" type="button" aria-label="Expandir o assistente" title="Expandir">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+    </button>
+    <button class="ast-icone" id="ast-recolher" type="button" aria-label="Recolher o assistente" title="Recolher (Esc)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+    <p class="ast-sub">Consulta o sistema com o seu acesso. Não faz nada por você.</p>
+  </div>
+
+  <!-- dica da tela: o assistente busca pelas ferramentas, com o acesso da pessoa; a tela nunca é fonte -->
+  <div class="ast-contexto">
+    <span>Nesta tela: <b>PL 042/2026</b></span>
+    <button class="btn btn-contorno btn-mini" type="button">Perguntar sobre esta matéria</button>
+  </div>
+
+  <!-- histórico na lateral (só no expandido) -->
+  <nav class="ast-lateral" aria-label="Suas conversas">
+    <div class="ast-hist">
+      <div class="busca"><label for="ast-busca-lateral">Buscar nas suas conversas</label><input id="ast-busca-lateral" type="search" /></div>
+      <button class="btn btn-contorno" type="button">Nova conversa</button>
+      <div><h3>Hoje</h3><ul>
+        <li><button type="button" aria-current="true"><span class="q">Qual a situação do PL 042/2026 e quem relata na CCJ?</span><span class="meta">10:42 · 3 fontes</span></button></li>
+      </ul></div>
+      <div><h3>Sexta-feira, 03/10</h3><ul>
+        <li><button type="button"><span class="q">O que vai ser votado na próxima sessão ordinária?</span><span class="meta">16:05 · 2 fontes</span></button></li>
+        <li><button type="button"><span class="q">Qual o quórum para derrubar um veto?</span><span class="meta">14:20 · 1 fonte</span></button></li>
+      </ul></div>
+    </div>
+  </nav>
+
+  <div class="ast-corpo" id="ast-corpo">
+    <!-- ===== VAZIO ===== -->
+    <div class="ast-vazio" data-estado="vazio">
+      <div>
+        <h2>Pergunte o que precisar saber da Casa</h2>
+        <p>Situação de matérias, pauta das sessões, pareceres, a Lei Orgânica e o Regimento. Cada resposta diz de onde veio.</p>
+        <ul class="ast-sugestoes">
+          <li><button type="button">Qual a situação do PL 042/2026?</button></li>
+          <li><button type="button">O que vai ser votado na próxima sessão?</button></li>
+          <li><button type="button">Qual o quórum para derrubar um veto?</button></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ===== CONVERSA GUARDADA (aberta do histórico): é registro ===== -->
+    <div class="ast-registro" data-estado="guardada" role="group" aria-label="Registro desta conversa">
+      <p><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Registro desta conversa (somente leitura)</p>
+      <dl>
+        <dt>Quem perguntou</dt><dd>Rita Campos · secretaria</dd>
+        <dt>Quando</dt><dd>05/10/2026 10:42–10:44</dd>
+        <dt>Modelo</dt><dd>openai/gpt-oss-120b · OpenRouter</dd>
+        <dt>Fontes</dt><dd>3 consultadas · 3 citações conferidas</dd>
+        <dt>Trilha</dt><dd><a href="trilha-auditoria.html">AST-2026-000184 na trilha de auditoria</a></dd>
+      </dl>
+    </div>
+
+    <!-- ===== CONVERSA ===== -->
+    <div class="ast-pergunta" data-estado="conversa guardada"><span class="ast-quem">Você · 10:42</span>Qual a situação do PL 042/2026 e quem relata na CCJ?</div>
+    <div class="ast-resposta" data-estado="conversa guardada">
+      <span class="selo-ia"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>Resposta gerada por IA</span>
+      <ul class="ast-passos" aria-label="O que o assistente consultou">
+        <li>Situação do PL 042/2026</li>
+        <li>Tramitação do PL 042/2026</li>
+        <li>Regimento Interno, art. 112</li>
+      </ul>
+      <p>O PL 042/2026 está nas comissões desde 24/09/2026, encaminhado à CCJ e à Comissão de Meio Ambiente.<a class="cit" href="#f1" aria-label="Fonte 1">1</a></p>
+      <p>Na CCJ, o relator é o Ver. Paulo Lima, designado em 02/10/2026. O parecer ainda não foi apresentado.<a class="cit" href="#f2" aria-label="Fonte 2">2</a> O Regimento dá à comissão 15 dias úteis para o parecer, contados da distribuição.<a class="cit" href="#f3" aria-label="Fonte 3">3</a></p>
+      <p class="ast-incerteza">Não encontrei a data de distribuição na CCJ; o prazo pode já estar correndo desde 24/09.</p>
+      <ol class="ast-fontes" aria-label="Fontes">
+        <li id="f1"><a href="#">Situação do PL 042/2026</a> — consultada às 10:42</li>
+        <li id="f2"><a href="#">Tramitação do PL 042/2026</a> — consultada às 10:42</li>
+        <li id="f3"><a href="#">Regimento Interno, art. 112</a> — texto conferido em 12/09/2026</li>
+      </ol>
+      <p class="ast-confianca">Confira as fontes antes de usar a resposta. <button class="ast-reportar" type="button">Reportar erro</button></p>
+    </div>
+    <div class="ast-pergunta" data-estado="conversa"><span class="ast-quem">Você · 10:44</span>Peça à CCJ uma reunião extraordinária para votar o parecer.</div>
+    <div class="ast-resposta" data-estado="conversa">
+      <span class="selo-ia"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z"/></svg>Resposta gerada por IA</span>
+      <div class="ast-proposta">
+        <p class="aviso">Proposta: nada foi feito ainda</p>
+        <b>Comunicado à CCJ pedindo reunião extraordinária sobre o PL 042/2026</b>
+        <a class="btn btn-primaria btn-mini" href="#">Revisar e confirmar</a>
+      </div>
+      <p class="ast-confianca">Você lê, ajusta e decide. <button class="ast-reportar" type="button">Reportar erro</button></p>
+    </div>
+
+    <!-- ===== HISTÓRICO (no painel) ===== -->
+    <div class="ast-hist" data-estado="historico">
+      <div class="busca"><label for="ast-busca-hist">Buscar nas suas conversas</label><input id="ast-busca-hist" type="search" /></div>
+      <button class="btn btn-contorno" type="button">Nova conversa</button>
+      <div><h3>Hoje</h3><ul>
+        <li><button type="button"><span class="q">Qual a situação do PL 042/2026 e quem relata na CCJ?</span><span class="meta">10:42 · 3 fontes · 1 proposta</span></button></li>
+      </ul></div>
+      <div><h3>Sexta-feira, 03/10</h3><ul>
+        <li><button type="button"><span class="q">O que vai ser votado na próxima sessão ordinária?</span><span class="meta">16:05 · 2 fontes</span></button></li>
+        <li><button type="button"><span class="q">Qual o quórum para derrubar um veto?</span><span class="meta">14:20 · 1 fonte</span></button></li>
+      </ul></div>
+      <p class="ast-gap">Nenhuma conversa se apaga: elas fazem parte do registro da Casa. <b>[GAP]</b> Quem mais pode lê-las e por quanto tempo ficam guardadas ainda está em definição.</p>
+    </div>
+
+    <!-- ===== INDISPONÍVEL (R-IA-1) ===== -->
+    <div data-estado="indisponivel">
+      <div class="sinal sinal-atencao" role="status">
+        <span class="sinal-ic ia" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 2l20 20"/><path d="M17.5 19H9a7 7 0 0 1-6.71-9M5.6 5.6A7 7 0 0 1 20 9c1.7 0 3 1.3 3 3a4 4 0 0 1-1.3 2.9"/></svg></span>
+        <div class="sinal-corpo">
+          <p class="sinal-titulo">O assistente está indisponível agora</p>
+          <p class="sinal-ctx">Siga pela tela: nada do seu trabalho depende dele. Sua pergunta ficou no histórico, sem resposta.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== COTA DA CASA ===== -->
+    <div data-estado="cota">
+      <div class="sinal sinal-atencao" role="status">
+        <span class="sinal-ic ia" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <div class="sinal-corpo">
+          <p class="sinal-titulo">A cota de IA da Casa deste mês acabou</p>
+          <p class="sinal-ctx">O assistente volta no dia 1º. Para antecipar, fale com quem administra a Casa no sistema.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CAMPO ===== -->
+  <form class="ast-campo" onsubmit="return false">
+    <div class="linha-envio">
+      <div>
+        <label for="ast-pergunta">Sua pergunta</label>
+        <textarea id="ast-pergunta" rows="1"></textarea>
+      </div>
+      <button class="btn btn-primaria" type="submit">Perguntar</button>
+    </div>
+    <p class="ast-registro-aviso"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Fica guardado no histórico da Casa: a pergunta, a resposta, as fontes e o modelo usado. A trilha de auditoria registra que você perguntou.</p>
+  </form>
+  <p class="sr-only" aria-live="polite" id="ast-status"></p>
+</aside>
+
+<!-- ================= PRANCHA: troca de estado (só nesta prancha) ================= -->
+<details class="prancha">
+  <summary>Estados desta prancha</summary>
+  <div class="opcoes" role="group" aria-label="Estados do componente nesta prancha">
+  <button type="button" data-tamanho="recolhido" aria-pressed="false">Recolhido</button>
+  <button type="button" data-tamanho="aberto" aria-pressed="true">Aberto</button>
+  <button type="button" data-tamanho="expandido" aria-pressed="false">Expandido</button>
+  <span aria-hidden="true">|</span>
+  <button type="button" data-ver="vazio" aria-pressed="false">Vazio</button>
+  <button type="button" data-ver="conversa" aria-pressed="true">Conversa</button>
+  <button type="button" data-ver="historico" aria-pressed="false">Histórico</button>
+  <button type="button" data-ver="guardada" aria-pressed="false">Guardada</button>
+  <button type="button" data-ver="indisponivel" aria-pressed="false">Indisponível</button>
+  <button type="button" data-ver="cota" aria-pressed="false">Cota</button>
+  </div>
+</details>
+
+<script src="../sistema/tema.js"></script>
+<script>
+  (function () {
+    var raiz = document.documentElement;
+    var lancador = document.getElementById('ast-lancador');
+    var campo = document.getElementById('ast-pergunta');
+    var status = document.getElementById('ast-status');
+    var btnHist = document.getElementById('ast-historico');
+    raiz.setAttribute('data-assistente', 'aberto');
+    raiz.setAttribute('data-ast-estado', 'conversa');
+
+    function marcar(attr, valor) {
+      document.querySelectorAll('.prancha [' + attr + ']').forEach(function (b) {
+        b.setAttribute('aria-pressed', b.getAttribute(attr) === valor ? 'true' : 'false');
+      });
+    }
+    function tamanho(t, focar) {
+      raiz.setAttribute('data-assistente', t);
+      lancador.setAttribute('aria-expanded', t === 'recolhido' ? 'false' : 'true');
+      marcar('data-tamanho', t);
+      var exp = document.getElementById('ast-expandir');
+      exp.setAttribute('aria-label', t === 'expandido' ? 'Reduzir para o painel' : 'Expandir o assistente');
+      exp.title = t === 'expandido' ? 'Reduzir' : 'Expandir';
+      if (focar && t !== 'recolhido') campo.focus();
+      if (focar && t === 'recolhido') lancador.focus();
+    }
+    function ver(v) {
+      raiz.setAttribute('data-ast-estado', v);
+      btnHist.setAttribute('aria-pressed', v === 'historico' ? 'true' : 'false');
+      marcar('data-ver', v);
+      status.textContent = v === 'historico' ? 'Histórico de conversas aberto' : '';
+    }
+    lancador.addEventListener('click', function () { tamanho('aberto', true); });
+    document.getElementById('ast-recolher').addEventListener('click', function () { tamanho('recolhido', true); });
+    var btnExp = document.getElementById('ast-expandir');
+    btnExp.addEventListener('click', function () {
+      tamanho(raiz.getAttribute('data-assistente') === 'expandido' ? 'aberto' : 'expandido', true);
+    });
+    btnHist.addEventListener('click', function () { ver(raiz.getAttribute('data-ast-estado') === 'historico' ? 'conversa' : 'historico'); });
+    document.querySelectorAll('.prancha [data-tamanho]').forEach(function (b) { b.addEventListener('click', function () { tamanho(b.getAttribute('data-tamanho'), false); }); });
+    document.querySelectorAll('.prancha [data-ver]').forEach(function (b) { b.addEventListener('click', function () { ver(b.getAttribute('data-ver')); }); });
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey && e.key === '/') { e.preventDefault(); tamanho(raiz.getAttribute('data-assistente') === 'recolhido' ? 'aberto' : 'recolhido', true); }
+      if (e.key === 'Escape' && raiz.getAttribute('data-assistente') !== 'recolhido') { tamanho('recolhido', true); }
+    });
+  })();
+</script>
+</body>
+</html>
