@@ -478,6 +478,19 @@
     "Onda E: o dataset `chave` (\"proposicoes\" | \"legislacao\" | \"votos-nominais\") INTEIRO, na ordem estavel.
      `votacoes-publicas` so' vale para \"votos-nominais\": o voto de votacao fora dele nao sai."))
 
+(defn materias-sem-rito
+  "Os ids das materias do portal ainda sem rito (carga de `oplenario.portal-republicar-rito`)."
+  [repo ente-id]
+  (transacao repo ente-id #(db-materia/ids-sem-rito % ente-id)))
+
+(defn gravar-rito-ausente!
+  "Grava o rito da carga na materia que ainda nao tem, se ele casar com o contrato publico
+  (`models.materia/RitoDaMateria`, o mesmo do relay); senao nada. true se gravou."
+  [repo ente-id proposicao-id rito]
+  (boolean
+   (when (m/validate models-materia/RitoDaMateria rito)
+     (transacao repo ente-id #(db-materia/gravar-rito-ausente! % ente-id proposicao-id rito)))))
+
 (defrecord RepoTransparenciaPg [datasource]
   RepoTransparencia
   (transacao [_ ente-id f] (tenancy/com-tenant* (:ds datasource) ente-id f))

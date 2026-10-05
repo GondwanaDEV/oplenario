@@ -117,6 +117,10 @@
    {:classe :comando-do-operador
     :motivo (str "o operador (linha de comando) reenvia ao feed da IA o que a Casa ja' tem: so' projecao, nenhuma linha "
                  "da Casa muda")}
+   "portal-republicar-rito"
+   {:classe :comando-do-operador
+    :motivo (str "o operador preenche o rito da faixa do portal nas materias anteriores a mig 20261005000262: so' "
+                 "projecao (`transparencia.materia.rito`, onde ainda falta), nenhuma linha da Casa muda")}
    "ia-orcamento"
    {:classe :comando-do-operador
     :motivo (str "o operador define o orcamento de IA da Casa: ato do OPERADOR (corrente da Operacao, ADR-0016, nao a da "

@@ -14,6 +14,7 @@
             [oplenario.comunicacao.components.repositorio :as repo-comunicacao]
             [oplenario.ia-orcamento :as ia-orcamento]
             [oplenario.ia-republicar :as ia-republicar]
+            [oplenario.portal-republicar-rito :as portal-republicar-rito]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.keycloak-idp :as keycloak-idp]
@@ -48,6 +49,16 @@
             ds   (component/start (datasource/datasource cfg))]
         (try (println "[oplenario]" (ia-republicar/republicar-proposicoes! (:ds ds) ente)
                       "proposicao(oes) publicada(s) no feed da IA")
+             (finally (component/stop ds))))
+
+      ;; Portal: a carga do rito das materias anteriores a mig 20261005000262 (idempotente; ver portal-republicar-rito)
+      (= "portal-republicar-rito" (first args))
+      (let [ente (or (parse-uuid (str (second args)))
+                     (throw (ex-info "uso: portal-republicar-rito <ente-id>" {})))
+            ds   (component/start (datasource/datasource cfg))]
+        (try (let [{:keys [sem-rito gravadas sem-rito-na-casa]} (portal-republicar-rito/republicar-rito! (:ds ds) ente)]
+               (println "[oplenario] rito da faixa do portal:" sem-rito "materia(s) sem rito," gravadas "gravada(s),"
+                        sem-rito-na-casa "seguem no mapa fixo (sem rito na Casa)"))
              (finally (component/stop ds))))
 
       ;; Track IA B.9 (ADR-0014): o OPERADOR define o orcamento de IA da Casa conforme o plano (valores comerciais).
