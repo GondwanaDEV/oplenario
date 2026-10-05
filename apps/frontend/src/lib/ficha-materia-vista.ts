@@ -14,7 +14,7 @@
 // por linha), não só os ativos — estas funções não filtram nada, só rotulam.
 
 import { rotularComissao } from "./comissao-vista";
-import { derivarTramitacao } from "./tramitacao-vista";
+import { derivarTramitacao, rotularSituacaoPeloRito } from "./tramitacao-vista";
 import { categorizarSituacao, type CategoriaSituacao } from "./proposicoes-vista";
 import { textoRecebimento } from "./recebimento-vista";
 import { dataDoPrazo, formatarNumeroAutografo, formatarNumeroNorma } from "./pos-aprovacao-vista";
@@ -49,8 +49,10 @@ export type DadosMateriaVista = {
   ultimaAcaoEm: string;
 };
 
-export function derivarDadosMateria(ficha: FichaMateriaOut): DadosMateriaVista {
-  const { rotuloSituacao } = derivarTramitacao(ficha.proposicao.estado);
+/** `desfecho`: o último ato depois do plenário (`desfechoDaPosAprovacao`). A situação é a mesma do chip do cabeçalho:
+ * o desfecho a partir do autógrafo, senão o nome da Casa para a etapa atual, senão o rótulo fixo. */
+export function derivarDadosMateria(ficha: FichaMateriaOut, desfecho?: string | null): DadosMateriaVista {
+  const rotuloSituacao = rotularSituacaoPeloRito(ficha.proposicao.estado, ficha.rito, desfecho);
   const ordenado = [...ficha.tramitacao].sort((a, b) => a.ocorridoEm.localeCompare(b.ocorridoEm));
   return {
     situacao: rotuloSituacao,

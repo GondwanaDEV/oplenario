@@ -105,6 +105,23 @@ describe("derivarDadosMateria", () => {
   // contrato mudou junto com `derivarTramitacao` (tramitacao-vista.ts): fail-closed continua sendo não
   // lançar e não fingir progresso, mas degradar não obriga a mostrar vocabulário de banco — o rótulo é
   // HUMANIZADO. Detector estrutural do underscore vive em tramitacao-vista.test.ts.
+  it("com rito, a situação é o nome da Casa para a etapa atual (o mesmo do chip e da faixa)", () => {
+    const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
+    const comRito: FichaMateriaOut = {
+      ...fichaBase,
+      rito: {
+        ordemUnica: true,
+        etapas: [etapa("protocolada", "Entrada"), etapa("em_comissoes", "Análise nas comissões")],
+        atual: etapa("em_comissoes", "Análise nas comissões"),
+        anteriores: null,
+        proximas: [],
+      },
+    };
+    expect(derivarDadosMateria(comRito).situacao).toBe("Análise nas comissões");
+    // a partir do autógrafo, o desfecho decide
+    expect(derivarDadosMateria(comRito, "publicada").situacao).toBe("Virou lei");
+  });
+
   it("estado desconhecido -> fail-closed (não lança) e situação HUMANIZADA, nunca a chave crua", () => {
     const fichaXpto = { ...fichaBase, proposicao: { ...fichaBase.proposicao, estado: "xpto_qualquer" } };
     expect(() => derivarDadosMateria(fichaXpto)).not.toThrow();

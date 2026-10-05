@@ -507,9 +507,16 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     - reapresentação depois da rejeição: `[GAP]`;
     - não vistos em browser: a ficha e as votações públicas com o turno.
 - **Falta:**
-  - a faixa do portal ainda é o mapa fixo (a projeção pública não carrega o rito); o chip da ficha usa o rótulo fixo e
-    a faixa o nome da Casa ("Em Plenário" e "Em Pauta" na mesma tela, na demo); `template_estado.ordem` não tem
-    validação nem significado documentado;
+  - **chip pelo nome da Casa (05/10/2026):** na ficha interna o chip e a "Situação" do rail dizem o nome que o rito
+    dá à etapa atual, o mesmo da faixa (sem rito verificável, o rótulo fixo); a partir do autógrafo o selo segue o
+    desfecho, que a ficha agora lê da rota de pós-aprovação (`desfechoDaPosAprovacao`). A lista interna recebe
+    `rotulo-estado` (`template_estado.nome`, um LEFT JOIN a mais na mesma consulta) e o chip da ficha pública usa a
+    etapa da movimentação mais recente ("Etapa atual" de "Por onde a matéria passou"). **Resta:** o quadro de
+    tramitação e o painel da Mesa seguem no rótulo fixo (`rotularEstado`), porque `paineis.tramitacao` não guarda o
+    nome da etapa: pede coluna nova, projeção do rótulo que `proposicao.protocolada`/`transicionou` já carregam e
+    reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
+    portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
+    `template_estado.ordem` não tem validação nem significado documentado;
   - o cockpit do vereador ainda diz "faltam N" em votação encerrada;
   - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
     cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira

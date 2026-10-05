@@ -9,6 +9,7 @@
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.db.proposicao :as prop]
+            [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.migracao :as migracao]))
 
 (def ^:dynamic *ds* nil)
@@ -120,3 +121,21 @@
               "docs/23 Fatia 4a: o autor viaja no resumo (a TV mostra de quem e' a materia)")
           (is (nil? (:autor-texto (get por-id b))) "sem autoria textual -> nil, nunca inventada")
           (is (= [] (prop/resumos-por-ids tx e1 [])) "lote vazio -> []"))))))
+
+(deftest lista-traz-o-nome-que-o-rito-da-casa-da-a-etapa
+  ;; O chip da lista diz o NOME que a Casa deu a etapa (`template_estado.nome`), o mesmo da faixa da ficha; materia
+  ;; sem rito (ou estado que o rito nao declara) vem com nil e a tela cai no rotulo fixo.
+  (let [ente (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      (fn [tx]
+        (let [sem-rito (protocolar! tx ente :ementa "Antes do rito")
+              tid (random-uuid)]
+          (tram/criar-template! tx {:id tid :ente-id ente :chave "rito_ordinario" :versao 1
+                                    :nome "Rito Ordinario [FIXTURE]" :estado-inicial "protocolada"})
+          (tram/criar-estado! tx {:id (random-uuid) :ente-id ente :template-id tid :chave "protocolada"
+                                  :nome "Entrada na Casa" :terminal false})
+          (let [com-rito (protocolar! tx ente :ementa "Depois do rito")
+                por-id (into {} (map (juxt :id identity)) (prop/listar tx ente filtro-base))]
+            (is (= "Entrada na Casa" (:rotulo-estado (get por-id com-rito))))
+            (is (nil? (:rotulo-estado (get por-id sem-rito))) "sem rito: nil, nunca inventado")
+            (is (= 2 (prop/contar tx ente filtro-base)) "a juncao com o rito nao multiplica linha")))))))
