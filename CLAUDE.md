@@ -68,7 +68,7 @@ abertas, em ordem de importância:
 
 **1. Track IA — base comum ENTREGUE (26/09/2026); Faixas A e B são o maior bloco restante.** O satélite existe:
 `apps/ia/` (Python 3.12, **[ADR-0006](docs/adr/0006-satelite-de-ia-apps-ia.md)**), com porta de inferência (fake por
-padrão + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
+padrão + OpenRouter + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
 incerteza, registro sem conteúdo, revisão humana, R-IA-1), `nucleo.Nucleo` (o pipeline que **toda** capacidade compõe) e
 avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42).
 **Faixa A em curso (26/09/2026):** captação (A.2), transcrição com Caminho C + fronteira core↔IA
@@ -82,9 +82,13 @@ A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedo
 não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
 de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
-`OPENROUTER_API_KEY`), ZDR e "sem coleta" travados em toda requisição, provedor e custo declarados no registro. As 8
-capacidades passam por ele, com `openai/gpt-oss-120b` como modelo padrão provisório; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
-jurídico, agora com o OpenRouter como contratado; o adaptador nunca falou com o OpenRouter real. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+`OPENROUTER_API_KEY`), ZDR, "sem coleta" e `require_parameters` travados em toda requisição, provedor e custo
+declarados no registro. As 8 capacidades passam por ele; transcrição e embeddings seguem self-host. O satélite só sobe
+com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
+**Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
+ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
+reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429); o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
+`[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
