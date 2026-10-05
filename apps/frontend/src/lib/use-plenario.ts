@@ -4,14 +4,14 @@
 // (/api/sessoes/:id/plenario) e dobra cada evento pelo reducer puro. Reconecta com backoff resumindo
 // pelo Last-Event-ID. Todo o IO mora aqui; a lógica de estado é o reducer testado (plenario-reducer).
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-fetch";
 import { camelizarChaves } from "./boundary";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
 import type { ComposicaoSessaoOut, MinhaPresencaOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, hidratarVotacaoEncerrada, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot, type VotacaoEncerradaSnapshot } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -146,6 +146,9 @@ export function usePlenario(
   // O mesmo espelho síncrono para a precedência de `hidratarMinhaPresenca` — um MAPA por vereador (ver a
   // docstring de `presencaEventoSeq` em `EstadoPlenario`); imutável no reducer, então guardar a referência basta.
   const presencaEventoSeqRef = useRef<Record<string, number>>({});
+  // Ponte para `conferirVotacao` (devolvida pelo hook): o effect a arma com o pedido de re-busca da votação e a
+  // desarma no cleanup. Fora de uma sessão viva é no-op.
+  const conferirVotacaoRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (semCredencial(token) || !idValido) return; // casos de erro são derivados no retorno (sem setState síncrono no effect)
@@ -163,6 +166,8 @@ export function usePlenario(
     let quorumEmVoo = false;
     let tribunaEmVoo = false;
     let votacaoEmVoo = false;
+    // 403 de `votacao-encerrada` (sessão secreta, leitor que não é a Mesa) não muda enquanto a tela vive.
+    let semAcessoAoResultado = false;
     let minhaPresencaEmVoo = false;
     let sessaoEmVoo = false;
 
@@ -281,6 +286,10 @@ export function usePlenario(
         if (!vivo) return;
         if (resp.status === 404) {
           setEstado((prev) => (prev ? hidratarVotacao(prev, null, seqNoDisparo) : prev));
+          // Nenhuma aberta: o que existe de votação para mostrar é o RESULTADO da última encerrada (o
+          // telão/TV/cockpit que recarrega depois do encerramento). Mesmo `seqNoDisparo`: qualquer evento
+          // de votação ao vivo durante as duas leituras descarta as duas.
+          await buscarVotacaoEncerrada(seqNoDisparo);
           return;
         }
         if (!resp.ok) {
@@ -296,6 +305,41 @@ export function usePlenario(
       } finally {
         limpar();
         votacaoEmVoo = false;
+      }
+    };
+
+    /** Busca `GET /sessoes/:id/votacao-encerrada` — o RESULTADO da última votação encerrada, chamada só
+     * depois de `votacao-aberta` dizer 404 (dentro da MESMA guarda `votacaoEmVoo`). 404 é o estado
+     * legítimo "nenhuma votação encerrada ainda". 403 (sessão secreta e quem lê não é a Mesa — o teto é o da
+     * rota magra `/quorum`) é permanente para esta tela: marca e para de perguntar, em vez de gerar uma
+     * negação a cada 30 s. Qualquer outra falha degrada SEM MENTIR (mantém o que o SSE mostrou). */
+    const buscarVotacaoEncerrada = async (seqNoDisparo: number) => {
+      if (semAcessoAoResultado) return;
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
+      try {
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}/votacao-encerrada`, {
+          token: token ?? undefined,
+          signal,
+          cache: "no-store",
+        });
+        if (!vivo) return;
+        if (resp.status === 404) return;
+        if (resp.status === 403) {
+          semAcessoAoResultado = true;
+          return;
+        }
+        if (!resp.ok) {
+          setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+          return;
+        }
+        const v = camelizarChaves(await resp.json()) as VotacaoEncerradaSnapshot;
+        if (!vivo) return;
+        setEstado((prev) => (prev ? hidratarVotacaoEncerrada(prev, v, seqNoDisparo) : prev));
+      } catch {
+        if (!vivo) return;
+        setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+      } finally {
+        limpar();
       }
     };
 
@@ -421,6 +465,16 @@ export function usePlenario(
      * granularidade — de ~30s (a periódica) pra' quase instantâneo. */
     let pedidoDeRebuscaVotacao = false;
 
+    /** Pedido de conferir o placar feito por QUEM ACABOU DE ESCREVER nele (o cockpit, depois do 201 do próprio
+     * voto — `conferirVotacao`). O voto gravado só chegava à tela pelo evento `voto.registrado`; evento perdido
+     * (rede do plenário, retenção do canal) deixava o vereador até 30s sem o "Você votou", com o voto já no
+     * banco. Diferente de `pedidoDeRebuscaVotacao`: este NÃO é consumido enquanto houver uma busca em voo
+     * (ela pode ter saído ANTES do voto e não o trazer) — espera a em voo acabar e dispara uma nova. */
+    let pedidoDeConferirVotacao = false;
+    conferirVotacaoRef.current = () => {
+      if (vivo && comVotacao) pedidoDeConferirVotacao = true;
+    };
+
     /** Retentativa da presença do próprio vereador quando o snapshot foi descartado por precedência — ver a
      * docstring de `buscarMinhaPresenca`. Escrita só pelo updater daquela busca, nunca por `aoFrame`. */
     let pedidoDeRebuscaMinhaPresenca = false;
@@ -472,6 +526,9 @@ export function usePlenario(
         const desdeVotacao = Date.now() - ultimaBuscaVotacao;
         if (pedidoDeRebuscaVotacao || desdeVotacao >= REBUSCA_PERIODICA_MS) {
           pedidoDeRebuscaVotacao = false;
+          void rehidratarVotacao();
+        } else if (pedidoDeConferirVotacao && !votacaoEmVoo) {
+          pedidoDeConferirVotacao = false;
           void rehidratarVotacao();
         }
       }
@@ -604,13 +661,19 @@ export function usePlenario(
 
     return () => {
       vivo = false;
+      conferirVotacaoRef.current = () => {};
       clearInterval(relogio);
       controller.abort();
     };
   }, [sessaoId, token, idValido, comQuorum, comVotacao, comMinhaPresenca]);
 
+  /** Pede que o placar da votação seja relido do servidor agora (em até 500ms), sem esperar o evento ao vivo
+   * nem a periódica de 30s. Para quem acabou de gravar um voto e precisa ver o resultado oficial. Estável
+   * entre renders; no-op sem `comVotacao`. */
+  const conferirVotacao = useCallback(() => conferirVotacaoRef.current(), []);
+
   // casos de erro derivados (mantêm o effect livre de setState síncrono)
-  if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token)." };
-  if (!idValido) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Identificador de sessão inválido." };
-  return { sessao, estado, conexao, erro };
+  if (semCredencial(token)) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Sem credencial de sessão (token).", conferirVotacao };
+  if (!idValido) return { sessao: null, estado: null, conexao: "erro" as EstadoConexao, erro: "Identificador de sessão inválido.", conferirVotacao };
+  return { sessao, estado, conexao, erro, conferirVotacao };
 }

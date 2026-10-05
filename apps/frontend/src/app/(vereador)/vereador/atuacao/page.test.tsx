@@ -117,6 +117,37 @@ describe("Minha atuação", () => {
     expect(f.mock.calls.some(([u]) => u === `/api/portal/casa/${ENTE}/vereadores/${VEREADOR}`)).toBe(true);
   });
 
+  describe("o acesso do próprio vereador", () => {
+    afterEach(() => vi.unstubAllEnvs());
+    const semToken = () =>
+      render(
+        <AuthProvider tokenQuery={null}>
+          <PaginaAtuacao />
+        </AuthProvider>
+      );
+
+    it("sessão real do login da Casa: o Perfil traz o caminho para trocar o próprio e-mail de acesso", async () => {
+      vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+      mockApi({
+        eu: { ator: { "ente-id": ENTE, papeis: ["vereador"], "tipo-vinculo": "vereador" } },
+        painel: painel(),
+        perfil: perfil(),
+      });
+      semToken();
+      const link = await screen.findByRole("link", { name: /Trocar meu e-mail de acesso/ });
+      expect(link.getAttribute("href")).toBe("/api/auth/conta");
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    });
+
+    it("modo dev (token de dev): sem o link", async () => {
+      mockApi({ eu: { ator: { "ente-id": ENTE } }, painel: painel(), perfil: perfil() });
+      renderizar();
+      await screen.findByRole("list", { name: "Números do mandato" });
+      expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
+    });
+  });
+
   it("nunca publica percentual de presença", async () => {
     mockApi({ eu: { ator: { "ente-id": ENTE } }, painel: painel(), perfil: perfil(), votos: meusVotos() });
     const { container } = renderizar();

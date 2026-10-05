@@ -11,6 +11,7 @@
 // dele no portal não muda.
 
 import { useAuth } from "@/lib/auth";
+import { AnchorTrocarEmail, usePodeTrocarEmail } from "@/lib/link-conta-de-acesso";
 import { useAtuacao } from "@/lib/use-atuacao";
 import { derivarAtuacao, type AtuacaoVista, type LinhaVotoAtuacao } from "@/lib/atuacao-vista";
 import { planificarFrase } from "@/lib/perfil-vereador-vista";
@@ -43,7 +44,7 @@ export default function PaginaAtuacao() {
       </div>
     );
   }
-  return <Atuacao vista={derivarAtuacao(estado.perfil, estado.painel, estado.votos)} />;
+  return <Atuacao vista={derivarAtuacao(estado.perfil, estado.painel, estado.votos)} token={token} />;
 }
 
 const ICONE_CADEADO = (
@@ -71,7 +72,20 @@ function LinhaVoto({ v }: { v: LinhaVotoAtuacao }) {
   );
 }
 
-function Atuacao({ vista }: { vista: AtuacaoVista }) {
+function MeuAcesso({ token }: { token: string | null }) {
+  const pode = usePodeTrocarEmail(token);
+  if (!pode) return null;
+  return (
+    <>
+      <h2 className="secao-tit">Meu acesso</h2>
+      <p className="acesso">
+        <AnchorTrocarEmail />
+      </p>
+    </>
+  );
+}
+
+function Atuacao({ vista, token }: { vista: AtuacaoVista; token: string | null }) {
   const { presenca } = vista;
   return (
     <div className="atuacao">
@@ -161,6 +175,9 @@ function Atuacao({ vista }: { vista: AtuacaoVista }) {
           {n}
         </p>
       ))}
+
+      {/* Só aparece onde a conta existe (sessão real, login da Casa): o link some em modo dev e na sessão do gov.br. */}
+      <MeuAcesso token={token} />
     </div>
   );
 }

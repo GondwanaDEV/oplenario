@@ -14,6 +14,23 @@
 .quem-mesa .quem b { font-weight: 600; font-size: var(--t-13); color: var(--texto); display: block; }
 .quem-mesa .quem span { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); }
 
+/* Quando a pessoa tem conta no Keycloak da Casa, o bloco de quem está logado é um menu (<details>): o avatar abre um
+   cartão, como a lista dos grupos da barra, com o caminho para trocar o próprio e-mail de acesso. */
+.quem-menu { position: relative; }
+.quem-menu > summary { display: flex; align-items: center; gap: 0.55rem; cursor: pointer; list-style: none; }
+.quem-menu > summary::-webkit-details-marker { display: none; }
+.quem-menu > summary:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; border-radius: 8px; }
+.quem-menu-painel {
+  position: absolute; top: calc(100% + 0.55rem); right: 0; z-index: 40; width: min(18rem, calc(100vw - 2rem)); padding: 0.4rem;
+  background: var(--surface-solida); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra);
+}
+.quem-menu-painel a {
+  display: block; padding: 0.55rem 0.7rem; border-radius: 8px; color: var(--texto); text-decoration: none;
+  font-size: var(--t-13); font-weight: 500; line-height: 1.35;
+}
+.quem-menu-painel a:hover { background: color-mix(in srgb, var(--marca) 7%, transparent); }
+.quem-menu-painel .conta-nota { font-size: var(--t-12); font-weight: 400; color: var(--texto-2); }
+
 /* `flex-wrap: wrap` + `min-width: 0`: sem isto a nav é UM filho flex largo demais (7 itens, uma linha) do
    .topo-grade — mais largo que o envelope já em desktop, empurrando o .topo-dir (margin-left:auto) para
    fora e cortando "quem opera" na borda direita (achado do teste exploratório em 1366px). Deixando a nav

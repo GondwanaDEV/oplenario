@@ -294,6 +294,8 @@ describe("PaginaCalendario", () => {
     const aviso = forte.closest('[role="status"]');
     expect(aviso).not.toBeNull();
     expect(aviso!.textContent).toMatch(/pode estar sem prazos que existem/i);
+    // não manda conferir "o painel de compliance": a tela não existe (miudeza de 05/10/2026)
+    expect(aviso!.textContent).not.toMatch(/painel de compliance/i);
   });
 
   it("o teto de 6 da agenda lateral é ANUNCIADO, não silencioso", async () => {

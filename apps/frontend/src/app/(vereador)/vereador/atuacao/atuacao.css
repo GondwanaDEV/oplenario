@@ -46,3 +46,7 @@
 .atuacao .vazio { font-size: var(--t-13); color: var(--texto-2); margin: 0; }
 .atuacao .recorte { font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; margin: 0.6rem 0 0; }
 .atuacao .nota { font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; margin: 1.2rem 0 0; }
+/* "Meu acesso": o link para trocar o próprio e-mail (página de conta do Keycloak, em inglês). */
+.atuacao .acesso { margin: 0; font-size: var(--t-13); line-height: 1.5; }
+.atuacao .acesso a { color: var(--marca); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.atuacao .acesso .conta-nota { color: var(--texto-2); font-weight: 400; font-size: var(--t-12); text-decoration: none; }

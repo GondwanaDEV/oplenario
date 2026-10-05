@@ -237,6 +237,9 @@
     "Fatia 'demo-tres-consertos' #2b — a votacao 'aberta' MAIS RECENTE da sessao, ou nil. Existe pra
      RECUPERACAO de estado (cliente que conecta sem nenhum evento no stream — retencao MINID de 5min do
      canal, `tempo_real/components`), nunca pra substituir o SSE.")
+  (votacao-encerrada-da-sessao [this ente-id sessao-id]
+    "A votacao 'encerrada' MAIS RECENTE da sessao, ou nil (nunca 'anulada') — o RESULTADO pra recuperacao de
+     estado do telao/TV/cockpit que recarrega DEPOIS do encerramento; irma de `votacao-aberta-da-sessao`.")
   (votos-da-votacao [this ente-id votacao-id])
   (contar-votos-secretos-da-votacao [this ente-id votacao-id]
     "Tick anonimo (contagem, nunca apuracao por valor) — sigilo §22.6, mesma fronteira de
@@ -995,6 +998,8 @@
   (buscar-votacao [this ente-id id] (transacao this ente-id #(votacao/buscar % ente-id id)))
   (votacao-aberta-da-sessao [this ente-id sessao-id]
     (transacao this ente-id #(votacao/aberta-da-sessao % ente-id sessao-id)))
+  (votacao-encerrada-da-sessao [this ente-id sessao-id]
+    (transacao this ente-id #(votacao/encerrada-da-sessao % ente-id sessao-id)))
   (votos-da-votacao [this ente-id vid] (transacao this ente-id #(votacao/votos-da-votacao % ente-id vid)))
   (contar-votos-secretos-da-votacao [this ente-id vid]
     (transacao this ente-id #(votacao/contar-votos-secretos % ente-id vid)))

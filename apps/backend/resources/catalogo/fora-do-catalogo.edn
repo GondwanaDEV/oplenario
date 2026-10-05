@@ -69,6 +69,8 @@
                              :motivo "conducao da sessao ao vivo: abrir a votacao e' da Mesa, pela tela (Eixo 4.3)"}
  :legislativo/encerrar-votacao {:categoria :pessoal
                                 :motivo "conducao da sessao ao vivo: encerrar a votacao e' da Mesa, pela tela (Eixo 4.3)"}
+ :legislativo/votacao-encerrada {:categoria :so-tela
+                                 :motivo "recuperacao de estado do telao/TV/cockpit que recarrega depois do encerramento (voto por vereador na nominal); o agente consulta a votacao pelo portal publico, nao pela conducao ao vivo"}
  :sessoes/confirmar-minha-presenca {:categoria :pessoal
                                     :motivo "presenca e' pessoal: so' o proprio vereador confirma, pela tela (Eixo 4.3)"}
  :sessoes/registrar-presenca {:categoria :pessoal

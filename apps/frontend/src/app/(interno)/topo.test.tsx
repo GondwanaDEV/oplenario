@@ -87,6 +87,64 @@ describe("TopoInterno", () => {
     expect(screen.queryByText("Sérgio Lopes")).toBeNull();
   });
 
+  describe("a conta de acesso (trocar o próprio e-mail)", () => {
+    // Responde por rota: o topo busca a identidade, /eu (o tipo do vínculo) e a contagem da caixa.
+    function servidor(tipoVinculo: string) {
+      global.fetch = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        if (u.includes("/api/eu")) {
+          return { ok: true, json: async () => ({ ator: { papeis: ["secretario"], "tipo-vinculo": tipoVinculo } }) } as Response;
+        }
+        if (u.includes("/api/meu/identidade")) {
+          return { ok: true, json: async () => ({ nome: "Marina Alencar Freire", papeis: ["secretario"] }) } as Response;
+        }
+        return { ok: false, status: 404 } as Response;
+      }) as unknown as typeof fetch;
+    }
+    const montar = () =>
+      render(
+        <AuthProvider tokenQuery={null}>
+          <TemaProvider>
+            <TopoInterno area="Painéis da Mesa" />
+          </TemaProvider>
+        </AuthProvider>
+      );
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("modo real, servidor da Casa: o avatar abre um menu com o link para a página de conta", async () => {
+      vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+      servidor("servidor");
+      montar();
+      const link = await screen.findByRole("link", { name: /Trocar meu e-mail de acesso/ });
+      expect(link.getAttribute("href")).toBe("/api/auth/conta");
+      expect(link.getAttribute("target")).toBe("_blank");
+      expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(screen.getByText("Marina Alencar Freire")).toBeTruthy(); // o nome segue na barra
+    });
+
+    it("sessão do gov.br (cidadão) não tem o link", async () => {
+      vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+      servidor("cidadao");
+      montar();
+      await screen.findByText("Marina Alencar Freire");
+      await new Promise((r) => setTimeout(r, 20));
+      expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
+    });
+
+    it("modo dev (token de dev) não tem o link", async () => {
+      servidor("servidor");
+      render(
+        <AuthProvider tokenQuery="abc123">
+          <TemaProvider>
+            <TopoInterno area="Painéis da Mesa" />
+          </TemaProvider>
+        </AuthProvider>
+      );
+      await screen.findByText("Marina Alencar Freire");
+      expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
+    });
+  });
+
   it("se a busca falhar, mostra 'Sessão'/'indisponível' — nunca finge um ator (mesma disciplina da fatia 2)", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 401 }) as Response) as unknown as typeof fetch;
     render(

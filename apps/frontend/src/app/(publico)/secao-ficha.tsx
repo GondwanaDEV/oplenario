@@ -127,7 +127,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
 
       <AcompanharMateria ente={ente} proposicaoId={proposicaoId} sessao={sessao} />
 
-      <section className="secao">
+      <section className="secao ficha-secao">
         <h2>O que este projeto faz</h2>
         {/* Faixa A / A.8b: o resumo PUBLICADO pela Casa (revisado por uma pessoa, §16.8). Sem resumo publicado, o
             aviso diz isso — não "a IA caiu": o portal nunca fala com a IA, só mostra o que a Casa publicou. */}
@@ -185,7 +185,7 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
       {/* só aparece se a matéria já teve votação encerrada em sessão pública; a seção some sozinha se não */}
       <VotacoesDaMateria ente={ente} proposicaoId={proposicaoId} dados={votacoes} />
 
-      <section className="secao" aria-label="Participação cidadã">
+      <section className="secao ficha-secao" aria-label="Participação cidadã">
         <h2>O que a população está dizendo</h2>
         <p className="part-regras">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">

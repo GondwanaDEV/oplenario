@@ -248,6 +248,41 @@
              {:votos (repo/votos-da-votacao repo-leg ente-id (:id v))}
              {:votos-registrados (repo/contar-votos-secretos-da-votacao repo-leg ente-id (:id v))})))))))
 
+(defn votacao-encerrada
+  "GET .../votacao-encerrada — o RESULTADO da ultima votacao ENCERRADA desta sessao, pra RECUPERACAO de
+  estado: `votacao-aberta` so' le votacao aberta, entao o telao/TV/cockpit que recarregava DEPOIS do
+  encerramento perdia o placar (o `votacao.encerrada` ao vivo ja' passou do canal de ~5min). Irma de
+  `votacao-aberta`: mesma amarra de sessao (`sessao-autorizada`: mesma Casa, sessao aberta — fechada -> 409),
+  mesma resolucao de objeto. nil (sessao inexistente OU nenhuma votacao encerrada — ESTADO LEGITIMO) -> a
+  borda traduz 404. 'anulada' nunca e' resultado (`votacao-encerrada-da-sessao` filtra por estado).
+
+  SIGILO = o do evento ao vivo, nao mais: NOMINAL devolve o voto por vereador (o que `voto.registrado`
+  nominal ja' levou ao vivo); SECRETA so' o contador anonimo; SIMBOLICA so' o resultado; os totais e a base
+  sao o agregado de `votacao.encerrada`, publico mesmo na secreta. Nunca apuracao por valor de voto secreto
+  alem do que o proprio encerramento publica.
+
+  AUTHZ: ao contrario de `votacao-aberta`, a politica injetada (`pode-ver-resultado?`, host) e' a da rota
+  magra `/quorum` — mesma Casa E (transmissao publica OU 'secretario') — SEM a clausula 'vereador'. Numa
+  sessao secreta o plenario nao tem canal ao vivo (403 na subscricao): o teto do que se ve' dela e' o que a
+  rota magra do telao ja' expoe; o vereador entrou em `votacao-aberta` pra poder VOTAR, e esse argumento nao
+  alcanca ler o resultado nominal depois. Em sessao publica a politica coincide com a de `votacao-aberta`."
+  [repo-leg consultar-sessao sessao-fechada? pode-ver-resultado? ator sessao-id]
+  (when-let [s (sessao-autorizada consultar-sessao sessao-fechada? ator sessao-id)]
+    (authz/check! ator :votacao/ver-resultado s pode-ver-resultado?)
+    (let [ente-id (:ente-id ator)]
+      (when-let [v (repo/votacao-encerrada-da-sessao repo-leg ente-id sessao-id)]
+        (let [{:keys [objeto-tipo proposicao]} (resolver-objeto-votacao repo-leg ente-id v)
+              modalidade (:modalidade v)]
+          (merge
+           {:votacao-id (:id v) :modalidade modalidade :objeto-tipo objeto-tipo :objeto-id (:objeto-id v)
+            :proposicao proposicao :resultado (:resultado v)
+            :total-sim (:total-sim v) :total-nao (:total-nao v) :total-abstencao (:total-abstencao v)
+            :base-membros (:base-membros v)}
+           (case modalidade
+             "nominal" {:votos (repo/votos-da-votacao repo-leg ente-id (:id v))}
+             "secreta" {:votos-registrados (repo/contar-votos-secretos-da-votacao repo-leg ente-id (:id v))}
+             nil)))))))
+
 ;; ========================= FE Onda A1: fila de relatores pendentes (§16.11) =========================
 
 (defn relatores-pendentes

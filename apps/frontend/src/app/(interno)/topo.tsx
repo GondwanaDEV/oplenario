@@ -23,6 +23,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTema } from "@/lib/tema";
 import { useAuth } from "@/lib/auth";
+import { AnchorTrocarEmail, usePodeTrocarEmail } from "@/lib/link-conta-de-acesso";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
@@ -247,18 +248,40 @@ export function TopoInterno({ area }: { area: string }) {
             {tema === "escuro" ? "☾" : "☀"}
             <span className="tema-rotulo">{tema === "escuro" ? "Escuro" : "Claro"}</span>
           </button>
-          <div className="quem-mesa">
-            <span className="avatar" aria-hidden="true">
-              {nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
-            </span>
-            <span className="quem">
-              <b>{nome}</b>
-              <span>{papel}</span>
-            </span>
-          </div>
+          <QuemMesa nome={nome} papel={papel} token={token} />
         </div>
       </div>
     </header>
+  );
+}
+
+/** Avatar + nome + papel de quem está na barra. Onde a pessoa tem conta no Keycloak da Casa (sessão real, login da
+ *  Casa), o bloco vira um menu com o caminho para trocar o próprio e-mail de acesso; nos outros casos (modo dev, gov.br,
+ *  ainda carregando) fica como era. */
+function QuemMesa({ nome, papel, token }: { nome: string; papel: string; token: string | null }) {
+  const temConta = usePodeTrocarEmail(token);
+  const quem = (
+    <>
+      <span className="avatar" aria-hidden="true">
+        {nome.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
+      </span>
+      <span className="quem">
+        <b>{nome}</b>
+        <span>{papel}</span>
+      </span>
+    </>
+  );
+  if (!temConta) return <div className="quem-mesa">{quem}</div>;
+  return (
+    <details className="quem-mesa quem-menu">
+      <summary>
+        {quem}
+        <span className="sr-only">, menu da conta</span>
+      </summary>
+      <div className="quem-menu-painel">
+        <AnchorTrocarEmail />
+      </div>
+    </details>
   );
 }
 

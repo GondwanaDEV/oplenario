@@ -181,6 +181,26 @@
             (resposta-conflito-sessao-fechada e)
             (throw e)))))))
 
+(defn- votacao-encerrada-handler
+  "GET /sessoes/:id/votacao-encerrada — o resultado da ULTIMA votacao encerrada da sessao (recuperacao de
+  estado do telao/TV/cockpit que recarrega depois do encerramento). Irma de `votacao-aberta-handler`: SEM
+  `exige-papel` na borda (a politica e' TODA da camada fina, `pode-ver-resultado?` injetado pelo host — a da
+  rota magra `/quorum`, ver `controllers/votacao-encerrada`). nil (sessao inexistente/de outra Casa OU
+  nenhuma votacao encerrada — ESTADO LEGITIMO) -> 404; sessao ja fechada -> 409; sem a politica -> 403."
+  [repo-leg consultar-sessao sessao-fechada? pode-ver-resultado?]
+  (fn [req]
+    (let [ator (:ator req)
+          sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
+      (try
+        (if-let [ve (controllers/votacao-encerrada repo-leg consultar-sessao sessao-fechada?
+                                                   pode-ver-resultado? ator sid)]
+          (http/json-resposta 200 (adapters-out/votacao-encerrada->wire ve))
+          (http/json-resposta 404 {:erro "nenhuma votacao encerrada nesta sessao"}))
+        (catch clojure.lang.ExceptionInfo e
+          (if (= :conflito/sessao-fechada (:tipo (ex-data e)))
+            (resposta-conflito-sessao-fechada e)
+            (throw e)))))))
+
 (defn- votacao-aberta-handler
   "GET /sessoes/:id/votacao-aberta (fatia 'demo-tres-consertos' #2b). Carry telao (Daouda, 12/09/2026):
   SEM `exige-papel` de proposito, igual aos irmaos `/quorum`/`/tribuna`/`/composicao` (sessoes) — a rota
@@ -1320,7 +1340,8 @@
   'secretario' OU 'vereador') — ver rotas.clj). `nome-na-casa` (fatia 2b, injetada pelo host — mesma porta
   da folha de sessao: identidade -> nome SO' de quem tem vinculo nesta Casa) nomeia quem RECEBEU cada
   movimentacao no historico; ausente, o historico sai sem nome (degrada p/ 'recebida', nunca inventa)."
-  [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? resolver-municipio
+  [{:keys [auth repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta? pode-ver-resultado?
+           resolver-municipio
            resolver-vereador resolver-comissoes vereador-vinculado? vereador-no-roster? membros-da-casa
            registro relogio resolver-autor nome-na-casa colegas-da-casa ler-rascunho-resumo copiloto-requerimento
            comissoes-vigentes nomes-de-vereadores perfil-juridico casa-tem-juridico? copiloto-analise normas-publicadas?
@@ -1331,6 +1352,8 @@
   (let [nome-na-casa (or nome-na-casa (constantly nil))
         ;; sem o seam nenhum voto e' marcado como publico (o erro cai no lado de avisar o vereador)
         sessoes-publicas (or sessoes-publicas (constantly #{}))
+        ;; sem o seam, ninguem le o resultado da ultima votacao (fail-closed)
+        pode-ver-resultado? (or pode-ver-resultado? (constantly false))
         ;; fatia 2c: sem o seam, ninguem e' colega (fail-closed: nenhum convite passa na validacao)
         colegas-da-casa (or colegas-da-casa (constantly []))
         ;; ADR-0019: sem os seams, nenhuma comissao/nome/perfil resolve (fail-closed: nada e' encaminhado nem assinado)
@@ -1379,6 +1402,10 @@
       ["/sessoes/:id/votacao-aberta" :get
        [auth (votacao-aberta-handler repo-legislativo consultar-sessao sessao-fechada? pode-ver-votacao-aberta?)]
        :route-name :legislativo/votacao-aberta]
+      ;; Mesmo cuidado de prefix-tree: literal PROPRIO (singular), nunca `votacoes/<literal>`.
+      ["/sessoes/:id/votacao-encerrada" :get
+       [auth (votacao-encerrada-handler repo-legislativo consultar-sessao sessao-fechada? pode-ver-resultado?)]
+       :route-name :legislativo/votacao-encerrada]
       ["/legislativo/proposicoes" :get [auth papel-leitura (listar-proposicoes-handler repo-legislativo)]
        :route-name :legislativo/listar-proposicoes]
       ["/legislativo/proposicoes" :post
