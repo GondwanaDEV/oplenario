@@ -20,7 +20,9 @@
             [oplenario.kernel.components.idp :as idp]
             [oplenario.kernel.components.idp-dev :as idp-dev]
             [oplenario.kernel.tenancy :as tenancy]
-            [oplenario.migracao :as migracao])
+            [oplenario.migracao :as migracao]
+            [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import (java.time Instant)))
 
 (def ^:dynamic *ds* nil)
@@ -335,3 +337,26 @@
                                                                 :email "wanda@camara.gov.br"}))]
       (is (= 201 (:status r))))
     (is (= 200 (:status (pt/response-for svc :get "/meu/identidade" :headers {"Authorization" (bearer ente iid)}))))))
+
+;; ---- a migration nao pode ressuscitar acesso ----
+
+(defn- instrucoes-do-down []
+  (->> (str/split (slurp (io/resource "migrations/20261004000191-identidade-revogar-acesso.down.sql")) #"--;;")
+       (map str/trim) (remove str/blank?)))
+
+(deftest down-da-migration-nao-ressuscita-o-acesso-revogado
+  ;; up -> revoga -> down: a pessoa revogada segue SEM o papel (a linha revogada sai antes de a coluna cair; sem isso a
+  ;; linha voltaria a valer). Quem tinha o papel ativo o mantem. Tudo numa tx que desfaz: o banco de teste nao regride.
+  (let [ente (random-uuid) adm (admin! ente) revogada (identidade! "Xuxa") ativa (identidade! "Yuri")]
+    (conceder! ente revogada "vereador" ["vereador"])
+    (conceder! ente ativa "vereador" ["vereador"])
+    (revogar! ente revogada "vereador" adm "Mandato encerrado")
+    (let [n (fn [tx iid] (count (jdbc/execute! tx ["SELECT 1 FROM identidade.usuario_papel WHERE ente_id = ? AND identidade_id = ?
+                                                      AND papel = 'vereador'" ente iid])))]
+      (jdbc/with-transaction [tx *ds* {:rollback-only true}]
+        (jdbc/execute! tx ["SELECT set_config('app.ente_id', ?, true)" (str ente)])
+        (is (= 1 (n tx revogada)) "antes do down a linha revogada existe (a leitura enxerga: o teste nao e' vacuo)")
+        (doseq [i (instrucoes-do-down)] (jdbc/execute! tx [i]))
+        (is (zero? (n tx revogada)) "depois do down o acesso revogado NAO voltou")
+        (is (= 1 (n tx ativa)) "o ativo segue")))
+    (is (= #{} (repo/papeis-de (repo-id) ente revogada)) "a tx desfez: o banco segue na versao nova")))
