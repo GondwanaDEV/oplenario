@@ -519,7 +519,8 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     na linha do tempo pública as votações de PELOM gravadas antes, com a mesma conta da projeção.
   - **Votação não é "Etapa atual".** Em "Por onde a matéria passou", cada linha traz `votacao` (calculado da chave pela
     `transparencia.logic.desfecho/votacao?`; a chave não sai), e a marca "Etapa atual" fica na etapa mais recente que
-    não é votação. A votação segue na lista com a data e o nome do ato.
+    não é votação. A votação segue na lista com a data e o nome do ato. O chip da ficha pública (PR #209) usa a mesma
+    regra (`indiceDaEtapaAtual` em `movimentacoes-publicas.tsx`): chip e marca nunca divergem.
   - **O painel da Mesa trava o quórum.** Para a PELOM, quando a pauta traz a espécie, o quórum fica em 2/3.
   - **A sigla é PELOM em todo lugar;** o backend dizia "PELO".
   - **A demo vota a emenda com 2/3** e a deixa aprovada só no 1º turno.
