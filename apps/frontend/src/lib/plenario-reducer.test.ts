@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, hidratarVotacaoEncerrada, identidadeDe, exigeQuorumDaSessao, numeroDoTelao, type EstadoPlenario, vistaDoQuorum } from "./plenario-reducer";
 import { derivarMeuVoto } from "./meu-voto-vista";
 import type { EventoPlenario, SessaoOut } from "./contrato";
 import type { QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
@@ -1194,6 +1194,140 @@ describe("pauta.item-anunciado (docs/23 Fatia 4b)", () => {
   it("um anúncio novo substitui o anterior", () => {
     const e = aplicarEvento(aplicarEvento(aberta(), anuncio(1, "i22")), anuncio(2, "i31"));
     expect(e.anuncio?.itemId).toBe("i31");
+  });
+});
+
+// Defeito (04/10/2026, CLAUDE.md §3): recarregar o telão/TV/cockpit DEPOIS que a votação encerrou perdia o
+// placar — `GET /votacao-aberta` só lê votação ABERTA e `hidratarVotacao(null)` limpa o aberto. A recuperação
+// do RESULTADO é `GET /votacao-encerrada` -> `hidratarVotacaoEncerrada`.
+describe("votação — recuperação do RESULTADO depois do encerramento (hidratarVotacaoEncerrada)", () => {
+  const aberta = () => estadoInicial(sessao({ estado: "aberta" }));
+  const seq0 = 0;
+
+  const abertura = (seq: number, votacaoId = "vt1", modalidade = "nominal"): EventoPlenario => ({
+    tipo: "votacao.aberta",
+    seq,
+    dados: { "votacao-id": votacaoId, "sessao-id": "s1", "objeto-tipo": "proposicao", "objeto-id": "p1", modalidade, "quorum-tipo": "maioria_simples" },
+  });
+  const encerramento = (seq: number, votacaoId = "vt1"): EventoPlenario => ({
+    tipo: "votacao.encerrada",
+    seq,
+    dados: { "votacao-id": votacaoId, "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal", "total-sim": 2, "total-nao": 1, "total-abstencao": 0, "base-membros": 3 },
+  } as EventoPlenario);
+
+  const nominal = {
+    votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+    proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" },
+    resultado: "aprovada", totalSim: 2, totalNao: 1, totalAbstencao: 0, baseMembros: 3,
+    votos: [{ vereadorId: "v1", voto: "sim" as const }, { vereadorId: "v2", voto: "sim" as const }, { vereadorId: "v3", voto: "nao" as const }],
+  };
+
+  it("E1 — o CASO DO DEFEITO: cliente frio (sem nenhum evento) recupera o resultado nominal, com a grade por vereador", () => {
+    const e = hidratarVotacaoEncerrada(aberta(), nominal, seq0);
+    expect(e.placar).toEqual({
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+      proposicao: { tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" },
+      encerrada: true, votosNominais: { v1: "sim", v2: "sim", v3: "nao" }, votosSecretos: 0,
+      resultado: "aprovada", totais: { sim: 2, nao: 1, abstencao: 0 }, baseMembros: 3,
+    });
+  });
+
+  it("E1b — o resultado hidratado é o MESMO que o `votacao.encerrada` ao vivo constrói (placar idêntico, fora a ementa que só o HTTP traz)", () => {
+    const aoVivo = reduzir(sessao({ estado: "aberta" }), [
+      abertura(1),
+      { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "v1", voto: "sim" } },
+      { tipo: "voto.registrado", seq: 3, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "v2", voto: "sim" } },
+      { tipo: "voto.registrado", seq: 4, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": "v3", voto: "nao" } },
+      encerramento(5),
+    ] as EventoPlenario[]);
+    const hidratado = hidratarVotacaoEncerrada(aberta(), nominal, seq0);
+    expect({ ...hidratado.placar, proposicao: null }).toEqual({ ...aoVivo.placar, proposicao: null });
+  });
+
+  it("E2 — SECRETA: só o contador e o agregado; uma lista `votos` que viesse no corpo é IGNORADA (sigilo §22.6, fail-closed no cliente também)", () => {
+    const e = hidratarVotacaoEncerrada(
+      aberta(),
+      { votacaoId: "vt9", modalidade: "secreta", objetoTipo: "proposicao", objetoId: "p1", resultado: "rejeitada",
+        totalSim: 2, totalNao: 8, totalAbstencao: 0, baseMembros: 11, votosRegistrados: 10,
+        votos: [{ vereadorId: "v1", voto: "sim" }] } as never,
+      seq0,
+    );
+    expect(e.placar?.votosSecretos).toBe(10);
+    expect(e.placar?.votosNominais).toEqual({});
+    expect(e.placar?.totais).toEqual({ sim: 2, nao: 8, abstencao: 0 });
+    expect(e.placar?.resultado).toBe("rejeitada");
+    expect(e.placar?.encerrada).toBe(true);
+  });
+
+  it("E3 — SIMBÓLICA: só o resultado (totais nulos, como o evento ao vivo)", () => {
+    const e = hidratarVotacaoEncerrada(
+      aberta(),
+      { votacaoId: "vt8", modalidade: "simbolica", objetoTipo: "proposicao", objetoId: "p1", resultado: "aprovada" },
+      seq0,
+    );
+    expect(e.placar).toMatchObject({
+      modalidade: "simbolica", encerrada: true, resultado: "aprovada",
+      totais: { sim: null, nao: null, abstencao: null }, baseMembros: null, votosNominais: {}, votosSecretos: 0,
+    });
+  });
+
+  it("E4 — uma votação ABERTA mais nova no estado NUNCA é sobrescrita pelo resultado da anterior (sem piscar)", () => {
+    const comAbertaNova = aplicarEvento(aberta(), abertura(7, "vt2"));
+    const e = hidratarVotacaoEncerrada(comAbertaNova, nominal, comAbertaNova.votacaoEventoSeq);
+    expect(e.placar?.votacaoId).toBe("vt2");
+    expect(e.placar?.encerrada).toBe(false);
+  });
+
+  it("E4b — precedência por seq: um evento de votação chegado com a resposta em voo descarta o snapshot inteiro", () => {
+    const antes = aberta();
+    const seqNoDisparo = antes.votacaoEventoSeq;
+    const depois = aplicarEvento(antes, abertura(1, "vt2")); // chegou DEPOIS do disparo
+    expect(hidratarVotacaoEncerrada(depois, nominal, seqNoDisparo)).toBe(depois);
+  });
+
+  it("E5 — reconexão: um resultado mais novo no servidor (o `votacao.encerrada` dele se perdeu) substitui o encerrado antigo", () => {
+    const antigo = aplicarEvento(aplicarEvento(aberta(), abertura(1)), encerramento(2));
+    expect(antigo.placar?.votacaoId).toBe("vt1");
+    const e = hidratarVotacaoEncerrada(antigo, { ...nominal, votacaoId: "vt2", votos: [{ vereadorId: "v1", voto: "nao" }] }, antigo.votacaoEventoSeq);
+    expect(e.placar?.votacaoId).toBe("vt2");
+    expect(e.placar?.votosNominais).toEqual({ v1: "nao" });
+  });
+
+  it("E5b — o MESMO resultado já mostrado pelo SSE ganha a ementa que o evento não carrega, sem perder nada", () => {
+    const aoVivo = aplicarEvento(aplicarEvento(aberta(), abertura(1)), encerramento(2));
+    expect(aoVivo.placar?.proposicao).toBeNull();
+    const e = hidratarVotacaoEncerrada(aoVivo, nominal, aoVivo.votacaoEventoSeq);
+    expect(e.placar?.proposicao).toEqual({ tipo: "PL", ano: 2026, sequencial: 42, ementa: "Dispõe sobre X" });
+    expect(e.placar?.encerrada).toBe(true);
+  });
+
+  it("E5c — votação aberta cujo encerramento se perdeu: `hidratarVotacao(null)` tira o placar aberto e o resultado entra no lugar", () => {
+    const comAberta = aplicarEvento(aberta(), abertura(1));
+    const semAberta = hidratarVotacao(comAberta, null, comAberta.votacaoEventoSeq);
+    expect(semAberta.placar).toBeNull();
+    const e = hidratarVotacaoEncerrada(semAberta, nominal, semAberta.votacaoEventoSeq);
+    expect(e.placar).toMatchObject({ votacaoId: "vt1", encerrada: true, resultado: "aprovada" });
+  });
+
+  it("E6 — depois de hidratado, uma abertura ao vivo substitui o resultado (uma votação por vez)", () => {
+    const hidratado = hidratarVotacaoEncerrada(aberta(), nominal, seq0);
+    const e = aplicarEvento(hidratado, abertura(1, "vt2"));
+    expect(e.placar).toMatchObject({ votacaoId: "vt2", encerrada: false, resultado: null });
+  });
+
+  it("E7 — sem resultado (cru null), corpo torto ou sem `resultado`: estado inalterado, nunca lança", () => {
+    const base = aberta();
+    expect(hidratarVotacaoEncerrada(base, null, seq0)).toBe(base);
+    expect(() => hidratarVotacaoEncerrada(base, {} as never, seq0)).not.toThrow();
+    expect(hidratarVotacaoEncerrada(base, {} as never, seq0)).toBe(base);
+    expect(hidratarVotacaoEncerrada(base, { ...nominal, resultado: undefined } as never, seq0)).toBe(base);
+    expect(hidratarVotacaoEncerrada(base, { ...nominal, votos: [null, { vereadorId: 3 }, { vereadorId: "v1", voto: "sim" }] } as never, seq0).placar?.votosNominais)
+      .toEqual({ v1: "sim" });
+  });
+
+  it("E8 — `proposicao` de forma torta vira null (nunca título inventado)", () => {
+    const e = hidratarVotacaoEncerrada(aberta(), { ...nominal, proposicao: { tipo: "PL", ano: "2026" } } as never, seq0);
+    expect(e.placar?.proposicao).toBeNull();
   });
 });
 
