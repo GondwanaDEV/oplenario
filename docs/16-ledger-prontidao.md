@@ -2749,7 +2749,7 @@ Das 50 abertas, 20 estavam nas 17 linhas antigas de achado e 30 são novas (as l
 | # | Achado | Gravidade | Evidência | Só código? |
 |---|---|---|---|---|
 | 1 | Um único papel, `secretario`, abre a votação, vota, encerra e emite o autógrafo; a simbólica aceita o `resultado` do corpo | crítico | `legislativo/diplomat/http/in.clj:1278` e `:1401`; `legislativo/controllers.clj:588-590` | decisão do fundador |
-| 2 | Promulgar/publicar a norma não tem rota (`promulgar-norma!` sem chamador) | crítico | `legislativo/db/norma.clj:21`; `legislativo/components/repositorio.clj:1036` | parte; o rito de sanção por LOM é `[GAP]` |
+| 2 | ~~Promulgar/publicar a norma não tem rota (`promulgar-norma!` sem chamador)~~ **fechado em 05/10/2026:** `POST /legislativo/proposicoes/:id/norma` e `POST /legislativo/normas/:id/publicacao`, com o card "Lei" em `/pos-aprovacao/:id` | crítico | `legislativo/controllers.clj` (`promulgar-norma`, `publicar-norma`); teste `promulgar_norma_test.clj` | quem promulga e o prazo seguem `[GAP]` do rito por LOM |
 | 3 | Gerar a remessa ao TCE não tem rota nem agendador | crítico | `compliance/diplomat/http/in.clj:89-97` | parte; o layout do SIM é `[GAP]` |
 | 4 | Convocação oficial da sessão não existe | crítico | `paineis/mesa/proxima-sessao-rail.tsx:30` | espera o jurídico |
 | 5 | **Aceitar a remessa pela rota não cumpre a obrigação: ela segue pendente e o sweep a vence depois de 30/09** (reproduzido, ver abaixo) | crítico | `compliance/components/repositorio.clj:236-237` (a resposta só transiciona a remessa); `rotas.clj:921-940` (nenhum gatilho em `/compliance/remessas/:id/resposta`); `gatilho_compliance.clj:215-240` (avalia só metas fiscais e contas, e varre todo pendente) | sim; confirmar o desenho (quem reavalia no aceite) |

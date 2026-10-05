@@ -17,8 +17,9 @@
 
 (defn pos-aprovacao->wire
   "`autografo-out` (AutografoOut JA PROJETADO, ou nil) + `tramitacao-out` (TramitacaoExecutivaOut JA
-  PROJETADO, ou nil) -> PosAprovacaoOut."
-  [autografo-out tramitacao-out]
-  (validado wire/PosAprovacaoOut
-            {:autografo autografo-out :tramitacao-executiva tramitacao-out}
-            "pos-aprovacao"))
+  PROJETADO, ou nil) + `norma-out` (NormaOut JA PROJETADO, ou nil — F3.8b) -> PosAprovacaoOut."
+  ([autografo-out tramitacao-out] (pos-aprovacao->wire autografo-out tramitacao-out nil))
+  ([autografo-out tramitacao-out norma-out]
+   (validado wire/PosAprovacaoOut
+             {:autografo autografo-out :tramitacao-executiva tramitacao-out :norma norma-out}
+             "pos-aprovacao")))

@@ -52,11 +52,11 @@
   [tx {:keys [id ente-id veiculo-publicacao updated-by lock-version]}]
   (let [{:keys [estado]} (estado+lock tx ente-id id)]
     (when (nil? estado)
-      (throw (ex-info "publicar!: norma inexistente" {:id id :ente-id ente-id})))
+      (throw (ex-info "publicar!: norma inexistente" {:tipo :conflito/norma :id id :ente-id ente-id})))
     (when (not= "promulgada" estado)
-      (throw (ex-info "publicar!: so se publica uma norma 'promulgada'" {:id id :estado estado})))
+      (throw (ex-info "publicar!: so se publica uma norma 'promulgada'" {:tipo :conflito/norma :id id :estado estado})))
     (when (str/blank? veiculo-publicacao)
-      (throw (ex-info "publicar!: veiculo-publicacao e' obrigatorio (prova da publicacao)" {:id id})))
+      (throw (ex-info "publicar!: veiculo-publicacao e' obrigatorio (prova da publicacao)" {:tipo :validacao/invalido :id id})))
     (let [r (jdbc/execute-one! tx
               (sql/format {:update :legislativo.norma
                            :set {:estado "publicada" :publicado_em [:now] :veiculo_publicacao veiculo-publicacao
@@ -64,7 +64,7 @@
                            :where [:and [:= :ente_id ente-id] [:= :id id] [:= :lock_version lock-version]]}))]
       (when (zero? (:next.jdbc/update-count r 0))
         (throw (ex-info "publicar!: conflito de lock_version ou norma inexistente"
-                        {:id id :lock-version lock-version})))
+                        {:tipo :conflito/norma :id id :lock-version lock-version})))
       {:id id :estado "publicada"})))
 
 (defn buscar [tx ente-id id]

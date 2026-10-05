@@ -33,6 +33,7 @@
             [oplenario.legislativo.adapters.out.meu-painel :as adapters-out-meu-painel]
             [oplenario.legislativo.adapters.in.pos-aprovacao :as adapters-in-pos-aprovacao]
             [oplenario.legislativo.adapters.out.autografo :as adapters-out-autografo]
+            [oplenario.legislativo.adapters.out.norma :as adapters-out-norma]
             [oplenario.legislativo.adapters.out.parecer :as adapters-out-parecer]
             [oplenario.legislativo.adapters.out.pos-aprovacao :as adapters-out-pos-aprovacao]
             [oplenario.legislativo.adapters.out.proposicao :as adapters-out-proposicao]
@@ -879,10 +880,11 @@
   "{:autografo :tramitacao-executiva} (dominio, kebab, nil-aveis) -> PosAprovacaoOut. Chama os DOIS
   adapters/out irmaos (autografo/tramitacao-executiva) antes de compor — adapters/ nunca chama outro
   adapters/ (ADR-0001 §3), mesma disciplina de ficha-materia-handler compondo detalhe->wire+ficha->wire."
-  [{:keys [autografo tramitacao-executiva]}]
+  [{:keys [autografo tramitacao-executiva norma]}]
   (adapters-out-pos-aprovacao/pos-aprovacao->wire
     (some-> autografo adapters-out-autografo/autografo->wire)
-    (some-> tramitacao-executiva adapters-out-tramitacao-executiva/tramitacao-executiva->wire)))
+    (some-> tramitacao-executiva adapters-out-tramitacao-executiva/tramitacao-executiva->wire)
+    (some-> norma adapters-out-norma/norma->wire)))
 
 (defn- gerar-autografo-handler
   "POST /legislativo/proposicoes/:id/autografo — 'Gerar autografo e enviar ao Executivo'. `ano` (kernel/
@@ -976,6 +978,48 @@
           (http/json-resposta 404 {:erro "tramitacao executiva nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
           (resposta-conflito-tramitacao-executiva e))))))
+
+;; ========================= F3.8b: promulgar e publicar a norma =========================
+
+(defn- resposta-conflito-norma
+  "`:conflito/norma` -> 409 com a mensagem de DOMINIO (a tela a mostra). Mesma disciplina de
+  `resposta-conflito-tramitacao-executiva`: cada diplomat traduz a SUA borda."
+  [e]
+  (case (:tipo (ex-data e))
+    :conflito/norma (http/json-resposta 409 {:erro (ex-message e)})
+    (throw e)))
+
+(defn- promulgar-norma-handler
+  "POST /legislativo/proposicoes/:id/norma — 'Promulgar a lei' (F3.8b). A data da promulgacao e' o dia civil
+  da borda (kernel/tempo, injetavel em teste — mesmo padrao do autografo). 201 com a pos-aprovacao inteira (a
+  tela troca o cartao sem reconsultar); nil (proposicao inexistente) -> 404; nao promulgavel/ja promulgada -> 409."
+  [repo-leg resolver-municipio relogio]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          proposicao-id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-pos-aprovacao/promulgar-norma->dominio ator proposicao-id (:json-params req))]
+      (try
+        (if (controllers/promulgar-norma repo-leg resolver-municipio ente-id (tempo/hoje relogio zona-civil) m)
+          (http/json-resposta 201 (pos-aprovacao->wire
+                                    (controllers/buscar-pos-aprovacao repo-leg ente-id proposicao-id)))
+          (http/json-resposta 404 {:erro "proposicao nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-norma e))))))
+
+(defn- publicar-norma-handler
+  "POST /legislativo/normas/:id/publicacao — 'Registrar publicacao' (F3.8b). 200 com a norma publicada; nil
+  (norma inexistente no tenant) -> 404; ja publicada ou lock velho -> 409."
+  [repo-leg]
+  (fn [req]
+    (let [ator (:ator req) ente-id (:ente-id ator)
+          id (adapters-in/id-param->uuid (get-in req [:path-params :id]))
+          m (adapters-in-pos-aprovacao/publicar-norma->dominio ator (:json-params req))]
+      (try
+        (if (controllers/publicar-norma repo-leg ente-id id m)
+          (http/json-resposta 200 (adapters-out-norma/norma->wire (controllers/buscar-norma repo-leg ente-id id)))
+          (http/json-resposta 404 {:erro "norma nao encontrada"}))
+        (catch clojure.lang.ExceptionInfo e
+          (resposta-conflito-norma e))))))
 
 ;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
 
@@ -1408,6 +1452,13 @@
       ["/legislativo/tramitacoes-executivas/:id/apreciacao" :post
        [auth papel it/corpo-json (apreciar-veto-handler repo-legislativo)]
        :route-name :legislativo/apreciar-veto]
+      ;; F3.8b — a materia sancionada (ou com o veto derrubado) vira lei, e a lei e' publicada
+      ["/legislativo/proposicoes/:id/norma" :post
+       [auth papel it/corpo-json (promulgar-norma-handler repo-legislativo resolver-municipio relogio)]
+       :route-name :legislativo/promulgar-norma]
+      ["/legislativo/normas/:id/publicacao" :post
+       [auth papel it/corpo-json (publicar-norma-handler repo-legislativo)]
+       :route-name :legislativo/publicar-norma]
       ;; ADR-0019 fatia 1 — o caminho da comissao (secretaria) e o parecer juridico da Casa (opinativo)
       ["/legislativo/comissoes" :get [auth papel (comissoes-handler comissoes-vigentes)]
        :route-name :legislativo/comissoes]

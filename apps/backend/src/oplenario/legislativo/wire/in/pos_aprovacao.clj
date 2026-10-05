@@ -50,3 +50,19 @@
    [:lock-version :int]
    [:resultado (enum-de logic/estados-apreciacao-veto)]
    [:veto-votacao-id [:string {:min 1 :max 36}]]])
+
+(def PromulgarNorma
+  "Corpo de POST /legislativo/proposicoes/:id/norma — 'Promulgar a lei' (F3.8b). VAZIO de proposito: especie,
+  numero, URN, ementa, texto e data saem do que ja' esta' registrado (a proposicao, o autografo e o desfecho
+  do Executivo) e do relogio da borda — nada disso vem do cliente (§22.5). `:closed true` recusa campo extra."
+  [:map {:closed true}])
+
+(def ^:private veiculo-max 300)
+
+(def PublicarNorma
+  "Corpo de POST /legislativo/normas/:id/publicacao — 'Registrar publicacao' (promulgada -> publicada).
+  `veiculo-publicacao` e' a PROVA da publicacao (ex.: 'Diario Oficial do Municipio, ed. 1.234, p. 3'),
+  obrigatorio e nao-vazio (o db/norma tambem guarda). `lock-version` OBRIGATORIO (CAS real)."
+  [:map {:closed true}
+   [:lock-version :int]
+   [:veiculo-publicacao [:string {:min 1 :max veiculo-max}]]])

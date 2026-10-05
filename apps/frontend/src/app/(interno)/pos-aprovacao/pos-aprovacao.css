@@ -77,13 +77,13 @@
 /* ---- Registrar retorno ---- */
 .form-retorno { margin-top: 1rem; }
 .form-apreciacao { margin-top: 1rem; }
-.form-apreciacao .campo { margin-top: 0.8rem; }
-.form-apreciacao .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
-.form-apreciacao .campo input[type="text"] {
+.form-apreciacao .campo, .form-publicacao .campo { margin-top: 0.8rem; }
+.form-apreciacao .campo label, .form-publicacao .campo label { display: block; font-size: var(--t-12); color: var(--texto-2); margin-bottom: 0.3rem; }
+.form-apreciacao .campo input[type="text"], .form-publicacao .campo input[type="text"] {
   width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--linha); border-radius: 8px;
   background: var(--surface); color: var(--texto); font: inherit; font-size: var(--t-13);
 }
-.form-apreciacao .campo input[type="text"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+.form-apreciacao .campo input[type="text"]:focus-visible, .form-publicacao .campo input[type="text"]:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
 .form-erro { color: var(--acento-texto); font-size: var(--t-13); font-weight: 600; margin: 0 0 0.8rem; }
 .fr-opcoes { display: flex; flex-direction: column; gap: 0.5rem; }
 .fr-opcao { display: flex; align-items: center; gap: 0.5rem; font-size: var(--t-13); color: var(--texto); min-height: 32px; }
@@ -93,3 +93,7 @@
 .acoes { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
 
 @media (max-width: 900px) { .grade { grid-template-columns: 1fr; } }
+
+/* F3.8b — o card "Lei": a URN é longa e sem espaços; quebra em qualquer ponto para não estourar a coluna. */
+.card-norma .urn { overflow-wrap: anywhere; font-size: var(--t-12); }
+.card-norma .confirmar-norma { border-top: 1px dashed var(--linha); margin-top: 0.8rem; padding-top: 0.7rem; }

@@ -341,8 +341,10 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 
 **Exploratório de 12/09 retriado em 04/10/2026:** 84 achados · 43 conferidos no código · 19 abertos · 24 fechados · 41
 não conferidos. Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
-o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda); promulgar norma e gerar remessa ao
-TCE sem rota; convocação oficial inexistente.
+o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda); gerar remessa ao TCE sem rota;
+convocação oficial inexistente. **Promulgar e publicar a norma ENTREGUES (05/10/2026):** em `/pos-aprovacao/:id`, a matéria
+sancionada (ou com veto derrubado) vira lei com número da espécie no ano, URN LexML e o texto do autógrafo; registrar a
+publicação (o veículo é a prova) emite `norma.publicada` e a lei vai ao portal. Quem promulga e o prazo seguem `[GAP]` por LOM.
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

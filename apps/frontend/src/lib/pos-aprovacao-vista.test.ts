@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { derivarPipeline, derivarPrazoExecutivo, formatarNumeroAutografo } from "./pos-aprovacao-vista";
-import type { AutografoOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
+import {
+  derivarPipeline,
+  derivarPrazoExecutivo,
+  formatarNumeroAutografo,
+  formatarNumeroNorma,
+  promulgavel,
+} from "./pos-aprovacao-vista";
+import type { AutografoOut, NormaOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
 
 const autografo: AutografoOut = {
   id: "a1",
@@ -86,5 +92,62 @@ describe("derivarPrazoExecutivo", () => {
     const agora = new Date("2026-07-10T00:00:00Z"); // 7 dias depois do prazo (03/07)
     const r = derivarPrazoExecutivo(autografo, agora);
     expect(r).toEqual({ estado: "vencido", diasVencidos: 7 });
+  });
+});
+
+function norma(parcial: Partial<NormaOut> = {}): NormaOut {
+  return {
+    id: "n1",
+    proposicaoId: "p1",
+    tipoNorma: "lei",
+    numero: 12,
+    ano: 2026,
+    urn: "urn:lex:br;ce;fortaleza:lei:2026-10-05;12",
+    ementa: "Dispõe sobre X",
+    estado: "promulgada",
+    promulgadoEm: "2026-10-05T12:00:00Z",
+    lockVersion: 0,
+    ...parcial,
+  };
+}
+
+describe("a norma no pipeline (F3.8b)", () => {
+  it("sancionada e ainda sem norma: Promulgação é a etapa atual", () => {
+    const etapas = derivarPipeline(autografo, tramitacao({ estado: "sancionado" }), null);
+    expect(etapas[3]).toMatchObject({ rotulo: "Promulgação", situacao: "atual", detalhe: "pode promulgar" });
+    expect(etapas[4]).toMatchObject({ rotulo: "Publicação", situacao: "futura" });
+  });
+
+  it("veto mantido: nada a promulgar, as duas etapas seguem futuras", () => {
+    const etapas = derivarPipeline(autografo, tramitacao({ estado: "veto_mantido" }), null);
+    expect(etapas[3].situacao).toBe("futura");
+    expect(etapas[4].situacao).toBe("futura");
+  });
+
+  it("promulgada: Promulgação feita com o número da lei; Publicação é a atual", () => {
+    const etapas = derivarPipeline(autografo, tramitacao({ estado: "sancionado" }), norma());
+    expect(etapas[3]).toMatchObject({ situacao: "feita", detalhe: "Lei nº 12/2026 · 05/10/2026" });
+    expect(etapas[4]).toMatchObject({ rotulo: "Publicação", situacao: "atual" });
+  });
+
+  it("publicada: as cinco etapas feitas", () => {
+    const etapas = derivarPipeline(
+      autografo,
+      tramitacao({ estado: "veto_derrubado" }),
+      norma({ estado: "publicada", publicadoEm: "2026-10-06T12:00:00Z" }),
+    );
+    expect(etapas.map((e) => e.situacao)).toEqual(["feita", "feita", "feita", "feita", "feita"]);
+    expect(etapas[4].detalhe).toBe("06/10/2026");
+  });
+
+  it("promulgavel: sanção, sanção tácita e veto derrubado — nada mais", () => {
+    expect(["sancionado", "sancao_tacita", "veto_derrubado"].every(promulgavel)).toBe(true);
+    expect(["aguardando", "vetado", "veto_mantido", null, undefined].some(promulgavel)).toBe(false);
+  });
+
+  it("formatarNumeroNorma diz a espécie por extenso", () => {
+    expect(formatarNumeroNorma("lei", 12, 2026)).toBe("Lei nº 12/2026");
+    expect(formatarNumeroNorma("lei_complementar", 3, 2026)).toBe("Lei Complementar nº 3/2026");
+    expect(formatarNumeroNorma("emenda_lom", 1, 2026)).toBe("Emenda à Lei Orgânica nº 1/2026");
   });
 });

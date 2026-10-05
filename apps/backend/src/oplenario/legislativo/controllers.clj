@@ -796,6 +796,70 @@
   (when (repo/buscar-tramitacao-executiva repo-legislativo ente-id id)
     (repo/apreciar-veto! repo-legislativo ente-id (assoc m :id id))))
 
+;; ========================= F3.8b: promulgar e publicar a norma =========================
+
+(defn- conflito-norma! [msg info] (throw (ex-info msg (assoc info :tipo :conflito/norma))))
+
+(def ^:private por-que-nao-promulga
+  "O que dizer a' secretaria quando o retorno do Executivo ainda nao (ou nunca) permite promulgar."
+  {"aguardando"   "o Executivo ainda nao respondeu ao autografo"
+   "vetado"       "o veto ainda nao foi apreciado pela Camara"
+   "veto_mantido" "o veto foi mantido: a materia nao vira norma"})
+
+(defn promulgar-norma
+  "F3.8b — 'Promulgar a lei': a materia sancionada (expressa ou tacitamente) ou com o veto derrubado vira NORMA,
+  com numero proprio da especie no ano, URN LexML e o texto CONGELADO do autografo (o texto que foi ao Executivo
+  e' o que vira lei, nao o vigente de agora — mesmo racional do T3-A2 no autografo). A camada de dados ja'
+  existia (db/norma/promulgar!, F3.8b) sem nenhuma rota que a chamasse: a materia sancionada nunca virava lei.
+
+  Tudo sai do que ja' esta' registrado: especie (logic/tipo-proposicao->tipo-norma), ementa da proposicao,
+  autografo e texto, desfecho do Executivo, municipio (`resolver-municipio`, injetado pelo host). `hoje`
+  (LocalDate civil, do diplomat) e' a data da promulgacao e o ano do numerador ('norma:tipo:ano').
+
+  GUARDS (todos 409 `:conflito/norma` — o pedido e' valido, o recurso e' que nao esta' em condicao):
+  ja' promulgada; sem autografo; desfecho que nao promulga (logic/promulgavel?: sancionado | sancao_tacita |
+  veto_derrubado); especie que nao e' ato normativo. Duas promulgacoes simultaneas: o UNIQUE decide no Repo.
+  QUEM promulga (Prefeito na sancao, Presidente da Camara na tacita/veto derrubado) e o prazo sao rito por LOM,
+  `[GAP]` (§22.4.4): o sistema registra o ato, nao o atribui. nil se a proposicao nao existe (-> 404)."
+  [repo-legislativo resolver-municipio ente-id hoje m]
+  (let [proposicao-id (:proposicao-id m)
+        {:keys [proposicao]} (repo/buscar-proposicao-detalhe repo-legislativo ente-id proposicao-id)]
+    (when proposicao
+      (let [{:keys [autografo tramitacao-executiva norma]}
+            (repo/buscar-pos-aprovacao repo-legislativo ente-id proposicao-id)
+            estado (:estado tramitacao-executiva)]
+        (when norma
+          (conflito-norma! "esta materia ja foi promulgada" {:proposicao-id proposicao-id :norma-id (:id norma)}))
+        (when-not autografo
+          (conflito-norma! "a materia ainda nao tem autografo enviado ao Executivo" {:proposicao-id proposicao-id}))
+        (when-not (logic/promulgavel? estado)
+          (conflito-norma! (str "ainda nao se promulga: " (get por-que-nao-promulga estado "o retorno do Executivo nao permite"))
+                           {:proposicao-id proposicao-id :estado-executivo estado}))
+        (let [tipo-norma (try (logic/tipo-proposicao->tipo-norma (:tipo proposicao))
+                              (catch clojure.lang.ExceptionInfo _
+                                (conflito-norma! "esta especie de proposicao nao vira norma"
+                                                 {:proposicao-id proposicao-id :tipo (:tipo proposicao)})))
+              {:keys [uf municipio-nome]} (resolver-municipio ente-id)]
+          (repo/promulgar-norma! repo-legislativo ente-id
+            (merge m {:autografo-id (:id autografo) :texto-versao-id (:texto-versao-id autografo)
+                      :tipo-norma tipo-norma :ementa (:ementa proposicao)
+                      :ano (.getYear ^java.time.LocalDate hoje) :data-promulgacao hoje
+                      :uf uf :municipio-nome municipio-nome})))))))
+
+(defn buscar-norma
+  "F3.8b — a norma pelo SEU id (mesmo gate grosso das rotas irmas). nil se inexistente no tenant (-> 404)."
+  [repo-legislativo ente-id id]
+  (repo/buscar-norma repo-legislativo ente-id id))
+
+(defn publicar-norma
+  "F3.8b — 'Registrar publicacao': promulgada -> publicada, com o veiculo como prova (Diario Oficial, mural...).
+  O Repo emite `norma.publicada` na MESMA tx, e o portal da Casa projeta a lei a partir dele. CAS por
+  lock-version; publicar duas vezes ou com lock velho -> 409 (`:conflito/norma`, do db/norma). nil se a norma nao
+  existe no tenant (-> 404). `m` ja' vem coagido pelo adapters/in; este controller injeta o `:id` do path."
+  [repo-legislativo ente-id id m]
+  (when (buscar-norma repo-legislativo ente-id id)
+    (repo/publicar-norma! repo-legislativo ente-id (assoc m :id id))))
+
 ;; ========================= Onda C1: borda /meu do vereador (home fora-de-sessao) =========================
 
 (defn meu-painel

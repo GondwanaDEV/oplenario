@@ -42,7 +42,8 @@
   regressao em vez de passar silenciosamente."
   [{:keys [buscar-proposicao-detalhe proposicao-aprovada-em-votacao? aprovacao-vigente autografo-da-proposicao
            gerar-autografo-e-abrir-tramitacao! buscar-pos-aprovacao tramitacao-executiva-do-autografo
-           registrar-resposta-executivo! buscar-tramitacao-executiva apreciar-veto!]}]
+           registrar-resposta-executivo! buscar-tramitacao-executiva apreciar-veto!
+           promulgar-norma! buscar-norma publicar-norma!]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-leg/RepoLegislativo
     (buscar-proposicao-detalhe [_ _ente-id id] (buscar-proposicao-detalhe id))
@@ -54,7 +55,18 @@
     (tramitacao-executiva-do-autografo [_ _ente-id aid] (tramitacao-executiva-do-autografo aid))
     (registrar-resposta-executivo! [_ _ente-id m] (registrar-resposta-executivo! m))
     (buscar-tramitacao-executiva [_ _ente-id id] (buscar-tramitacao-executiva id))
-    (apreciar-veto! [_ _ente-id m] (apreciar-veto! m))))
+    (apreciar-veto! [_ _ente-id m] (apreciar-veto! m))
+    (promulgar-norma! [_ _ente-id m] (promulgar-norma! m))
+    (buscar-norma [_ _ente-id id] (buscar-norma id))
+    (publicar-norma! [_ _ente-id m] (publicar-norma! m))))
+
+(defn- norma-canonica [ente id pid & {:keys [estado lock-version] :or {estado "promulgada" lock-version 0}}]
+  {:id id :ente-id ente :proposicao-id pid :autografo-id (random-uuid) :tipo-norma "lei" :numero 1 :ano 2026
+   :urn "urn:lex:br;ce;fortaleza:lei:2026-10-05;1" :ementa "Dispoe sobre X [FIXTURE]" :texto-versao-id (random-uuid)
+   :estado estado :promulgado-em (java.time.Instant/parse "2026-10-05T12:00:00Z") :promulgado-por nil
+   :publicado-em (when (= "publicada" estado) (java.time.Instant/parse "2026-10-06T12:00:00Z"))
+   :veiculo-publicacao (when (= "publicada" estado) "Diario Oficial do Municipio")
+   :lock-version lock-version})
 
 (defn- fake-repo-identidade [papeis]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
@@ -442,3 +454,103 @@
                            :headers (com-bearer (token ente (random-uuid)))
                            :body (json/write-value-as-string {}))]
     (is (= 201 (:status r)))))
+
+;; ========================= F3.8b: POST /legislativo/proposicoes/:id/norma =========================
+
+(defn- promulgar [repo pid & {:keys [papeis corpo] :or {papeis #{"secretario"} corpo {}}}]
+  (pt/response-for (service-fn papeis repo)
+                   :post (str "/legislativo/proposicoes/" pid "/norma")
+                   :headers (com-bearer (token (random-uuid) (random-uuid)))
+                   :body (json/write-value-as-string corpo)))
+
+(deftest promulgar-depois-da-sancao-201-com-a-norma
+  (let [ente (random-uuid) pid (random-uuid) aid (random-uuid) tid (random-uuid) nid (random-uuid)
+        promulgou (atom nil)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
+                                                  :tramitacao-executiva (tramitacao-canonica ente tid aid :estado "sancionado")
+                                                  :norma (when @promulgou (norma-canonica ente nid pid))})
+               :promulgar-norma! (fn [m] (reset! promulgou m) {:id nid :numero 1 :urn "urn:x"})})
+        r (promulgar repo pid)
+        corpo (ler-json r)]
+    (is (= 201 (:status r)))
+    (is (= 1 (:numero (:norma corpo))))
+    (is (= "promulgada" (:estado (:norma corpo))))
+    (is (= "lei" (:tipo-norma @promulgou)) "a especie sai da proposicao, nao do cliente")
+    (is (= aid (:autografo-id @promulgou)))
+    (is (= "Fortaleza" (:municipio-nome @promulgou)))))
+
+(deftest promulgar-antes-do-retorno-do-executivo-409-com-o-motivo
+  (let [ente (random-uuid) pid (random-uuid) aid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
+                                                  :tramitacao-executiva (tramitacao-canonica ente (random-uuid) aid)
+                                                  :norma nil})})
+        r (promulgar repo pid)]
+    (is (= 409 (:status r)))
+    (is (= "ainda nao se promulga: o Executivo ainda nao respondeu ao autografo" (:erro (ler-json r))))))
+
+(deftest promulgar-veto-mantido-409
+  (let [ente (random-uuid) pid (random-uuid) aid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-proposicao-detalhe (fn [_id] {:proposicao (proposicao-canonica ente pid) :texto nil})
+               :buscar-pos-aprovacao (fn [_pid] {:autografo (autografo-canonico ente aid pid)
+                                                  :tramitacao-executiva (tramitacao-canonica ente (random-uuid) aid
+                                                                                             :estado "veto_mantido")
+                                                  :norma nil})})
+        r (promulgar repo pid)]
+    (is (= 409 (:status r)))
+    (is (= "ainda nao se promulga: o veto foi mantido: a materia nao vira norma" (:erro (ler-json r))))))
+
+(deftest promulgar-proposicao-inexistente-404
+  (let [repo (fake-repo-legislativo {:buscar-proposicao-detalhe (fn [_id] {:proposicao nil :texto nil})})]
+    (is (= 404 (:status (promulgar repo (random-uuid)))))))
+
+(deftest promulgar-nao-aceita-campos-no-corpo-400
+  ;; numero, data ou especie mandados pelo cliente nunca chegam ao Repo (fake sem metodos: se chegassem, estourava)
+  (let [r (promulgar (fake-repo-legislativo {}) (random-uuid) :corpo {:numero 99})]
+    (is (= 400 (:status r)))))
+
+(deftest promulgar-sem-papel-403
+  (is (= 403 (:status (promulgar (fake-repo-legislativo {}) (random-uuid) :papeis #{"vereador"})))))
+
+;; ========================= F3.8b: POST /legislativo/normas/:id/publicacao =========================
+
+(defn- publicar [repo nid corpo]
+  (pt/response-for (service-fn #{"secretario"} repo)
+                   :post (str "/legislativo/normas/" nid "/publicacao")
+                   :headers (com-bearer (token (random-uuid) (random-uuid)))
+                   :body (json/write-value-as-string corpo)))
+
+(deftest publicar-200-com-o-veiculo-aparado
+  (let [ente (random-uuid) nid (random-uuid) pid (random-uuid)
+        publicou (atom nil)
+        repo (fake-repo-legislativo
+              {:buscar-norma (fn [_id] (norma-canonica ente nid pid :estado (if @publicou "publicada" "promulgada")))
+               :publicar-norma! (fn [m] (reset! publicou m) {:id nid :estado "publicada"})})
+        r (publicar repo nid {:lock-version 0 :veiculo-publicacao "  Diario Oficial do Municipio  "})
+        corpo (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "publicada" (:estado corpo)))
+    (is (= "Diario Oficial do Municipio" (:veiculo-publicacao @publicou)))
+    (is (= nid (:id @publicou)) "o id vem do path")))
+
+(deftest publicar-sem-veiculo-400
+  (doseq [corpo [{:lock-version 0 :veiculo-publicacao "   "} {:lock-version 0} {:veiculo-publicacao "DOM"}]]
+    (is (= 400 (:status (publicar (fake-repo-legislativo {}) (random-uuid) corpo))) (pr-str corpo))))
+
+(deftest publicar-de-novo-409
+  (let [ente (random-uuid) nid (random-uuid)
+        repo (fake-repo-legislativo
+              {:buscar-norma (fn [_id] (norma-canonica ente nid (random-uuid) :estado "publicada"))
+               :publicar-norma! (fn [_m] (throw (ex-info "publicar!: so se publica uma norma 'promulgada'"
+                                                          {:tipo :conflito/norma})))})
+        r (publicar repo nid {:lock-version 1 :veiculo-publicacao "DOM"})]
+    (is (= 409 (:status r)))
+    (is (= "publicar!: so se publica uma norma 'promulgada'" (:erro (ler-json r))))))
+
+(deftest publicar-norma-inexistente-404
+  (let [repo (fake-repo-legislativo {:buscar-norma (fn [_id] nil)})]
+    (is (= 404 (:status (publicar repo (random-uuid) {:lock-version 0 :veiculo-publicacao "DOM"}))))))
