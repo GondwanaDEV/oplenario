@@ -3,7 +3,8 @@
   verdade, pelo caminho que o agente usa: a pessoa invoca o agente, o core emite a credencial delegada, a chamada
   resolve o ator AGORA (pessoa + `:via`) e executa. A materia achada pelo numero que uma pessoa fala, o tenant
   respeitado, a pauta da sessao da vez — e o TESTE DE VAZAMENTO na dimensao agente."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [next.jdbc :as jdbc]
             [oplenario.catalogo :as catalogo]
@@ -39,9 +40,6 @@
   {:repo-legislativo (repo-leg/map->RepoLegislativoPg {:datasource {:ds *ds*}})
    :repo-sessoes (repo-sessoes/map->RepoSessoesPg {:datasource {:ds *ds*}})
    :registrar-chamada (catalogo/registrador (repo-integracao))})
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- pessoa!
   "Uma pessoa com vinculo ativo e o `papel` na Casa `ente`. Devolve {:identidade-id :vinculo-id}."

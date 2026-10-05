@@ -3,7 +3,8 @@
   operador entra pelo realm proprio e ganha o cookie do console; nenhuma credencial de Casa abre o console e nenhuma
   do console abre uma Casa (2a dimensao do teste de vazamento: cross-esfera). O Keycloak de verdade (realm, chave
   fisica) e' prova do suite :keycloak e do e2e de navegador."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [oplenario.suporte-cpf :refer [cpf-valido]]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
@@ -117,9 +118,6 @@
     (is (= 401 (:status (pt/response-for svc :get "/operacao/eu" :headers (cookie-op seg)))))))
 
 ;; ---- cross-esfera (2a dimensao do teste de vazamento) ----
-
-(defn- dv [ds] (let [r (mod (reduce + (map * ds (range (inc (count ds)) 1 -1))) 11)] (if (< r 2) 0 (- 11 r))))
-(defn- cpf-valido [] (let [b (vec (repeatedly 9 #(rand-int 10))) d1 (dv b)] (apply str (concat b [d1 (dv (conj b d1))]))))
 
 (defn- servidora-da-casa! [ente]
   (let [iid (id/inserir! *ds* {:id (random-uuid) :cpf (cpf-valido) :nome "Servidora"})]
