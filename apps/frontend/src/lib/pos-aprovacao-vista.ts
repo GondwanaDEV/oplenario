@@ -8,12 +8,12 @@
 // sancao_tacita|vetado} -> (só p/ vetado) {veto_mantido|veto_derrubado}. Por isso este mapa PODE ser
 // fechado (sem fallback fail-closed pro rótulo cru precisar cobrir vocabulário de template por câmara).
 //
-// Passos 4 (Promulgação) e 5 (Publicação) SEMPRE renderizam como etapas futuras estáticas — spec §1 "sem
-// dado vivo nesta fatia" (legislativo.norma/artefato de publicação são domínios próprios, zero
-// acoplamento além de "vêm depois").
+// Passos 4 (Promulgação) e 5 (Publicação) vêm da NORMA (F3.8b, `PosAprovacaoOut.norma`): promulgada -> passo 4
+// feito; publicada -> passo 5 feito. Sem norma, o passo 4 é o "atual" quando o desfecho do Executivo já permite
+// promulgar (mesmo conjunto de legislativo.logic/estados-executivo-promulgaveis).
 
 import { formatarData } from "./formatar-data";
-import type { AutografoOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
+import type { AutografoOut, NormaOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
 
 export type SituacaoEtapa = "feita" | "atual" | "futura";
 
@@ -36,9 +36,31 @@ const ESTADOS_RESOLVIDOS = new Set(Object.keys(ROTULO_DESFECHO_POR_ESTADO));
 // Estado da tramitação, mas nil-ável na leitura composta: `PosAprovacaoOut.tramitacaoExecutiva` só é nulo
 // no instante teórico entre gerar! e iniciar! (nunca aparece por fora — Repo compõe os dois numa única
 // tx, spec §3.1) — mesmo assim tratamos como "aguardando" por segurança (nunca lança).
+// Desfechos em que a matéria vira norma — espelho de legislativo.logic/estados-executivo-promulgaveis. O backend
+// recusa (409) os outros; aqui só decide se o botão "Promulgar a lei" aparece.
+const ESTADOS_PROMULGAVEIS = new Set(["sancionado", "sancao_tacita", "veto_derrubado"]);
+
+export function promulgavel(estado: string | null | undefined): boolean {
+  return estado != null && ESTADOS_PROMULGAVEIS.has(estado);
+}
+
+const NOME_DA_ESPECIE: Record<string, string> = {
+  lei: "Lei",
+  lei_complementar: "Lei Complementar",
+  resolucao: "Resolução",
+  decreto_legislativo: "Decreto Legislativo",
+  emenda_lom: "Emenda à Lei Orgânica",
+};
+
+// "Lei nº 12/2026" — o número que a Casa e o cidadão usam para citar a norma.
+export function formatarNumeroNorma(tipoNorma: string, numero: number, ano: number): string {
+  return `${NOME_DA_ESPECIE[tipoNorma] ?? tipoNorma} nº ${numero}/${ano}`;
+}
+
 export function derivarPipeline(
   autografo: AutografoOut,
   tramitacaoExecutiva: TramitacaoExecutivaOut | null,
+  norma: NormaOut | null = null,
 ): EtapaPipeline[] {
   const estado = tramitacaoExecutiva?.estado ?? "aguardando";
   const resolvida = ESTADOS_RESOLVIDOS.has(estado);
@@ -65,8 +87,17 @@ export function derivarPipeline(
     situacao: resolvida ? "feita" : "futura",
   };
 
-  const etapaPromulgacao: EtapaPipeline = { rotulo: "Promulgação", detalhe: "—", situacao: "futura" };
-  const etapaPublicacao: EtapaPipeline = { rotulo: "Publicação", detalhe: "vira lei", situacao: "futura" };
+  const etapaPromulgacao: EtapaPipeline = norma
+    ? {
+        rotulo: "Promulgação",
+        detalhe: `${formatarNumeroNorma(norma.tipoNorma, norma.numero, norma.ano)} · ${formatarData(norma.promulgadoEm)}`,
+        situacao: "feita",
+      }
+    : { rotulo: "Promulgação", detalhe: promulgavel(estado) ? "pode promulgar" : "—", situacao: promulgavel(estado) ? "atual" : "futura" };
+  const publicada = norma?.estado === "publicada";
+  const etapaPublicacao: EtapaPipeline = publicada
+    ? { rotulo: "Publicação", detalhe: norma?.publicadoEm ? formatarData(norma.publicadoEm) : "publicada", situacao: "feita" }
+    : { rotulo: "Publicação", detalhe: "vira lei", situacao: norma ? "atual" : "futura" };
 
   return [etapaAutografo, etapaExecutivo, etapaSancao, etapaPromulgacao, etapaPublicacao];
 }

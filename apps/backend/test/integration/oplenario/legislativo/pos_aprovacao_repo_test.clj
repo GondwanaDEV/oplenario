@@ -77,7 +77,7 @@
   ;; Repo/buscar-pos-aprovacao NAO checa a proposicao (spec: sem short-circuit no nil do autografo) — a
   ;; decisao 404-vs-corpo-parcial e' do CONTROLLER (buscar-pos-aprovacao pre-checa a proposicao antes).
   (let [r (repo/buscar-pos-aprovacao *repo* (random-uuid) (random-uuid))]
-    (is (= {:autografo nil :tramitacao-executiva nil} r))))
+    (is (= {:autografo nil :tramitacao-executiva nil :norma nil} r))))
 
 (deftest buscar-pos-aprovacao-com-autografo-e-tramitacao
   (let [ente (random-uuid) pid (protocolar-e-aprovar! ente)

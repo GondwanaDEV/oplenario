@@ -68,7 +68,7 @@ abertas, em ordem de importância:
 
 **1. Track IA — base comum ENTREGUE (26/09/2026); Faixas A e B são o maior bloco restante.** O satélite existe:
 `apps/ia/` (Python 3.12, **[ADR-0006](docs/adr/0006-satelite-de-ia-apps-ia.md)**), com porta de inferência (fake por
-padrão + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
+padrão + OpenRouter + Anthropic), filtro de governança B1–B4 (único caminho até o LLM), Camada de Confiança mínima (citação conferida,
 incerteza, registro sem conteúdo, revisão humana, R-IA-1), `nucleo.Nucleo` (o pipeline que **toda** capacidade compõe) e
 avaliação no CI (`oplenario-ia-avaliar avaliacoes`) + custo por Casa — [PR #42](https://github.com/GondwanaDEV/oplenario/pull/42).
 **Faixa A em curso (26/09/2026):** captação (A.2), transcrição com Caminho C + fronteira core↔IA
@@ -82,9 +82,13 @@ A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedo
 não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
 de [`docs/30`](docs/30-avaliacao-openrouter.md): adaptador `openrouter` (`OPLENARIO_IA_VENDOR=openrouter` +
-`OPENROUTER_API_KEY`), ZDR e "sem coleta" travados em toda requisição, provedor e custo declarados no registro. As 8
-capacidades passam por ele, com `openai/gpt-oss-120b` como modelo padrão provisório; transcrição e embeddings seguem self-host. Ligar em produção espera o mesmo `[GAP]`
-jurídico, agora com o OpenRouter como contratado; o adaptador nunca falou com o OpenRouter real. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
+`OPENROUTER_API_KEY`), ZDR, "sem coleta" e `require_parameters` travados em toda requisição, provedor e custo
+declarados no registro. As 8 capacidades passam por ele; transcrição e embeddings seguem self-host. O satélite só sobe
+com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
+**Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
+ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
+reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429); o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
+`[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
 **O satélite está EM PRODUÇÃO (27/09/2026), com o fornecedor fake:** `ia-api` + `ia-trabalhador` no Dokploy, no
@@ -344,7 +348,7 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 **Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 39 abertos · 45 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
 - o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
-- promulgar norma e gerar remessa ao TCE sem rota; convocação oficial inexistente;
+- gerar remessa ao TCE sem rota; convocação oficial inexistente;
 - **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
   O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
 
@@ -357,6 +361,9 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   vereador, controle interno e jurídico. A linha revogada fica como histórico e conceder de novo abre outra. Sem papel
   ativo na Casa, o vínculo é encerrado e a sessão cai na chamada seguinte; as credenciais do agente da pessoa caem
   junto. `admin_ente` e `secretario` não são revogáveis por essa rota. O Keycloak não é tocado.
+- **Promulgar e publicar a norma:** em `/pos-aprovacao/:id`, a matéria sancionada (ou com veto derrubado) vira lei
+  com número da espécie no ano, URN LexML e o texto do autógrafo; registrar a publicação (o veículo é a prova) emite
+  `norma.publicada` e a lei vai ao portal. Quem promulga e o prazo seguem `[GAP]` por LOM.
 - **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
   criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
 - **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
