@@ -23,7 +23,7 @@ afterEach(() => {
 const fio = {
   vereadores: [
     { "vereador-id": "id-bruno", "nome-parlamentar": null, "nome-civil": "Bruno Lima", partido: "PT", "cargo-mesa": null },
-    { "vereador-id": "id-ana", "nome-parlamentar": "Ana Prado", "nome-civil": "Ana Maria Prado", partido: "PSB", "cargo-mesa": "Presidente" },
+    { "vereador-id": "id-ana", "nome-parlamentar": "Ana Prado", "nome-civil": "Ana Maria Prado", partido: "PSB", "cargo-mesa": "1_secretario" },
     { "vereador-id": "id-cida", "nome-parlamentar": "  ", "nome-civil": "Cida Nogueira", partido: null, "cargo-mesa": null },
   ],
 };
@@ -50,7 +50,7 @@ describe("ListaVereadores", () => {
     const lista = await screen.findByRole("list", { name: "Vereadores em exercício" });
     const [ana, bruno, cida] = within(lista).getAllByRole("link");
     expect(ana.querySelector(".lv-civil")?.textContent).toBe("Ana Maria Prado");
-    expect([...ana.querySelectorAll(".lv-tag")].map((t) => t.textContent)).toEqual(["Presidente", "PSB"]);
+    expect([...ana.querySelectorAll(".lv-tag")].map((t) => t.textContent)).toEqual(["1ª Secretaria", "PSB"]);
     expect(bruno.querySelector(".lv-civil")).toBeNull();
     expect(bruno.querySelector(".lv-nome")?.textContent).toBe("Bruno Lima");
     expect([...bruno.querySelectorAll(".lv-tag")].map((t) => t.textContent)).toEqual(["PT"]);
