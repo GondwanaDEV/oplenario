@@ -5,6 +5,7 @@
 
 import { formatarData, formatarDataSimples, formatarHora } from "./formatar-data";
 import { MENSAGEM_DE_REDE_NO_ANEXO, TIPOS_ACEITOS_EM_TEXTO } from "./anexos-do-atendimento";
+import { humanizarChave } from "./humanizar-chave";
 import type { EventoOut } from "./contrato-atendimento.gen";
 
 export type Especie = "esic" | "ouvidoria" | "lgpd";
@@ -62,11 +63,11 @@ const DIREITOS_LGPD: Record<string, string> = {
 };
 
 export function rotuloTipoManifestacao(tipo: string): string {
-  return TIPOS_MANIFESTACAO[tipo] ?? tipo;
+  return TIPOS_MANIFESTACAO[tipo] ?? humanizarChave(tipo, "Manifestação");
 }
 
 export function rotuloDireitoLgpd(tipo: string): string {
-  return DIREITOS_LGPD[tipo] ?? tipo;
+  return DIREITOS_LGPD[tipo] ?? humanizarChave(tipo, "Pedido do titular");
 }
 
 const ESTADOS: Record<string, string> = {
@@ -81,7 +82,7 @@ const ESTADOS: Record<string, string> = {
 };
 
 export function rotuloEstado(estado: string): string {
-  return ESTADOS[estado] ?? estado;
+  return ESTADOS[estado] ?? humanizarChave(estado, "Situação não informada");
 }
 
 export type TomPrazo = "vencido" | "hoje" | "perto" | "ok" | "encerrado";

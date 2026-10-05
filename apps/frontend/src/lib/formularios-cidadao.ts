@@ -2,6 +2,8 @@
 // participacao/logic.clj) e a montagem do corpo que vai ao backend, com os mesmos limites do wire/in. A validação
 // aqui é para a pessoa corrigir antes de enviar; o backend continua validando (fail-closed, 400).
 
+import { humanizarChave } from "./humanizar-chave";
+
 export type Opcao = { valor: string; rotulo: string; descricao: string };
 
 // Rótulos e descrições do design (ouvidoria.html).
@@ -85,5 +87,10 @@ const ESTADOS: Record<string, string> = {
 };
 
 export function rotuloEstado(estado: string): string {
-  return ESTADOS[estado] ?? estado;
+  return ESTADOS[estado] ?? humanizarChave(estado, "Situação não informada");
+}
+
+/** O rótulo de um tipo/direito da lista; valor que a tela não conhece sai em palavras, nunca a chave. */
+export function rotuloDaLista(lista: Opcao[], valor: string): string {
+  return lista.find((o) => o.valor === valor)?.rotulo ?? humanizarChave(valor);
 }

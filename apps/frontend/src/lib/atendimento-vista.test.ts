@@ -8,7 +8,9 @@ import {
   hrefDoPrazo,
   linhaDoPrazo,
   mensagemDeErroAtendimento,
+  rotuloDireitoLgpd,
   rotuloEstado,
+  rotuloTipoManifestacao,
   seloDoPrazo,
   avisoDoComplemento,
   textoDoRecibo,
@@ -60,6 +62,24 @@ describe("textos", () => {
     expect(tituloDoEvento({ ...e, tipo: "indeferimento" })).not.toBe(tituloDoEvento({ ...e, tipo: "resposta" }));
     expect(rotuloEstado("indeferido")).toBe("Indeferido");
     expect(rotuloEstado("indeferida")).toBe("Indeferida");
+  });
+
+  it("estado, tipo de manifestação e direito LGPD desconhecidos saem em palavras, nunca a chave do backend", () => {
+    expect(rotuloEstado("aguardando_orgao")).toBe("Aguardando orgao");
+    expect(rotuloEstado("")).toBe("Situação não informada");
+    expect(rotuloTipoManifestacao("pedido_especial")).toBe("Pedido especial");
+    expect(rotuloTipoManifestacao("")).toBe("Manifestação");
+    expect(rotuloDireitoLgpd("portabilidade_dos_dados")).toBe("Portabilidade dos dados");
+    expect(rotuloDireitoLgpd("")).toBe("Pedido do titular");
+    // os conhecidos seguem como estão
+    expect(rotuloEstado("em_analise")).toBe("Em análise");
+    expect(rotuloTipoManifestacao("denuncia")).toBe("Denúncia");
+    expect(rotuloDireitoLgpd("com_quem_compartilhado")).toBe("Com quem os dados foram compartilhados");
+  });
+
+  it("o título de item sem tipo conhecido não vira ': assunto' nem traz a chave", () => {
+    expect(tituloDoItem("ouvidoria", { tipo: "pedido_especial", assunto: "Rua escura" })).toBe("Pedido especial: Rua escura");
+    expect(tituloDoItem("lgpd", { tipo: "portabilidade_dos_dados" })).toBe("Portabilidade dos dados");
   });
 
   it("o vazio de cada fila concorda em gênero", () => {

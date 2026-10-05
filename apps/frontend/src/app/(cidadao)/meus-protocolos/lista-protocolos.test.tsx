@@ -43,6 +43,19 @@ describe("ListaProtocolos — o que a cidadã protocolou", () => {
     expect(screen.getByText(/nenhuma manifestação identificada/i)).toBeTruthy();
   });
 
+  it("estado e tipo que a tela não conhece saem em palavras, nunca a chave do backend", () => {
+    const novo: MeusProtocolos = {
+      pedidosEsic: [{ ...base, id: "p9", protocolo: "ESIC-2026-000009", assunto: "Obras", estado: "aguardando_orgao", diasRestantes: 4 }],
+      solicitacoesLgpd: [{ ...base, id: "s9", protocolo: "LGPD-2026-000009", tipo: "portabilidade_dos_dados", estado: "em_analise", diasRestantes: 4 }],
+      manifestacoes: [{ ...base, id: "m9", protocolo: "OUV-2026-000009", tipo: "pedido_especial", assunto: "Rua escura", estado: "protocolada", diasRestantes: 4, anonima: false }],
+    } as unknown as MeusProtocolos;
+    render(<ListaProtocolos dados={novo} token="tok" aoMudar={() => {}} />);
+    expect(screen.getByText("Aguardando orgao")).toBeTruthy();
+    expect(screen.getByText("Portabilidade dos dados")).toBeTruthy();
+    expect(screen.getByText(/Pedido especial · Rua escura/)).toBeTruthy();
+    expect(document.body.textContent ?? "").not.toMatch(/aguardando_orgao|portabilidade_dos_dados|pedido_especial/);
+  });
+
   it("a resposta da Câmara aparece, e só o e-SIC respondido oferece recurso", () => {
     render(<ListaProtocolos dados={DADOS} token="tok" aoMudar={() => {}} />);
     const p2 = screen.getByText("ESIC-2026-000002").closest("li")!;
