@@ -73,6 +73,28 @@
    [:encerrada-em Instante]
    [:apagamento [:maybe [:map-of :keyword :any]]]])
 
+;; ADR-0017 (adendo de 05/10/2026): os atos da Operacao iniciados e sem desfecho registrado (so' leitura, console).
+(def AtoSemDesfechoOut
+  "`acao` e' a da TENTATIVA (`entrada-no-console-iniciada`, `ia-orcamento-iniciado`, ...). `operador` e' o nome; sem
+  pessoa (linha de comando) vem nulo e `origem` diz `linha-de-comando`. `casa-nome` nulo = ato sem Casa (a entrada)."
+  [:map {:closed true}
+   [:id :string]
+   [:em :string]
+   [:acao :string]
+   [:operador [:maybe :string]]
+   [:origem [:maybe :string]]
+   [:ente-id [:maybe :string]]
+   [:casa-nome [:maybe :string]]])
+
+(def AtosSemDesfechoOut
+  "`total` e' a conta inteira; `atos` traz ate' `limite` (os mais antigos). `truncado` = ha' mais do que a lista mostra."
+  [:map {:closed true}
+   [:tolerancia-segundos :int]
+   [:limite :int]
+   [:total :int]
+   [:truncado :boolean]
+   [:atos [:vector AtoSemDesfechoOut]]])
+
 (def FichaDaCasaOut
   [:map {:closed true}
    [:casa CasaOut]

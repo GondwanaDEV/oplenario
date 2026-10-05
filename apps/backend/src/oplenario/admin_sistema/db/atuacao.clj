@@ -68,6 +68,16 @@
   (`ia-orcamento`, `reaplicar-login`)."
   #{"entrada-no-console-iniciada" "ia-orcamento-iniciado" "realm-reprovisionamento-iniciado"})
 
+(defn- onde-sem-desfecho
+  "A condicao de \"tentativa sem desfecho\" anterior a `antes-de`: uma so' definicao para a conferencia inteira e para a
+  lista do console. Desfecho `falhou` TAMBEM aponta a tentativa (`detalhe.tentativa`): par fechado nao e' acusado."
+  [^java.time.Instant antes-de]
+  [:and
+   [:in :a.acao (vec acoes-de-tentativa)]
+   [:< :a.em (java.sql.Timestamp/from antes-de)]
+   [:not [:exists {:select [1] :from [[:admin_sistema.atuacao :d]]
+                   :where [:= [:raw "d.detalhe ->> 'tentativa'"] [:cast :a.id :text]]}]]])
+
 (defn tentativas-sem-desfecho
   "As tentativas anteriores a `antes-de` (Instant) que nenhum registro aponta como desfecho: o ato comecou e a corrente
   nao sabe como terminou (processo caiu, ou o desfecho nao gravou). `antes-de` existe para nao acusar o que ainda esta'
@@ -76,13 +86,22 @@
   (mapv ->registro
         (jdbc/execute! conn (sql/format {:select [:a.seq :a.id :a.em :a.operador_id :a.ente_id :a.acao :a.detalhe :a.selo]
                                          :from [[:admin_sistema.atuacao :a]]
-                                         :where [:and
-                                                 [:in :a.acao (vec acoes-de-tentativa)]
-                                                 [:< :a.em (java.sql.Timestamp/from antes-de)]
-                                                 [:not [:exists {:select [1] :from [[:admin_sistema.atuacao :d]]
-                                                                 :where [:= [:raw "d.detalhe ->> 'tentativa'"]
-                                                                         [:cast :a.id :text]]}]]]
+                                         :where (onde-sem-desfecho antes-de)
                                          :order-by [[:a.seq :asc]]}))))
+
+(defn conferir-sem-desfecho
+  "O que o console do operador mostra (nunca em silencio): o TOTAL das tentativas sem desfecho anteriores a `antes-de` e
+  as `limite` MAIS RECENTES delas (a mesma ordem da atuacao na ficha da Casa: o que acabou de acontecer vem primeiro).
+  -> {:total n :registros [...]}; `:total` maior que `(count :registros)` = truncado.
+  O total e' contado na mesma consulta que traz a lista (janela), entao os dois concordam."
+  [conn ^java.time.Instant antes-de limite]
+  (let [linhas (jdbc/execute! conn (sql/format {:select [:a.seq :a.id :a.em :a.operador_id :a.ente_id :a.acao :a.detalhe
+                                                         :a.selo [[:raw "count(*) OVER ()"] :total]]
+                                                :from [[:admin_sistema.atuacao :a]]
+                                                :where (onde-sem-desfecho antes-de)
+                                                :order-by [[:a.seq :desc]] :limit limite}))]
+    {:total (if-let [r (first linhas)] (long (:total (comum/linha->kebab r))) 0)
+     :registros (mapv ->registro linhas)}))
 
 (defn verificar-corrente
   "Recalcula a corrente inteira. {:integra? true} ou {:integra? false :quebra-em <id do 1o registro que nao confere>}."
