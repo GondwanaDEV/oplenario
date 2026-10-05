@@ -98,11 +98,21 @@ o esqueleto/IA é o mesmo entre câmaras (5.1). E a **faixa de azulejo da tramit
 
 ## Tipografia
 
-- **Display — `Sora`** (700–800): geométrica-humanista com calor. Wordmark, títulos, hero. **Não-Inter.**
-- **Corpo/UI — `Hanken Grotesk`** (400–700): legível, quente, todo o texto de interface e leitura.
-- **Dados — `IBM Plex Mono`** (500): protocolo, quórum, datas, prazos, eyebrows — `tabular-nums`.
+*(Trocada em 05/10/2026. Histórico: Sora + Hanken Grotesk + IBM Plex Mono na origem; Plus Jakarta Sans +
+Inter + JetBrains Mono de 22/09 a 05/10.)*
 
-Escala: **13 · 16 · 21 · 28 · 40 · 56**. Corpo base 16px, linha 1.6, medida 56–60 ch.
+- **Display e corpo — `Mona Sans`** (200–900, eixo de largura 75–125%): uma família só. A hierarquia vem
+  da **largura**, não de trocar de letra: título de página largo (`--largura-titulo`, 112%), tela normal,
+  tabela e grade nominal condensadas (`--largura-densa`, 92%). Cobre as três densidades do produto —
+  tabela de 13px, portal de 56px, telão a 15 m. **Não-Inter.**
+- **Dados — `Geist Mono`** (500): protocolo, quórum, datas, prazos, eyebrows — `tabular-nums`.
+- **Número grande isolado** (placar, quórum, KPI) em `--display` usa `font-variant-numeric:
+  var(--numero-destaque)`, não `tabular-nums`: o algarismo tabular da Mona Sans corta o zero, o que ajuda
+  numa coluna e destoa num placar.
+
+Escala: **11 · 12 · 13 · 16 · 21 · 28 · 40 · 56**. Corpo base 16px, linha 1.6, medida 56–60 ch.
+O front serve as fontes do próprio domínio (`apps/frontend/src/app/fontes.css`); as telas HTML deste
+design system usam o Google Fonts só por serem artefato de design.
 
 ## A assinatura — a faixa de azulejo da tramitação
 
@@ -133,7 +143,7 @@ portal do cidadão.
 - ❌ Preto + verde-ácido/vermelhão (cluster nº2).
 - ❌ Layout de jornal: fios capilares, colunas densas (cluster nº3).
 - ❌ Gradiente roxo/rosa; fontes default (Inter/Roboto/Lexend).
-- ✅ Jade + telha + azulejo cobalto/Marajó · faixa de azulejo (Bulcão) · Sora/Hanken/Plex Mono ·
+- ✅ Jade + telha + azulejo cobalto/Marajó · faixa de azulejo (Bulcão) · Mona Sans (com eixo de largura) + Geist Mono ·
   modernismo brasileiro luminoso · AA+ verificado.
 
 ## Status & próximos passos

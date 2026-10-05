@@ -56,7 +56,7 @@
 .ob-col:first-child { border-left: 0; }
 .ob-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); margin: 0 0 0.3rem; }
 .ob-col .gl { width: 14px; height: 14px; flex: 0 0 auto; }
-.ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
+.ob-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: var(--numero-destaque); margin: 0; }
 .ob-dia .n { color: var(--marca); }
 .ob-vencer .n { color: var(--aviso-texto); }
 .ob-risco .n { color: var(--acento-texto); }
@@ -85,7 +85,7 @@
 .prz-atencao .anel-c .arco { stroke: var(--amarelo-traco); }
 .prz-noprazo .anel-c .arco { stroke: var(--marca); }   /* ver nota do anel em public.css */
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
-.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: var(--numero-destaque); }
 .anel-c .u { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
 .prazo-obj b { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); display: block; line-height: 1.3; }
 .prazo-obj .base { font-family: var(--mono); font-size: var(--t-12); color: var(--texto-2); margin-top: 2px; display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
@@ -109,7 +109,7 @@
    "PROTOCOLADA3" (rotulo colado no numero). Empilhar em coluna e' o que o cartao sempre quis. */
 .estagio-cab .meta { line-height: 1.1; display: flex; flex-direction: column; gap: 0.15rem; }
 .estagio-cab .nome { font-family: var(--mono); font-size: var(--t-12); text-transform: uppercase; letter-spacing: .05em; color: var(--texto-2); }
-.estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.estagio-cab .n { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); letter-spacing: -0.02em; font-variant-numeric: var(--numero-destaque); }
 .estagio-lista { list-style: none; margin: 0.1rem 0 0; padding: 0.6rem 0 0; border-top: 1px solid var(--linha); display: grid; gap: 0.5rem; }
 .estagio-lista li { line-height: 1.25; }
 .estagio-lista .ref { font-family: var(--mono); font-size: var(--t-11); color: var(--texto-2); }
@@ -136,7 +136,7 @@
 .orgulho-corpo { display: flex; flex-wrap: wrap; gap: 1.4rem 0; }
 .org-stat { flex: 1 1 200px; padding: 0 1.4rem; border-left: 1px solid var(--linha); min-width: 0; }
 .org-stat:first-child { border-left: 0; padding-left: 0; }
-.org-stat .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--texto); font-variant-numeric: tabular-nums; margin: 0; }
+.org-stat .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; color: var(--texto); font-variant-numeric: var(--numero-destaque); margin: 0; }
 .org-stat .n small { font-family: var(--mono); font-size: var(--t-13); font-weight: 600; color: var(--marca); letter-spacing: 0; margin-left: 0.35rem; }
 .org-stat .rot { font-size: var(--t-13); color: var(--texto-2); margin: 0.4rem 0 0; line-height: 1.35; }
 

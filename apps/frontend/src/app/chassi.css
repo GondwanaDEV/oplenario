@@ -33,6 +33,13 @@ body {
   transition: background-color .25s ease, color .25s ease;
 }
 
+/* A hierarquia vem da LARGURA (eixo da Mona Sans, ver tokens.css): o título de página
+   alarga, a tabela condensa. font-stretch herda; fonte sem o eixo simplesmente ignora.
+   O título mais largo quebra antes no celular; balance divide as linhas por igual em vez de
+   deixar uma palavra sozinha na última. */
+h1    { font-stretch: var(--largura-titulo); text-wrap: balance; }
+table { font-stretch: var(--largura-densa); }
+
 /* superfície PÚBLICA (portal do cidadão): mais ar, medida mais estreita */
 body.superficie-publica { --max: 1200px; line-height: 1.6; }
 /* :where() zera a especificidade do seletor de superficie, deixando esta regra em (0,0,1)

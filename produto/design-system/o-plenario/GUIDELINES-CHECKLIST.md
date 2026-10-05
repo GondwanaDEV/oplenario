@@ -21,7 +21,7 @@ Em conflito, o código prevalece sobre este doc.
 - [ ] A **ousadia mora em um lugar só** (a faixa de azulejo / a ilha-herói). O resto é disciplina.
 - [ ] **Ilhas que não tematizam**: placar = ilha-palco escura (`--palco-*`); documento/edital/ata =
       ilha-papel clara (`--papel-*`). O papel **continua claro no tema escuro** (candeeiro) — é de propósito.
-- [ ] Tipografia do sistema (Sora display / Hanken corpo / IBM Plex Mono dados, `tabular-nums` em números).
+- [ ] Tipografia do sistema (Mona Sans display e corpo, com `--largura-titulo`/`--largura-densa`; Geist Mono dados, `tabular-nums` em coluna de números; `--numero-destaque` em número grande de display).
 - [ ] Geometria do sistema (`--raio*`, `--max`). Nada de raio/sombra avulsos.
 
 ## 2. Voz & copy
