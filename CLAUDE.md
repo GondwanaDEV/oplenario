@@ -314,8 +314,11 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   motivo. A leitura devolve `recurso.do-ato` e a tela decide a etiqueta só por esse campo, nunca pelo texto do rótulo;
 - **na Operação (05/10/2026):** `ia-orcamento` e a entrada do operador gravam na atuação da Operação o par
   tentativa/desfecho, sem mudar o selo. `ia-orcamento` sem a tentativa não roda; o login do operador nunca é trancado
-  pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
-  `tentativas-sem-desfecho` existe como função de repositório, sem tela;
+  pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. O console mostra
+  o ato iniciado sem desfecho (PR #212): `GET /operacao/atos-sem-desfecho` (só o operador) lista as tentativas com
+  mais de 120 s sem desfecho, no máximo 50, com `total` e `truncado`; desfecho `falhou` fecha o par. Em `/operacao`
+  o bloco só aparece quando há item, e a conferência que não rodou vira aviso, nunca "nenhum ato". Bloco não visto
+  em browser (precisa de sessão do console);
 - **o login do cidadão fica na trilha (decidido em 05/10/2026):** pseudonimizado, com o par tentativa/desfecho; a
   ADR-0017 foi corrigida (adendo "Eixo 4c"), o código não mudou;
 - **orçamento de IA de Casa suspensa (regra de 05/10/2026):** a suspensão vence. O valor definido durante a suspensão
@@ -399,7 +402,10 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
   vivo.
 - **Cockpit (05/10/2026):** depois do 201 do próprio voto, a tela pede a releitura do placar
   (`usePlenario.conferirVotacao`) em vez de esperar o evento; evento perdido deixava o vereador até 30 s sem o "Você
-  votou". Era a causa da falha intermitente do E6 da Trilha 3.
+  votou". Era uma causa da falha intermitente do E6 da Trilha 3, mas não a única: o E6 ("Você votou Sim") reprovou
+  mais duas vezes depois desse conserto, em cerca de 40 execuções, e a causa **não está determinada** (a hipótese de
+  corrida com a E5 foi refutada). Desde o PR #225 a falha anexa a votação em que votou, a votação aberta segundo o
+  servidor e o texto da tela: na próxima reprovação, ler o anexo antes de supor.
 
 **Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 13 abertos · 71 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
@@ -489,7 +495,9 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **Fumaça de produção** (`fumaca-hml.yaml`) com 5 casos novos, só leitura: leis, vereadores, votações, ficha
     pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
     resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes,
-    exigindo 200.
+    exigindo 200. Desde o PR #225 revoga também um vereador (criado sem mandato, fora do roster e do quórum) e exige
+    201 exato ao conceder. Asserção de ausência ("sem erro", "sem não encontrado") espera antes o estado pronto da
+    tela, nunca um `waitForTimeout`.
   - **`next dev` sem as rotas mais fundas (05/10/2026, PRs #211 e #223):** na subida, o `next dev` às vezes monta a
     tabela de rotas com a leitura do disco incompleta e responde 404 a sessão inteira nas páginas mais fundas
     (`[ente]/materias/[id]`, `leis/[id]`, `vereadores/[id]`, `audiencias/[id]`; na stack local chegou a sobrar só
@@ -553,6 +561,8 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     rito desde a mig `20261005000262` (`transparencia.materia.rito`, projetado dos eventos, **sem reconstrução**): matéria
     sem evento novo depois dela ainda usa o mapa fixo, e ali o chip e a faixa podem divergir;
     `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
+  - **conceder acesso em modo dev:** a rota devolve 201 com `convite: "enviado"` e a tela diz que o convite foi
+    enviado, mas sem Keycloak nada é enviado. Só dev e demo; em produção o convite sai;
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de
