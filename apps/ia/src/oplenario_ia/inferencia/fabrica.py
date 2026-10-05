@@ -10,7 +10,7 @@ from oplenario_ia.ata import fake as ata_fake
 from oplenario_ia.ata.redacao import OPERACAO as ATA_REDIGIR
 from oplenario_ia.conferencia import fake as conferencia_fake
 from oplenario_ia.conferencia.roteiro import OPERACAO as CONFERENCIA_REDIGIR
-from oplenario_ia.config import Config, folga_de_raciocinio
+from oplenario_ia.config import Config, avisar_excecao_gratuita, folga_de_raciocinio
 from oplenario_ia.inferencia.fake import PortaFake
 from oplenario_ia.inferencia.porta import PortaInferencia
 from oplenario_ia.parecer import fake as parecer_fake
@@ -41,13 +41,19 @@ def criar_porta(config: Config) -> PortaInferencia:
         # o fornecedor real da plataforma (ADR-0023): todo modelo de linguagem passa pelo OpenRouter
         from oplenario_ia.inferencia.openrouter_adapter import PortaOpenRouter
 
+        politica = config.openrouter_politica
+        if politica == "excecao-gratuita":
+            # exceção temporária à ADR-0023: o aviso sai uma vez por processo (já saiu no `carregar()` da subida)
+            avisar_excecao_gratuita()
         return PortaOpenRouter(
             config.modelo,
             timeout_s=config.timeout_s,
             chave=os.environ.get("OPENROUTER_API_KEY"),
             url=config.openrouter_url,
             provedores=config.openrouter_provedores,
-            folga_raciocinio=folga_de_raciocinio(config.modelo),
+            folga_raciocinio=folga_de_raciocinio(config.modelo, politica),
+            politica=politica,
+            reservas=[(m, folga_de_raciocinio(m, politica)) for m in config.modelos_reserva],
         )
     if config.vendor == "anthropic":
         # import tardio: o SDK do fornecedor só carrega quando o deploy o escolhe
