@@ -193,9 +193,12 @@ login funciona, só não está escondido.
 1. **Imagem do Keycloak com o tema.** No Dokploy, o serviço Keycloak das Casas passa de `quay.io/keycloak/keycloak:26.0.0`
    para o build de `apps/keycloak/Dockerfile` (contexto `apps/keycloak`). Mesma versão, mesmo banco, mesmas variáveis:
    só entra o diretório `/opt/keycloak/themes/oplenario`. Reimplante e espere o healthcheck.
-2. **Backend:** `KEYCLOAK_TEMA_LOGIN` pode ficar ausente (padrão `oplenario`). `KEYCLOAK_TEMA_LOGIN=""` desliga o tema
-   (o realm volta ao padrão do Keycloak no próximo reprovisionamento). O limite da entrada pelo CPF é
-   `ENTRADA_LIMITE_POR_IP` (padrão 30) por `ENTRADA_JANELA_MIN` (padrão 5) minutos.
+2. **Backend:** `KEYCLOAK_TEMA_LOGIN` pode ficar ausente (padrão `oplenario`). `KEYCLOAK_TEMA_LOGIN=""` desliga o tema:
+   o login de cada Câmara volta ao padrão do Keycloak quando se reaplica a configuração dela (passo 3). O limite da
+   entrada pelo CPF é `ENTRADA_LIMITE_POR_IP` (padrão 30) por `ENTRADA_JANELA_MIN` (padrão 5) minutos.
+   **O limite conta o IP que o Traefik acrescenta ao `X-Forwarded-For`** (o último item, lido pelo frontend). Se algum
+   dia houver outro proxy ou CDN na frente do Traefik, o último item passa a ser o dele e todo mundo cai no mesmo
+   balde — rever `ipDoCliente` (`apps/frontend/src/lib/entrada-cpf.ts`) antes.
 3. **Reaplicar o login de cada Câmara** no console do operador (ficha da Câmara → "Reaplicar configuração de login",
    `POST /operacao/casas/:ente/realm`). É o que
    grava no realm: o nome da Câmara, o pt-BR, o tema (login e e-mail), a política de senha, a trava contra força bruta,

@@ -2,7 +2,8 @@
   "INTEGRACAO gated: exige o Keycloak do docker (--profile auth) rodando. Prova provisionar-realm!/
   criar-usuario!/resetar-mfa! contra a admin-API real — nao roda no CI (sem Keycloak la'; ver
   tests.edn/:keycloak e ci.yml --skip :keycloak)."
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing use-fixtures]]
             [com.stuartsierra.component :as component]
             [jsonista.core :as json]
             [oplenario.config :as config]
@@ -258,14 +259,17 @@
     (is (= "Câmara Municipal de Russas" (:displayName (realm-representation *idp* ente)))
         "reprovisionar sem nome (ex.: conceder acesso) nao apaga o nome da Casa")))
 
-(deftest tema-desligado-pela-config-nao-e-gravado
+(deftest desligar-o-tema-pela-config-volta-ao-padrao
   (let [ente (random-uuid)
-        idp (component/start (kc/keycloak-idp (assoc config :tema-login nil)))]
+        sem-tema (component/start (kc/keycloak-idp (assoc config :tema-login nil)))]
     (try
-      (idp/provisionar-realm! idp ente {:nome "Câmara Municipal de Teste"})
-      (is (nil? (:loginTheme (realm-representation idp ente))) "sem tema configurado, o Keycloak usa o padrao")
-      (is (nil? (:emailTheme (realm-representation idp ente))))
-      (finally (component/stop idp)))))
+      (idp/provisionar-realm! *idp* ente {:nome "Câmara Municipal de Teste"})
+      (is (= "oplenario" (:loginTheme (realm-representation *idp* ente))))
+      (idp/provisionar-realm! sem-tema ente)
+      (let [r (realm-representation sem-tema ente)]
+        (is (str/blank? (:loginTheme r)) "KEYCLOAK_TEMA_LOGIN vazio + reaplicar = o login volta ao padrao do Keycloak")
+        (is (str/blank? (:emailTheme r))))
+      (finally (component/stop sem-tema)))))
 
 (deftest o-client-web-aponta-para-a-entrada-do-o-plenario
   (let [ente (random-uuid)
@@ -287,9 +291,11 @@
     (idp/criar-usuario! *idp* ente {:identidade-id iid :nome "Servidor Teste" :email "srv@example.com"})
     (let [u (usuario-representation *idp* ente iid)
           http (http!) token (admin-token-teste! http base-url)]
-      ;; a pessoa ja' concluiu o convite: sem pendencia
+      ;; a pessoa ja' concluiu o convite (tem senha): sem pendencia
       (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u))
                         (assoc u :requiredActions []))
+      (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u) "/reset-password")
+                        {:type "password" :value "Senha-de-teste-1" :temporary false})
       (idp/resetar-mfa! *idp* ente iid)
       (let [depois (usuario-representation *idp* ente iid)]
         (is (= ["CONFIGURE_TOTP"] (:requiredActions depois))
@@ -304,3 +310,16 @@
                                       (filter #(= alias (:alias %))) first :priority))]
       (is (< (prioridade "UPDATE_PASSWORD") (prioridade "CONFIGURE_TOTP"))
           "o Keycloak executa as acoes por prioridade: sem o ajuste, o convite pedia o codigo antes de a pessoa ter senha"))))
+
+(deftest resetar-mfa-de-quem-nunca-teve-senha-pede-a-senha-tambem
+  ;; quem concluiu o convite ANTIGO (so' passkey) nao tem senha: tirar a passkey sem pedir a senha o deixaria sem
+  ;; como entrar (o login da Casa pede senha)
+  (let [ente (random-uuid) iid (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (idp/criar-usuario! *idp* ente {:identidade-id iid :nome "Do Convite Antigo" :email "antigo@example.com"})
+    (let [u (usuario-representation *idp* ente iid)
+          http (http!) token (admin-token-teste! http base-url)]
+      (admin-put-teste! http token base-url (str "/admin/realms/ente-" ente "/users/" (:id u))
+                        (assoc u :requiredActions []))
+      (idp/resetar-mfa! *idp* ente iid)
+      (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions (usuario-representation *idp* ente iid))))))))

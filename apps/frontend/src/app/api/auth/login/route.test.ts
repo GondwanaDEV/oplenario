@@ -198,10 +198,15 @@ describe("GET /api/auth/login — a Câmara escolhida depois do CPF (ADR-0025)",
   const escolha = (casas: string[], redirectPath: string | null = null) =>
     JSON.stringify({ hint: HINT, redirectPath, casas: casas.map((enteId) => ({ enteId, nome: "Câmara" })) });
 
-  it("a Câmara está na escolha: o usuário já conferido vai como login_hint e o cookie da escolha some", async () => {
+  it("a Câmara está na escolha: o usuário já conferido vai como login_hint e o cookie fica (voltar e escolher outra)", async () => {
     const resp = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([ENTE, OUTRA])), { fetchImpl: fetchOk() });
     expect(new URL(resp.headers.get("location")!).searchParams.get("login_hint")).toBe(HINT);
-    expect(resp.headers.get("set-cookie")).toMatch(/entrar_escolha=;/);
+    expect(resp.headers.get("set-cookie")).not.toMatch(/entrar_escolha/);
+  });
+
+  it("o destino guardado na escolha passa pela mesma validação de todo redirect", async () => {
+    const resp = await GET(comCookie(`/api/auth/login?ente=${ENTE}`, escolha([ENTE], "/.//evil.example")), { fetchImpl: fetchOk() });
+    expect(pkceCookie(resp).payload.redirectPath).toBeNull();
   });
 
   it("o destino pedido antes do CPF segue para o callback", async () => {

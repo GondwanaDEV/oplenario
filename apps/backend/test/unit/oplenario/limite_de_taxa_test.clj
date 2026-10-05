@@ -23,4 +23,22 @@
     (lt/tentar! l "a" 0)
     (lt/tentar! l "b" 0)
     (lt/tentar! l "c" 500)
-    (is (= #{"c"} (set (keys @(:estado l)))) "passou do teto de chaves: as que so' tem tentativa vencida saem")))
+    (is (= #{"c"} (set (keys (:chaves @(:estado l))))) "passou do teto de chaves: as que so' tem tentativa vencida saem")))
+
+(deftest a-varredura-nao-roda-a-cada-pedido
+  (let [l (lt/novo {:maximo 5 :janela-ms 1000 :max-chaves 2})]
+    (lt/tentar! l "a" 0)
+    (lt/tentar! l "b" 0)
+    (lt/tentar! l "c" 1500)
+    (is (= #{"c"} (set (keys (:chaves @(:estado l))))) "1a varredura")
+    (lt/tentar! l "d" 1500)
+    (lt/tentar! l "e" 1550)
+    (is (= #{"c" "d" "e"} (set (keys (:chaves @(:estado l)))))
+        "menos de um decimo da janela depois da ultima varredura: nao varre de novo (as chaves vivas ficam)")
+    (lt/tentar! l "f" 2700)
+    (is (= #{"f"} (set (keys (:chaves @(:estado l))))) "passado o intervalo, varre: so' fica quem tem tentativa na janela")))
+
+(deftest concorrente-conta-cada-tentativa-uma-vez
+  (let [l (lt/novo {:maximo 50 :janela-ms 60000})
+        vereditos (doall (pmap (fn [_] (lt/tentar! l "ip" 1000)) (range 80)))]
+    (is (= 50 (count (filter :permitido? vereditos))) "exatamente o maximo passa, mesmo com 80 ao mesmo tempo")))

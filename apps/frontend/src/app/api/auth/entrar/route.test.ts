@@ -72,7 +72,8 @@ describe("POST /api/auth/entrar — a entrada pelo CPF", () => {
 
   it("pergunta ao backend com o CPF só em dígitos, no corpo — e repassa o IP que a borda pôs", async () => {
     const fetchImpl = backend(umaCasa);
-    await entrarPeloCpf(post({ cpf: "529.982.247-25" }, { "x-forwarded-for": "203.0.113.7, 10.0.0.2" }), { fetchImpl });
+    // o cliente pôs "10.9.9.9" na frente; o proxy da borda acrescentou o endereço de verdade no fim
+    await entrarPeloCpf(post({ cpf: "529.982.247-25" }, { "x-forwarded-for": "10.9.9.9, 203.0.113.7" }), { fetchImpl });
 
     const [url, init] = fetchImpl.mock.calls[0];
     expect(String(url)).toMatch(/\/auth\/localizar$/);

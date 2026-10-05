@@ -60,12 +60,16 @@ export function lerEscolha(bruto: string | undefined): Escolha | null {
 }
 
 /**
- * O IP de quem pediu, como a borda (o proxy reverso) o pôs no `X-Forwarded-For`: o primeiro da lista — a mesma regra
- * do backend (`auditoria.logic/ip-de`). O BFF repassa ao backend para o limite de tentativas por IP valer por pessoa,
- * não pelo servidor do Next. Só IPv4/IPv6 literais; qualquer outra coisa -> null (nada é repassado).
+ * O IP de quem pediu, para o limite de tentativas por IP do backend valer por pessoa, não pelo servidor do Next.
+ *
+ * É o ÚLTIMO item do `X-Forwarded-For`: o que o proxy da borda (o Traefik, que fala direto com o Next) acrescentou com
+ * o endereço de quem abriu a conexão com ele. Os itens anteriores vêm do próprio pedido e o cliente escreve o que
+ * quiser — com o primeiro, cada tentativa ganharia um balde novo (ou gastaria o balde da rede de uma Câmara). Só
+ * IPv4/IPv6 literais; qualquer outra coisa -> null (nada é repassado e o backend usa o endereço do Next).
  */
 export function ipDoCliente(headers: Headers): string | null {
-  const primeiro = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  if (!primeiro || !/^[0-9A-Fa-f:.]{2,45}$/.test(primeiro)) return null;
-  return primeiro;
+  const itens = headers.get("x-forwarded-for")?.split(",") ?? [];
+  const ultimo = itens[itens.length - 1]?.trim();
+  if (!ultimo || !/^[0-9A-Fa-f:.]{2,45}$/.test(ultimo)) return null;
+  return ultimo;
 }

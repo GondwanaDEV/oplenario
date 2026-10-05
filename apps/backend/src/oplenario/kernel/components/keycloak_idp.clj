@@ -315,16 +315,18 @@
 
 (defn- configurar-aparencia-e-defesa!
   "ADR-0025: PUT PARCIAL do realm (mesmo racional de `configurar-smtp!`: o Keycloak 26 nao zera os campos omitidos).
-  Portugues do Brasil como unica lingua, o tema do O Plenario (quando configurado), o nome da Casa (quando informado —
-  sem nome, o realm guarda o que ja' tinha), a politica de senha e a defesa contra forca bruta. Erro de infra LANCA."
+  Portugues do Brasil como unica lingua, o tema do O Plenario, o nome da Casa (quando informado — sem nome, o realm
+  guarda o que ja' tinha), a politica de senha e a defesa contra forca bruta. Tema desligado na config
+  (KEYCLOAK_TEMA_LOGIN vazio) grava \"\" — o padrao do Keycloak, conferido no 26.0.0 —, para reaplicar de fato desfazer o
+  tema (omitir o campo deixaria o tema antigo no realm). Erro de infra LANCA."
   [http-client token base-url realm {:keys [nome tema-login]}]
-  (let [corpo (cond-> (merge {:realm realm
+  (let [;; o mesmo nome serve o login (temas/oplenario/login) e o e-mail do convite (temas/oplenario/email)
+        tema (if (str/blank? tema-login) "" tema-login)
+        corpo (cond-> (merge {:realm realm
                               :internationalizationEnabled true :supportedLocales ["pt-BR"] :defaultLocale "pt-BR"
-                              :passwordPolicy politica-de-senha}
+                              :passwordPolicy politica-de-senha :loginTheme tema :emailTheme tema}
                              defesa-forca-bruta)
-                (not (str/blank? nome)) (assoc :displayName nome)
-                ;; o mesmo nome serve o login (temas/oplenario/login) e o e-mail do convite (temas/oplenario/email)
-                (not (str/blank? tema-login)) (assoc :loginTheme tema-login :emailTheme tema-login))
+                (not (str/blank? nome)) (assoc :displayName nome))
         {:keys [status corpo]} (admin-req! http-client token :put (str "/admin/realms/" realm) corpo base-url)]
     (when-not (= 204 status)
       (throw (ex-info "keycloak-idp: falha ao configurar a aparencia e a defesa do realm (infra)"
@@ -672,14 +674,17 @@
             (when-not (= 204 status)
               (throw (ex-info "keycloak-idp: falha ao remover credencial MFA (infra)" {:status status :credencial-id id})))))
         ;; ADR-0025: sem o fator, o proximo login pede o cadastro do codigo — senao a pessoa entraria so' com a senha
-        ;; (o OTP do fluxo padrao e' condicional: so' e' pedido de quem tem um). Le o usuario INTEIRO e devolve o registro
-        ;; completo (mesmo cuidado de `corrigir-email-do-convite-impl`: PUT parcial apaga o `identidade-id`).
+        ;; (o OTP do fluxo padrao e' condicional: so' e' pedido de quem tem um). Quem nunca teve senha (o convite antigo,
+        ;; so' passkey) perde a passkey aqui: pede a senha tambem, senao ficaria sem como entrar. Le o usuario INTEIRO e
+        ;; devolve o registro completo (mesmo cuidado de `corrigir-email-do-convite-impl`: PUT parcial apaga o
+        ;; `identidade-id`).
         (let [caminho (str "/admin/realms/" realm "/users/" kc-id)
+              pendencias (if (some #(= "password" (:type %)) corpo) ["CONFIGURE_TOTP"] acoes-do-primeiro-acesso)
               {usuario :corpo st-u :status} (admin-req! http-client token :get caminho nil base-url)
               _ (when-not (= 200 st-u) (throw (ex-info "keycloak-idp: falha ao ler o usuario (infra)" {:status st-u})))
               {st :status c :corpo} (admin-req! http-client token :put caminho
                                                 (update usuario :requiredActions
-                                                        #(vec (distinct (conj (vec %) "CONFIGURE_TOTP"))))
+                                                        #(vec (distinct (into (vec %) pendencias))))
                                                 base-url)]
           (when-not (= 204 st)
             (throw (ex-info "keycloak-idp: falha ao pedir o novo cadastro do codigo (infra)" {:status st :corpo c}))))

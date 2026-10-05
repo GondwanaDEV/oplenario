@@ -45,21 +45,22 @@ export async function iniciarLogin(request: NextRequest, opts?: OpcoesBackend): 
   }
 
   // ADR-0025: a Câmara escolhida em /entrar/escolher (quem tem acesso a mais de uma). O usuário já conferido pelo CPF
-  // vai como `login_hint` só se ESTA Câmara está na escolha; o destino pedido antes do CPF segue junto.
+  // vai como `login_hint` só se ESTA Câmara está na escolha; o destino pedido antes do CPF segue junto (validado de
+  // novo aqui, como todo `redirect`). O cookie NÃO é apagado: quem clicou na Câmara errada e voltou ainda escolhe a
+  // outra até ele vencer (5 min).
   const escolha = viaGovbr ? null : lerEscolha(request.cookies.get(COOKIE_ESCOLHA)?.value);
   const daEscolha = escolha?.casas.some((c) => c.enteId === ente) ? escolha : null;
 
   // `null` = ninguém pediu destino; o callback então escolhe a home da persona (destinoPorPapeis).
   const redirectPath =
-    pedidoDeRedirect(request.nextUrl.searchParams.get("redirect"), origin) ?? daEscolha?.redirectPath ?? null;
+    pedidoDeRedirect(request.nextUrl.searchParams.get("redirect"), origin) ??
+    pedidoDeRedirect(daEscolha?.redirectPath ?? null, origin);
 
-  const response = redirecionarAoKeycloak({
+  return redirecionarAoKeycloak({
     origin,
     descoberta,
     redirectPath,
     loginHint: daEscolha?.hint ?? null,
     viaGovbr,
   });
-  if (escolha) response.cookies.delete(COOKIE_ESCOLHA);
-  return response;
 }

@@ -75,7 +75,8 @@ login" do console do operador):
 - `displayName` = **nome oficial da Casa** (`provisionar-realm!` ganhou a aridade `[idp ente-id {:nome}]`; sem nome,
   o realm existente guarda o que tinha e o novo nasce "O Plenário");
 - **pt-BR** como único idioma; `loginTheme`/`emailTheme` = `KEYCLOAK_TEMA_LOGIN` (padrão `oplenario`; vazio
-  desliga). Keycloak sem o tema instalado cai no padrão com um erro no log dele — ligar não derruba nada;
+  grava `""`, o padrão do Keycloak, e reaplicar desfaz o tema). Keycloak sem o tema instalado cai no padrão com um erro
+  no log dele — ligar não derruba nada;
 - **política de senha:** 8 a 128 caracteres, diferente do usuário e do e-mail (NIST 800-63B: comprimento, sem regra
   de composição);
 - **trava contra força bruta:** a cada 10 erros, 1 minuto, dobrando até 15; **nunca permanente** — senão quem
@@ -90,7 +91,8 @@ login" do console do operador):
 - O login da Casa fica **CPF → senha → código do aplicativo** (o OTP condicional do fluxo padrão: pedido de quem tem
   um). É o "senha + TOTP como piso" da §22.5, e o segundo fator continua obrigatório.
 - `resetar-mfa!` agora devolve a pendência `CONFIGURE_TOTP`: sem o fator, o próximo login pede o cadastro — antes a
-  pessoa passaria a entrar só com a senha.
+  pessoa passaria a entrar só com a senha. Quem nunca teve senha (o convite antigo, só passkey) ganha também
+  `UPDATE_PASSWORD`, senão ficaria sem como entrar.
 - **A passkey sai do primeiro acesso, por ora.** Ela fica presa ao domínio do Keycloak (o *RP ID*); o domínio
   definitivo do produto ainda está pendente (`docs/04-nome-e-marca.md`), e trocar o domínio depois invalidaria todas.
   A required action continua habilitada no realm; a passkey volta como segundo fator (ou primário, §22.5) quando o
@@ -99,10 +101,16 @@ login" do console do operador):
 ### 5. Limite de tentativas
 
 O backend não tinha nenhum. `oplenario.limite-de-taxa`: janela deslizante por chave, em memória da instância (hoje
-uma); a tentativa recusada não conta. Na entrada pelo CPF: **30 consultas por IP a cada 5 min** (`:entrada`;
-`ENTRADA_LIMITE_POR_IP`, `ENTRADA_JANELA_MIN`) → 429 com `Retry-After`. Uma Câmara inteira costuma sair por um IP só; o
-teto cobre a chegada da equipe. O IP é o primeiro do `X-Forwarded-For` (mesma regra da auditoria; o proxy da borda é
-nosso); o BFF repassa o IP que recebeu.
+uma), uma função pura trocada por `swap!`, com a memória varrida no máximo a cada décimo da janela; a tentativa
+recusada não conta. Na entrada pelo CPF: **30 consultas por IP a cada 5 min** (`:entrada`; `ENTRADA_LIMITE_POR_IP`,
+`ENTRADA_JANELA_MIN`) → 429 com `Retry-After`. Uma Câmara inteira costuma sair por um IP só; o teto cobre a chegada da
+equipe.
+
+**De onde vem o IP:** o BFF lê o **último** item do `X-Forwarded-For` — o que o proxy da borda (o Traefik, que fala
+direto com o Next) acrescentou; os anteriores o cliente escreve o que quiser — e repassa só ele ao backend.
+`/api/auth/localizar` responde 404 no próprio Next: o proxy de `/api/:path*` não leva mais o navegador direto ao
+`POST /auth/localizar` com um `X-Forwarded-For` inventado. (A auditoria continua lendo o primeiro item; ela registra,
+não limita.)
 
 ## Alternativas descartadas
 
@@ -124,6 +132,15 @@ nosso); o BFF repassa o IP que recebeu.
 - **Senha esquecida** = novo convite do administrador da Câmara (o "esqueci a senha" do Keycloak fica desligado: ele
   depende do SMTP de produção, que é `[GAP]`). A tela diz isso.
 - **Sem SMTP em produção não sai convite** — isso já era verdade e continua.
+- **Quem souber o CPF de um vereador consegue travar a conta dele por alguns minutos** (10 senhas erradas → 1 min,
+  dobrando até 15). A trava existe porque protege também o código do aplicativo (6 dígitos) de ser adivinhado; ela é
+  temporária e não derruba quem já está dentro (a sessão do O Plenário não depende do Keycloak). Com o domínio
+  definitivo e a passkey de volta, a senha deixa de ser a porta principal. Aceito por ora.
+- **Conceder acesso em `/administracao` reaplica o realm** (o `provisionar-realm!` sem nome): mais 3 ou 4 chamadas ao
+  Keycloak por concessão, e um realm criado por esse caminho (Casa antiga, sem passar pelo console) nasce "O Plenário"
+  até alguém usar "Reaplicar configuração de login" no console, que grava o nome.
+- **O limite é por instância e um deploy o zera.** Com mais de uma réplica do backend, trocar pelo Valkey (o mesmo
+  `tentar!`).
 
 ## O que o operador faz (produção)
 

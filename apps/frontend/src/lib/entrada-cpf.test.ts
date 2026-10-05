@@ -52,8 +52,9 @@ describe("a escolha de Câmara (quem tem acesso a mais de uma)", () => {
 
 describe("ipDoCliente — o IP que a borda (o proxy) pôs no X-Forwarded-For", () => {
   const h = (xff?: string) => new Headers(xff ? { "x-forwarded-for": xff } : {});
-  it("o primeiro da lista", () => {
-    expect(ipDoCliente(h("203.0.113.7, 10.0.0.2"))).toBe("203.0.113.7");
+  it("o último da lista: o que o proxy acrescentou; os anteriores o cliente escreve o que quiser", () => {
+    expect(ipDoCliente(h("203.0.113.7"))).toBe("203.0.113.7");
+    expect(ipDoCliente(h("1.2.3.4, 203.0.113.7"))).toBe("203.0.113.7");
     expect(ipDoCliente(h("2001:db8::1"))).toBe("2001:db8::1");
   });
   it("sem cabeçalho ou com lixo -> null (nada é repassado ao backend)", () => {
