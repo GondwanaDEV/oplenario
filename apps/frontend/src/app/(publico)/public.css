@@ -18,7 +18,10 @@
 
 /* ---- espelha body.superficie-publica do chassi.css (aqui é um <div>, não o <body>) ---- */
 .superficie-publica { --max: 1200px; line-height: 1.6; }
-.superficie-publica a {
+/* :where() como no chassi: a regra fica em (0,0,1) e todo link com classe própria manda na própria cor.
+   Sem ele, `.superficie-publica a` (0,1,1) vencia `.btn-primaria` (0,1,0) e o texto do botão-link saía da
+   cor do fundo — "Baixar o texto publicado" na ficha da lei ficou invisível em produção. */
+:where(.superficie-publica) a {
   color: var(--marca);
   text-decoration-color: color-mix(in srgb, var(--marca) 35%, transparent);
   text-underline-offset: 3px;

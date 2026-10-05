@@ -314,5 +314,8 @@ describe("ConteudoPosAprovacao", () => {
     await waitFor(() => expect(screen.getByText("Diário Oficial do Município, ed. 1.234")).toBeTruthy());
     expect(screen.queryByLabelText("Onde a lei foi publicada")).toBeNull();
     expect(screen.getByText(/aparece no portal da Câmara, em Leis e normas/)).toBeTruthy();
+    // o Desfecho deixa de dizer "segue para promulgação/publicação" e diz o que a matéria virou
+    expect(screen.getByText("A matéria foi sancionada e virou a Lei nº 12/2026, já publicada.")).toBeTruthy();
+    expect(screen.queryByText(/segue para promulgação/)).toBeNull();
   });
 });

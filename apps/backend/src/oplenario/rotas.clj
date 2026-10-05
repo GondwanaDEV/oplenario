@@ -993,5 +993,10 @@
         ["/contas" :post]
         (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
         ["/sessoes/:id/votacoes/:votacao-id/encerramento" :post]
-        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))}))
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:contas}} (constantly true))
+        ;; o aceite da remessa pelo TCE cumpre a obrigacao da competencia (`remessa_enviada`): so' a resposta `aceita`
+        ;; — a rejeitada nao cumpre nada e nao dispara
+        ["/compliance/remessas/:id/resposta" :post]
+        (gatilho/interceptor-depois disparar-gatilho {:origem "evento" :partes #{:remessas}}
+                                    (fn [req] (= "aceita" (get-in req [:json-params "estado"]))))}))
      estado-da-casa))))

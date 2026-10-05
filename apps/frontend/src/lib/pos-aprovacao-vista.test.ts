@@ -4,6 +4,7 @@ import {
   derivarPrazoExecutivo,
   formatarNumeroAutografo,
   formatarNumeroNorma,
+  fraseDaNorma,
   promulgavel,
 } from "./pos-aprovacao-vista";
 import type { AutografoOut, NormaOut, TramitacaoExecutivaOut } from "./contrato-legislativo.gen";
@@ -149,5 +150,19 @@ describe("a norma no pipeline (F3.8b)", () => {
     expect(formatarNumeroNorma("lei", 12, 2026)).toBe("Lei nº 12/2026");
     expect(formatarNumeroNorma("lei_complementar", 3, 2026)).toBe("Lei Complementar nº 3/2026");
     expect(formatarNumeroNorma("emenda_lom", 1, 2026)).toBe("Emenda à Lei Orgânica nº 1/2026");
+  });
+});
+
+describe("fraseDaNorma — o Desfecho depois da promulgação", () => {
+  it("concorda com a espécie e diz se já foi publicada", () => {
+    expect(fraseDaNorma({ tipoNorma: "lei", numero: 5, ano: 2026, estado: "publicada" })).toBe(
+      "virou a Lei nº 5/2026, já publicada",
+    );
+    expect(fraseDaNorma({ tipoNorma: "decreto_legislativo", numero: 1, ano: 2026, estado: "publicada" })).toBe(
+      "virou o Decreto Legislativo nº 1/2026, já publicado",
+    );
+    expect(fraseDaNorma({ tipoNorma: "resolucao", numero: 2, ano: 2026, estado: "promulgada" })).toBe(
+      "virou a Resolução nº 2/2026, que ainda falta publicar",
+    );
   });
 });

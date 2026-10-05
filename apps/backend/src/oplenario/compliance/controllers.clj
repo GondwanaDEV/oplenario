@@ -22,28 +22,29 @@
 (defn- transicionar-remessa
   "Aplica `transicao!` (thunk que chama o metodo de transicao do Repo — devolve a remessa ja transicionada
   ou nil no CAS perdido) e DESAMBIGUA o nil: a remessa AINDA existe no tenant -> conflito de ciclo (estado
-  incompativel; o handler mapeia p/ 409); ausente -> nil (o handler mapeia p/ 404). O happy-path e' uma
-  unica chamada — o existence-check (`remessa-existe?`) so paga no (raro) miss, e a RLS garante que so a
+  incompativel; o handler mapeia p/ 409); ausente -> nil (o handler mapeia p/ 404). O conflito carrega o estado
+  ATUAL e o ESPERADO (`esperado` = o estado em que a remessa precisa estar para a transicao), que a borda diz em
+  portugues. O happy-path e' uma unica chamada — o `estado-da-remessa` so paga no (raro) miss, e a RLS garante que so a
   remessa do proprio tenant e' visivel (sem vazamento cross-tenant)."
-  [repo-compliance ente-id id transicao!]
+  [repo-compliance ente-id id esperado transicao!]
   (or (transicao!)
-      (when (repo/remessa-existe? repo-compliance ente-id id)
+      (when-let [atual (repo/estado-da-remessa repo-compliance ente-id id)]
         (throw (ex-info "transicao de remessa em conflito (estado incompativel com o ciclo)"
-                        {:tipo :conflito/remessa :id id})))))
+                        {:tipo :conflito/remessa :id id :estado-atual atual :esperado esperado})))))
 
 (defn validar-remessa
   "Transiciona a remessa `id` rascunho->validada no tenant do `ator`. nil = inexistente (-> 404);
   :conflito/remessa = ja-transicionada / estado incompativel (-> 409)."
   [repo-compliance ator id]
   (let [ente-id (:ente-id ator)]
-    (transicionar-remessa repo-compliance ente-id id
+    (transicionar-remessa repo-compliance ente-id id "rascunho"
                           #(repo/validar-remessa! repo-compliance ente-id id))))
 
 (defn submeter-remessa
   "Transiciona a remessa `id` validada->submetida no tenant do `ator`. Mesma semantica de erro de validar."
   [repo-compliance ator id]
   (let [ente-id (:ente-id ator)]
-    (transicionar-remessa repo-compliance ente-id id
+    (transicionar-remessa repo-compliance ente-id id "validada"
                           #(repo/submeter-remessa! repo-compliance ente-id id))))
 
 (defn registrar-resposta-remessa
@@ -52,5 +53,5 @@
   de erro de validar (nil -> 404; :conflito/remessa -> 409)."
   [repo-compliance ator id estado]
   (let [ente-id (:ente-id ator)]
-    (transicionar-remessa repo-compliance ente-id id
+    (transicionar-remessa repo-compliance ente-id id "submetida"
                           #(repo/registrar-resposta-remessa! repo-compliance ente-id id estado))))

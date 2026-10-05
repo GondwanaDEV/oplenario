@@ -96,4 +96,5 @@
 
 /* F3.8b — o card "Lei": a URN é longa e sem espaços; quebra em qualquer ponto para não estourar a coluna. */
 .card-norma .urn { overflow-wrap: anywhere; font-size: var(--t-12); }
+.card-norma .status-norma { margin: 0 0 0.8rem; font-size: var(--t-13); font-weight: 600; color: var(--marca); }
 .card-norma .confirmar-norma { border-top: 1px dashed var(--linha); margin-top: 0.8rem; padding-top: 0.7rem; }
