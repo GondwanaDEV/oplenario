@@ -654,7 +654,7 @@
       (when-let [t (ler-transcricao (:ente-id ator) transcricao-id)]
         (assoc t :ponteiro p)))))
 
-(declare nomes-de-quem-congelou sha256-hex)
+(declare nomes-de-quem-congelou nomear-atos-de-chamada sha256-hex)
 
 (defn ata-da-sessao
   "Faixa A / A.6: a ata vigente (com o nome de quem publicou, pelo seam `nome-na-casa`) e o historico de versoes.
@@ -1361,7 +1361,7 @@
   canonico + PDF, hasheia os dois, e insere UMA linha versionada em `sessoes.folha_sessao` (D3 — um trio
   html_*/pdf_* cada, NUNCA duas linhas). D4: NENHUM evento de dominio emitido (o molde da remessa, `compliance/
   events/remessa.clj`, e' so' comentario sem consumidor — abrir uma segunda ferida evento-sem-consumidor e'
-  proibido); a linha do banco e' a ANCORA. `m` = `{:serializador :renderizador-pdf :objeto-store}`, os TRES
+  proibido); a linha do banco e' a ANCORA. `m` = `{:serializador :renderizador-pdf :objeto-store}` (+ `:nome-na-casa`, seam opcional de nomes), os TRES
   ports injetados POR CHAMADA (nunca campos do record) — a mesma forma de `gerar-artefato-publicacao!`.
 
   1. CARREGA O DOCUMENTO reusando `folha-da-sessao` (acima, MESMA funcao, UMA SO' tx no Repo) — isto e' o
@@ -1381,7 +1381,7 @@
   Devolve a linha de `sessoes.folha_sessao` (com `:ja-congelada true` no caminho do dedup), ou `nil` (sessao
   inexistente neste ente -> 404 na borda, mesmo contrato de `folha-da-sessao`)."
   [repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio
-   {:keys [serializador renderizador-pdf objeto-store]}]
+   {:keys [serializador renderizador-pdf objeto-store nome-na-casa]}]
   (when-not objeto-store
     (throw (ex-info "gerar-folha!: objeto-store ausente" {:sessao-id sessao-id})))
   (when-not serializador
@@ -1390,7 +1390,10 @@
     (throw (ex-info "gerar-folha!: renderizador-pdf ausente" {:sessao-id sessao-id})))
   (let [ente-id (:ente-id ator)
         agora   (tempo/agora relogio)
-        doc     (folha-da-sessao repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio)]
+        doc     (some-> (folha-da-sessao repo-sessoes roster-da-casa dados-da-casa ator sessao-id relogio)
+                        ;; o nome de quem conduziu entra NO DOCUMENTO que vai ser congelado (a folha e' imutavel e tem
+                        ;; hash: o nome e' resolvido uma vez, aqui, e fica). Folha ja' congelada nao e' reescrita.
+                        (update :atos-de-chamada-conduzida #(nomear-atos-de-chamada nome-na-casa ente-id %)))]
     (when doc
       (when-not (m/validate mod-folha/FolhaDocumento doc)
         (throw (ex-info "gerar-folha!: documento nao bate FolhaDocumento — recusado ANTES de renderizar"
@@ -1450,6 +1453,17 @@
                     (log/warn e "nome de quem congelou a folha indisponivel; a versao segue sem ele")
                     nil))))
         (distinct (keep :gerada-por folhas))))
+
+(defn nomear-atos-de-chamada
+  "Cada ato de chamada conduzida ganha `:conduzida-por-nome` — o nome de quem conduziu, pelo seam `nome-na-casa`
+  (fn [ente-id identidade-id] -> nome|nil, so' de quem tem vinculo NESTA Casa; sessoes nunca importa
+  identidade, §22.10). Sem nome (seam ausente, sem vinculo, leitura falhou) a chave sai nil e a tela/folha
+  escrevem o texto neutro — nunca o id. ENRIQUECIMENTO, nao nucleo: mesma postura de `nomes-de-quem-congelou`."
+  [nome-na-casa ente-id atos]
+  (let [nomes (if nome-na-casa
+                (nomes-de-quem-congelou nome-na-casa ente-id (map #(hash-map :gerada-por (:conduzida-por %)) atos))
+                {})]
+    (mapv #(assoc % :conduzida-por-nome (get nomes (:conduzida-por %))) atos)))
 
 (defn folha-conteudo
   "Le' o BINARIO CONGELADO (`qual` = :html ou :pdf) da versao `versao` da folha da sessao `sessao-id` do

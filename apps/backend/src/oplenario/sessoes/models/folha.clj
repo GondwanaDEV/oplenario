@@ -91,12 +91,15 @@
    [:decidido-em {:optional true} [:maybe km/Instante]]])
 
 (def AtoDeChamadaConduzida
-  "O ato append-only (`db/chamada/listar-da-sessao`) — pode haver mais de um por sessao (reconducao)."
+  "O ato append-only (`db/chamada/listar-da-sessao`) — pode haver mais de um por sessao (reconducao).
+  `conduzida-por-nome` e' o nome de quem conduziu, resolvido no congelamento pelo seam `nome-na-casa` (so' de quem
+  tem vinculo nesta Casa); ausente ou nil = a folha escreve o texto neutro \"Servidor(a) da Câmara\", nunca o id."
   [:map {:closed true}
    [:id :uuid]
    [:ente-id :uuid]
    [:sessao-id :uuid]
    [:conduzida-por :uuid]
+   [:conduzida-por-nome {:optional true} [:maybe :string]]
    [:membros-da-casa :int]
    [:ocorrido-em km/Instante]
    [:registrado-em km/Instante]])
