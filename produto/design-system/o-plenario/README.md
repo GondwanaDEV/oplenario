@@ -15,7 +15,7 @@ de `sistema/` e nos style-tiles canônicos prevalece** sobre prosa.
 | Caminho | O que é | Papel na implementação |
 |---|---|---|
 | **`sistema/`** | **A SSOT executável.** `tokens.css` (99 custom properties: paleta-marca fixa + semânticos por `[data-tema]`), `chassi.css` (reset · base · componentes), `tema.js` (alternância claro/escuro page-agnóstica). | **Gerar daqui.** Tokens → TS/Tailwind; chassi → camada de componentes; tema.js → theming. **Não copiar à mão.** |
-| `linguagem-visual.html` | Style-tile canônico (paleta, fontes Sora · Hanken Grotesk · IBM Plex Mono, assinatura = faixa de azulejo). | Referência visual de verdade. |
+| `linguagem-visual.html` | Style-tile canônico (paleta, fontes Mona Sans · Geist Mono, assinatura = faixa de azulejo). | Referência visual de verdade. |
 | `componentes.html` | Biblioteca viva (styleguide) — consome `sistema/`. | Catálogo de componentes a portar. |
 | **`telas/`** | **48 telas** HTML, todas linkando `../sistema/` (verificado: 48/48). 3 públicos, 10 arquétipos, as 3 apostas de produto. | **Alvos de tradução** para componentes React. Não são código canônico — são a especificação visual de cada superfície. |
 | `opcoes/` | Direções exploradas e **rejeitadas** (`A-modernismo-civico`, `C-pedra-e-bronze`, `D-o-registro`). | **Ignorar na implementação.** Registro histórico da exploração, não é alvo. |
