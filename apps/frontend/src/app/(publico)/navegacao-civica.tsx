@@ -37,6 +37,11 @@ const CARTOES = [
     rota: "atas",
   },
   {
+    titulo: "Votações",
+    motivo: "O que a Câmara votou nas sessões públicas, o resultado e, nas votações nominais, o voto de cada vereador.",
+    rota: "votacoes",
+  },
+  {
     titulo: "Audiências públicas",
     motivo: "As próximas audiências e as já realizadas. Você pode se inscrever para falar, entrando com o gov.br.",
     rota: "audiencias",

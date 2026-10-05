@@ -28,6 +28,25 @@ export async function buscarPublico<T>(...segmentos: string[]): Promise<T | null
   }
 }
 
+// Como `buscarPublico`, para a rota que PAGINA: `consulta` vira query string (cada valor codificado). Valor
+// ausente (undefined) não entra — a página 1 sai sem `?pagina=` e o backend assume 1.
+export async function buscarPublicoComConsulta<T>(
+  segmentos: string[],
+  consulta: Record<string, string | undefined>,
+): Promise<T | null> {
+  const qs = new URLSearchParams(
+    Object.entries(consulta).filter((par): par is [string, string] => par[1] !== undefined),
+  ).toString();
+  try {
+    const caminho = segmentos.map(codificarSegmento).join("/");
+    const r = await fetch(`/api/portal/casa/${caminho}${qs ? `?${qs}` : ""}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    return camelizarChaves(await r.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 // `buscarNomeCasa` roda em SERVER COMPONENT (page.tsx), NÃO em client — por isso não pode usar
 // `buscarPublico` (fetch relativo `/api/...`, que só resolve no browser via o rewrite same-origin de
 // next.config.ts). Aqui o fetch é direto ao backend com a MESMA env var (`BACKEND_URL`) que o rewrite usa
