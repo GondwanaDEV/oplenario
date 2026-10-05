@@ -50,6 +50,25 @@
       (is (= ["agente" "assistente" "agente"] ((juxt :ator-tipo :via-agente :canal) r)))
       (is (= "e1" (get-in r [:detalhe :execucao]))))))
 
+(deftest a-entrada-tem-tentativa-e-o-desfecho-a-aponta
+  ;; ADR-0017, adendo de 05/10/2026: o mint nao tem :ator na requisicao; o ator vem do handler, depois de resolvido
+  (let [ator {:ente-id ente :identidade-id maria :papeis #{} :tipo-vinculo "cidadao"}
+        t (logic/registro-da-tentativa-de-entrada (req :post :ator nil) ator :identidade/mint-sessao)]
+    (is (= ["identidade/mint-sessao" "entrada" "iniciado" nil "cidadao" maria ente]
+           ((juxt :acao :classe :decisao :status-http :ator-tipo :identidade-id :ente-id) t)))
+    (is (= "10.0.0.9" (:ip t)) "o IP segue a regra de sempre (e anulado depois de 6 meses)")
+    (testing "o desfecho da entrada aponta a tentativa em detalhe.tentativa"
+      (let [d (logic/registro-da-requisicao (req :post :ator nil)
+                                            {:status 200 :auditoria {:classe "entrada" :ator ator :rotulo "entrou"}}
+                                            :identidade/mint-sessao 7)]
+        (is (= ["entrada" "permitido" 7] ((juxt :classe :decisao (comp :tentativa :detalhe)) d)))))
+    (testing "sem Casa ou sem rota nao ha tentativa (nada a quem atribuir)"
+      (is (nil? (logic/registro-da-tentativa-de-entrada (req :post :ator nil) (dissoc ator :ente-id) :identidade/mint-sessao)))
+      (is (nil? (logic/registro-da-tentativa-de-entrada (req :post :ator nil) ator nil)))
+      (is (nil? (logic/registro-da-tentativa-de-entrada (req :post :ator nil) nil :identidade/mint-sessao))))
+    (testing "so' a rota de entrada declarada entrega a tentativa (a lista e' fechada)"
+      (is (= #{:identidade/mint-sessao} logic/acoes-de-entrada)))))
+
 (defn- corrente [n]
   (reduce (fn [acc i]
             (let [r {:ente-id ente :seq i :id (random-uuid) :ocorrido-em (Instant/parse "2026-09-29T12:00:00Z")

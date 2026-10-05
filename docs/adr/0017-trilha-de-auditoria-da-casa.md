@@ -339,13 +339,123 @@ transação de tenant própria de ~5 ms; três rodadas, depois de aquecer):
   `AUDITORIA_EXIGIR_TENTATIVA=true` e aceita que a trilha fora para a Casa.
 - **Não diz se o ato aconteceu.** A tentativa sem desfecho também aparece quando o processo cai antes de o ato
   commitar. Ela aponta onde conferir (ação, recurso, quem, quando); a conferência é do auditor.
-- **A entrada (login):** o handler do mint não tem ator antes de rodar; segue com um registro só, gravado depois.
+- ~~**A entrada (login):** o handler do mint não tem ator antes de rodar; segue com um registro só, gravado depois.~~
+  **Fechado em 05/10/2026** — ver o adendo seguinte.
 - **Um pedido que dure mais de 2 minutos** aparece como sem desfecho até terminar.
-- **O que não passa por HTTP** (consumidores do outbox, jobs) não era auditado e continua não sendo.
+- ~~**O que não passa por HTTP** (consumidores do outbox, jobs) não era auditado e continua não sendo.~~
+  **Medido em 05/10/2026** — ver o adendo seguinte: hoje não há ato nessas famílias que precise do par.
 - **Quem escreve direto no banco** continua fora, como antes: é o que o selo e a âncora cobrem.
 
 **Pendências da trilha depois deste adendo:**
 
 - o resumo legível por ação (item 3 acima);
-- step-up (item 4) e o verificador offline (item 5);
-- a entrada sem tentativa (acima).
+- step-up (item 4) e o verificador offline (item 5).
+
+## Adendo (05/10/2026) — a entrada, os jobs e os consumidores do outbox
+
+O adendo de 04/10 fechou a escrita por HTTP e deixou três famílias de fora. Esta é a medição de cada uma contra o código
+de hoje e o que ela decidiu.
+
+**O critério.** A tentativa existe para fechar uma janela: o ato commita numa transação e o registro dele vai noutra.
+Onde o efeito já é uma linha append-only gravada **na mesma transação**, com autor e origem, essa janela não existe, e
+um par na trilha (outra transação) só acrescentaria um segundo relógio. Projeção (read-model, canal ao vivo, feed,
+caixa de aviso) não é ato: a trilha registra o que as pessoas e o sistema **fazem**, não o que se projeta do que foi feito.
+
+### Inventário
+
+**1. A entrada**
+
+| Ponto | O que grava hoje | É ato auditável? | Decisão |
+|---|---|---|---|
+| `POST /auth/sessoes` — `identidade/diplomat/http/auth_in.clj`, `mint-handler` | Só o desfecho `entrada`, depois da resposta (o interceptor global o recebe pela marca `:auditoria` do handler) | **Sim:** cria a sessão (e, no 1º gov.br, o vínculo de cidadão e o consentimento) | **Instrumentado:** tentativa antes da sessão |
+| `POST /auth/sessoes` com token inválido ou sem vínculo ativo (401) | Nada: não há ator nem Casa a quem atribuir | Não: nada foi concedido | Sem registro, como antes |
+| `DELETE /auth/sessoes` (logout) | Nada (rota pública, sem ator) | Não: o Eixo G lista o login, não o logout; nenhum dado de domínio muda | Sem registro |
+| `POST /operacao/sessoes` (operador) — `admin_sistema/diplomat/http/in.clj` | `entrou-no-console` na **atuação da Operação** | Sim, mas é da Operação | Fora: outra corrente (ADR-0016) |
+| Callback do gov.br e do Keycloak | Não existem no backend: são rotas do BFF (`app/api/auth/callback`, `app/api/operacao/callback`) que chamam o mint | — | O mesmo ponto acima |
+
+**2. Jobs e comandos**
+
+| Ponto | O que é | É ato auditável? | Decisão |
+|---|---|---|---|
+| Agendador de jobs | **Não existe em produção.** `kernel/components/scheduler.clj` só elege o líder do relay; `participacao/varrer-vencimentos!` nunca roda fora de teste | — | Nada a instrumentar |
+| `gatilho_compliance.clj` (ao ler o painel e depois de atos) | O mais próximo de um job: avalia obrigações e varre vencimentos em nome do sistema | O efeito sim; o par não | Fora: cada efeito é uma linha append-only de `compliance.compliance_avaliacao` (origem `sob_demanda`/`evento`/`sweep`) **na mesma transação**; um par custaria 2 gravações na corrente a cada leitura do painel |
+| Pools `exportacao.clj` e `renderizador_pdf.clj` | Continuação de um pedido já registrado (o 202 / o congelamento da folha) | Não: o pedido é o ato | Fora |
+| `main.clj`: `migrate`, `ia-republicar-proposicoes`, `reconciliar-anexos`, `operador-convidar`/`-desligar` | Infraestrutura, projeção ou ato do operador (os dois últimos já gravam na atuação) | Não, na corrente da Casa | Fora |
+| `main.clj`: `ia-orcamento` | Ato do operador sobre uma Casa | Sim, **da Operação** | Fora desta corrente. **Lacuna achada:** não grava na atuação e o `definido_por` é o texto "operador (linha de comando)", sem nome |
+
+**3. Consumidores do outbox** (o registro que o host monta em `sistema/registro-de-consumidores`)
+
+| Consumidor | O que faz | Classe |
+|---|---|---|
+| `tempo-real-sse` | publica no canal ao vivo | projeção |
+| `transparencia-portal` | read-model do portal | projeção |
+| `transparencia-notificacao` | pede um aviso por seguidor (`notificacao.requisitada`) | projeção |
+| `paineis` · `paineis-inbox` | read-models e caixa de aviso | projeção |
+| `legislativo-notificacao` | avisa o autor de que a norma foi publicada | projeção |
+| `integracao-ia-promocao` | promove evento ao feed da IA (ADR-0008) | projeção |
+| `integracao-ia-cota-da-casa` | zera ou devolve a cota de IA da Casa suspensa/reativada | efeito com registro próprio: linha nova em `orcamento_ia` (trigger append-only, `definido_por`) na tx do relay; a causa já está na atuação |
+| `admin-sistema-registro` | ativa a Casa no registro quando o 1º administrador entra | Operação (sela na atuação) |
+
+Nenhum consumidor foi tocado, então **nada no caminho do relay pode lançar por causa da auditoria**. Há uma razão a mais
+para não pôr o par ali: o handler roda dentro da transação do relay (dedup + efeito atômicos). Um par gravado em
+transação própria diria "permitido" antes de o relay commitar; se o commit falhasse, a trilha afirmaria um efeito que
+não existe, e o redrive gravaria outro. Consumidor com efeito auditável deve ter o **registro dentro da própria
+transação** (como o `orcamento_ia`), nunca o par.
+
+### O que foi feito: a entrada
+
+- **Onde:** o `mint-handler` chama `:tentativa-da-entrada!` (entregue pelo interceptor `tentativa`, só na rota de
+  `logic/acoes-de-entrada`) **depois** de a identidade ter vínculo ativo na Casa e **antes** de `criar-sessao!`.
+  O ator só existe nesse ponto, por isso a tentativa é gravada pelo handler e não pelo interceptor, como na escrita.
+- **O mesmo mecanismo:** mesma tabela, mesma corrente selada, `classe = entrada`, `decisao = iniciado`; o desfecho
+  aponta `detalhe.tentativa`. A tela, o CSV e a conferência já mostram "ação iniciada, desfecho não registrado".
+  Nenhuma migration.
+- **Falha depois da tentativa:** se o mint lança depois dela (banco caiu na sessão), o desfecho sai como
+  `falhou`/500 da classe `entrada`, apontando a tentativa; não sobra tentativa solta.
+- **A trilha fora NUNCA tranca a entrada, nem com `AUDITORIA_EXIGIR_TENTATIVA=true`.** Decidido: com a exigência ligada
+  a escrita é recusada (503) porque o plenário pode esperar; recusar o login seria trancar para fora também quem vai
+  consertar a trilha. A tentativa que não grava vai para `log/error`, a sessão abre e o desfecho entra sem
+  apontamento (se ele também falhar, não há linha na corrente, só o log). Coberto por teste com a exigência
+  desligada, ausente e ligada.
+- **Custo:** o login passa de uma gravação na corrente para duas. Não foi medido com logins simultâneos; o custo por
+  gravação é o já medido para a escrita em 04/10 (acima).
+- **Sem dado pessoal novo:** o registro leva o mesmo que o desfecho já levava (pessoa, papéis, canal, IP com a regra
+  dos 6 meses).
+
+**O que a tentativa da entrada NÃO cobre:**
+
+- No 1º login pelo gov.br, `garantir-cidadao!` cria o vínculo de cidadão e o consentimento **antes** de a identidade
+  estar resolvida; a tentativa entra logo depois. A janela é entre esses dois passos: o vínculo existe (com o
+  consentimento, que tem o próprio registro datado) e a trilha ainda não tem linha; o novo login da pessoa grava o par.
+  A garantia dada é a da sessão: **sessão que existe tem tentativa na corrente**.
+- Login recusado (401) segue sem registro: não há Casa a quem atribuir.
+- A entrada do **operador** fica na atuação da Operação e **também** grava depois de criar a sessão. O mesmo
+  fechamento para a atuação é decisão da ADR-0016, não desta.
+
+### O que NÃO foi feito, e como não regredir
+
+**`com-tentativa-do-sistema` não foi construída.** Sem ato nas famílias 2 e 3 que peça o par, ela não teria um único
+chamador. Quando o primeiro job com efeito auditável sem registro próprio chegar, a forma já está decidida:
+
+- `com-tentativa-do-sistema` reutiliza `registrar-tentativa!` e `registrar-requisicao!` (nada copiado do interceptor);
+  Casa obrigatória; o nome do job vai em `acao` e em `detalhe`;
+- exige migration, porque o `CHECK` de `ator_tipo` não aceita `sistema` (a migration `20261005000220` ficou
+  reservada e **não foi usada**);
+- vale para job e para comando de operador **com Casa**, nunca para consumidor do relay (ver acima).
+
+**O inventário virou teste** (`auditoria/atos_fora_do_http_test`): reprova se aparecer
+- uma criação de sessão fora dos dois mints conhecidos;
+- um agendador, thread ou pool novo fora da lista com motivo;
+- um comando novo em `main.clj`;
+- um consumidor novo no relay.
+
+Cada um só entra com uma classe e um **motivo escrito**. O teste não decide por quem escreve; obriga a decisão a
+existir.
+
+### Achados fora desta fatia
+
+- **ADR-0016 / Operação:** `ia-orcamento` não grava na atuação e não nomeia o operador; a entrada do operador grava na
+  atuação depois da sessão, sem tentativa.
+- **Eixo 4c × código:** a ADR diz que o login do cidadão **não entra** na trilha; o código o registra desde a fatia 1
+  (`entrou pelo gov.br`) e a tentativa passa a dobrar essa linha. Decidir: aceitar o login do cidadão (e corrigir o
+  texto do Eixo 4c) ou tirá-lo, o que apaga o dobro e o original.

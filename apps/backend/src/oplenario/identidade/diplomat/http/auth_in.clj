@@ -137,6 +137,10 @@
                                                   :ente-id (:ente-id verificadas) :vinculo-tipo "cidadao"}
                                                  (dissoc verificadas :vinculo-tipo)))]
             (let [^Instant agora-inst (tempo/agora relogio)
+                  ;; ADR-0017 (adendo de 05/10/2026): o ator ja' esta' resolvido e a sessao ainda NAO existe — e' aqui que
+                  ;; a tentativa da entrada entra na trilha da Casa (o host entrega a funcao; sem ele, nada a fazer). A
+                  ;; funcao nunca lanca nem recusa a entrada.
+                  _   (when-let [tentativa! (:tentativa-da-entrada! req)] (tentativa! ator))
                   seg (repo/criar-sessao! repo-identidade
                         (cond-> {:identidade-id (:identidade-id ator)
                                  :ente-id       (:ente-id ator)

@@ -27,6 +27,14 @@
   (when-let [r (logic/registro-da-tentativa req acao)]
     (:seq (gravar! repo-auditoria seams r))))
 
+(defn registrar-tentativa-de-entrada!
+  "ANTES de a sessao ser criada: grava a tentativa da ENTRADA (o ator ja' resolvido pelo mint) e devolve o seq dela.
+  LANCA se nao gravar — quem chama (o interceptor) NUNCA recusa a entrada por causa disso, nem com
+  AUDITORIA_EXIGIR_TENTATIVA: so' loga (ADR-0017, adendo de 05/10/2026)."
+  [repo-auditoria seams req acao ator]
+  (when-let [r (logic/registro-da-tentativa-de-entrada req ator acao)]
+    (:seq (gravar! repo-auditoria seams r))))
+
 (defn registrar-requisicao!
   "Do par requisicao/resposta ja' respondido -> o registro na corrente (quando entra na trilha). Uma falha aqui NAO
   desfaz o ato nem muda a resposta: e' logada como erro. `tentativa` = o seq da tentativa gravada antes do handler
