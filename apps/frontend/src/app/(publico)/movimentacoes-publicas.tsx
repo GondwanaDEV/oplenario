@@ -48,8 +48,20 @@ export function useMovimentacoesPublicas(ente: string, proposicaoId: string): Mo
   return res.chave === chave ? res.dado : null;
 }
 
+/** O nome da etapa atual (a movimentação mais recente, a mesma marcada "Etapa atual"), ou null quando o histórico não
+ * carregou ou o rito não nomeou a etapa. É o que o chip da ficha pública diz. */
+export function etapaAtualDasMovimentacoes(dado: MovimentacoesOut | "erro" | null): string | null {
+  if (!dado || dado === "erro") return null;
+  return dado.movimentacoes[0]?.etapa ?? null;
+}
+
 export function MovimentacoesPublicas({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
   const dado = useMovimentacoesPublicas(ente, proposicaoId);
+  return <SecaoMovimentacoes dado={dado} />;
+}
+
+/** A seção a partir do histórico já buscado (a ficha busca uma vez e usa também no chip). */
+export function SecaoMovimentacoes({ dado }: { dado: MovimentacoesOut | "erro" | null }) {
   if (dado === null) return null;
 
   return (

@@ -285,6 +285,13 @@
    [:legislativo.tramitacao_executiva :x] [:and [:= :x.ente_id :a.ente_id] [:= :x.autografo_id :a.id]]
    [:legislativo.norma :n] [:and [:= :n.ente_id :p.ente_id] [:= :n.proposicao_id :p.id]]])
 
+(def ^:private juncao-do-rotulo-do-rito
+  "O NOME que o rito da Casa da' ao estado atual (`template_estado.nome`), para o chip da lista dizer o mesmo que a
+  faixa da ficha. UNIQUE (ente_id, template_id, chave): o LEFT JOIN nao multiplica linha. Materia sem rito, ou estado
+  que o rito nao declara, fica NULL e a tela cai no rotulo fixo. Nao le' `ordem` (nada aqui depende dela)."
+  [[:legislativo.template_estado :te]
+   [:and [:= :te.ente_id :p.ente_id] [:= :te.template_id :p.template_id] [:= :te.chave :p.estado]]])
+
 (defn listar
   "Onda B Slice 1 — lista filtravel/ordenavel/paginada do servidor (fonte da verdade, NAO read-model
   assincrono). Filtro OPCIONAL e combinavel (chave ausente/nil nao filtra); `busca` e' ILIKE substring
@@ -299,9 +306,10 @@
     (comum/linhas->kebab
      (jdbc/execute! tx
        (sql/format {:select (conj (mapv #(keyword (str "p." (name %))) colunas-resumo)
-                                  [desfecho-depois-do-autografo :desfecho])
+                                  [desfecho-depois-do-autografo :desfecho]
+                                  [:te.nome :rotulo_estado])
                     :from [[:legislativo.proposicoes :p]]
-                    :left-join juncoes-do-desfecho
+                    :left-join (into juncoes-do-desfecho juncao-do-rotulo-do-rito)
                     :where (into [:and] (where-listagem ente-id filtro))
                     :order-by [[(keyword (str "p." (name col))) dir] [:p.id :asc]]
                     :limit tamanho
