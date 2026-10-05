@@ -106,14 +106,15 @@
       (is (= [true] (distinct (map #(not (str/includes? (str (:etapa %)) "_")) (:movimentacoes r))))
           "nenhuma etapa e' chave de cadastro")
       (is (= [false false true] (mapv :inicial (:movimentacoes r))) "so' a ultima (a mais antiga) e' a abertura")
-      (is (= #{:ocorrido-em :etapa :inicial} (set (mapcat keys (:movimentacoes r))))
-          "so' instante, etapa e abertura: nada de ator, gatilho, contexto")
+      (is (= #{:ocorrido-em :etapa :inicial :etapa-chave} (set (mapcat keys (:movimentacoes r))))
+          "so' instante, etapa e abertura (e a chave, que so' o adapter le): nada de ator, gatilho, contexto")
       (is (apply >= (map #(.toEpochMilli ^Instant (:ocorrido-em %)) (:movimentacoes r)))
           "ordem cronologica decrescente"))
     (let [wire (adapter/movimentacoes->wire (linha-do-tempo ente pid))]
       (is (= #{:movimentacoes :movimentacoes-total :historico-completo :historico-desde} (set (keys wire))))
-      (is (= #{:ocorrido-em :etapa :abertura} (set (mapcat keys (:movimentacoes wire))))
-          "o contrato de saida e' fechado: nao ha campo para quem despachou"))))
+      (is (= #{:ocorrido-em :etapa :abertura :votacao} (set (mapcat keys (:movimentacoes wire))))
+          "o contrato de saida e' fechado: nao ha campo para quem despachou, e a chave da etapa nao sai")
+      (is (= [false] (distinct (map :votacao (:movimentacoes wire)))) "etapa do rito nao e' votacao"))))
 
 (deftest sem-rito-a-abertura-chama-se-protocolada
   (let [ente (random-uuid) pid (protocolar! ente)]
