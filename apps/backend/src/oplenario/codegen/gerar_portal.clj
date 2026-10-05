@@ -13,7 +13,8 @@
             [oplenario.transparencia.wire.out.dados-abertos :as dados-abertos]
             [oplenario.transparencia.wire.out.materia :as materia]
             [oplenario.transparencia.wire.out.norma :as norma]
-            [oplenario.transparencia.wire.out.parlamentar :as parlamentar]))
+            [oplenario.transparencia.wire.out.parlamentar :as parlamentar]
+            [oplenario.transparencia.wire.out.votacao :as votacao]))
 
 (def manifesto
   "NormaOut ANTES de MateriaOut/FichaOut (referencia nomeada: FichaOut aninha NormaOut em :norma —
@@ -50,7 +51,15 @@
    ;; Onda E — dados abertos. Folhas antes do agregado.
    ["ColunaDadosAbertosOut" dados-abertos/ColunaDadosAbertosOut]
    ["DatasetAbertoOut" dados-abertos/DatasetAbertoOut]
-   ["DadosAbertosOut" dados-abertos/DadosAbertosOut]])
+   ["DadosAbertosOut" dados-abertos/DadosAbertosOut]
+   ;; Portal de votacoes (frente 'portal-votacoes-publicas'). Folhas antes dos agregados.
+   ["SessaoDaVotacaoOut" votacao/SessaoDaVotacaoOut]
+   ["MateriaDaVotacaoOut" votacao/MateriaDaVotacaoOut]
+   ["PlacarOut" votacao/PlacarOut]
+   ["VotacaoPublicaOut" votacao/VotacaoPublicaOut]
+   ["VotacoesPublicasOut" votacao/VotacoesPublicasOut]
+   ["VotoNominalOut" votacao/VotoNominalOut]
+   ["VotacaoDetalheOut" votacao/VotacaoDetalheOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

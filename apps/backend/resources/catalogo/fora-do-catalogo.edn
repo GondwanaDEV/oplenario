@@ -216,6 +216,11 @@
                                :motivo "o catalogo de dados abertos do portal (anonimo); arquivo para baixar, nao acao de agente"}
  :transparencia/baixar-dataset {:categoria :so-tela
                                 :motivo "o download CSV do dataset aberto (anonimo); o agente consulta o dominio pelas suas ferramentas"}
+ ;; ---------- portal de votacoes ----------
+ :transparencia/listar-votacoes {:categoria :so-tela
+                                 :motivo "a lista de votacoes encerradas de sessoes publicas no portal do cidadao (anonimo)"}
+ :transparencia/votacao-publica {:categoria :so-tela
+                                 :motivo "uma votacao e o voto de cada vereador no portal do cidadao (anonimo); o agente consulta o dominio pelas suas ferramentas"}
  ;; ---------- ADR-0017: a trilha de auditoria da Casa ----------
  :auditoria/trilha {:categoria :so-tela
                     :motivo "a trilha de auditoria e' prova de integridade lida por pessoas; o agente nao le rastro de pessoas"}

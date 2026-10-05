@@ -47,7 +47,8 @@
             [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
             [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]
-            [oplenario.transparencia.diplomat.http.in :as transparencia-http]))
+            [oplenario.transparencia.diplomat.http.in :as transparencia-http]
+            [oplenario.votacoes-publicas :as votacoes-publicas]))
 
 (set! *warn-on-reflection* true)
 
@@ -806,6 +807,18 @@
                                          (fn [ente-id proposicao-id]
                                            (legislativo-http/pareceres-juridicos-publicos-wire
                                              repo-legislativo ente-id proposicao-id))
+                                         ;; portal de votacoes: o host cruza sessoes (quais sessoes sao publicas) e
+                                         ;; legislativo (a votacao e os votos); sem um dos dois montado (testes de outras
+                                         ;; verticais) o portal mostra lista vazia e nenhuma votacao.
+                                         :votacoes-publicas
+                                         (fn [ente-id limite deslocamento]
+                                           (if (and repo-sessoes repo-legislativo)
+                                             (votacoes-publicas/listar repo-sessoes repo-legislativo ente-id limite deslocamento)
+                                             {:votacoes [] :total 0}))
+                                         :votacao-publica
+                                         (fn [ente-id votacao-id]
+                                           (when (and repo-sessoes repo-legislativo)
+                                             (votacoes-publicas/buscar repo-sessoes repo-legislativo ente-id votacao-id)))
                                          ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
                                          ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
                                          ;; mesma inversao de dependencia sobre cadastros (§22.10).
