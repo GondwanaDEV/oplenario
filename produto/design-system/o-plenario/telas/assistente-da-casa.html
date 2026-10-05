@@ -139,9 +139,11 @@
   /* campo + aviso de registro */
   .ast-campo { border-top: 1px solid var(--linha); padding: .75rem 1rem .85rem; display: grid; gap: .45rem; }
   .ast-campo label { font-size: var(--t-12); font-weight: 600; color: var(--texto); }
+  /* o rótulo fica ACIMA da linha; o campo e o botão dividem a linha com a mesma altura
+     (o botão acompanha a base do campo quando ele cresce) */
   .ast-campo .linha-envio { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: end; }
-  .ast-campo textarea { resize: none; min-height: 48px; max-height: 160px; width: 100%; padding: .6rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13)/1.45 var(--corpo); }
-  .ast-campo .btn { min-height: 48px; }
+  .ast-campo textarea { display: block; resize: none; min-height: 48px; max-height: 160px; width: 100%; padding: .6rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13)/1.45 var(--corpo); }
+  .ast-campo .btn { height: 48px; min-height: 48px; padding-block: 0; margin: 0; }
   .ast-registro-aviso { margin: 0; font-size: var(--t-11); line-height: 1.45; color: var(--texto-2); display: flex; gap: .35rem; align-items: flex-start; }
   .ast-registro-aviso svg { flex: 0 0 auto; margin-top: 1px; }
 
@@ -435,11 +437,9 @@
 
   <!-- ===== CAMPO ===== -->
   <form class="ast-campo" onsubmit="return false">
+    <label for="ast-pergunta">Sua pergunta</label>
     <div class="linha-envio">
-      <div>
-        <label for="ast-pergunta">Sua pergunta</label>
-        <textarea id="ast-pergunta" rows="1"></textarea>
-      </div>
+      <textarea id="ast-pergunta" rows="1"></textarea>
       <button class="btn btn-primaria" type="submit">Perguntar</button>
     </div>
     <p class="ast-registro-aviso"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Fica guardado no histórico da Casa: a pergunta, a resposta, as fontes e o modelo usado. A trilha de auditoria registra que você perguntou.</p>
