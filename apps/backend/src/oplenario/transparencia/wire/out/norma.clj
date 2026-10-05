@@ -13,12 +13,18 @@
    [:urn :string]
    [:ementa :string]
    [:publicado-em :string]
-   [:veiculo-publicacao :string]])
+   [:veiculo-publicacao :string]
+   ;; ha' texto publicado para baixar (`/legislacao/:id/artefato`)? A tela so' mostra o botao quando e' verdadeiro: sem
+   ;; isto o cidadao clicava e via um 404 em JSON.
+   [:tem-texto :boolean]])
 
 (def NormasOut
-  "Resposta de GET /portal/casa/:ente/legislacao (frente 'truncamento-familia', sitio (c)): o acervo publico
-  as-enacted cortava em 200 (`teto-listagem`, `db/norma.clj`) sem sinalizar. `:normas-total` e' o par
-  obrigatorio (mesmo racional de MateriasOut/PainelOut) — o teto em si NUNCA sai neste contrato."
+  "Resposta de GET /portal/casa/:ente/legislacao: UMA PAGINA do acervo publico as-enacted + o TOTAL (do mesmo filtro,
+  sem pagina) e o tamanho da pagina — o cliente sabe quantas existem e quantas paginas faltam, nunca recebe um corte
+  em silencio (frente 'truncamento-familia', sitio (c)). `:normas-total` e' o par obrigatorio (mesmo racional de
+  MateriasOut/PainelOut); `:pagina`/`:por-pagina` espelham VotacoesPublicasOut."
   [:map {:closed true}
    [:normas [:sequential NormaOut]]
-   [:normas-total :int]])
+   [:normas-total :int]
+   [:pagina :int]
+   [:por-pagina :int]])

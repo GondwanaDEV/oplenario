@@ -22,7 +22,7 @@
             {:norma-id (->str (:norma-id n)) :proposicao-id (->str (:proposicao-id n))
              :tipo-norma (:tipo-norma n) :numero (:numero n) :ano (:ano n) :urn (:urn n)
              :ementa (:ementa n) :publicado-em (->str (:publicado-em n))
-             :veiculo-publicacao (:veiculo-publicacao n)}
+             :veiculo-publicacao (:veiculo-publicacao n) :tem-texto (:tem-texto n)}
             "NormaOut"))
 
 (defn ->wires
@@ -31,9 +31,11 @@
   (mapv ->wire normas))
 
 (defn normas->wire
-  "{:normas :normas-total} (dominio) -> NormasOut — o par lista+total de GET /portal/casa/:ente/legislacao
-  (frente 'truncamento-familia', sitio (c)). SEM `(or ... 0)` (corrige achado IMPORTANTE da revisao
-  adversarial): `:normas-total` ausente e' bug de servidor e tem de reprovar no schema (500), nao virar `0`
-  silencioso."
-  [{:keys [normas normas-total]}]
-  (validar! wire/NormasOut {:normas (->wires normas) :normas-total normas-total} "NormasOut"))
+  "{:normas :normas-total :pagina :por-pagina} (dominio) -> NormasOut — a pagina + o total de GET
+  /portal/casa/:ente/legislacao (frente 'truncamento-familia', sitio (c)). SEM `(or ... 0)` (corrige achado
+  IMPORTANTE da revisao adversarial): `:normas-total`/`:pagina`/`:por-pagina` ausentes sao bug de servidor e tem de
+  reprovar no schema (500), nao virar `0` silencioso."
+  [{:keys [normas normas-total pagina por-pagina]}]
+  (validar! wire/NormasOut
+            {:normas (->wires normas) :normas-total normas-total :pagina pagina :por-pagina por-pagina}
+            "NormasOut"))

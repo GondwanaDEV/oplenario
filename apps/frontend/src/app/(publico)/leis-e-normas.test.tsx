@@ -22,6 +22,7 @@ const norma1 = {
   ementa: "Institui o Programa Municipal de Hortas Comunitárias.",
   "publicado-em": "2026-03-10T15:00:00Z",
   "veiculo-publicacao": "Diário Oficial do Município",
+  "tem-texto": true,
 };
 const norma2 = {
   ...norma1,
@@ -51,7 +52,7 @@ afterEach(() => {
 
 describe("LeisDaCasa", () => {
   it("lista as normas com título em palavras, ementa, data e link para a ficha — sem código nem UUID na tela", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1, norma2], "normas-total": 2 } } });
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1, norma2], "normas-total": 2, pagina: 1, "por-pagina": 20 } } });
     const { container } = render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
     const lista = await screen.findByRole("list", { name: "Leis e normas publicadas" });
     const itens = within(lista).getAllByRole("listitem");
@@ -68,13 +69,13 @@ describe("LeisDaCasa", () => {
   });
 
   it("uma só norma: o total fica no singular", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1], "normas-total": 1 } } });
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1], "normas-total": 1, pagina: 1, "por-pagina": 20 } } });
     render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
     expect(await screen.findByText("1 norma publicada")).toBeTruthy();
   });
 
   it("acervo vazio: diz que a Câmara ainda não publicou leis aqui, sem lista nem alerta", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [], "normas-total": 0 } } });
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [], "normas-total": 0, pagina: 1, "por-pagina": 20 } } });
     render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
     expect(await screen.findByText("Esta Câmara ainda não publicou leis aqui.")).toBeTruthy();
     expect(screen.queryByRole("list", { name: "Leis e normas publicadas" })).toBeNull();
@@ -94,18 +95,75 @@ describe("LeisDaCasa", () => {
     expect((await screen.findByRole("alert")).textContent).toMatch(/Não foi possível carregar/);
   });
 
-  it("acervo maior que o teto do servidor: mostra quantas aparecem e o total, e manda filtrar — nunca trunca em silêncio", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1, norma2], "normas-total": 250 } } });
+  it("acervo de várias páginas: diz o total e a página, igual às votações — nunca trunca em silêncio", async () => {
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1, norma2], "normas-total": 57, pagina: 1, "por-pagina": 20 } } });
     render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
-    const aviso = await screen.findByRole("status");
-    expect(aviso.textContent).toMatch(/Mostrando 2 de 250 normas/);
-    expect(aviso.textContent).toMatch(/filtros/);
-    expect(screen.getByText("250 normas publicadas")).toBeTruthy();
+    const nav = await screen.findByRole("navigation", { name: "Páginas de leis e normas" });
+    expect(nav.textContent).toContain("Mostrando 1 a 2 de 57");
+    expect(nav.textContent).toContain("página 1 de 3");
+    expect(screen.getByText("57 normas publicadas")).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Próxima página" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/leis?pagina=2`);
+    expect(within(nav).queryByRole("link", { name: "Página anterior" })).toBeNull();
+  });
+
+  it("página 2: pede ?pagina=2 ao servidor, conta a partir de 21 e oferece anterior e próxima", async () => {
+    const fn = mockar({
+      [`/api/portal/casa/${ENTE}/legislacao?pagina=2`]: { corpo: { normas: [norma1], "normas-total": 57, pagina: 2, "por-pagina": 20 } },
+    });
+    render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} pagina={2} />);
+    const nav = await screen.findByRole("navigation", { name: "Páginas de leis e normas" });
+    expect(fn).toHaveBeenCalledWith(`/api/portal/casa/${ENTE}/legislacao?pagina=2`, { cache: "no-store" });
+    expect(nav.textContent).toContain("Mostrando 21 a 21 de 57");
+    expect(nav.textContent).toContain("página 2 de 3");
+    expect(within(nav).getByRole("link", { name: "Página anterior" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/leis`);
+    expect(within(nav).getByRole("link", { name: "Próxima página" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/leis?pagina=3`);
+  });
+
+  it("os filtros ficam na URL e no pedido ao trocar de página", async () => {
+    const fn = mockar({
+      [`/api/portal/casa/${ENTE}/legislacao?tipo=lei&ano=2026&pagina=2`]: {
+        corpo: { normas: [norma1], "normas-total": 45, pagina: 2, "por-pagina": 20 },
+      },
+    });
+    render(<LeisDaCasa ente={ENTE} filtro={{ tipo: "lei", ano: "2026", numero: "", ignorados: [] }} pagina={2} />);
+    const nav = await screen.findByRole("navigation", { name: "Páginas de leis e normas" });
+    expect(fn).toHaveBeenCalledWith(`/api/portal/casa/${ENTE}/legislacao?tipo=lei&ano=2026&pagina=2`, { cache: "no-store" });
+    expect(within(nav).getByRole("link", { name: "Página anterior" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/leis?tipo=lei&ano=2026`);
+    expect(within(nav).getByRole("link", { name: "Próxima página" }).getAttribute("href")).toBe(
+      `/portal/casa/${ENTE}/leis?tipo=lei&ano=2026&pagina=3`,
+    );
+  });
+
+  it("página além do fim: diz que a página está vazia, mantém o total e o caminho de volta", async () => {
+    mockar({
+      [`/api/portal/casa/${ENTE}/legislacao?pagina=9`]: { corpo: { normas: [], "normas-total": 45, pagina: 9, "por-pagina": 20 } },
+    });
+    render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} pagina={9} />);
+    expect(await screen.findByText("Esta página não tem normas. Volte para a primeira.")).toBeTruthy();
+    expect(screen.queryByText("Esta Câmara ainda não publicou leis aqui.")).toBeNull();
+    const nav = screen.getByRole("navigation", { name: "Páginas de leis e normas" });
+    expect(nav.textContent).toContain("45 no total");
+    expect(within(nav).getByRole("link", { name: "Página anterior" })).toBeTruthy();
+  });
+
+  it("uma página só: mostra o total mas não oferece páginas que não existem", async () => {
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1, norma2], "normas-total": 2, pagina: 1, "por-pagina": 20 } } });
+    render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
+    const nav = await screen.findByRole("navigation", { name: "Páginas de leis e normas" });
+    expect(nav.textContent).toContain("página 1 de 1");
+    expect(within(nav).queryByRole("link")).toBeNull();
+  });
+
+  it("acervo vazio: sem navegação de páginas", async () => {
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [], "normas-total": 0, pagina: 1, "por-pagina": 20 } } });
+    render(<LeisDaCasa ente={ENTE} filtro={SEM_FILTRO} />);
+    await screen.findByText("Esta Câmara ainda não publicou leis aqui.");
+    expect(screen.queryByRole("navigation", { name: "Páginas de leis e normas" })).toBeNull();
   });
 
   it("com filtro: manda tipo/ano/número ao servidor, preenche o formulário e permite limpar", async () => {
     const fn = mockar({
-      [`/api/portal/casa/${ENTE}/legislacao?tipo=lei&ano=2026&numero=12`]: { corpo: { normas: [norma1], "normas-total": 1 } },
+      [`/api/portal/casa/${ENTE}/legislacao?tipo=lei&ano=2026&numero=12`]: { corpo: { normas: [norma1], "normas-total": 1, pagina: 1, "por-pagina": 20 } },
     });
     render(<LeisDaCasa ente={ENTE} filtro={{ tipo: "lei", ano: "2026", numero: "12", ignorados: [] }} />);
     await screen.findByRole("list", { name: "Leis e normas publicadas" });
@@ -128,14 +186,14 @@ describe("LeisDaCasa", () => {
   });
 
   it("filtro sem resultado: diz que nada casou com os filtros e oferece limpar — não diz que a Câmara não publicou", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao?ano=1999`]: { corpo: { normas: [], "normas-total": 0 } } });
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao?ano=1999`]: { corpo: { normas: [], "normas-total": 0, pagina: 1, "por-pagina": 20 } } });
     render(<LeisDaCasa ente={ENTE} filtro={{ tipo: "", ano: "1999", numero: "", ignorados: [] }} />);
     expect(await screen.findByText("Nenhuma norma encontrada com esses filtros.")).toBeTruthy();
     expect(screen.queryByText("Esta Câmara ainda não publicou leis aqui.")).toBeNull();
   });
 
   it("valor de filtro inválido na URL: avisa que foi ignorado", async () => {
-    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1], "normas-total": 1 } } });
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao`]: { corpo: { normas: [norma1], "normas-total": 1, pagina: 1, "por-pagina": 20 } } });
     render(<LeisDaCasa ente={ENTE} filtro={{ tipo: "", ano: "", numero: "", ignorados: ["ano"] }} />);
     expect((await screen.findByRole("note")).textContent).toMatch(/O ano informado não é válido e foi ignorado/);
   });
@@ -155,6 +213,16 @@ describe("FichaDaNorma", () => {
     const origem = screen.getByRole("link", { name: /Ver a matéria que deu origem/ });
     expect(origem.getAttribute("href")).toBe(`/portal/casa/${ENTE}/materias/30000000-0000-0000-0000-000000000001`);
     expect(container.textContent).not.toContain(N1);
+  });
+
+  it("norma sem texto publicado: não oferece o download (levaria a um 404) e diz que o texto ainda não foi publicado aqui", async () => {
+    mockar({ [`/api/portal/casa/${ENTE}/legislacao/${N1}`]: { corpo: { ...norma1, "tem-texto": false } } });
+    const { container } = render(<FichaDaNorma ente={ENTE} normaId={N1} />);
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByRole("link", { name: /Baixar o texto publicado/ })).toBeNull();
+    expect(container.querySelector('a[href*="/artefato"]')).toBeNull();
+    expect(screen.getByText("O texto desta norma ainda não foi publicado aqui.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Ver a matéria que deu origem/ })).toBeTruthy();
   });
 
   it("a trilha volta à lista de leis", async () => {

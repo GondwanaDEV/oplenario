@@ -127,6 +127,62 @@ describe("VotacoesPublicas", () => {
     expect(screen.queryByRole("navigation", { name: "Páginas de votações" })).toBeNull();
   });
 
+  describe("filtrada por matéria (?materia=, vindo da ficha pública)", () => {
+    const MATERIA = "30000000-0000-0000-0000-000000000001";
+    const URL_MATERIA = `${URL_LISTA}?materia=${MATERIA}`;
+    const daMateria = { votacoes: [nominal], total: 1, pagina: 1, "por-pagina": 20 };
+
+    it("pede só as votações da matéria e diz que a lista está filtrada, com 'ver todas' e o caminho da ficha", async () => {
+      const fn = vi.fn(async (url: string) => {
+        const corpo = ({ [URL_MATERIA]: daMateria } as Record<string, unknown>)[String(url)];
+        return corpo === undefined
+          ? ({ ok: false, status: 404, json: async () => ({}) } as Response)
+          : ({ ok: true, status: 200, json: async () => corpo } as Response);
+      });
+      global.fetch = fn as unknown as typeof fetch;
+      render(<VotacoesPublicas ente={ENTE} votacao={null} pagina={1} materia={MATERIA} />);
+      const aviso = await screen.findByRole("status");
+      expect(fn).toHaveBeenCalledWith(URL_MATERIA, { cache: "no-store" });
+      expect(aviso.textContent).toContain("Mostrando só as votações da matéria PL 7/2026");
+      expect(within(aviso).getByRole("link", { name: "Ver todas as votações" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/votacoes`);
+      expect(within(aviso).getByRole("link", { name: "Ver a matéria" }).getAttribute("href")).toBe(`/portal/casa/${ENTE}/materias/${MATERIA}`);
+      expect(within(screen.getByRole("list", { name: "Votações encerradas" })).getAllByRole("listitem")).toHaveLength(1);
+    });
+
+    it("sem filtro não há faixa de filtro", async () => {
+      mockar({ [URL_LISTA]: lista });
+      render(<VotacoesPublicas ente={ENTE} votacao={null} pagina={1} />);
+      await screen.findByRole("list", { name: "Votações encerradas" });
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByRole("link", { name: "Ver todas as votações" })).toBeNull();
+    });
+
+    it("o filtro se mantém nos links da lista e das páginas", async () => {
+      mockar({
+        [`${URL_MATERIA}&pagina=2`]: { votacoes: [nominal], total: 41, pagina: 2, "por-pagina": 20 },
+      });
+      render(<VotacoesPublicas ente={ENTE} votacao={null} pagina={2} materia={MATERIA} />);
+      const nav = await screen.findByRole("navigation", { name: "Páginas de votações" });
+      expect(within(nav).getByRole("link", { name: "Página anterior" }).getAttribute("href")).toBe(
+        `/portal/casa/${ENTE}/votacoes?materia=${MATERIA}`,
+      );
+      expect(within(nav).getByRole("link", { name: "Próxima página" }).getAttribute("href")).toBe(
+        `/portal/casa/${ENTE}/votacoes?materia=${MATERIA}&pagina=3`,
+      );
+      const item = within(screen.getByRole("list", { name: "Votações encerradas" })).getAllByRole("listitem")[0];
+      expect(item.querySelector("a")?.getAttribute("href")).toBe(`/portal/casa/${ENTE}/votacoes?votacao=v1&materia=${MATERIA}&pagina=2`);
+    });
+
+    it("matéria sem votação pública: diz isso (não 'nenhuma votação por enquanto') e oferece ver todas", async () => {
+      mockar({ [URL_MATERIA]: { votacoes: [], total: 0, pagina: 1, "por-pagina": 20 } });
+      render(<VotacoesPublicas ente={ENTE} votacao={null} pagina={1} materia={MATERIA} />);
+      expect(await screen.findByText("Nenhuma votação encerrada em sessão pública desta matéria.")).toBeTruthy();
+      const aviso = screen.getByRole("status");
+      expect(aviso.textContent).toContain("Mostrando só as votações da matéria escolhida");
+      expect(within(aviso).getByRole("link", { name: "Ver todas as votações" })).toBeTruthy();
+    });
+  });
+
   it("falha na lista: erro honesto, nunca lista vazia fingida", async () => {
     mockar({});
     render(<VotacoesPublicas ente={ENTE} votacao={null} pagina={1} />);

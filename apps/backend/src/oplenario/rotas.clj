@@ -846,9 +846,10 @@
                                          ;; legislativo (a votacao e os votos); sem um dos dois montado (testes de outras
                                          ;; verticais) o portal mostra lista vazia e nenhuma votacao.
                                          :votacoes-publicas
-                                         (fn [ente-id limite deslocamento]
+                                         (fn [ente-id limite deslocamento materia-id]
                                            (if (and repo-sessoes repo-legislativo)
-                                             (votacoes-publicas/listar repo-sessoes repo-legislativo ente-id limite deslocamento)
+                                             (votacoes-publicas/listar repo-sessoes repo-legislativo ente-id limite deslocamento
+                                                                       materia-id)
                                              {:votacoes [] :total 0}))
                                          :votacao-publica
                                          (fn [ente-id votacao-id]

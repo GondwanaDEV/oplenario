@@ -5,9 +5,10 @@
   pronta do host (§22.10).")
 
 (defprotocol RepoVotacaoPublica
-  (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento]
+  (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento materia-id]
     "{:votacoes :total} das votacoes ENCERRADAS das sessoes dadas, a mais recente primeiro, paginadas; `:total` e'
-     do mesmo predicado, sem pagina. Quem chama decide QUAIS sessoes sao publicas.")
+     do mesmo predicado, sem pagina. `materia-id` (nil = todas) restringe as votacoes dessa proposicao (so' restringe:
+     nunca amplia o conjunto de sessoes). Quem chama decide QUAIS sessoes sao publicas.")
   (ids-das-votacoes-das-sessoes [this ente-id sessao-ids]
     "#{votacao-id} de TODAS as votacoes (em qualquer estado) das sessoes dadas — o conjunto contra o qual a leitura
      publica de VOTO POR VEREADOR confere uma votacao antes de publica-la (o voto projetado em `transparencia` nao

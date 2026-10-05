@@ -8,6 +8,10 @@
 .votacoes-publicas .secao-tit { font-family: var(--display); font-size: var(--t-16); margin: 1.6rem 0 0.6rem; }
 .votacoes-publicas .estado { color: var(--texto-2); }
 
+.votacoes-publicas .vp-filtro { margin: 1.2rem 0 0; padding: 0.6rem 0.9rem; border-left: 4px solid var(--marca); background: var(--surface);
+  font-size: var(--t-13); color: var(--texto); max-width: 52rem; line-height: 1.55; }
+.votacoes-publicas .vp-filtro a { color: var(--acao); font-weight: 600; min-height: 44px; display: inline-flex; align-items: center; }
+
 .vp-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 .vp-lista li { padding: 0.8rem 1rem; border: 1px solid var(--linha); border-left-width: 4px; border-radius: var(--raio-sm); background: var(--surface); }
 .vp-lista li.vp-aprovada, .vp-aberta.vp-aprovada { border-left-color: var(--jade); }

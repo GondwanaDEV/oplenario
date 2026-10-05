@@ -1,0 +1,3 @@
+/* "Votações desta matéria" na ficha pública da matéria — tokens do portal; o botão é o `btn btn-contorno` do chassi. */
+.vm .vm-texto { margin: 0 0 1rem; max-width: 62ch; font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; }
+.vm .btn { min-height: 44px; }

@@ -30,6 +30,7 @@ const fichaComNormaFake = {
     ementa: "Cria o Programa Municipal de Hortas Comunitárias.",
     "publicado-em": "2026-08-01T00:00:00Z",
     "veiculo-publicacao": "diario_oficial",
+    "tem-texto": true,
   },
 };
 
@@ -134,6 +135,54 @@ describe("SecaoFicha", () => {
     const link = screen.getByRole("link", { name: "Lei nº 1234/2026" });
     expect(link.getAttribute("href")).toBe("/portal/casa/fortaleza/leis/n1");
     expect(document.body.textContent).not.toContain("urn:lex:br;ce;fortaleza:camara.municipal:lei:2026;1234");
+  });
+
+  it("norma publicada SEM texto para baixar -> sem link de download, e diz que o texto ainda não foi publicado aqui", async () => {
+    const semTexto = { ...fichaComNormaFake, norma: { ...fichaComNormaFake.norma, "tem-texto": false } };
+    mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : semTexto) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(screen.getByText(/virou lei/i)).toBeTruthy());
+    expect(screen.queryByRole("link", { name: /texto oficial/i })).toBeNull();
+    expect(document.querySelector('a[href*="/artefato"]')).toBeNull();
+    expect(document.querySelector(".norma-publicada")?.textContent).toContain("O texto desta norma ainda não foi publicado aqui.");
+    // a URN crua saiu do bloco (#149): o cidadão lê o título da norma, com link para a ficha dela
+    expect(document.querySelector(".norma-publicada")?.textContent).not.toContain("urn:lex");
+    expect(document.querySelector('.norma-publicada a[href*="/leis/"]')).not.toBeNull();
+  });
+
+  it("matéria com votação pública encerrada -> a ficha liga às votações dela (filtradas pela matéria)", async () => {
+    mockFetch((url) => ({
+      ok: true,
+      json: async () =>
+        url.endsWith("/comentarios")
+          ? []
+          : url.includes("/votacoes")
+            ? { votacoes: [{ "votacao-id": "v1" }], total: 2, pagina: 1, "por-pagina": 20 }
+            : fichaFake,
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    const link = await screen.findByRole("link", { name: "Ver as votações desta matéria" });
+    expect(link.getAttribute("href")).toBe("/portal/casa/fortaleza/votacoes?materia=p1");
+    expect(screen.getByRole("heading", { name: "Votações desta matéria" })).toBeTruthy();
+  });
+
+  it("matéria sem votação pública -> nenhuma seção nem link de votações (nunca um link para lista vazia)", async () => {
+    mockFetch((url) => ({
+      ok: true,
+      json: async () =>
+        url.endsWith("/comentarios")
+          ? []
+          : url.includes("/votacoes")
+            ? { votacoes: [], total: 0, pagina: 1, "por-pagina": 20 }
+            : fichaFake,
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".ficha-cab .num")?.textContent).toBe("PL 042/2026"));
+    await waitFor(() =>
+      expect((global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((c) => String(c[0]).includes("/votacoes"))).toBe(true),
+    );
+    expect(screen.queryByRole("link", { name: /votações desta matéria/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Votações desta matéria" })).toBeNull();
   });
 
   it("comentários aprovados -> lista read-only (corpo + data, sem autor), marcada como <ul>/<li> — review A2.3 item 2", async () => {

@@ -55,8 +55,8 @@
                       :resolver-ente-publico #(or (parse-uuid (str %)) (throw (ex-info "x" {:tipo :validacao/invalido})))
                       :info-ente #(when (contains? casas %) {:nome-oficial "Câmara"})
                       :nomes-dos-vereadores nomes
-                      :votacoes-publicas (fn [ente limite deslocamento]
-                                           (votacoes-publicas/listar *ses* *leg* ente limite deslocamento))
+                      :votacoes-publicas (fn [ente limite deslocamento materia]
+                                           (votacoes-publicas/listar *ses* *leg* ente limite deslocamento materia))
                       :votacao-publica (fn [ente id] (votacoes-publicas/buscar *ses* *leg* ente id))})
                     it/globais)
       ph/create-server ::ph/service-fn))
@@ -311,3 +311,73 @@
         svc (servico #{ente} (constantly {}))
         ids (mapv :votacao-id (:votacoes (:corpo (get! svc (str "/portal/casa/" ente "/votacoes")))))]
     (is (= [(str b) (str a)] ids))))
+
+;; ---------- o filtro por materia (a ficha publica liga as votacoes dela) ----------
+
+(deftest o-filtro-por-materia-so-restringe-e-nunca-vaza-sessao-secreta
+  (let [{:keys [ente p1 publica nominal secreta-em-publica simbolica na-secreta na-fechada aberta anulada sem-sessao]}
+        (casa!)
+        redacao (let [vid (abrir! ente publica "redacao_final" p1 "simbolica")]
+                  (encerrar! ente vid {:resultado "aprovada"})
+                  vid)
+        ;; um parecer cujo objeto_id COLIDE com o id da materia (sem FK no banco): tem de ficar de fora
+        parecer-colide (let [vid (abrir! ente publica "parecer" p1 "simbolica")]
+                         (encerrar! ente vid {:resultado "aprovada"})
+                         vid)
+        svc (servico #{ente} (constantly nomes))
+        lista (:corpo (get! svc (str "/portal/casa/" ente "/votacoes?materia=" p1)))
+        ids (ids-da-lista lista)]
+    (testing "so' as votacoes encerradas da proposicao em sessao publica: a nominal, a secreta (so' o resultado) e a redacao final"
+      (is (= (set (map str [nominal secreta-em-publica redacao])) ids))
+      (is (= 3 (:total lista)) "o total e' do mesmo filtro"))
+    (testing "SESSAO SECRETA ou fechada ao publico: a votacao dessa MESMA materia continua escondida"
+      (is (not-any? #(contains? ids (str %)) [na-secreta na-fechada])))
+    (testing "em curso, anulada e fora de plenario continuam fora"
+      (is (not-any? #(contains? ids (str %)) [aberta anulada sem-sessao])))
+    (testing "votacao de outro objeto (parecer) nao entra, nem com o objeto_id igual ao da materia"
+      (is (not-any? #(contains? ids (str %)) [simbolica parecer-colide])))
+    (testing "o filtro so' restringe: sem ele a lista traz mais do que com ele"
+      (let [toda (:corpo (get! svc (str "/portal/casa/" ente "/votacoes")))]
+        (is (< (:total lista) (:total toda)))
+        (is (every? (ids-da-lista toda) ids))))))
+
+(deftest o-filtro-por-materia-segue-o-isolamento-por-casa
+  (let [a (casa!) b (casa!)
+        svc (servico #{(:ente a) (:ente b)} (constantly nomes))
+        url #(str "/portal/casa/" %1 "/votacoes?materia=" %2)]
+    (testing "a materia da Casa B perguntada pela Casa A: nada (nem 404, nem a votacao de B)"
+      (let [r (get! svc (url (:ente a) (:p1 b)))]
+        (is (= 200 (:status r)))
+        (is (= [0 []] [(:total (:corpo r)) (:votacoes (:corpo r))]))))
+    (testing "cada Casa ve as proprias"
+      (is (contains? (ids-da-lista (:corpo (get! svc (url (:ente b) (:p1 b))))) (str (:nominal b)))))
+    (testing "materia sem votacao publica: lista vazia com total 0"
+      (let [r (:corpo (get! svc (url (:ente a) (random-uuid))))]
+        (is (= [0 []] [(:total r) (:votacoes r)]))))))
+
+(deftest o-filtro-por-materia-pagina-sem-repetir-nem-pular
+  (let [ente (random-uuid)
+        publica (sessao! ente "ordinaria")
+        materia (random-uuid)
+        outra (random-uuid)
+        feitas (vec (for [_ (range 23)]
+                      (let [vid (abrir! ente publica "proposicao" materia "simbolica")]
+                        (encerrar! ente vid {:resultado "aprovada"})
+                        vid)))
+        _ (dotimes [_ 4] (let [vid (abrir! ente publica "proposicao" outra "simbolica")]
+                           (encerrar! ente vid {:resultado "aprovada"})))
+        svc (servico #{ente} (constantly {}))
+        url #(str "/portal/casa/" ente "/votacoes?materia=" materia %)
+        p1 (:corpo (get! svc (url "")))
+        p2 (:corpo (get! svc (url "&pagina=2")))]
+    (is (= [23 20 3] [(:total p1) (count (:votacoes p1)) (count (:votacoes p2))]))
+    (is (= (set (map str feitas)) (into (ids-da-lista p1) (ids-da-lista p2))) "as 23 da materia, cada uma uma vez")
+    (is (= [2 20] [(:pagina p2) (:por-pagina p2)]))))
+
+(deftest materia-malformada-ou-repetida-e-400-nunca-lista-inteira
+  (let [{:keys [ente p1]} (casa!)
+        svc (servico #{ente} (constantly nomes))
+        url #(str "/portal/casa/" ente "/votacoes" %)]
+    (is (= [400 400] [(:status (get! svc (url "?materia=nao-e-uuid")))
+                      (:status (get! svc (url (str "?materia=" p1 "&materia=" (random-uuid)))))]))
+    (is (= 200 (:status (get! svc (url "?materia=")))) "valor vazio = sem filtro")))
