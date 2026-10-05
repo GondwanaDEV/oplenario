@@ -149,3 +149,37 @@
         r (pt/response-for (service-fn #{"secretario"} (fake-repo-legislativo (random-uuid) id))
                            :get (str "/legislativo/proposicoes/" id "/ficha"))]
     (is (= 401 (:status r)))))
+
+(deftest ficha-materia-traz-o-rito-da-casa-na-ordem-do-rito
+  ;; o fake devolve o dado BRUTO do template; a rota entrega a faixa pronta, com o nome que a Casa deu a cada etapa
+  ;; e sem nenhum campo interno (ordem da coluna, template-id). Vocabulario fora da demo, de proposito.
+  (let [ente (random-uuid) id (random-uuid)
+        bruto {:estado-inicial "entrada"
+               :estados [{:chave "entrada" :nome "Entrada" :terminal false :ordem 1}
+                         {:chave "em_comissoes" :nome "Em Comissões" :terminal false :ordem 2}
+                         {:chave "arquivada" :nome "Arquivada" :terminal true :ordem 3}]
+               :transicoes [{:de-estado "entrada" :para-estado "em_comissoes"}
+                            {:de-estado "em_comissoes" :para-estado "arquivada"}]}
+        repo-l (reify repo-leg/RepoLegislativo
+                 (ficha-completa-da-proposicao [_ e i]
+                   (if (and (= e ente) (= i id))
+                     (assoc (ficha-canonica ente id) :rito-do-template bruto)
+                     {:proposicao nil :texto nil :tramitacao [] :apensadas [] :emendas [] :pareceres []})))
+        r (pt/response-for (service-fn #{"secretario"} repo-l)
+                           :get (str "/legislativo/proposicoes/" id "/ficha")
+                           :headers (com-bearer (token ente (random-uuid))))
+        rito (:rito (ler-json r))]
+    (is (= 200 (:status r)))
+    (is (true? (:ordem-unica rito)))
+    (is (= ["Entrada" "Em Comissões"] (mapv :rotulo (:etapas rito))))
+    (is (= "Em Comissões" (:rotulo (:atual rito))))
+    (is (= [{:chave "arquivada" :rotulo "Arquivada" :terminal true}] (:proximas rito)))
+    (is (not-any? #(contains? % :ordem) (:etapas rito)))))
+
+(deftest ficha-materia-sem-rito-da-casa-nao-traz-faixa-inventada
+  (let [ente (random-uuid) id (random-uuid)
+        r (pt/response-for (service-fn #{"secretario"} (fake-repo-legislativo ente id))
+                           :get (str "/legislativo/proposicoes/" id "/ficha")
+                           :headers (com-bearer (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (nil? (:rito (ler-json r))))))

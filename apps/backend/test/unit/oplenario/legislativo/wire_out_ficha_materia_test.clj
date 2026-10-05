@@ -89,3 +89,29 @@
 (deftest ficha-materia-out-truncado-nao-booleano-invalida
   (is (not (m/validate wire/FichaMateriaOut (assoc ficha-minima :tramitacao-truncado "true")))
       "string 'true' nao e' :boolean — o schema nao aceita truthy solto"))
+
+(def ^:private rito-minimo
+  {:ordem-unica true
+   :etapas [{:chave "entrada" :rotulo "Entrada" :terminal false}]
+   :atual {:chave "entrada" :rotulo "Entrada" :terminal false}
+   :anteriores nil
+   :proximas []})
+
+(deftest rito-da-materia-valido
+  (is (m/validate wire/RitoDaMateriaOut rito-minimo))
+  (is (m/validate wire/RitoDaMateriaOut (assoc rito-minimo :ordem-unica false :etapas [] :atual nil
+                                               :anteriores [{:chave "a" :rotulo "A" :terminal false}]))
+      "sem ordem unica: so' o entorno; sem etapa atual declarada pelo rito, `atual` e' nil"))
+
+(deftest rito-da-materia-nao-vaza-campo-interno
+  (is (not (m/validate wire/RitoDaMateriaOut (assoc rito-minimo :ordem 3))))
+  (is (not (m/validate wire/RitoDaMateriaOut (assoc-in rito-minimo [:etapas 0 :ordem] 1)))
+      "a etapa sai com chave, rotulo e terminal — a `ordem` da coluna nao e' contrato"))
+
+(deftest ficha-aceita-e-nao-exige-rito
+  (let [base {:proposicao proposicao-minima :tramitacao [] :tramitacao-truncado false :apensadas []
+              :apensadas-truncado false :emendas [] :emendas-truncado false :pareceres []
+              :pareceres-truncado false :coautores []}]
+    (is (m/validate wire/FichaMateriaOut base) "campo ACRESCENTADO e opcional: produtor antigo segue valido")
+    (is (m/validate wire/FichaMateriaOut (assoc base :rito rito-minimo)))
+    (is (m/validate wire/FichaMateriaOut (assoc base :rito nil)))))
