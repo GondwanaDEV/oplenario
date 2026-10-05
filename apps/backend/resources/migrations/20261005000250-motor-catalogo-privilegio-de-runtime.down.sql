@@ -1,0 +1,11 @@
+REVOKE SELECT ON motor.calendario_feriado FROM oplenario_app;
+--;;
+REVOKE SELECT ON motor.prazo_dominio_vigente FROM oplenario_app;
+--;;
+REVOKE SELECT ON motor.template_compliance FROM oplenario_app;
+--;;
+REVOKE INSERT ON motor.template_compliance FROM oplenario_motor_catalogo;
+--;;
+REVOKE USAGE ON SCHEMA motor FROM oplenario_motor_catalogo;
+--;;
+REVOKE oplenario_motor_catalogo FROM oplenario_pool;

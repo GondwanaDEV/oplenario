@@ -48,7 +48,7 @@ não frente de trabalho:
 as 8 fases F0–F7 estão mergeadas em `main`** — F0 plataforma base · F1 cadastros+identidade ·
 F2 resolvedor de fatos (o KEYSTONE) · F3 legislativo (8 eixos) · F4 sessões+tempo real (HERO) ·
 F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. Ao fim da F7 eram 13
-módulos e 61 migrations; em 05/10/2026 são 133 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
+módulos e 61 migrations; em 05/10/2026 são 135 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
 marcos MFE-1 a MFE-4 cumpridos.
 
 **Marcos de valor demonstrável:** M1 (a Casa existe), M2 (compliance vivo), M3 (coração
@@ -429,6 +429,12 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **Compliance:** aceitar a remessa cumpre a obrigação. O gatilho do host (`gatilho_compliance.clj`, parte
     `:remessas`) reavalia a competência no aceite e, antes do sweep, em toda leitura do painel. O módulo `compliance`
     continua sem emitir evento.
+  - **O gatilho rodava sem privilégio (05/10/2026, mig `20261005000250`):** com o papel de produção (`oplenario_pool`)
+    ele morria em `permission denied for table template_compliance` e, como nunca derruba a leitura, o painel
+    respondia 200 sem avaliar nada. A suíte roda como dono do banco e não via; só o log do `t3-e2e` mostrou. Agora
+    `oplenario_app` lê `template_compliance`, `prazo_dominio_vigente` e `calendario_feriado`; gravar versão de regra é
+    do papel `oplenario_motor_catalogo` (só INSERT, fora da sessão da Casa). O `t3-e2e` reprova se o log do backend
+    tiver `permission denied for`. Teste com o papel de runtime: `gatilho_compliance_papel_de_runtime_test`.
   - **Voto por vereador só de sessão pública:** CSV de dados abertos, perfil público e "Minha atuação" leem
     `voto_parlamentar` por `parlamentar/da-votacao-publica` (fail-closed); leitura nova que esqueça reprova o
     `voto_publico_estrutura_test`.
