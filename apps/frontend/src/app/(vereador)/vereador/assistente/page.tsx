@@ -1,14 +1,17 @@
-"use client";
+// /vereador/assistente — o endereço antigo da tela cheia do assistente no app do vereador. A Clara agora abre no
+// próprio app, expandida (ADR-0024, fatia 4): esta rota só leva à home com `?clara=expandida`, que a moldura lê, abre
+// e tira da URL. Fica de pé para os links antigos e para o gate do middleware (que mede as páginas em disco).
+//
+// Server Component: o redirecionamento sai antes de qualquer tela. O `?token=` de dev vai junto (comToken).
 
-// /vereador/assistente — o assistente da Casa dentro do app do vereador (Faixa B / B.6). O mesmo painel da
-// secretaria; o que muda é o que ele pode fazer: além de consultar, PROPÕE atos do próprio vereador (o
-// requerimento), que ele lê e assina na tela da proposta (ADR-0012). A authz real é o backend.
+import { redirect } from "next/navigation";
+import { comToken } from "@/lib/nav";
 
-import { useAuth } from "@/lib/auth";
-import { CONFIANCA_PROPOE, PainelAssistente, SUGESTOES_VEREADOR } from "../../../(interno)/assistente/painel-assistente";
-import "../../../(interno)/assistente/assistente.css";
-
-export default function PaginaAssistenteVereador() {
-  const { token } = useAuth();
-  return <PainelAssistente token={token} publico="vereador" sugestoes={SUGESTOES_VEREADOR} confianca={CONFIANCA_PROPOE} />;
+export default async function PaginaAssistenteVereador({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { token } = await searchParams;
+  redirect(comToken("/vereador?clara=expandida", typeof token === "string" ? token : null));
 }
