@@ -6,7 +6,7 @@
 .acomp .t { font-size: var(--t-13); color: var(--texto-2); }
 .acomp .t b { color: var(--texto); font-weight: 600; display: block; font-family: var(--display); }
 .acomp .btn { margin-left: auto; display: inline-flex; align-items: center; gap: 0.45rem; }
-.acomp /* Denunciar comentário (feature 6.3): discreto, no rodapé de cada comentário */
+/* Denunciar comentário (feature 6.3): discreto, no rodapé de cada comentário */
 .cmt-denunciar { display: inline-block; margin: 0.45rem 0 0; background: none; border: 0; padding: 0; font: inherit;
   font-size: var(--t-12); color: var(--texto-2); text-decoration: underline; cursor: pointer; }
 .superficie-publica a.cmt-denunciar { color: var(--texto-2); }
