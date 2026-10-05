@@ -18,7 +18,8 @@
             [oplenario.transparencia.db.materia :as db-materia]
             [oplenario.transparencia.db.norma :as db-norma]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
-            [oplenario.transparencia.diplomat.http.in :as transparencia-http])
+            [oplenario.transparencia.diplomat.http.in :as transparencia-http]
+            [oplenario.transparencia.suporte-voto-publico :as voto-publico])
   (:import (java.time Instant)))
 
 (def ^:dynamic *ds* nil)
@@ -56,7 +57,8 @@
                                                :resolver-ente-publico #(or (parse-uuid (str %))
                                                                            (throw (ex-info "x" {:tipo :validacao/invalido})))
                                                :info-ente #(when (contains? casas %) {:nome-oficial "Câmara"})
-                                               :nomes-dos-vereadores nomes})
+                                               :nomes-dos-vereadores nomes
+                                               :votacoes-com-voto-publico (voto-publico/tudo-publico *ds*)})
                     it/globais)
       ph/create-server ::ph/service-fn))
 

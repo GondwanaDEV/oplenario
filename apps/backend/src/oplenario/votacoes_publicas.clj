@@ -26,6 +26,15 @@
                                         (assoc v :sessao (da-sessao s)))))
                      votacoes)}))
 
+(defn ids-de-votacoes-publicas
+  "#{votacao-id} das votacoes da Casa cuja sessao o portal pode mostrar — o conjunto contra o qual o portal confere
+  VOTO POR VEREADOR (perfil publico, CSV de votos nominais) antes de publica-lo. O voto projetado em `transparencia`
+  nao carrega a sessao; a votacao sim, no legislativo. Fail-closed: votacao sem sessao, de sessao secreta ou fechada
+  ao publico, ou de outra Casa nunca entra aqui, e portanto nunca sai. Sem estado de votacao no criterio: o que
+  decide e' a sessao (a mesma `sessoes-publicas` das listas acima)."
+  [repo-sessoes repo-legislativo ente-id]
+  (leg/ids-das-votacoes-das-sessoes repo-legislativo ente-id (map :id (ses/sessoes-publicas repo-sessoes ente-id))))
+
 (defn buscar
   "A votacao encerrada com os votos nominais (se nominal) e a `:sessao`, ou nil quando nao existe, nao encerrou, foi
   anulada, e' de outra Casa ou a sessao dela nao e' publica."

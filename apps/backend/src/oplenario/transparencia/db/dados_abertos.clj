@@ -5,7 +5,8 @@
   compara versoes do arquivo). Funcoes sobre a `tx` do tenant (RLS isola)."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
-            [oplenario.kernel.db-util :as comum]))
+            [oplenario.kernel.db-util :as comum]
+            [oplenario.transparencia.db.parlamentar :as parlamentar]))
 
 (set! *warn-on-reflection* true)
 
@@ -29,8 +30,9 @@
 
 (defn votos-nominais
   "Os votos NOMINAIS publicos (voto secreto nunca chega aqui: o ramo secreto do evento nao carrega vereador), com
-  a materia votada quando ela foi projetada."
-  [tx ente-id]
+  a materia votada quando ela foi projetada. So' voto de votacao de `votacoes-publicas` (sessao publica, entregue pelo
+  host): o de sessao secreta ou fechada ao publico, ou de votacao sem sessao conhecida, nao sai (fail-closed)."
+  [tx ente-id votacoes-publicas]
   (comum/linhas->kebab
    (jdbc/execute! tx
      (sql/format {:select [:v.votacao_id :v.ocorrido_em :v.proposicao_id [:m.tipo :materia_tipo]
@@ -38,17 +40,21 @@
                   :from [[:transparencia.voto_parlamentar :v]]
                   :left-join [[:transparencia.materia :m] [:and [:= :m.ente_id :v.ente_id]
                                                            [:= :m.proposicao_id :v.proposicao_id]]]
-                  :where [:= :v.ente_id ente-id]
+                  :where [:and [:= :v.ente_id ente-id] (parlamentar/da-votacao-publica :v.votacao_id votacoes-publicas)]
                   :order-by [[:v.ocorrido_em :asc] [:v.votacao_id :asc] [:v.vereador_id :asc]]}))))
 
-(defn- resumo-de [tx ente-id tabela coluna-data]
+(defn- resumo-de [tx ente-id tabela coluna-data & [mais-onde]]
   (comum/linha->kebab
    (jdbc/execute-one! tx (sql/format {:select [[[:count :*] :linhas] [[:max coluna-data] :atualizado_em]]
-                                      :from [tabela] :where [:= :ente_id ente-id]}))))
+                                      :from [tabela]
+                                      :where (if mais-onde [:and [:= :ente_id ente-id] mais-onde] [:= :ente_id ente-id])}))))
 
 (defn resumo
-  "{dataset {:linhas :atualizado-em}} — a ultima PROJECAO de cada dataset (quando o portal soube do dado)."
-  [tx ente-id]
+  "{dataset {:linhas :atualizado-em}} — a ultima PROJECAO de cada dataset (quando o portal soube do dado). Os votos
+  nominais contam so' o que `votos-nominais` publica (`votacoes-publicas`): o numero do catalogo nao pode denunciar
+  o voto de sessao secreta."
+  [tx ente-id votacoes-publicas]
   {:proposicoes    (resumo-de tx ente-id :transparencia.materia :atualizado_em)
    :legislacao     (resumo-de tx ente-id :transparencia.norma :projetado_em)
-   :votos-nominais (resumo-de tx ente-id :transparencia.voto_parlamentar :projetado_em)})
+   :votos-nominais (resumo-de tx ente-id :transparencia.voto_parlamentar :projetado_em
+                              (parlamentar/da-votacao-publica :votacao_id votacoes-publicas))})
