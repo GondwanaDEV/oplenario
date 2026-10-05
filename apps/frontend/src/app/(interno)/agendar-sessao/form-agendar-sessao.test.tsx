@@ -73,6 +73,20 @@ describe("FormAgendarSessao", () => {
     await waitFor(() => expect(agendar).toHaveBeenCalledWith(expect.objectContaining({ sessaoLegislativaId: "sl-B" })));
   });
 
+  it("o seletor de período fala em palavras (ano e quantas sessões), nunca o pedaço do id", () => {
+    const A = "3f2a9c1e-7b4d-4e8a-9d10-0a1b2c3d4e5f";
+    const B = "91c0d5aa-12ef-4b67-8a3c-5d6e7f809a1b";
+    const com = (id: string, n: number, quando: string): SessaoOut => ({ ...sessao(id, n), agendadaPara: quando });
+    montar([com(A, 1, "2025-03-10T17:00:00Z"), com(A, 2, "2025-04-10T17:00:00Z"), com(B, 1, "2026-03-10T17:00:00Z")]);
+    const opcoes = Array.from(screen.getByLabelText(/Sessão legislativa/).querySelectorAll("option")).map((o) => o.textContent ?? "");
+    expect(opcoes).toContain("Sessão legislativa de 2025 · 2 sessões");
+    expect(opcoes).toContain("Sessão legislativa de 2026 · 1 sessão");
+    const todo = opcoes.join("|");
+    expect(todo).not.toContain(A.slice(0, 8));
+    expect(todo).not.toContain(B.slice(0, 8));
+    expect(todo).not.toMatch(/sessão\(ões\)/);
+  });
+
   it("audiência pública (ADR-0021 A1): o bloco aparece só com esse tipo e vai no corpo", async () => {
     agendar.mockResolvedValue({ ok: true, sessao: { ...sessao("sl-A", 3), tipoSessao: "audiencia_publica" } });
     montar([sessao("sl-A", 14)]);
