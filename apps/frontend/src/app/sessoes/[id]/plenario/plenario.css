@@ -124,7 +124,7 @@
 .placar-nominal .mk-nao { background: var(--telha-fundo); color: #fff; }
 .placar-nominal .mk-abstencao { background: var(--surface-2); border: 1px solid var(--linha); color: var(--texto-2); }
 .placar-nominal .vn { min-width: 0; line-height: 1.15; }
-.placar-nominal .vn b { display: block; font-size: var(--t-13); font-weight: 600; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+.placar-nominal .vn b { display: block; font-stretch: var(--largura-densa); font-size: var(--t-13); font-weight: 600; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
 .placar-nominal .vn span { font-size: var(--t-12); color: var(--texto-2); }
 
 /* quórum */

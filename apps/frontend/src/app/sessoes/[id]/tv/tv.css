@@ -32,6 +32,9 @@
 .tv.cursor-oculto, .tv.cursor-oculto * { cursor: none; }
 
 /* ---------------- topo (moldura) ---------------- */
+/* Título do telão: largo, mas menos que o das telas (--largura-titulo), porque a manchete
+   da matéria tem limite de linhas e o telão lê a 15 m — a palavra inteira vale mais que a largura. */
+.tv h1 { font-stretch: 104%; }
 .tv-topo { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 2vw; padding: 1.6vw 2.4vw 1.2vw; }
 .tv-marca { display: flex; align-items: center; gap: 1vw; }
 .tv-marca .marca-simbolo { width: 3.4vw; height: 3.4vw; min-width: 40px; min-height: 40px; }
@@ -145,7 +148,7 @@
 .tv .pl { min-height: 0; border-radius: var(--raio-lg); padding: .6vw 1.5vw; display: flex; align-items: center; justify-content: space-between; gap: 1vw; border: 2px solid; }
 .tv .pl .r { display: inline-flex; align-items: center; gap: .7vw; font-family: var(--display); font-weight: 700; font-size: clamp(1.2rem, 1.9vw, 3.2rem); }
 .tv .pl .r svg { width: 2vw; height: 2vw; min-width: 20px; min-height: 20px; }
-.tv .pl .n { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: var(--numero-destaque); }
+.tv .pl .n { font-family: var(--display); font-weight: 800; font-stretch: 115%; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .tv .pl-sim { background: rgba(67,189,147,.14); border-color: var(--tv-sim-borda); color: var(--tv-sim); }
 .tv .pl-nao { background: rgba(240,121,75,.13); border-color: var(--tv-nao-borda); color: var(--tv-nao); }
 .tv .pl-abs { background: var(--tv-cartao); border-color: var(--tv-abs-borda); color: var(--tv-abs); }
@@ -158,7 +161,7 @@
 .tv .vt .mk-nao { background: var(--tv-nao-borda); color: #1C0A03; }
 .tv .vt .mk-abs { background: rgba(231,240,226,.3); color: #0F2418; }
 .tv .vt .vn { min-width: 0; line-height: 1.15; }
-.tv .vt .vn b { display: block; font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv .vt .vn b { display: block; font-stretch: var(--largura-densa); font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tv .vt .vn span { font-family: var(--mono); font-size: clamp(.75rem, .85vw, 1.4rem); color: var(--palco-texto-2); }
 
 /* nominal sem nenhum voto ainda: o miolo não pode ficar um vazio com o placar num canto (mesmo tratamento da secreta) */
