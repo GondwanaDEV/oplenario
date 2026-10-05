@@ -92,6 +92,8 @@ describe("ConteudoFichaMateria", () => {
     await waitFor(() => expect(screen.getByRole("img", { name: /Tramitação de/ })).toBeTruthy());
     const faixa = screen.getByRole("img", { name: /Tramitação de/ }).getAttribute("aria-label") ?? "";
     expect(faixa).toContain("concluídos Entrada; atual Instrução; pendente Plenário único");
+    // o selo da ficha diz a mesma etapa com o mesmo nome (o rito chega pela rota, não só pela prop do cabeçalho)
+    expect(document.querySelector(".ficha-cab .chip")?.textContent).toBe("Instrução");
   });
 
   it("ordem de heading não pula nível: h1 (ementa) -> h2 (conteúdo/rail) -> h3 (cards)", async () => {

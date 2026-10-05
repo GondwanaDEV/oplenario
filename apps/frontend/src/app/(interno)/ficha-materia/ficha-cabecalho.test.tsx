@@ -120,8 +120,58 @@ describe("FichaCabecalho", () => {
       expect(faixa).toContain("atual Comissões");
     });
 
-    it("o chip de situação continua sendo o rótulo único de estado (o mesmo da lista)", () => {
+    // Decisão de 05/10/2026: na ficha a mesma etapa não pode ter dois nomes na mesma tela. O selo usa o nome que a
+    // Casa deu à etapa atual (o mesmo da faixa); sem rito utilizável, segue o rótulo único de estado (o da lista).
+    it("o selo de situação diz o nome que a Casa deu à etapa atual, o mesmo da faixa", () => {
+      const rito: RitoDaMateriaOut = {
+        ordemUnica: true,
+        etapas: [etapa("entrada", "Entrada"), etapa("em_pauta", "Na Ordem do Dia"), etapa("final", "Concluída", true)],
+        atual: etapa("em_pauta", "Na Ordem do Dia"),
+        anteriores: null,
+        proximas: [etapa("final", "Concluída", true)],
+      };
+      render(<FichaCabecalho proposicao={{ ...proposicao, estado: "em_pauta" }} rito={rito} />);
+      expect(screen.getByText("Na Ordem do Dia", { selector: ".chip" })).toBeTruthy();
+      expect(screen.queryByText("Em pauta")).toBeNull();
+      const faixa = screen.getByRole("img", { name: /Tramitação/ }).getAttribute("aria-label") ?? "";
+      expect(faixa).toContain("atual Na Ordem do Dia");
+    });
+
+    it("sem ordem única, o selo também usa o nome da etapa atual no rito", () => {
+      const rito: RitoDaMateriaOut = {
+        ordemUnica: false,
+        etapas: [],
+        atual: etapa("analise", "Análise"),
+        anteriores: [etapa("recebida", "Recebida")],
+        proximas: [etapa("via_a", "Via A"), etapa("via_b", "Via B")],
+      };
+      render(<FichaCabecalho proposicao={{ ...proposicao, estado: "analise" }} rito={rito} />);
+      expect(screen.getByText("Análise", { selector: ".chip" })).toBeTruthy();
+    });
+
+    it("a cor do selo continua vindo do estado, não do nome da etapa", () => {
+      const rito: RitoDaMateriaOut = {
+        ordemUnica: true,
+        etapas: [etapa("aguardando_pauta", "Pronta para a Ordem do Dia"), etapa("fim", "Fim", true)],
+        atual: etapa("aguardando_pauta", "Pronta para a Ordem do Dia"),
+        anteriores: null,
+        proximas: [etapa("fim", "Fim", true)],
+      };
+      render(<FichaCabecalho proposicao={{ ...proposicao, estado: "aguardando_pauta" }} rito={rito} />);
+      expect(screen.getByText("Pronta para a Ordem do Dia", { selector: ".chip" }).className).toContain("chip-aguarda");
+    });
+
+    it("rito que não declara a etapa atual: o selo segue o rótulo único de estado (o mesmo da lista)", () => {
       render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: etapa("em_comissoes", "Em Comissões") }} />);
+      expect(screen.getByText("Em comissões")).toBeTruthy();
+      expect(screen.queryByText("Em Comissões")).toBeNull();
+    });
+
+    it("rito sem etapa atual ou nulo: o selo segue o rótulo único de estado", () => {
+      const { unmount } = render(<FichaCabecalho proposicao={proposicao} rito={{ ...ritoEmLinha, atual: null }} />);
+      expect(screen.getByText("Em comissões")).toBeTruthy();
+      unmount();
+      render(<FichaCabecalho proposicao={proposicao} rito={null} />);
       expect(screen.getByText("Em comissões")).toBeTruthy();
     });
   });

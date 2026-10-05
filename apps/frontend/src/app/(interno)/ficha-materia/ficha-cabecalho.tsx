@@ -27,8 +27,13 @@ export function FichaCabecalho({
   const numero = formatarNumeroProposicao(proposicao.tipo, proposicao.sequencial, proposicao.ano);
   const especie = formatarEspecieProposicao(proposicao.tipo);
   // a ordem e os nomes das etapas vêm do rito da Casa; sem rito (ou sem a etapa atual nele), o mapa ilustrativo
-  const { estagios: estagiosFixos, rotuloSituacao } = derivarTramitacao(proposicao.estado);
-  const estagios = faixaDoRito(rito)?.estagios ?? estagiosFixos;
+  const { estagios: estagiosFixos, rotuloSituacao: rotuloFixo } = derivarTramitacao(proposicao.estado);
+  const faixaDaCasa = faixaDoRito(rito);
+  const estagios = faixaDaCasa?.estagios ?? estagiosFixos;
+  // o selo diz a etapa com o nome que a Casa lhe deu, o mesmo da faixa: a mesma etapa não tem dois nomes na tela.
+  // Usa a mesma condição da faixa (rito que declara a etapa atual); sem ela, o rótulo único de estado. A cor do
+  // selo segue o estado (categorizarSituacao): o rito dá nome e ordem, não categoria.
+  const rotuloSituacao = faixaDaCasa && rito?.atual ? rito.atual.rotulo : rotuloFixo;
   const categoria = categorizarSituacao(proposicao.estado);
 
   return (
