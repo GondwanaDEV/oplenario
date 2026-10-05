@@ -42,6 +42,17 @@ describe("candidatosObjeto", () => {
   it("pauta sem proposições -> lista vazia", () => {
     expect(candidatosObjeto([{ tipoItem: "homenagem", fase: "expediente", ordem: 1 }])).toEqual([]);
   });
+  it("a posição é dentro da fase, contando TODOS os itens ativos dela (não só as proposições)", () => {
+    const c = candidatosObjeto([
+      { tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 1 },
+      { tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 2 },
+      { tipoItem: "leitura", proposicaoId: null, fase: "ordem_do_dia", ordem: 3 },
+      { tipoItem: "proposicao", proposicaoId: "pA", fase: "ordem_do_dia", ordem: 4 },
+      { tipoItem: "proposicao", proposicaoId: "pB", fase: "ordem_do_dia", ordem: 6 },
+    ]);
+    expect(c.map((x) => [x.objetoId, x.posicao])).toEqual([["pA", 2], ["pB", 3]]);
+    expect(c[0].ordem).toBe(4); // a `ordem` gravada segue ali, para ordenar
+  });
 });
 
 describe("derivarPainelVotacao", () => {

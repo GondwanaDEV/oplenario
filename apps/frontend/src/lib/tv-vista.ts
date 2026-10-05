@@ -14,6 +14,7 @@ import { iniciais } from "./iniciais";
 import { derivarPlacar, rotularVotos } from "./placar-vista";
 import type { EstadoPlenario, PlacarVotacao, VotoNominal } from "./plenario-reducer";
 import { identidadeDe } from "./plenario-reducer";
+import { numerarNaFase } from "./posicao-na-fase";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
 import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
 
@@ -113,7 +114,8 @@ export function subRelogioDaTv(
 
 export interface ItemPautaTv {
   id: string;
-  ordem: number;
+  /** O número que se lê: a posição do item DENTRO da fase (não a `ordem` gravada, que é uma só por pauta). */
+  posicao: number;
   sigla: string; // "PL 22/2026" | "Leitura" | "Comunicado" | …
   descricao: string;
   fase: string; // "Ordem do Dia"
@@ -148,11 +150,12 @@ export function itensDaPautaTv(
 ): ItemPautaTv[] {
   if (!pauta) return [];
   const votando = placar && !placar.encerrada ? placar.objetoId : null;
-  return pauta.itens.map((it) => {
+  const posicoes = numerarNaFase(pauta.itens);
+  return pauta.itens.map((it, i) => {
     const emVotacao = votando !== null && it["proposicao-id"] === votando;
     return {
       id: it.id,
-      ordem: it.ordem,
+      posicao: posicoes[i],
       ...siglaEDescricao(it),
       fase: nomeFase(it.fase),
       emVotacao,

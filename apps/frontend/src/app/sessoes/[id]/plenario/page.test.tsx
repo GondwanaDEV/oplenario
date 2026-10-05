@@ -20,7 +20,8 @@ vi.mock("@/lib/auth", () => ({
 }));
 const usePlenarioMock = vi.fn();
 vi.mock("@/lib/use-plenario", () => ({ usePlenario: (...a: unknown[]) => usePlenarioMock(...a) }));
-vi.mock("@/lib/use-pauta", () => ({ usePauta: () => ({ pauta: null, estado: "ok" }) }));
+const usePautaMock = vi.fn(() => ({ pauta: null as unknown, estado: "ok" }));
+vi.mock("@/lib/use-pauta", () => ({ usePauta: () => usePautaMock() }));
 
 beforeAll(() => {
   // jsdom não tem matchMedia; `useAgora` o consulta (prefers-reduced-motion)
@@ -67,6 +68,25 @@ function montar(estado: Partial<EstadoPlenario>) {
   usePlenarioMock.mockReturnValue({ sessao, estado: { ...estadoInicial(sessao), ...estado }, conexao: "ao-vivo", erro: null });
   return render(<TemaProvider><PaginaPlenario /></TemaProvider>);
 }
+
+describe("Telão da Mesa — a pauta numera por fase", () => {
+  it("o 1º item da Ordem do Dia aparece como 1, não como o número da pauta toda", () => {
+    usePautaMock.mockReturnValueOnce({
+      estado: "ok",
+      pauta: {
+        "sessao-id": "s1",
+        itens: [
+          { id: "i1", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata", ordem: 1 },
+          { id: "i2", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura de ofício", ordem: 2 },
+          { id: "i3", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "Leitura do parecer", ordem: 5 },
+        ],
+      },
+    });
+    montar({});
+    const numeros = [...document.querySelectorAll(".pauta-ordem")].map((e) => e.textContent);
+    expect(numeros).toEqual(["1", "2", "1"]);
+  });
+});
 
 describe("Telão da Mesa — recuperação de estado", () => {
   it("liga a hidratação por snapshot de quórum/tribuna E de votação no usePlenario", () => {
