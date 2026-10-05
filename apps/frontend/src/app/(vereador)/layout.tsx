@@ -20,6 +20,7 @@ import { TemaProvider, useTema } from "@/lib/tema";
 import { comToken } from "@/lib/nav";
 import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import { useContagemDaCaixa } from "@/lib/use-comunicados";
+import { MolduraDaClara } from "../(interno)/clara/moldura-da-clara";
 import "./vereador-shell.css";
 
 export default function LayoutVereador({ children }: { children: React.ReactNode }) {
@@ -68,7 +69,12 @@ export function GuardVereador({ children }: { children: React.ReactNode }) {
       </main>
     );
   }
-  return <AppShellVereador>{children}</AppShellVereador>;
+  // A Clara (ADR-0024) também no app do vereador: o mesmo painel das telas internas, com o conjunto do vereador.
+  return (
+    <MolduraDaClara publico="vereador">
+      <AppShellVereador>{children}</AppShellVereador>
+    </MolduraDaClara>
+  );
 }
 
 function AppShellVereador({ children }: { children: React.ReactNode }) {

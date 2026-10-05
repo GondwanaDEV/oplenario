@@ -12,6 +12,7 @@ import { useEditarProposicao } from "@/lib/use-editar-proposicao";
 import { comToken } from "@/lib/nav";
 import { FormularioProposicao, type ValoresFormulario } from "../formulario-proposicao";
 import { TopoInterno } from "../../topo";
+import { dicaDaMateria, useDicaDaClara } from "../../clara/dica";
 
 export default function PaginaEditarProposicao({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,6 +20,7 @@ export default function PaginaEditarProposicao({ params }: { params: Promise<{ i
   const { dados, estado: estadoDetalhe } = useProposicaoDetalhe(token, id);
   const { editar, estado: estadoEnvio, erro } = useEditarProposicao(token, id);
   const router = useRouter();
+  useDicaDaClara(dados ? dicaDaMateria(dados.tipo, dados.sequencial, dados.ano) : null);
 
   async function aoSubmeter(valores: ValoresFormulario) {
     if (!dados) return;

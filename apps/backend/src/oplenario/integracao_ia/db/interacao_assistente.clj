@@ -1,6 +1,7 @@
 (ns oplenario.integracao-ia.db.interacao-assistente
   "O historico auditavel da Clara (mig 0220, ADR-0024): uma linha por pergunta, append-only, na tx do tenant."
-  (:require [honey.sql :as sql]
+  (:require [clojure.string :as str]
+            [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum])
   (:import (java.sql Timestamp)
@@ -48,10 +49,34 @@
                                                     [:= :identidade_id identidade-id]]
                                             :limit 1}))))
 
+(def ^:private com-acento "ÁÀÂÃÄáàâãäÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÕÖóòôõöÚÙÛÜúùûüÇçÑñ")
+(def ^:private sem-acento "AAAAAaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuCcNn")
+
+(defn- sem-acento-sql
+  "lower(translate(<expr>, acentuadas, sem acento)). O Postgres daqui nao tem `unaccent` (e a busca nao pede migration):
+  a coluna E o parametro passam pela MESMA normalizacao, entao comparam igual."
+  [expr]
+  (str "lower(translate(" expr ", '" com-acento "', '" sem-acento "'))"))
+
+(defn- padrao-like
+  "`%texto%` com `\\`, `%` e `_` escapados (ESCAPE '\\'): o que a pessoa digita e' literal, nunca curinga. Em NFC, para
+  que o acento digitado decomposto (letra + marca) vire o caractere que o `translate` conhece."
+  [^String busca]
+  (str "%" (str/replace (java.text.Normalizer/normalize busca java.text.Normalizer$Form/NFC) #"[\\%_]" #(str "\\" %))
+       "%"))
+
+(defn- contem
+  "<expr> contem o padrao, sem caixa nem acento. O padrao vai como parametro, nunca interpolado."
+  [expr padrao]
+  [:raw [(str (sem-acento-sql expr) " LIKE lower(translate(") [:lift padrao]
+         (str "::text, '" com-acento "', '" sem-acento "')) ESCAPE '\\'")]])
+
 (defn listar
   "As interacoes da Casa, a mais recente primeiro: de uma pessoa (`identidade-id`) ou de todas (nil, so' para o
-  auditor). `antes` (Instant, opcional) pagina pelo instante. Resumo, sem a resposta: o que a lista mostra."
-  [tx ente-id identidade-id antes limite]
+  auditor). `antes` (Instant, opcional) pagina pelo instante. `busca` (opcional) = a pergunta OU o texto da resposta
+  contem o texto, sem diferenca de caixa nem de acento, com `%`/`_` literais. Resumo, sem a resposta: o que a lista
+  mostra."
+  [tx ente-id {:keys [identidade-id antes busca]} limite]
   (mapv (fn [r] (-> (comum/linha->kebab r) (update :ocorrido-em instante)))
         (jdbc/execute! tx
           (sql/format {:select [:id :conversa_id :identidade_id :pergunta :desfecho :ocorrido_em
@@ -60,7 +85,10 @@
                        :from [:integracao_ia.interacao_assistente]
                        :where (cond-> [:and [:= :ente_id ente-id]]
                                 identidade-id (conj [:= :identidade_id identidade-id])
-                                antes (conj [:< :ocorrido_em (Timestamp/from ^Instant antes)]))
+                                antes (conj [:< :ocorrido_em (Timestamp/from ^Instant antes)])
+                                busca (conj (let [p (padrao-like busca)]
+                                              [:or (contem "pergunta" p)
+                                                   (contem "coalesce(resposta ->> 'texto', '')" p)])))
                        :order-by [[:ocorrido_em :desc] [:id :desc]]
                        :limit limite}))))
 
