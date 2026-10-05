@@ -5,6 +5,7 @@
             [malli.core :as m]
             [malli.error :as me]
             [oplenario.auditoria.logic :as logic]
+            [oplenario.auditoria.resumos :as resumos]
             [oplenario.auditoria.wire.out.trilha :as wire]))
 
 (set! *warn-on-reflection* true)
@@ -40,7 +41,9 @@
   {:seq (long (:seq r)) :em (str (:ocorrido-em r)) :ator (ator r) :acao (:acao r) :classe (:classe r)
    :decisao (decisao r)
    :recurso (when (or (:recurso-tipo r) (:recurso-id r) (:rotulo r))
-              {:tipo (:recurso-tipo r) :id (:recurso-id r) :rotulo (:rotulo r)})
+              {:tipo (:recurso-tipo r) :id (:recurso-id r) :rotulo (:rotulo r)
+               :do-ato (boolean (and (:rotulo r) (:acao r)
+                                     (= (:rotulo r) (resumos/rotulo-da-acao (keyword (:acao r))))))})
    :campos (vec (:campos r)) :canal (:canal r) :ip (ip-truncado (:ip r))
    :selo (:selo r) :selo-anterior (:selo-anterior r)})
 

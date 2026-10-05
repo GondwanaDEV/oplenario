@@ -51,12 +51,16 @@ describe("trilha de auditoria — a lógica pura", () => {
 
   it("a frase do ato não ganha um segundo verbo na etiqueta, e o detalhe só situa o módulo", () => {
     const ato: RegistroTrilha = { ...base, acao: "sessoes/definir-tempos-regimentais",
-      recurso: { tipo: null, id: null, rotulo: "Definiu os tempos regimentais da tribuna" } };
+      recurso: { tipo: null, id: null, rotulo: "Definiu os tempos regimentais da tribuna", doAto: true } };
     expect(verbo(ato).rotulo).toBe("Ato");
     expect(objeto(ato)).toEqual({ titulo: "Definiu os tempos regimentais da tribuna", detalhe: "Sessões e atas" });
     // a cor segue a natureza da ação
-    expect(verbo({ ...ato, acao: "identidade/revogar-acesso", recurso: { tipo: null, id: null, rotulo: "Revogou um acesso à Casa" } }))
+    expect(verbo({ ...ato, acao: "identidade/revogar-acesso", recurso: { tipo: null, id: null, rotulo: "Revogou um acesso à Casa", doAto: true } }))
       .toEqual({ rotulo: "Ato", tom: "removeu" });
+    // nome de pessoa que parece verbo ("Abreu Lima") é OBJETO: a ação continua no detalhe e a etiqueta é o verbo da rota
+    const pessoa: RegistroTrilha = { ...base, acao: "cadastros/editar-vereador", recurso: { tipo: "vereador", id: "v1", rotulo: "Abreu Lima", doAto: false } };
+    expect(verbo(pessoa).rotulo).toBe("Editou");
+    expect(objeto(pessoa)).toEqual({ titulo: "Abreu Lima", detalhe: "editar vereador · Cadastros" });
     // rótulo de objeto continua com o verbo da ação
     expect(verbo(base).rotulo).toBe("Aprovou");
     // negação e falha seguem com a etiqueta própria
