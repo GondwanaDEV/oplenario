@@ -19,11 +19,46 @@ import { derivarInicio } from "@/lib/inicio-vista";
 import { TopoInterno } from "../topo";
 import { PainelInicio } from "./painel-inicio";
 import { CentralDaCasa } from "./central-da-casa";
+import { BotaoSair } from "@/lib/botao-sair";
+import { modoReal } from "@/lib/modo";
 import "./inicio.css";
 
 function InicioPessoal({ token, papeis }: { token: string | null; papeis: string[] }) {
   const { sessoes, estado: estadoSessoes } = useSessoes(token);
-  return <PainelInicio vista={derivarInicio({ papeis, sessoes, estadoSessoes })} />;
+  // Sem o topo da secretaria (o chrome do vereador e da cidadã é outro), mas com "Sair": sem ele, quem caía aqui não
+  // tinha como encerrar a sessão.
+  return (
+    <>
+      <PainelInicio vista={derivarInicio({ papeis, sessoes, estadoSessoes })} />
+      <SairDoInicio />
+    </>
+  );
+}
+
+function SairDoInicio() {
+  if (!modoReal()) return null;
+  return (
+    <div className="envelope inicio-sair">
+      <BotaoSair className="btn btn-contorno" />
+    </div>
+  );
+}
+
+// O acesso da pessoa não carregou (o backend respondeu erro que não é 401; o 401 já levou de volta ao login, ver
+// `voltarAoLogin`). Antes a tela seguia sem papel nenhum e mostrava a área da cidadã, sem topo e sem como sair.
+function AcessoIndisponivel() {
+  return (
+    <>
+      <main className="envelope inicio">
+        <section className="card inicio-sessao" role="alert">
+          <p className="eyebrow">Seu acesso</p>
+          <h1>Não foi possível carregar o seu acesso</h1>
+          <p className="inicio-detalhe">Recarregue a página. Se persistir, saia e entre de novo.</p>
+        </section>
+      </main>
+      <SairDoInicio />
+    </>
+  );
 }
 
 export function ConteudoInicio() {
@@ -33,6 +68,7 @@ export function ConteudoInicio() {
   // Segura o render enquanto /eu não respondeu — sem isso a tela decidiria a persona com `papeis=[]` e
   // piscaria a home do cidadão para a secretária (mesmo racional dos guards de papel).
   if (estadoPapeis === "carregando") return null;
+  if (estadoPapeis === "erro") return <AcessoIndisponivel />;
 
   // `secretario` vence quando alguém acumula papéis — a mesma regra de `personaDe` em inicio-vista.ts.
   if (papeis.includes("secretario")) {

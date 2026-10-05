@@ -11,6 +11,8 @@
 // dele no portal não muda.
 
 import { useAuth } from "@/lib/auth";
+import { BotaoSair } from "@/lib/botao-sair";
+import { modoReal } from "@/lib/modo";
 import { AnchorTrocarEmail, usePodeTrocarEmail } from "@/lib/link-conta-de-acesso";
 import { useAtuacao } from "@/lib/use-atuacao";
 import { derivarAtuacao, type AtuacaoVista, type LinhaVotoAtuacao } from "@/lib/atuacao-vista";
@@ -74,13 +76,17 @@ function LinhaVoto({ v }: { v: LinhaVotoAtuacao }) {
 
 function MeuAcesso({ token }: { token: string | null }) {
   const pode = usePodeTrocarEmail(token);
-  if (!pode) return null;
+  // Em modo dev não há sessão a encerrar; em sessão real "Sair" sempre aparece, e o e-mail só para quem tem conta da Casa.
+  if (!modoReal()) return null;
   return (
     <>
       <h2 className="secao-tit">Meu acesso</h2>
-      <p className="acesso">
-        <AnchorTrocarEmail />
-      </p>
+      {pode && (
+        <p className="acesso">
+          <AnchorTrocarEmail />
+        </p>
+      )}
+      <BotaoSair className="btn btn-contorno sair" />
     </>
   );
 }

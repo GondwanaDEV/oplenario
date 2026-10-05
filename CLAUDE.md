@@ -156,6 +156,13 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
   `/entrar`, `/status`, `/api`, `/_next`, `/fontes` e arquivo estático; a raiz e qualquer caminho desconhecido levam
   direto à tela do CPF (com `redirect`, menos a raiz), sem página de passagem. `middleware.test.ts` mede as páginas
   públicas em disco contra a lista. O console do operador segue com a entrada própria.
+- **Sair e sessão que expirou (05/10/2026):** não havia "Sair" em nenhuma tela das Câmaras (só no console do
+  operador). Agora está no menu do avatar do topo interno, no topo da área da cidadã, em "Meu acesso" do vereador e no
+  `/inicio` de quem não tem o topo; é um POST em `/api/auth/logout` (`lib/botao-sair.tsx`). O Keycloak pergunta "Você
+  realmente deseja sair?" porque o logout vai sem `id_token_hint` (o login não guarda token); a sessão do sistema já
+  caiu antes da pergunta. Cookie `sessao` que o backend não reconhece mais (401 em `/eu`) leva a
+  `/api/auth/sessao-expirada`, que confere no backend, apaga os cookies e abre `/entrar` com o destino; com a sessão
+  válida ou o backend fora do ar, não desloga. Antes a pessoa caía no `/inicio` sem papel, sem topo e sem como sair.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:

@@ -24,6 +24,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTema } from "@/lib/tema";
 import { useAuth } from "@/lib/auth";
 import { AnchorTrocarEmail, usePodeTrocarEmail } from "@/lib/link-conta-de-acesso";
+import { BotaoSair } from "@/lib/botao-sair";
+import { modoReal } from "@/lib/modo";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
 import { comToken } from "@/lib/nav";
@@ -277,11 +279,12 @@ export function TopoInterno({ area }: { area: string }) {
   );
 }
 
-/** Avatar + nome + papel de quem está na barra. Onde a pessoa tem conta no Keycloak da Casa (sessão real, login da
- *  Casa), o bloco vira um menu com o caminho para trocar o próprio e-mail de acesso; nos outros casos (modo dev, gov.br,
- *  ainda carregando) fica como era. */
+/** Avatar + nome + papel de quem está na barra. Em sessão real o bloco é um menu com "Sair" e, onde a pessoa tem conta
+ *  no Keycloak da Casa (login da Casa, não gov.br), o caminho para trocar o próprio e-mail de acesso. Em modo dev fica
+ *  só o nome. */
 function QuemMesa({ nome, papel, token }: { nome: string; papel: string; token: string | null }) {
   const temConta = usePodeTrocarEmail(token);
+  const sessaoReal = modoReal();
   const quem = (
     <>
       <span className="avatar" aria-hidden="true">
@@ -293,7 +296,8 @@ function QuemMesa({ nome, papel, token }: { nome: string; papel: string; token: 
       </span>
     </>
   );
-  if (!temConta) return <div className="quem-mesa">{quem}</div>;
+  // Em modo dev não há sessão a encerrar (o token vem da URL); em sessão real o menu sempre existe, com "Sair".
+  if (!sessaoReal) return <div className="quem-mesa">{quem}</div>;
   return (
     <details className="quem-mesa quem-menu">
       <summary>
@@ -301,7 +305,8 @@ function QuemMesa({ nome, papel, token }: { nome: string; papel: string; token: 
         <span className="sr-only">, menu da conta</span>
       </summary>
       <div className="quem-menu-painel">
-        <AnchorTrocarEmail />
+        {temConta && <AnchorTrocarEmail />}
+        <BotaoSair className="quem-sair" />
       </div>
     </details>
   );
