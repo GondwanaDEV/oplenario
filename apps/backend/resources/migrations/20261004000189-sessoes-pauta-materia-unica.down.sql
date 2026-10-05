@@ -1,3 +1,2 @@
--- Desfaz so' o indice. Os itens duplicados que o `.up.sql` retirou (ativo = false, com linha em `pauta_alteracao`)
--- NAO voltam a ficar ativos: reativar item nao existe no sistema, e a trilha append-only nao se reescreve.
+-- Desfaz o indice (a migration nao muta dado, entao nao ha' o que restaurar).
 DROP INDEX IF EXISTS sessoes.uq_pauta_item_materia_ativa;

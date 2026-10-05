@@ -120,6 +120,14 @@
 
 (def ^:private mensagem-materia-ja-na-pauta "Esta matéria já está na pauta desta sessão.")
 
+(defn- materia-ativa-na-pauta?
+  [tx ente-id pauta-sessao-id proposicao-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [1] :from [:sessoes.pauta_item]
+                        :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id]
+                                [:= :proposicao_id proposicao-id] [:= :ativo true]]
+                        :limit 1}))))
+
 (defn adicionar-item!
   "Insere um item na pauta (ordem = max+1) e LOGA inclusao, atomico. Valida fase/tipo-item (fail-closed);
   a coerencia FK-por-tipo (proposicao_id XOR texto_descricao) e' barrada pelo CHECK da migration. Devolve
@@ -127,6 +135,11 @@
   [tx {:keys [id ente-id pauta-sessao-id fase tipo-item proposicao-id texto-descricao created-by]}]
   (logic/validar-fase fase)
   (logic/validar-tipo-item tipo-item)
+  ;; item ANTIGO (anterior ao corte do indice, mig 20261004000189) nao esta no indice: a checagem em codigo cobre
+  ;; "a materia ja existe num item ativo desta pauta". O indice segue decidindo a corrida entre dois INSERTs novos.
+  (when (and proposicao-id (materia-ativa-na-pauta? tx ente-id pauta-sessao-id proposicao-id))
+    (throw (ex-info mensagem-materia-ja-na-pauta
+                    {:tipo :conflito/pauta-materia-duplicada :proposicao-id proposicao-id})))
   (let [ordem (proxima-ordem tx ente-id pauta-sessao-id)]
     (try
       (jdbc/execute-one! tx

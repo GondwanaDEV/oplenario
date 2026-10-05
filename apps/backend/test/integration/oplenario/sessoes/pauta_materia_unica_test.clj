@@ -5,7 +5,8 @@
   Prova: (1) o HTTP devolve 409 em portugues, nunca 500; (2) a CORRIDA — dois pedidos simultaneos da mesma materia,
   um passa e o outro recebe o conflito (a garantia e' do indice, nao de uma checagem em codigo); (3) o que e'
   legitimo continua passando (item retirado volta, outra materia, a mesma materia em outra sessao, itens de texto
-  repetidos, reordenar); (4) a migration SOBREVIVE a duplicata ja' existente: retira o excedente com log, nao apaga."
+  repetidos, reordenar); (4) a migration NAO muta dado: duplicata LEGADA (anterior ao corte do indice) fica intacta, o indice e'
+  criado mesmo assim, e a materia que so' existe num item legado e' barrada pela checagem em codigo (409)."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
@@ -158,53 +159,65 @@
                                       VALUES (gen_random_uuid(), ?, ?, 'ordem_do_dia', 'proposicao', ?, 9, now())"
                                      ente pid prop])))))))
 
-;; ---------- 3. a migration sobrevive a duplicata ja' existente ----------
+;; ---------- 3. a migration NAO muta dado: duplicata LEGADA fica como esta' ----------
 
 (defn- statements-da-migration []
   (->> (str/split (slurp (io/resource "migrations/20261004000189-sessoes-pauta-materia-unica.up.sql")) #"--;;")
        (map str/trim)
        (remove str/blank?)))
 
-(deftest a-migration-retira-o-excedente-sem-apagar-nada
-  (let [ente (random-uuid) sid (sessao! ente) dup (random-uuid) unica (random-uuid)
-        ;; transacoes separadas: criado_em cresce, e o "mais antigo" e' bem definido
-        item! (fn [prop]
-                (let [id (random-uuid)]
-                  (tenancy/com-tenant* *ds* ente
-                    #(pauta/adicionar-item! % {:id id :ente-id ente
-                                               :pauta-sessao-id (:id (pauta/garantir-pauta! % {:ente-id ente :sessao-id sid}))
-                                               :fase "ordem_do_dia" :tipo-item "proposicao" :proposicao-id prop}))
-                  id))]
-    ;; estado "de antes": sem o indice
+(defn- aplicar-migration! []
+  (jdbc/with-transaction [tx *ds*]
+    (doseq [s (statements-da-migration)] (jdbc/execute-one! tx [s]))))
+
+(defn- legado!
+  "Item ANTERIOR ao corte do indice (criado_em 2026-09-01), inserido por fora de `adicionar-item!` — como os que
+  ja' existem em bases antigas. `ativo` explicito."
+  [ente sid prop ativo]
+  (let [id (random-uuid)]
+    (tenancy/com-tenant* *ds* ente
+      #(jdbc/execute-one! % ["INSERT INTO sessoes.pauta_item (id, ente_id, pauta_sessao_id, fase, tipo_item,
+                                                               proposicao_id, ordem, ativo, efetivado_em, criado_em)
+                              VALUES (?, ?, ?, 'ordem_do_dia', 'proposicao', ?, 1, ?, now(), timestamptz '2026-09-01 12:00:00+00')"
+                             id ente (:id (pauta/garantir-pauta! % {:ente-id ente :sessao-id sid})) prop ativo]))
+    id))
+
+(defn- estado-das-linhas [ente]
+  (tenancy/com-tenant* *ds* ente
+    (fn [tx]
+      {:itens (jdbc/execute! tx ["SELECT id, ativo, lock_version, atualizado_em, ordem FROM sessoes.pauta_item
+                                   WHERE ente_id = ? ORDER BY id" ente] sem-qualificar)
+       :alteracoes (:n (jdbc/execute-one! tx ["SELECT count(*) AS n FROM sessoes.pauta_alteracao WHERE ente_id = ?" ente]
+                                          sem-qualificar))})))
+
+(defn- indice-existe? []
+  (some? (jdbc/execute-one! *ds* ["SELECT 1 FROM pg_indexes WHERE schemaname = 'sessoes'
+                                    AND indexname = 'uq_pauta_item_materia_ativa'"])))
+
+(deftest a-migration-nao-altera-duplicata-legada-e-cria-o-indice
+  (let [ente (random-uuid) sid (sessao! ente) dup (random-uuid)]
+    ;; estado "de antes": sem o indice, com a materia duplicada em itens legados (e um retirado)
     (jdbc/execute-one! *ds* ["DROP INDEX IF EXISTS sessoes.uq_pauta_item_materia_ativa"])
     (try
-      (let [a (item! dup) b (item! dup) c (item! dup) u (item! unica)]
-        (jdbc/with-transaction [tx *ds*]
-          (doseq [s (statements-da-migration)] (jdbc/execute-one! tx [s])))
-        (let [linhas (tenancy/com-tenant* *ds* ente
-                       #(jdbc/execute! % ["SELECT id, ativo FROM sessoes.pauta_item WHERE ente_id = ?" ente] sem-qualificar))
-              ativo? (into {} (map (juxt :id :ativo)) linhas)
-              alts   (tenancy/com-tenant* *ds* ente
-                       #(jdbc/execute! % ["SELECT pauta_item_id, tipo, justificativa, detalhe::text AS detalhe
-                                             FROM sessoes.pauta_alteracao
-                                            WHERE ente_id = ? AND tipo = 'exclusao'" ente] sem-qualificar))]
-          (is (= 4 (count linhas)) "nenhuma linha foi apagada")
-          (is (= {a true b false c false u true} ativo?) "fica o mais antigo de cada grupo; a materia unica nao muda")
-          (is (= #{b c} (into #{} (map :pauta_item_id) alts)) "cada retirada deixou rastro")
-          (is (every? #(= "exclusao" (:tipo %)) alts))
-          (is (every? #(str/includes? (:detalhe %) (str a)) alts) "o rastro aponta o item mantido")
-          (is (every? #(str/includes? (:justificativa %) "20261004000189") alts))
-          (testing "o indice voltou, e vale"
-            (is (= :conflito/pauta-materia-duplicada
-                   (try (item! dup) nil (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e)))))))
-          (testing "o FORCE ROW LEVEL SECURITY voltou nas duas tabelas"
-            (is (= [true true]
-                   (mapv :relforcerowsecurity
-                         (jdbc/execute! *ds* ["SELECT relname, relforcerowsecurity FROM pg_class
-                                                WHERE oid IN ('sessoes.pauta_item'::regclass, 'sessoes.pauta_alteracao'::regclass)
-                                                ORDER BY relname DESC"] sem-qualificar)))))))
-      (finally
-        ;; garante o estado final (indice presente) mesmo se um assert acima derrubar o corpo
-        (jdbc/execute-one! *ds* ["CREATE UNIQUE INDEX IF NOT EXISTS uq_pauta_item_materia_ativa
-                                   ON sessoes.pauta_item (ente_id, pauta_sessao_id, proposicao_id)
-                                   WHERE ativo AND proposicao_id IS NOT NULL"])))))
+      (legado! ente sid dup true) (legado! ente sid dup true) (legado! ente sid dup true) (legado! ente sid (random-uuid) false)
+      (let [antes (estado-das-linhas ente)]
+        (is (= 4 (count (:itens antes))))
+        (aplicar-migration!)
+        (is (indice-existe?) "o CREATE INDEX nao falha numa base com duplicata legada")
+        (is (= antes (estado-das-linhas ente))
+            "nenhuma linha mudou (ativo, lock_version, atualizado_em), nenhuma foi apagada, e nenhuma linha nova em pauta_alteracao")
+        (is (= 3 (count (filter :ativo (:itens (estado-das-linhas ente))))) "as 3 duplicatas legadas seguem ativas"))
+      (finally (aplicar-migration!)))))
+
+(deftest materia-que-so-existe-num-item-legado-da-409
+  (let [ente (random-uuid) sid (sessao! ente) prop (random-uuid)]
+    (legado! ente sid prop true)
+    (is (indice-existe?))
+    (let [r (incluir ente sid prop)]
+      (is (= 409 (:status r)) "o indice nao ve o item antigo; quem barra e' a checagem em codigo")
+      (is (= "Esta matéria já está na pauta desta sessão." (get-in r [:corpo :erro]))))
+    (is (= 1 (count (ativos ente sid))) "nada novo entrou")
+    (testing "retirado o legado, a materia pode voltar"
+      (tenancy/com-tenant* *ds* ente
+        #(jdbc/execute-one! % ["UPDATE sessoes.pauta_item SET ativo = false WHERE ente_id = ? AND proposicao_id = ?" ente prop]))
+      (is (= 201 (:status (incluir ente sid prop)))))))
