@@ -235,7 +235,7 @@
    de tema escuro que existia logo abaixo. */
 .anel-c .arco { fill: none; stroke: var(--marca); stroke-width: 7; }
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
-.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: tabular-nums; }
+.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); font-variant-numeric: var(--numero-destaque); }
 .anel-c .u { font-family: var(--mono); font-size: var(--t-11); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
 
 .pedido { display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: center; background: var(--bg); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.15rem; }
@@ -436,7 +436,7 @@
 
 .nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8rem; margin: 1.2rem 0 0; }
 .num-card { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.1rem; }
-.num-card b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+.num-card b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .num-card span { font-size: var(--t-13); color: var(--texto-2); display: block; margin-top: 0.3rem; }
 .num-card .nota { font-size: var(--t-12); color: var(--texto-2); }
 
@@ -445,7 +445,7 @@
 .perfil-presenca .presenca-bloco { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1.1rem 1.2rem; }
 .presenca-titulo { font-family: var(--display); font-size: var(--t-16); color: var(--texto); margin: 0; }
 .presenca-texto { font-size: var(--t-16); color: var(--texto); line-height: 1.5; margin: 0.4rem 0 0; }
-.presenca-fracao { font-family: var(--display); font-size: var(--t-28); color: var(--texto); margin: 0; line-height: 1; font-variant-numeric: tabular-nums; }
+.presenca-fracao { font-family: var(--display); font-size: var(--t-28); color: var(--texto); margin: 0; line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .presenca-fracao b { font-weight: 800; }
 .presenca-fracao span { font-family: var(--corpo); font-size: var(--t-16); font-weight: 400; color: var(--texto-2); }
 .presenca-frase { font-size: var(--t-13); color: var(--texto-2); line-height: 1.55; margin: 0.6rem 0 0; }
