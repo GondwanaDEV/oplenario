@@ -144,6 +144,61 @@
       (is (true? (:ordem-unica r)))
       (is (= ["unica"] (chaves (:etapas r)))))))
 
+;; ---- o significado de `ordem` (migration 20261005000261): 0 = nao declarada; > 0 = posicao da etapa na linha do
+;; rito, UNICA entre as etapas (nao terminais). Desfecho (terminal) nao entra na linha, entao a `ordem` dele nao conta.
+
+(deftest ordem-declarada-vence-quando-a-topologia-nao-da-linha
+  (let [t-devolucao (conj transicoes-linear (tr "plenario_unico" "instrucao"))]
+    (testing "com devolucao (ciclo) a topologia nao tem ordem unica: SO' a ordem declarada desenha a linha"
+      (let [sem-ordem (rito-de {:estados (mapv #(assoc % :ordem 0) estados-linear) :transicoes t-devolucao})
+            com-ordem (rito-de {:transicoes t-devolucao})]
+        (is (false? (:ordem-unica sem-ordem)) "sem ordem declarada o ciclo nao tem linha")
+        (is (= [] (:etapas sem-ordem)))
+        (is (true? (:ordem-unica com-ordem)))
+        (is (= ["entrada" "instrucao" "plenario_unico"] (chaves (:etapas com-ordem))))))
+    (testing "a ordem declarada decide a ORDEM DE LEITURA: a linha sai pela `ordem`, nao pela ordem em que as etapas chegam"
+      (let [embaralhados [(est "plenario_unico" "Plenário único" 3) (est "entrada" "Entrada" 1)
+                          (est "promulgada" "Promulgada" 4 true) (est "instrucao" "Instrução" 2)
+                          (est "rejeitada" "Rejeitada" 5 true)]
+            r (rito-de {:estados embaralhados :transicoes t-devolucao})]
+        (is (= ["entrada" "instrucao" "plenario_unico"] (chaves (:etapas r))))))))
+
+(deftest ordem-repetida-entre-etapas-nao-conta-como-declarada
+  (testing "duas etapas com a mesma ordem > 0: a coluna nao distingue, vale a topologia (que aqui e' unica)"
+    (let [repetidos [(est "entrada" "Entrada" 1) (est "instrucao" "Instrução" 2) (est "plenario_unico" "Plenário único" 2)
+                     (est "promulgada" "Promulgada" 3 true) (est "rejeitada" "Rejeitada" 4 true)]
+          r (rito-de {:estados repetidos})]
+      (is (true? (:ordem-unica r)))
+      (is (= ["entrada" "instrucao" "plenario_unico"] (chaves (:etapas r))))))
+  (testing "o mesmo vale com devolucao: sem ordem distinta e sem topologia unica, nao ha' linha"
+    (let [repetidos [(est "entrada" "Entrada" 1) (est "instrucao" "Instrução" 2) (est "plenario_unico" "Plenário único" 2)
+                     (est "promulgada" "Promulgada" 3 true) (est "rejeitada" "Rejeitada" 4 true)]
+          r (rito-de {:estados repetidos :transicoes (conj transicoes-linear (tr "plenario_unico" "instrucao"))})]
+      (is (false? (:ordem-unica r)))
+      (is (= [] (:etapas r))))))
+
+(deftest ordem-dos-desfechos-nao-atrapalha-a-linha
+  (testing "terminais com a mesma ordem (ou 0) nao invalidam a ordem declarada das etapas"
+    (let [estados [(est "entrada" "Entrada" 1) (est "instrucao" "Instrução" 2) (est "plenario_unico" "Plenário único" 3)
+                   (est "promulgada" "Promulgada" 0 true) (est "rejeitada" "Rejeitada" 0 true)]
+          r (rito-de {:estados estados :transicoes (conj transicoes-linear (tr "plenario_unico" "instrucao"))})]
+      (is (true? (:ordem-unica r)) "a linha vem da ordem declarada: so' ela resolve o ciclo")
+      (is (= ["entrada" "instrucao" "plenario_unico"] (chaves (:etapas r)))))))
+
+(deftest ordem-repetida-aponta-quem-repete
+  (testing "so' etapa (nao terminal) com ordem > 0 conta; 0 e' 'nao declarada' e se repete a vontade"
+    (is (= [] (rito/ordem-repetida estados-linear)))
+    (is (= [] (rito/ordem-repetida [(est "a" "A" 0) (est "b" "B" 0) (est "fim" "Fim" 0 true)])))
+    (is (= [] (rito/ordem-repetida [(est "a" "A" 1) (est "fim" "Fim" 1 true) (est "arq" "Arq" 1 true)]))
+        "terminal nao entra na linha: a ordem dele nao colide com a de etapa nenhuma")
+    (is (= [] (rito/ordem-repetida [{:chave "a" :nome "A" :terminal false} {:chave "b" :nome "B" :terminal false}]))
+        "ordem ausente = nao declarada")
+    (is (= [{:ordem 2 :chaves ["instrucao" "plenario_unico"]}]
+           (rito/ordem-repetida [(est "entrada" "Entrada" 1) (est "instrucao" "Instrução" 2)
+                                 (est "plenario_unico" "Plenário único" 2) (est "promulgada" "Promulgada" 3 true)])))
+    (is (= [{:ordem 1 :chaves ["a" "b"]} {:ordem 2 :chaves ["c" "d"]}]
+           (rito/ordem-repetida [(est "a" "A" 1) (est "b" "B" 1) (est "c" "C" 2) (est "d" "D" 2)])))))
+
 ;; o rito ordinario REAL da Casa de demonstracao (demo/acervo.clj `estados-rito` + `transicoes-rito`): dois
 ;; desfechos terminais e uma saida de arquivamento logo no inicio — o grafo NAO e' uma reta, mas as etapas sao.
 (def ^:private estados-demo

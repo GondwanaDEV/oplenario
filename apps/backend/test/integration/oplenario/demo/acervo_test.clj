@@ -16,7 +16,100 @@
             [oplenario.identidade.components.repositorio :as repo-identidade]
             [oplenario.legislativo.components.repositorio :as repo-legislativo]
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
-            [oplenario.legislativo.logic :as legislativo.logic]))
+            [oplenario.kernel.tenancy :as tenancy]
+            [oplenario.legislativo.db.tramitacao :as tram]
+            [oplenario.legislativo.logic :as legislativo.logic]
+            [oplenario.legislativo.logic.rito :as rito]
+            [oplenario.kernel.db-util :as comum]
+            [next.jdbc :as jdbc]
+            [honey.sql :as sql]
+            [seed-demo]))
+
+;; `template_estado.ordem` (migration 20261005000261): o rito que a Casa recebe NASCE aqui (nenhuma rota, tela ou
+;; provisionamento cria estado de rito); entao e' aqui que se prova que ele declara a ordem da linha, em vez de deixar
+;; a faixa "Onde esta a materia" depender so' da topologia das transicoes.
+(defn- ordem-da-linha-principal
+  "Problemas (lista de textos; vazia = ok) da `ordem` de um rito `{:estado-inicial :estados :transicoes}`."
+  [{:keys [estado-inicial estados transicoes]}]
+  (let [etapas (remove :terminal estados)
+        desfechos (filter :terminal estados)
+        por-ordem (sort-by :ordem etapas)
+        ordem-de (into {} (map (juxt :chave :ordem)) etapas)
+        max-etapa (apply max 0 (map :ordem etapas))]
+    (concat
+     (when (empty? etapas) ["rito sem etapa"])
+     (for [e etapas :when (not (pos? (or (:ordem e) 0)))] (str "etapa sem ordem declarada: " (:chave e)))
+     (for [{:keys [ordem chaves]} (rito/ordem-repetida estados)] (str "ordem " ordem " repetida em " chaves))
+     (when (and (seq por-ordem) (not= estado-inicial (:chave (first por-ordem))))
+       [(str "o estado inicial " estado-inicial " nao tem a menor ordem")])
+     (for [e desfechos :when (<= (or (:ordem e) 0) max-etapa)] (str "desfecho antes do ultimo passo: " (:chave e)))
+     ;; a linha principal avanca de um em um: cada transicao entre etapas vai ao proximo ou volta
+     (for [{:keys [de-estado para-estado]} transicoes
+           :when (and (contains? ordem-de de-estado) (contains? ordem-de para-estado))
+           :let [de (ordem-de de-estado) para (ordem-de para-estado)]
+           :when (> para (inc de))]
+       (str "transicao salta etapa: " de-estado " -> " para-estado)))))
+
+(defn- chaves-da-linha [{:keys [estado-inicial estados transicoes]} atual]
+  (mapv :chave (:etapas (rito/rito-da-materia {:estado-inicial estado-inicial :estados estados :transicoes transicoes
+                                               :atual atual :tramitacao [] :tramitacao-truncado false}))))
+
+(deftest ordem-da-linha-principal-reprova-o-que-a-regra-proibe
+  (let [est (fn [chave ordem terminal] {:chave chave :nome chave :ordem ordem :terminal terminal})
+        bom {:estado-inicial "a" :estados [(est "a" 1 false) (est "b" 2 false) (est "fim" 3 true)]
+             :transicoes [{:de-estado "a" :para-estado "b"} {:de-estado "b" :para-estado "fim"}]}]
+    (is (empty? (ordem-da-linha-principal bom)) "o instrumento aceita o rito bom (senao nao prova nada)")
+    (is (some #(re-find #"sem ordem declarada" %)
+              (ordem-da-linha-principal (assoc bom :estados [(est "a" 0 false) (est "b" 0 false) (est "fim" 3 true)]))))
+    (is (some #(re-find #"repetida" %)
+              (ordem-da-linha-principal (assoc bom :estados [(est "a" 1 false) (est "b" 1 false) (est "fim" 3 true)]))))
+    (is (some #(re-find #"menor ordem" %)
+              (ordem-da-linha-principal (assoc bom :estados [(est "a" 2 false) (est "b" 1 false) (est "fim" 3 true)]))))
+    (is (some #(re-find #"desfecho antes" %)
+              (ordem-da-linha-principal (assoc bom :estados [(est "a" 1 false) (est "b" 3 false) (est "fim" 2 true)]))))
+    (is (some #(re-find #"salta etapa" %)
+              (ordem-da-linha-principal
+               {:estado-inicial "a"
+                :estados [(est "a" 1 false) (est "b" 2 false) (est "c" 3 false) (est "fim" 4 true)]
+                :transicoes [{:de-estado "a" :para-estado "b"} {:de-estado "a" :para-estado "c"}]})))))
+
+(deftest os-templates-da-demo-declaram-a-ordem-da-linha
+  (with-sistema [s]
+    (let [{:keys [ente identidades]} (casa/semear! s)
+          _ (acervo/semear! s ente (:vereador identidades))
+          ds (get-in s [:datasource :ds])
+          ritos (tenancy/com-tenant* ds ente
+                  (fn [tx]
+                    (let [ts (comum/linhas->kebab
+                              (jdbc/execute! tx (sql/format {:select [:id :chave]
+                                                             :from [:legislativo.template_tramitacao]
+                                                             :where [:and [:= :ente_id ente]
+                                                                     [:in :chave ["rito_ordinario"
+                                                                                  "parecer_comissao_permanente"]]]})))]
+                      (mapv (fn [{:keys [id chave]}] (assoc (tram/rito-do-template tx ente id) :chave chave))
+                            ts))))]
+      (testing "a demo instala o rito da materia E o do parecer (senao o teste nao prova nada)"
+        (is (= #{"rito_ordinario" "parecer_comissao_permanente"} (set (map :chave ritos)))))
+      (doseq [r ritos]
+        (testing (str "rito " (:chave r))
+          (is (empty? (ordem-da-linha-principal r))
+              "estados com ordem declarada, distinta e crescente na linha principal")
+          (testing "a ordem declarada e a topologia contam a MESMA linha (a ordem nao contradiz o que a engine executa)"
+            (let [ultima (:chave (last (sort-by :ordem (remove :terminal (:estados r)))))
+                  zerados (update r :estados (partial mapv #(assoc % :ordem 0)))]
+              (is (seq (chaves-da-linha r ultima)))
+              (is (= (chaves-da-linha r ultima) (chaves-da-linha zerados ultima))))))))))
+
+(deftest o-rito-fixture-do-portal-declara-a-ordem-da-linha
+  ;; seed-demo/materias: o rito [FIXTURE] que alimenta o portal na demo. Nao passa pelo banco neste teste: e' o dado
+  ;; que a semente grava, lido da mesma definicao que ela usa.
+  (let [estados @#'seed-demo/rito-fixture-estados
+        transicoes (mapv (fn [[de para]] {:de-estado de :para-estado para}) @#'seed-demo/rito-fixture-transicoes)
+        r {:estado-inicial "protocolada" :estados estados
+           :transicoes (conj transicoes {:de-estado "protocolada" :para-estado "arquivada"})}]
+    (is (empty? (ordem-da-linha-principal r)))
+    (is (= ["protocolada" "em_comissoes" "em_pauta" "segundo_turno" "em_sancao" "aprovada"]
+           (chaves-da-linha r "aprovada")))))
 
 (deftest acervo-usa-vocabulario-real-e-cobre-o-rito-que-instala
   (with-sistema [s]
