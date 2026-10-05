@@ -124,7 +124,7 @@ export function TopoInterno({ area }: { area: string }) {
   const papel =
     estado === "pronto" && dados ? rotuloPapel(dados.papeis) : estado === "carregando" ? "" : "indisponível";
   return (
-    <header className="topo">
+    <header className="topo topo-interno">
       <div className="envelope topo-grade">
         <div className="marca">
           <Brasao />

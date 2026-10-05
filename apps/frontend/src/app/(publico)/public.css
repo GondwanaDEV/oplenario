@@ -194,7 +194,8 @@
 .mais-trami .i-feito { background: var(--marca); border-radius: 50%; }
 
 /* ============== 4 · BALCÕES DE DIREITO (e-SIC + LGPD) ============== */
-.balcoes { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 2.4vw, 1.6rem); }
+/* minmax(0, …): com `1fr` puro a coluna não encolhe abaixo do conteúdo, e a 320 px o balcão passava 1 px da tela. */
+.balcoes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(1rem, 2.4vw, 1.6rem); }
 .balcao { background: var(--surface); border: 1px solid var(--linha); border-radius: var(--raio-lg); box-shadow: var(--sombra); padding: clamp(1.3rem, 3vw, 1.9rem); display: flex; flex-direction: column; }
 .balcao > .eyebrow { margin-bottom: 0.5rem; }
 .balcao-esic > .eyebrow { color: var(--acento-texto); }
@@ -328,7 +329,7 @@
 }
 @media (max-width: 720px) {
   .capa-grade { grid-template-columns: 1fr; }
-  .balcoes { grid-template-columns: 1fr; }
+  .balcoes { grid-template-columns: minmax(0, 1fr); }
   .rodape-grade { grid-template-columns: 1fr; }
   .pedido { grid-template-columns: 1fr; }
 }
