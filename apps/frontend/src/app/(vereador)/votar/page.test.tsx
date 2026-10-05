@@ -6,7 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 // mockados — não são o que se testa aqui, e cada um tem teste próprio.
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ token: "tok" }) }));
 vi.mock("@/lib/use-minha-sessao-atual", () => ({
-  useMinhaSessaoAtual: () => ({ sessaoId: "s1", situacao: "em_curso", estado: "pronto" }),
+  useMinhaSessaoAtual: () => ({ sessaoId: "s1", situacao: "em_curso", sessoesVivas: [], estado: "pronto" }),
 }));
 vi.mock("@/lib/use-meu-painel", () => ({
   useMeuPainel: () => ({ dados: { vereadorId: "v-eu" }, estado: "pronto", recarregar: () => {} }),

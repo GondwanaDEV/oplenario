@@ -367,14 +367,14 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
 - **Pauta:** a mesma matéria não entra duas vezes ativa na pauta de uma sessão (409). O índice único vale para itens
   criados depois da migration; os antigos são cobertos por checagem em código e não foram alterados.
 - **Telão:** o placar nominal mostra o nome parlamentar, nunca o prefixo do UUID.
+- **Cockpit com duas sessões em curso:** `/votar` abre a aberta mais recente e oferece a troca para a outra (`?sessao=`);
+  `GET /meu/sessao-atual` lista `sessoes-vivas`. A Trilha 3 abre o cockpit com a sessão explícita.
 - **Dashboard da Mesa:** "em tramitação" vem do rito (`template_estado.terminal`, levado pelo evento
   `proposicao.transicionou`); a sessão em curso aparece primeiro, com a hora no fuso da Casa; as remessas ao TCE
   aparecem no card de compliance.
 - **Votos:** `votos.vereador_id` segue sem FK (ADR-0001 §6 proíbe FK entre schemas); a integridade é a recusa na
   aplicação, provada com Postgres real, mais um CHECK contra UUID nulo.
 - **Falta:**
-  - o cockpit com duas sessões vivas ainda abre a mais antiga (o conserto por data reprovou a Trilha 3 e foi desfeito;
-    depende de o evento de sessão carregar o tipo);
   - voto nominal em sessão secreta sai no CSV de dados abertos e no perfil público do vereador;
   - trocar o e-mail de quem já tem conta (o reconvite vai para o e-mail antigo);
   - a lista de leis corta em 200 sem paginar; a ficha da matéria não leva às votações dela;

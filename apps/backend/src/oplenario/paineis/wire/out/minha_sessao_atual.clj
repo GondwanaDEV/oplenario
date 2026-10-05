@@ -4,7 +4,16 @@
   ordenada 'em curso primeiro', mesmo contrato de GET /paineis/sli/sessoes). Sem sessao viva -> ambos nil,
   200 (ausencia de sessao e' um ESTADO, nao um erro).")
 
+(def SessaoVivaOut
+  [:map {:closed true}
+   [:sessao-id :string]
+   [:situacao :string]
+   [:aberta-em [:maybe :string]]])
+
 (def MinhaSessaoAtualOut
+  "`sessao-id`/`situacao` = a sessao que o cockpit abre por padrao; `sessoes-vivas` = todas as vivas (a padrao
+  inclusa), para o vereador trocar quando ha' mais de uma em curso."
   [:map {:closed true}
    [:sessao-id {:optional true} [:maybe :string]]
-   [:situacao {:optional true} [:maybe :string]]])
+   [:situacao {:optional true} [:maybe :string]]
+   [:sessoes-vivas [:vector SessaoVivaOut]]])

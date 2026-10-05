@@ -93,6 +93,39 @@
     (is (= 200 (:status r)))
     (is (nil? (:sessao-id body)) "'agendada' nao conta como 'sessao atual' — so' aberta/suspensa contam")))
 
+(defn- viva [estado aberta-em]
+  {:sessao-id (random-uuid) :estado-atual estado
+   :aberta-em (some-> aberta-em Instant/parse) :transicionou-em (some-> aberta-em Instant/parse) :encerrada-em nil})
+
+(deftest minha-sessao-duas-vivas-abre-a-mais-recente-e-lista-as-duas
+  ;; docs/16, retriagem linha 12: o sli ordena a aberta MAIS ANTIGA primeiro (bom para a Mesa achar a travada);
+  ;; o cockpit tem de abrir a de agora e deixar o vereador trocar.
+  (let [antiga (viva "aberta" "2026-07-01T13:00:00Z")
+        nova (viva "aberta" "2026-07-01T18:00:00Z")
+        r (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [antiga nova]))
+                           :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= (str (:sessao-id nova)) (:sessao-id body)) "a padrao e' a aberta mais recente, nao a mais antiga")
+    (is (= [(str (:sessao-id nova)) (str (:sessao-id antiga))] (mapv :sessao-id (:sessoes-vivas body)))
+        "as duas vivas vao na resposta, a padrao primeiro")
+    (is (= "2026-07-01T18:00:00Z" (:aberta-em (first (:sessoes-vivas body)))))))
+
+(deftest minha-sessao-aberta-vence-suspensa-mais-nova
+  (let [aberta (viva "aberta" "2026-07-01T13:00:00Z")
+        suspensa (viva "suspensa" "2026-07-01T18:00:00Z")
+        body (ler-json (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [aberta suspensa]))
+                                        :get "/meu/sessao-atual"
+                                        :headers (com-bearer (token (random-uuid) (random-uuid)))))]
+    (is (= (str (:sessao-id aberta)) (:sessao-id body)) "na suspensa nao se vota agora")
+    (is (= ["em_curso" "suspensa"] (mapv :situacao (:sessoes-vivas body))))))
+
+(deftest minha-sessao-sem-viva-lista-vazia
+  (let [body (ler-json (pt/response-for (service-fn #{"vereador"} (fake-repo-paineis [(sessao-agendada)]))
+                                        :get "/meu/sessao-atual"
+                                        :headers (com-bearer (token (random-uuid) (random-uuid)))))]
+    (is (= [] (:sessoes-vivas body)) "agendada nao entra na lista de vivas")))
+
 (deftest minha-sessao-sem-papel-vereador-403
   (let [r (pt/response-for (service-fn #{"secretario"} (fake-repo-paineis [(sessao-em-curso)]))
                            :get "/meu/sessao-atual" :headers (com-bearer (token (random-uuid) (random-uuid))))]
