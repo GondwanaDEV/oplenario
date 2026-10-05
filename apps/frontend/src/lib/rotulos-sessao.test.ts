@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
+import { nomeFase, nomeTipoFala, nomeTipoSessao, nomeDaSessao } from "./rotulos-sessao";
 
 describe("nomeTipoSessao — o tipo da sessao no cabecalho do telao", () => {
   // Valores da FONTE — CHECK de `sessoes.sessao.tipo_sessao`:
@@ -78,5 +78,20 @@ describe("nomeTipoFala — o tipo da fala na tribuna", () => {
   it("nulo/vazio -> string vazia", () => {
     expect(nomeTipoFala(null)).toBe("");
     expect(nomeTipoFala(undefined)).toBe("");
+  });
+});
+
+describe("nomeDaSessao — o nome da sessao numerada em todas as telas", () => {
+  it("sessao comum: numero ordinal + Sessao + tipo com inicial maiuscula", () => {
+    expect(nomeDaSessao(15, "ordinaria")).toBe("15ª Sessão Ordinária");
+    expect(nomeDaSessao(2, "extraordinaria")).toBe("2ª Sessão Extraordinária");
+  });
+
+  it("audiencia publica nao vira 'Sessao Audiencia publica': e' o nome do cabecalho da Mesa", () => {
+    expect(nomeDaSessao(2, "audiencia_publica")).toBe("Audiência pública nº 2");
+  });
+
+  it("tipo desconhecido sai pela chave, sem sumir", () => {
+    expect(nomeDaSessao(1, "itinerante")).toBe("1ª Sessão Itinerante");
   });
 });

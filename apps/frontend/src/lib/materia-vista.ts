@@ -12,6 +12,7 @@
 // maiúsculas (nunca lança, nunca inventa uma sigla plausível para algo desconhecido).
 
 import type { MateriaOut } from "./contrato-portal.gen";
+import { categoriaDoDesfecho } from "./desfecho-vista";
 import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
 
 const SIGLA_POR_TIPO: Record<string, string> = {
@@ -58,8 +59,29 @@ function paraVista(m: MateriaOut): MateriaVista {
 //      aponta "Proposições" pra cá) e escolhia so' 1+3 de até 200 vindos do backend, SEM contagem nenhuma.
 //      MESMA ordem (ano DESC, sequencial DESC) de `listar-em-tramitacao` — por isso o MESMO texto ("da
 //      numeração mais alta para a mais baixa") vale aqui.
-const truncamentoTramitacao = (mostradas: number, total: number) =>
-  `Mostrando ${mostradas} de ${total} matérias, da numeração mais alta para a mais baixa.`;
+// "Em tramitação agora" não mostra matéria que já saiu do rito: arquivada, rejeitada, retirada ou aprovada sem ato
+// depois do plenário, e a que virou lei ou teve o veto mantido. Antes a seção pegava as 4 mais recentes, e a capa
+// abria com uma matéria arquivada sob o título "Em tramitação agora". À espera do Executivo ou com o veto por apreciar
+// ainda tramita (a categoria "tram" do desfecho).
+const ESTADOS_FORA_DA_TRAMITACAO = new Set(["aprovada", "arquivada", "rejeitada", "retirada", "prejudicada"]);
+
+export function emTramitacao(m: Pick<MateriaOut, "estado" | "desfecho">): boolean {
+  const categoria = categoriaDoDesfecho(m.desfecho);
+  if (categoria) return categoria === "tram";
+  return !ESTADOS_FORA_DA_TRAMITACAO.has(m.estado);
+}
+
+// O total: com a lista inteira na mão (o backend manda até 200), conta-se as que tramitam; com a lista cortada, não se
+// sabe quantas tramitam, e o texto diz só o total da Casa, que é o campo autoritativo (regra 4, nunca deduzido).
+const truncamentoTramitacao = (mostradas: number, emCurso: number, total: number, completa: boolean): string | null => {
+  if (completa) {
+    return emCurso > mostradas
+      ? `Mostrando ${mostradas} de ${emCurso} matérias em tramitação, da numeração mais alta para a mais baixa.`
+      : null;
+  }
+  const quais = mostradas === 1 ? "1 matéria" : `${mostradas} matérias`;
+  return `Mostrando ${quais} em tramitação, das ${total} da Casa no portal, da numeração mais alta para a mais baixa.`;
+};
 
 export function escolherDestaque(
   itens: MateriaOut[],
@@ -69,16 +91,16 @@ export function escolherDestaque(
   maisTramitacao: MateriaVista[];
   truncamento: string | null;
 } {
-  if (itens.length === 0) return { destaque: null, maisTramitacao: [], truncamento: null };
-  const [primeiro, ...resto] = itens;
+  const emCurso = itens.filter(emTramitacao);
+  if (emCurso.length === 0) return { destaque: null, maisTramitacao: [], truncamento: null };
+  const [primeiro, ...resto] = emCurso;
   const maisTramitacao = resto.slice(0, 3).map(paraVista);
   const mostradas = 1 + maisTramitacao.length;
   return {
     destaque: paraVista(primeiro),
     maisTramitacao,
-    // `materiasTotal` (regra 4): SEMPRE o campo autoritativo do backend, NUNCA `itens.length` (que já vem
-    // capado em 200 pelo backend) nem qualquer dedução client-side — a comparação certa é contra o total
-    // real, senão uma Casa com 250 matérias exibiria "mostrando 4" sem nunca dizer de quantas.
-    truncamento: materiasTotal > mostradas ? truncamentoTramitacao(mostradas, materiasTotal) : null,
+    // `materiasTotal` (regra 4): o campo autoritativo do backend decide se a lista veio inteira; `itens.length` já
+    // vem capado em 200, então só serve de total quando o backend diz que não há mais nada.
+    truncamento: truncamentoTramitacao(mostradas, emCurso.length, materiasTotal, materiasTotal <= itens.length),
   };
 }

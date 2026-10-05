@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import type { VotacaoDetalheOut, VotacaoPublicaOut, VotacoesPublicasOut } from "@/lib/contrato-portal.gen";
 import { buscarPublicoComConsulta } from "@/lib/portal-api";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { nomeTipoSessao } from "@/lib/rotulos-sessao";
+import { nomeDaSessao } from "@/lib/rotulos-sessao";
 import { formatarData, formatarHora } from "@/lib/formatar-data";
 import {
   nomeModalidade,
@@ -52,7 +52,7 @@ function titulo(v: Cabecalho): string {
 }
 
 function tituloSessao(s: VotacaoPublicaOut["sessao"]): string {
-  return `${s.numeroSequencial}ª Sessão ${nomeTipoSessao(s.tipoSessao).replace(/^./, (c) => c.toUpperCase())}`;
+  return nomeDaSessao(s.numeroSequencial, s.tipoSessao);
 }
 
 function quando(iso: string): string {

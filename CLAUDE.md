@@ -547,8 +547,15 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     auditoria com os rótulos;
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
     acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
-    (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,
-    tema claro, o ato de revogar e o telão com o nome.
+    (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). **Passada a 375 px no
+    tema claro (05/10/2026),** 16 telas do portal e 19 internas em produção, só leitura: nenhuma rola na horizontal.
+    Consertado: "Em tramitação agora" na capa mostrava arquivada e lei (agora só o que tramita, `emTramitacao`); a barra
+    de ações fixa do parecer e do expediente encostava na borda (`.comando-grade` zerava o padding do `.envelope`); o
+    anel de prazo da Mesa encolhia a 56 px e o "ATRASO" tocava o traço; o selo "Publicada v1" da pauta e o chip de
+    papel em `/administracao` eram escuro sobre escuro (`--jade-fundo` é fundo para texto branco); a pauta oficial do
+    portal repetia a fase em cada item e punha o Expediente no fim; a audiência pública saía "2ª Sessão Audiência
+    pública" (agora `nomeDaSessao`: "Audiência pública nº 2"). Não visto: o ato de revogar (a Trilha 3 o exercita) e
+    `/administracao` como `admin_ente` (não há credencial de demo).
 
 **Dívida técnica conhecida (não bloqueia):** assinatura ICP-Brasil ainda é `STUB-ICP-v0`; registro de
 passkey depende de secure context (carry de ambiente); PWA cerimonial e app Flutter parqueados atrás

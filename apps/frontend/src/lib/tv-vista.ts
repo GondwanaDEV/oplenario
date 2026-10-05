@@ -16,7 +16,7 @@ import type { EstadoPlenario, PlacarVotacao, VotoNominal } from "./plenario-redu
 import { identidadeDe } from "./plenario-reducer";
 import { numerarNaFase } from "./posicao-na-fase";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
-import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
+import { nomeDaSessao, nomeFase, nomeTipoFala } from "./rotulos-sessao";
 
 // ---------------------------------------------------------------- fase
 
@@ -76,11 +76,9 @@ export function seloDaTv(estadoSessao: string, conexao: string): SeloTv {
   return { rotulo: "Encerrada", tom: "fim" };
 }
 
-/** "15ª Sessão Ordinária". O tipo vem do enum do backend (`ordinaria`) via `nomeTipoSessao`. */
+/** "15ª Sessão Ordinária" ("Audiência pública nº 2"), por `nomeDaSessao`. */
 export function tituloDaSessao(sessao: Pick<SessaoOut, "tipo-sessao" | "numero-sequencial">): string {
-  const tipo = nomeTipoSessao(sessao["tipo-sessao"]);
-  const Tipo = tipo ? tipo[0].toUpperCase() + tipo.slice(1) : "";
-  return `${sessao["numero-sequencial"]}ª Sessão ${Tipo}`.trim();
+  return nomeDaSessao(sessao["numero-sequencial"], sessao["tipo-sessao"]);
 }
 
 /** HH:MM do relógio da TV — no fuso da máquina, que é a da sala do plenário. */
