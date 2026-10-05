@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
+import { nomeDaSessao, nomeFase, nomeTipoFala, nomeTipoSessao } from "./rotulos-sessao";
 
 describe("nomeTipoSessao — o tipo da sessao no cabecalho do telao", () => {
   // Valores da FONTE — CHECK de `sessoes.sessao.tipo_sessao`:
@@ -78,5 +78,23 @@ describe("nomeTipoFala — o tipo da fala na tribuna", () => {
   it("nulo/vazio -> string vazia", () => {
     expect(nomeTipoFala(null)).toBe("");
     expect(nomeTipoFala(undefined)).toBe("");
+  });
+});
+
+describe("nomeDaSessao — o nome da sessão no cabeçalho da chamada, da ata e da transcrição", () => {
+  it("como o Comando da Mesa: tipo em palavras e número", () => {
+    expect(nomeDaSessao({ tipoSessao: "ordinaria", numeroSequencial: 15 })).toBe("Sessão ordinária nº 15");
+    expect(nomeDaSessao({ tipoSessao: "extraordinaria", numeroSequencial: 2 })).toBe("Sessão extraordinária nº 2");
+  });
+
+  it("a audiência pública tem nome próprio", () => {
+    expect(nomeDaSessao({ tipoSessao: "audiencia_publica", numeroSequencial: 3 })).toBe("Audiência pública nº 3");
+  });
+
+  it("sem número ou sem tipo, nada (não se inventa nome)", () => {
+    expect(nomeDaSessao({ tipoSessao: "ordinaria", numeroSequencial: null })).toBeNull();
+    expect(nomeDaSessao({ tipoSessao: null, numeroSequencial: 4 })).toBeNull();
+    expect(nomeDaSessao(null)).toBeNull();
+    expect(nomeDaSessao(undefined)).toBeNull();
   });
 });

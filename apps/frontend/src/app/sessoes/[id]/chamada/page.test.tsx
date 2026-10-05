@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import PaginaChamada from "./page";
-import type { ChamadaOut, LinhaChamadaOut } from "@/lib/contrato-sessoes.gen";
+import PaginaChamada, { ConteudoChamada } from "./page";
+import type { ChamadaOut, LinhaChamadaOut, SessaoOut } from "@/lib/contrato-sessoes.gen";
+import { ProvedorDaDica, useDicaAtual } from "@/app/(interno)/clara/dica";
 
 // Este page.test.tsx mocka `useChamada` (não a rede) — pedido explícito da Etapa 3B fatia 3: o hook já tem
 // 13 testes próprios (use-chamada.test.ts) cobrindo IO/SSE/otimista/rollback; aqui a prova é só que a
@@ -35,6 +36,22 @@ const useChamadaMock = vi.fn();
 vi.mock("@/lib/use-chamada", () => ({
   useChamada: (...args: unknown[]) => useChamadaMock(...args),
 }));
+
+// A sessão (ADR-0024, fatia 6): a chamada lê `GET /sessoes/:id` pelo hook do Comando da Mesa, que tem testes
+// próprios (use-conducao-sessao.test.ts). Aqui ele é mockado como o `useChamada`: por padrão ainda carregando.
+const sessaoDaTela = vi.hoisted(() => ({ atual: { sessao: null as unknown, estado: "carregando" as string } }));
+const useConducaoMock = vi.fn();
+vi.mock("@/lib/use-conducao-sessao", () => ({
+  useConducaoSessao: (...a: unknown[]) => {
+    useConducaoMock(...a);
+    return { ...sessaoDaTela.atual, erro: null, transicionar: vi.fn(), recarregar: vi.fn() };
+  },
+}));
+const SESSAO: SessaoOut = {
+  id: "s1", sessaoLegislativaId: "sl1", tipoSessao: "ordinaria", numeroSequencial: 15, estado: "aberta",
+  modalidade: "presencial", delibera: true, transmitePublica: true, geraAtaRegimental: true,
+  permiteVotoSecreto: false, permiteModalidadeRemota: false, lockVersion: 1,
+};
 
 function linha(over: Partial<LinhaChamadaOut>): LinhaChamadaOut {
   return {
@@ -337,18 +354,75 @@ describe("PaginaChamada — a Clara (ADR-0024, fatia 5)", () => {
   afterEach(() => {
     cleanup();
     papeisDaClara.atual = [];
+    sessaoDaTela.atual = { sessao: null, estado: "carregando" };
     delete document.documentElement.dataset.clara;
   });
 
-  it("a secretaria tem a Clara, recolhida; a tela não sabe o nome da sessão, então não publica dica", () => {
+  it("a secretaria tem a Clara, recolhida; aberta, mostra a sessão desta tela (fatia 6)", () => {
     papeisDaClara.atual = ["secretario"];
+    sessaoDaTela.atual = { sessao: SESSAO, estado: "pronto" };
     mockRetorno(dadosBase());
     render(<PaginaChamada />);
     const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
     expect(lancador.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(lancador);
-    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).not.toContain("Nesta tela");
+    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).toContain(
+      "Nesta tela: 15ª Sessão Ordinária",
+    );
     // os comandos da chamada continuam na barra fixa (.comando), que o botão da Clara mede para subir acima dela
     expect(screen.getByRole("region", { name: "Comandos da chamada" }).classList.contains("comando")).toBe(true);
+  });
+});
+
+describe("PaginaChamada — qual sessão é (ADR-0024, fatia 6)", () => {
+  function Sonda() {
+    const dica = useDicaAtual();
+    return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+  }
+  const quando = () => document.querySelector("header.topo .sessao-meta .quando") as HTMLElement;
+  function montar() {
+    mockRetorno(dadosBase());
+    return render(
+      <ProvedorDaDica>
+        <ConteudoChamada id="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+  }
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    sessaoDaTela.atual = { sessao: null, estado: "carregando" };
+  });
+
+  it("lê a sessão desta tela com o token da página", () => {
+    montar();
+    expect(useConducaoMock).toHaveBeenCalledWith("s1", "tok");
+  });
+
+  it("com a sessão lida, o cabeçalho diz qual é e a tela publica a dica da sessão", () => {
+    sessaoDaTela.atual = { sessao: SESSAO, estado: "pronto" };
+    montar();
+    expect(document.querySelector("header.topo .sessao-meta .tipo")?.textContent).toBe("Chamada de presença");
+    expect(quando().textContent).toBe("Sessão ordinária nº 15 · composição de 21/05/2026");
+    expect(screen.getByTestId("dica").textContent).toBe(
+      "15ª Sessão Ordinária | Sobre a 15ª Sessão Ordinária,  | Perguntar sobre esta sessão",
+    );
+  });
+
+  it("enquanto a sessão carrega, o cabeçalho fica como antes e não há dica; a chamada já funciona", () => {
+    montar();
+    expect(quando().textContent).toBe("composição de 21/05/2026");
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    expect(screen.getByRole("heading", { level: 1, name: "A chamada" })).toBeTruthy();
+  });
+
+  it("leitura da sessão recusada (403/404): cabeçalho como antes, sem dica, e a chamada segue", () => {
+    sessaoDaTela.atual = { sessao: null, estado: "erro" };
+    montar();
+    expect(quando().textContent).toBe("composição de 21/05/2026");
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    expect(screen.getByRole("region", { name: "Comandos da chamada" })).toBeTruthy();
   });
 });

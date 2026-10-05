@@ -10,6 +10,7 @@
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { SessaoComClara } from "../com-clara";
+import { useSessaoNoCabecalho } from "../sessao-no-cabecalho";
 import { useTema } from "@/lib/tema";
 import { useTranscricao, type GravacaoTranscrita } from "@/lib/use-transcricao";
 import { avisoDeAtencao, blocosDeFala, relogio, situacao } from "@/lib/transcricao-vista";
@@ -27,6 +28,8 @@ export default function PaginaTranscricao() {
 export function ConteudoTranscricao({ id }: { id: string }) {
   const { token } = useAuth();
   const r = useTranscricao(id, token);
+  // Qual sessão é (ADR-0024, fatia 6): o nome no cabeçalho e a dica da Clara. Nunca bloqueia a transcrição.
+  const nomeSessao = useSessaoNoCabecalho(id, token, "sessao");
   const { tema, alternar } = useTema();
 
   return (
@@ -43,6 +46,7 @@ export function ConteudoTranscricao({ id }: { id: string }) {
           <div className="topo-sep" aria-hidden="true" />
           <div className="sessao-meta">
             <span className="tipo">Transcrição</span>
+            {nomeSessao && <span className="quando">{nomeSessao}</span>}
           </div>
           <div className="topo-dir">
             <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">

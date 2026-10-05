@@ -25,6 +25,18 @@ export function nomeTipoSessao(tipo: string | null | undefined): string {
   return NOME_TIPO_SESSAO[tipo] ?? tipo;
 }
 
+/** O nome da sessão no cabeçalho das telas da Mesa, como o Comando da Mesa o escreve: "Sessão ordinária nº 15". A
+ *  audiência pública não é "Sessão audiência pública": é "Audiência pública nº 3". Sem número, nada — o cabeçalho
+ *  fica como estava, sem nome inventado. */
+export function nomeDaSessao(
+  sessao: { tipoSessao?: string | null; numeroSequencial?: number | null } | null | undefined,
+): string | null {
+  const numero = sessao?.numeroSequencial;
+  if (!sessao?.tipoSessao || !numero) return null;
+  if (sessao.tipoSessao === "audiencia_publica") return `Audiência pública nº ${numero}`;
+  return `Sessão ${nomeTipoSessao(sessao.tipoSessao)} nº ${numero}`;
+}
+
 // A FASE do rito. Mesma mecânica e mesmo motivo do tipo de sessão acima: o backend transporta a chave
 // (`ordem_do_dia`), e a tribuna do plenário renderizava essa chave crua — com o CSS pondo em
 // maiúscula, o painel exibia "ORDEM_DO_DIA" ao público. O mapa vivia local em plenario/page.tsx
