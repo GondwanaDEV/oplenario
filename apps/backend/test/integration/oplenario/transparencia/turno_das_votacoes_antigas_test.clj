@@ -85,5 +85,7 @@
         (is (= "ato:rejeitada:turno_2" (desfecho/chave {:ato "rejeitada" :turno 2}))))
       (testing "rodar de novo nao muda nada"
         (let [antes (linhas tx ente dois)]
+          ;; a tabela temporaria e' ON COMMIT DROP e esta tx nao comita: a 2a rodada a recria
+          (jdbc/execute! tx ["DROP TABLE turno_das_votacoes_antigas"])
           (doseq [s @statements] (jdbc/execute! tx [s]))
           (is (= antes (linhas tx ente dois))))))))
