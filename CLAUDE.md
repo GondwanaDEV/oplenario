@@ -484,8 +484,14 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     indeferida e estado desconhecido ficam no chip neutro. **Subscrição:** estado desconhecido sai em palavras.
   - **Fumaça de produção** (`fumaca-hml.yaml`) com 5 casos novos, só leitura: leis, vereadores, votações, ficha
     pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
-    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes
-    (o `next dev` do CI respondeu 404 na primeira visita a uma rota dinâmica).
+    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes,
+    exigindo 200.
+  - **`next dev` sem as rotas mais fundas (05/10/2026):** em 4 de 60 subidas a frio no CI, o `next dev` (16.2.9) montou
+    a tabela de rotas com a leitura do disco incompleta e respondeu 404 a rodada inteira em `[ente]/materias/[id]`,
+    `leis/[id]`, `vereadores/[id]` e `audiencias/[id]`, sem erro no log. O contêiner agora sobe por
+    `apps/frontend/scripts/dev.mjs`, que compara as páginas do disco com `.next/dev/types/routes.d.ts` e refaz a
+    leitura até bater (só muda a data de modificação do arquivo). Procurar `[dev]` no log do frontend. 404 numa página
+    que não chama `notFound()` é isso, e não "não encontrado" da aplicação.
   - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
     `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
     de varredura afirma o volume varrido.
