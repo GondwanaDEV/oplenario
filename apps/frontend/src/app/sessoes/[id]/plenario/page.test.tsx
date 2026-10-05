@@ -213,6 +213,44 @@ describe("Telão da Mesa — placar nominal com o NOME do vereador", () => {
     });
   });
 
+  // O defeito (05/10/2026): o bloco da votação ENCERRADA ainda dizia "faltam votar N" — numa votação que já
+  // fechou ninguém mais vai votar; o que cabe é dizer quantos não votaram. Aberta continua "faltam votar".
+  describe("a linha 'quantos votaram' do placar", () => {
+    const meta = () => document.querySelector(".placar-meta")?.textContent;
+    const crua = {
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+      proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar" },
+      resultado: "aprovada", totalSim: 1, totalNao: 1, totalAbstencao: 0, baseMembros: 3,
+      votos: [{ vereadorId: "a", voto: "sim" }, { vereadorId: "b", voto: "nao" }],
+    };
+    const encerrada = (extra: object = {}) => {
+      const e = hidratarComposicao(aberta(), composicao);
+      return hidratarVotacaoEncerrada(e, { ...crua, ...extra } as never, e.votacaoEventoSeq);
+    };
+
+    it("votação ABERTA: 'faltam votar N de M'", () => {
+      montar({ placar: { ...placar, baseMembros: 3, votosNominais: { a: "sim" } } });
+      expect(meta()).toBe("faltam votar 2 de 3");
+    });
+
+    it("votação nominal ENCERRADA com quem não votou: 'não votaram N de M', nunca 'faltam votar'", () => {
+      montar(encerrada());
+      expect(meta()).toBe("não votaram 1 de 3");
+      expect(document.body.textContent).not.toMatch(/faltam votar/i);
+    });
+
+    it("votação SECRETA ENCERRADA com quem não votou: 'não votaram N de M', nunca 'faltam votar'", () => {
+      montar(encerrada({ modalidade: "secreta", votos: undefined, votosRegistrados: 2 }));
+      expect(meta()).toBe("não votaram 1 de 3");
+      expect(document.body.textContent).not.toMatch(/faltam votar/i);
+    });
+
+    it("votação ENCERRADA em que todos votaram: 'todos os M votaram' (não muda)", () => {
+      montar(encerrada({ totalSim: 2, totalNao: 1 }));
+      expect(meta()).toBe("todos os 3 votaram");
+    });
+  });
+
   it("votação SECRETA continua sem grade nominal (sigilo não regride)", () => {
     montar({
       ...hidratarComposicao(aberta(), composicao),

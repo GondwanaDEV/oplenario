@@ -3,6 +3,7 @@
 // NÃO CONSTA. Aqui só o que a tela decide: como chamar cada estado do convite, o resumo de quantos confirmaram,
 // quem vai ficar de fora se o autor protocolar agora, e o filtro da busca de colegas.
 
+import { humanizarChave } from "./humanizar-chave";
 import type { ColegaOut, SubscricaoOut } from "./contrato-legislativo.gen";
 
 export type EstadoSubscricao = SubscricaoOut["estado"];
@@ -15,7 +16,9 @@ const ROTULOS: Record<EstadoSubscricao, { texto: string; tom: "conf" | "pend" | 
 };
 
 export function rotuloSubscricao(estado: EstadoSubscricao): { texto: string; tom: "conf" | "pend" | "fora" } {
-  return ROTULOS[estado] ?? { texto: estado, tom: "fora" };
+  // estado novo do backend que esta tela ainda não conhece: palavras, nunca a chave de cadastro
+  if (Object.hasOwn(ROTULOS, estado)) return ROTULOS[estado];
+  return { texto: humanizarChave(estado), tom: "fora" };
 }
 
 /** "1 de 2 coautores confirmaram" — a frase-resumo da proposta. */
