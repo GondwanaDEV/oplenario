@@ -90,7 +90,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-bottom: 1px solid var(--linha);
   box-shadow: inset 0 -1px 0 var(--vidro-brilho);
 }
-.topo-grade { display: flex; align-items: center; gap: 0.8rem 1.3rem; padding: 0.7rem 0; flex-wrap: wrap; }
+/* Só a margem de cima e de baixo: o topo é `.envelope.topo-grade` no mesmo elemento, e um `padding: 0.7rem 0` aqui
+   (que vem depois do .envelope) zerava a margem lateral — marca e avatar encostavam na borda da tela. */
+.topo-grade { display: flex; align-items: center; gap: 0.8rem 1.3rem; padding-block: 0.7rem; flex-wrap: wrap; }
 .topo-sep { width: 1px; align-self: stretch; background: var(--linha); margin: 2px 0; }
 .topo-dir { margin-left: auto; display: flex; align-items: center; gap: 0.8rem; }
 
