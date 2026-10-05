@@ -1,6 +1,6 @@
 (ns oplenario.legislativo.regra-votacao-emenda-lom-test
   "INTEGRACAO (PG real, Repo real, sem HTTP): a emenda a Lei Organica so' abre votacao com 2/3 dos membros (CF art. 29,
-  regra-dado `emenda_lom` da mig 20261005000240), conferida pelo MESMO caminho das contas do Prefeito
+  regra-dado `emenda_lom` da mig 20261005000250), conferida pelo MESMO caminho das contas do Prefeito
   (`db/regra_votacao/conferir!`, na tx do INSERT). Outra especie segue com o quorum que a Mesa escolher. O 422 da borda
   sai do mesmo `:conflito/regra-de-votacao` que as contas ja' provam em `contas_http_test`."
   (:require [clojure.string :as str]

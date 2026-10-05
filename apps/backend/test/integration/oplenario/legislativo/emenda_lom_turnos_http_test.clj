@@ -1,6 +1,6 @@
 (ns oplenario.legislativo.emenda-lom-turnos-http-test
   "INTEGRACAO (PG real + a cadeia HTTP inteira de `rotas/montar`): a emenda a Lei Organica em DOIS TURNOS com
-  intersticio de dez dias (CF art. 29; regra `emenda_lom` da mig 20261005000240, `turnos` 2 e `intersticio_dias` 10).
+  intersticio de dez dias (CF art. 29; regra `emenda_lom` da mig 20261005000250, `turnos` 2 e `intersticio_dias` 10).
   Legislativo REAL (proposicao, votacao, autografo); identidade, cadastros e sessoes FAKE (9 vereadores: 2/3 = 6).
 
   O relogio da borda e' um atom: a abertura do 2o turno anda o relogio para depois do encerramento do 1o (que o banco

@@ -481,7 +481,7 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
     de varredura afirma o volume varrido.
 - **Emenda à Lei Orgânica (CF art. 29):** 2/3 dos membros, dois turnos e interstício de 10 dias.
-  - **A regra é dado.** A linha `emenda_lom` entra em `legislativo.regra_votacao_materia` (mig `20261005000240`), ao
+  - **A regra é dado.** A linha `emenda_lom` entra em `legislativo.regra_votacao_materia` (mig `20261005000250`), ao
     lado da linha das contas do Prefeito. A guarda do quórum é DSL do motor. As colunas novas `turnos` e
     `intersticio_dias` valem 1 turno para as contas e 2 turnos com 10 dias para a emenda.
   - **A regra se escolhe pela matéria.** A escolha fica em `logic/regra_votacao/chave-da-materia`.
