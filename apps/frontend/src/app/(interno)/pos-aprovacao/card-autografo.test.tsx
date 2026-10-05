@@ -32,6 +32,24 @@ describe("CardAutografo", () => {
     expect(screen.getByText("GAP")).toBeTruthy();
   });
 
+  it("aguardando resposta -> diz até quando o Executivo pode sancionar ou vetar", () => {
+    render(<CardAutografo autografo={autografo} aguardandoResposta />);
+    expect(screen.getByText("O Executivo tem até 03/07/2026 para sancionar ou vetar.")).toBeTruthy();
+  });
+
+  it("o dia do prazo é o da Casa mesmo quando o servidor devolve em UTC", () => {
+    // 20/10 23h59 em Fortaleza chega como 21/10 02h59 em UTC
+    render(<CardAutografo autografo={{ ...autografo, prazoRespostaEm: "2026-10-21T02:59:59Z" }} aguardandoResposta />);
+    expect(screen.getByText("20/10/2026")).toBeTruthy();
+    expect(screen.getByText("O Executivo tem até 20/10/2026 para sancionar ou vetar.")).toBeTruthy();
+  });
+
+  it("já respondido -> mostra o prazo na lista, mas não diz que o Executivo ainda tem prazo", () => {
+    render(<CardAutografo autografo={autografo} aguardandoResposta={false} />);
+    expect(screen.getByText("03/07/2026")).toBeTruthy();
+    expect(screen.queryByText(/para sancionar ou vetar/)).toBeNull();
+  });
+
   it("não inventa um link de PDF (sem contraparte real no modelo)", () => {
     render(<CardAutografo autografo={autografo} />);
     expect(screen.queryByRole("link")).toBeNull();
