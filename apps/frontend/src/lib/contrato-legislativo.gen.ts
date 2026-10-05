@@ -11,6 +11,7 @@ export interface ProposicaoResumoOut {
   autorTexto?: string | null;
   estado: string;
   atualizadoEm: string;
+  desfecho?: string | null;
 }
 
 export interface ListaProposicoesOut {

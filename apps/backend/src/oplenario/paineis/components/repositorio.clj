@@ -77,6 +77,20 @@
       (log/warn "paineis: transicao sem materia projetada no board (protocolo ausente?)"
                 {:ente-id ente-id :proposicao-id proposicao-id-str :estado estado})))
 
+(defn- registrar-desfecho!
+  "Ato a partir do autografo -> o desfecho do quadro. Outro ato (a votacao) passa reto, sem log: e' o caso normal.
+  Instante invalido ou materia ainda nao projetada = LOG, nunca excecao (o relay e' compartilhado)."
+  [tx ente-id proposicao-id-str ato ocorrido-em-str]
+  (when (contains? db-tramitacao/atos-do-quadro ato)
+    (let [instante (try (some-> ocorrido-em-str Instant/parse) (catch Exception _ nil))]
+      (if (nil? instante)
+        (log/warn "paineis: desfecho sem instante valido — nao projetado"
+                  {:ente-id ente-id :proposicao-id proposicao-id-str :ato ato})
+        (or (db-tramitacao/atualizar-desfecho! tx {:ente-id ente-id :proposicao-id (UUID/fromString (str proposicao-id-str))
+                                                   :desfecho ato :desfecho-em instante})
+            (log/warn "paineis: desfecho sem materia projetada no quadro (ou ato ja' superado)"
+                      {:ente-id ente-id :proposicao-id proposicao-id-str :ato ato}))))))
+
 (def ^:private canal-email
   "O UNICO canal que o ledger de ENTREGA (notificacao_entrega) materializa. Onda E fatia 1: o mesmo evento
   `notificacao.requisitada` passou a carregar tambem `in_app` (inbox interna, projetada por
@@ -168,6 +182,15 @@
     "proposicao.transicionou"
     (transicionar-tramitacao! tx ente-id (:proposicao-id payload) (:para payload) (:ocorrido-em payload)
                               (true? (:para-terminal payload)))
+
+    ;; docs/16 linha 18: o ato depois do plenario muda a coluna do quadro, mas so' a partir do AUTOGRAFO (a
+    ;; aprovacao/rejeicao em plenario passa reto: em dois turnos ela nao encerra a etapa)
+    "proposicao.desfecho-registrado"
+    (registrar-desfecho! tx ente-id (:proposicao-id payload) (:ato payload) (:ocorrido-em payload))
+
+    ;; a publicacao da norma e' o ultimo ato: a materia "virou lei"
+    "norma.publicada"
+    (registrar-desfecho! tx ente-id (:proposicao-id payload) "publicada" (:publicado-em payload))
 
     ;; F7 E3: projeta o ciclo de vida da SESSAO plenaria (F4) na vista de SLI de janela de sessao (Inv.9). O
     ;; UPSERT e' idempotente + monotonico (ver db/sli-sessao/projetar-transicao!); a 1a transicao de uma
@@ -403,7 +426,8 @@
     (transacao this ente-id
       (fn [tx]
         {:itens             (db-tramitacao/listar-board tx ente-id teto-tramitacao-board-por-estado)
-         :totais-por-estado (db-tramitacao/resumo tx ente-id)})))
+         ;; por estado E desfecho: a materia que saiu do plenario muda de coluna pelo desfecho (docs/16 linha 18)
+         :totais-por-estado (db-tramitacao/resumo-do-board tx ente-id)})))
   (sli-sessoes [this ente-id] (sli-sessoes this ente-id {}))
   (sli-sessoes [this ente-id {:keys [limite] :or {limite teto-sli-sessoes}}]
     (transacao this ente-id

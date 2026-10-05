@@ -130,10 +130,12 @@ export interface ItemBoardOut {
   autorTexto?: string | null;
   estado: string;
   transicionouEm: string;
+  desfecho?: string | null;
 }
 
 export interface TotalPorEstadoOut {
   estado: string;
+  desfecho?: string | null;
   total: number;
 }
 
