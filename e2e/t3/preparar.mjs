@@ -158,15 +158,17 @@ est = await transicionar(sessaoFolha, "encerrada");
 console.log(`   sessao de folha ${sessaoFolha} -> estado=${est.estado} lock=${est.lock}`);
 
 // ---- 2. a sessao do /votar (E5-confirmar-presenca + E6-votar) -----------------------------
-passo("\n2) a sessao que /votar de fato abre — /votar NAO aceita parametro de sessao");
+passo("\n2) a sessao do /votar — passada explicitamente em ?sessao= (o padrao do cockpit e' a aberta mais recente,")
+passo("   que seria a sessao de chamada recem-aberta acima; E5/E6 precisam de outra)");
 const atual = exigir(await api(TOK.vereador, "GET", "/meu/sessao-atual"), "GET /meu/sessao-atual (vereador)");
-const sessaoVotar = atual["sessao-id"];
-console.log(`   GET /meu/sessao-atual (:vereador) => ${sessaoVotar} (situacao=${atual.situacao})`);
+// A viva aberta ha' mais tempo que NAO seja a sessao de chamada desta corrida — a mesma que /votar abria
+// antes de o cockpit passar a preferir a mais recente (docs/16, retriagem linha 12).
+const sessaoVotar = ((atual["sessoes-vivas"] ?? [])
+  .filter((s) => s["sessao-id"] !== sessaoChamada)
+  .sort((a, b) => String(a["aberta-em"] ?? "").localeCompare(String(b["aberta-em"] ?? "")))[0] ?? {})["sessao-id"] ?? null;
+console.log(`   GET /meu/sessao-atual (:vereador) => padrao ${atual["sessao-id"]}; /votar vai com ?sessao=${sessaoVotar}`);
 if (!sessaoVotar) {
-  bloqueio("meu-sessao-atual-vazio", "GET /meu/sessao-atual devolveu sessao-id nulo — o cockpit /votar mostra 'Nenhuma sessao em curso agora' e E5-confirmar/E6-votar sao inalcancaveis.");
-} else if (sessaoVotar !== sessaoChamada) {
-  console.log(`   ATENCAO: NAO e uma das sessoes novas. sli_sessoes ordena "aberta ha mais tempo primeiro"`);
-  console.log(`   (paineis/db/sli_sessao.clj:111-132), entao uma sessao aberta AGORA sempre entra ATRAS.`);
+  bloqueio("meu-sessao-atual-vazio", "GET /meu/sessao-atual nao listou nenhuma sessao viva alem da de chamada — E5-confirmar/E6-votar sao inalcancaveis.");
 }
 
 let votacaoAberta = null;
@@ -590,16 +592,16 @@ const artefato = {
     sessaoFolhaId: sessaoFolha,
     urlFolha: comToken(`/sessoes/${sessaoFolha}/folha`, "secretaria"),
     confirmarPresenca: {
-      url: comToken("/votar", "vereador"),
+      url: comToken(`/votar?sessao=${sessaoVotar}`, "vereador"),
       sessaoQueOVotarAbre: sessaoVotar,
       vereadorId: vereadorIdDoVereador,
       presencaZerada: presencaVereadorZerada,
-      nota: "/votar NAO aceita parametro de sessao — deriva de GET /meu/sessao-atual. Por isso confirmar-presenca NAO roda na sessaoChamadaId.",
+      nota: "/votar abre a sessao de ?sessao= quando ela esta em curso (senao a aberta mais recente). Por isso confirmar-presenca NAO roda na sessaoChamadaId.",
     },
   },
 
   e6: {
-    url: comToken("/votar", "presidente"),
+    url: comToken(`/votar?sessao=${sessaoVotar}`, "presidente"),
     identidadeQueVota: "presidente",
     motivoDaIdentidade: "a identidade :presidente tem papel 'vereador' no banco E esta PRESENTE na sessao do /votar — vota sem depender de E5 rodar antes. A :vereador foi deliberadamente deixada AUSENTE para E5 exercitar 'confirmar a propria presenca'.",
     preambuloObrigatorio: "se os botoes Sim/Nao/Abster NAO aparecerem e a tela mostrar 'Confirme sua presenca para poder votar', clique 'Confirmar presenca' PRIMEIRO e so entao vote. Isso nao e defeito do spec: `estado.presentes` do cockpit so e' alimentado por evento SSE (hidratarQuorum nao preenche presentes), e o replay da CanalStore e de 5 min — passada a janela, quem esta presente no banco aparece como ausente na tela.",

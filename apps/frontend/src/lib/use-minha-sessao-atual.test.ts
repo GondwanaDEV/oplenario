@@ -85,3 +85,38 @@ describe("useMinhaSessaoAtual", () => {
     }
   });
 });
+
+describe("useMinhaSessaoAtual — duas sessões em curso", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const corpo = {
+    "sessao-id": "nova",
+    situacao: "em_curso",
+    "sessoes-vivas": [
+      { "sessao-id": "nova", situacao: "em_curso", "aberta-em": "2026-07-01T18:00:00Z" },
+      { "sessao-id": "antiga", situacao: "em_curso", "aberta-em": "2026-07-01T13:00:00Z" },
+    ],
+  };
+
+  it("sem escolha, abre a padrão e expõe as duas vivas", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => corpo }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useMinhaSessaoAtual("tok"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sessaoId).toBe("nova");
+    expect(result.current.sessoesVivas.map((s) => s.sessaoId)).toEqual(["nova", "antiga"]);
+  });
+
+  it("a sessão escolhida na URL vence a padrão quando está entre as vivas", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => corpo }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useMinhaSessaoAtual("tok", "antiga"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sessaoId).toBe("antiga");
+  });
+
+  it("uma escolha que não está em curso (link velho) cai na padrão", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => corpo }) as Response) as unknown as typeof fetch;
+    const { result } = renderHook(() => useMinhaSessaoAtual("tok", "encerrada-ontem"));
+    await waitFor(() => expect(result.current.estado).toBe("pronto"));
+    expect(result.current.sessaoId).toBe("nova");
+  });
+});
