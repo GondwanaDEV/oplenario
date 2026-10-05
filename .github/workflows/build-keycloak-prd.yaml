@@ -1,12 +1,13 @@
 name: Build/Deploy Keycloak das Casas (prd)
 
-# ADR-0025, docs/27 secao 9, passo 1: o Keycloak das Casas passa a rodar a imagem de `apps/keycloak/Dockerfile` (a mesma
-# 26.0.0 + o diretorio do tema `oplenario`). Mesma versao, mesmo banco, mesmas variaveis e o mesmo comando: so' a imagem
-# muda.
+# ADR-0025, docs/27 secao 9, passo 1: o Keycloak das Casas passa a rodar a imagem de `apps/keycloak/Dockerfile` (a MESMA
+# versao que o compose ja' roda + o diretorio do tema `oplenario`). Mesmo banco, mesmas variaveis e o mesmo comando: so'
+# a imagem muda.
 #
-# 1. publica a imagem no GHCR (`:latest` e `:<sha>`; o Dokploy recebe a do sha, que nao muda por baixo dele);
-# 2. acha no Dokploy o COMPOSE do Keycloak das Casas pelo nome do container que a API usa (KEYCLOAK_BASE_URL da API); o
+# 1. acha no Dokploy o COMPOSE do Keycloak das Casas pelo nome do container que a API usa (KEYCLOAK_BASE_URL da API); o
 #    Keycloak do operador e' outro (ADR-0016) e nao e' tocado. Sem exatamente um, para sem mexer em nada;
+# 2. publica no GHCR a imagem com o tema A PARTIR DA VERSAO que o compose roda (`:latest` e `:<versao>-<sha>`; o
+#    Dokploy recebe a do sha, que nao muda por baixo dele);
 # 3. guarda o compose como estava, troca so' a linha `image:` do Keycloak e reimplanta;
 # 4. confere pelo Keycloak (serverinfo do admin) que o tema `oplenario` esta' carregado. Se nao aparecer em 12 min,
 #    VOLTA o compose anterior, reimplanta e falha.
@@ -57,17 +58,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_TOKEN }}
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./apps/keycloak
-          file: ./apps/keycloak/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REPO_IMAGEM }}:latest
-            ${{ env.REPO_IMAGEM }}:${{ github.sha }}
-          platforms: linux/amd64
-
       # O Keycloak das Casas e' um COMPOSE no Dokploy (servico `keycloak`), e a API fala com ele pelo nome do container
       # (`<appName do compose>-<servico>-<n>`, na KEYCLOAK_BASE_URL da API). E' por esse nome que ele e' achado: o
       # Keycloak do operador e' outro e nao casa. Sem exatamente um compose, sem o compose guardado no proprio Dokploy
@@ -111,12 +101,35 @@ jobs:
             exit 1
           fi
           echo "imagem atual: $(grep -E '^[[:space:]]*image:[[:space:]]*["'"'"']?quay\.io/keycloak/keycloak:' "$RUNNER_TEMP/compose-anterior.yml" | sed 's/^[[:space:]]*//')"
+          versao=$(grep -oE 'quay\.io/keycloak/keycloak:[^"'"'"'[:space:]]+' "$RUNNER_TEMP/compose-anterior.yml" | head -1 | cut -d: -f2)
+          if ! [[ "$versao" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::versao do Keycloak no compose nao e' X.Y.Z ('$versao'): nada foi trocado"
+            exit 1
+          fi
+          echo "versao do Keycloak em producao: $versao (a imagem com o tema parte dela)"
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
           id="${achados[0]}"
           echo "::add-mask::$id"
           jq -n --arg id "$id" --rawfile f "$RUNNER_TEMP/compose-anterior.yml" '{composeId: $id, composeFile: $f}' \
             > "$RUNNER_TEMP/anterior.json"
           echo "id=$id" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/keycloak.json"
+
+      # A imagem parte EXATAMENTE da versao que o compose roda hoje. A 1a troca (05/10/2026) partia da 26.0.0 do
+      # Dockerfile contra um Keycloak de producao 26.3.5: o Keycloak nao sobe contra um banco ja' migrado para uma versao
+      # mais nova ("Incorrect state of migration"), e o login ficou fora ate' a volta do compose.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/keycloak
+          file: ./apps/keycloak/Dockerfile
+          push: true
+          build-args: |
+            KEYCLOAK_VERSION=${{ steps.app.outputs.versao }}
+          tags: |
+            ${{ env.REPO_IMAGEM }}:latest
+            ${{ env.REPO_IMAGEM }}:${{ steps.app.outputs.versao }}-${{ github.sha }}
+          platforms: linux/amd64
 
       # Um COMPOSE puxa a imagem com o login do SERVIDOR (a API puxa com o login guardado no app dela, que nao vale aqui).
       # Na 1a troca (05/10/2026) o pacote era privado e o servidor nao tinha login no GHCR: o Keycloak ficou fora do ar
@@ -145,12 +158,12 @@ jobs:
       - name: Trocar a imagem e reimplantar
         env:
           ID: ${{ steps.app.outputs.id }}
-          SHA: ${{ github.sha }}
+          TAG: ${{ steps.app.outputs.versao }}-${{ github.sha }}
         run: |
           set -euo pipefail
           umask 077
           post() { curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' -d @- "$DK/$1" > /dev/null; }
-          sed -E "s#^([[:space:]]*image:[[:space:]]*)[\"']?quay\.io/keycloak/keycloak:[^\"'[:space:]]*[\"']?#\1$REPO_IMAGEM:$SHA#" \
+          sed -E "s#^([[:space:]]*image:[[:space:]]*)[\"']?quay\.io/keycloak/keycloak:[^\"'[:space:]]*[\"']?#\1$REPO_IMAGEM:$TAG#" \
             "$RUNNER_TEMP/compose-anterior.yml" > "$RUNNER_TEMP/compose-novo.yml"
           diff "$RUNNER_TEMP/compose-anterior.yml" "$RUNNER_TEMP/compose-novo.yml" | grep -E '^[<>]' | sed 's/^/  /' || true
           [ "$(diff "$RUNNER_TEMP/compose-anterior.yml" "$RUNNER_TEMP/compose-novo.yml" | grep -c '^>')" = "1" ] \
@@ -158,7 +171,7 @@ jobs:
           jq -n --arg id "$ID" --rawfile f "$RUNNER_TEMP/compose-novo.yml" '{composeId: $id, composeFile: $f}' \
             | post compose.update
           jq -n --arg id "$ID" '{composeId: $id}' | post compose.deploy
-          echo "deploy disparado: $REPO_IMAGEM:$SHA"
+          echo "deploy disparado: $REPO_IMAGEM:$TAG"
 
       - name: Conferir o tema no Keycloak (ou voltar atras)
         env:
