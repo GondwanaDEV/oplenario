@@ -288,6 +288,31 @@ export interface AcusarCienciaOut {
   cienteEm: string;
 }
 
+export interface MeuVotoOut {
+  votacaoId: string;
+  voto: string;
+  registradoEm: string;
+  anulada: boolean;
+  portal: "publico" | "sessao-fechada" | "sem-sessao";
+  materiaTipo: string | null;
+  materiaAno: number | null;
+  materiaSequencial: number | null;
+  materiaEmenta: string | null;
+}
+
+export interface MeusVotosPorOpcaoOut {
+  sim: number;
+  nao: number;
+  abstencao: number;
+}
+
+export interface MeusVotosOut {
+  vereadorId: string | null;
+  votos: MeuVotoOut[];
+  votosTotal: number;
+  votosPorOpcao: MeusVotosPorOpcaoOut;
+}
+
 export interface GatilhoPossivelOut {
   gatilho: string;
   destinosPossiveis: string[];
