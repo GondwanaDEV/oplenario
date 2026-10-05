@@ -16,8 +16,9 @@ export interface ComentarioOut {
 }
 
 import type { FichaOut } from "./contrato-portal.gen";
+import { situacaoDoDesfecho } from "./desfecho-vista";
 import { derivarRef } from "./materia-vista";
-import { derivarTramitacao, type EstagioTramitacao } from "./tramitacao-vista";
+import { derivarTramitacao, faixaDoRito, type EstagioTramitacao } from "./tramitacao-vista";
 
 export type NormaPublicadaVista = {
   normaId: string;
@@ -53,8 +54,26 @@ export type FichaVista = {
 
 export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
+/**
+ * A faixa e o selo da ficha pública. Precedência:
+ *  1. o desfecho depois do plenário (do autógrafo em diante) decide os dois — o rito não sabe do Executivo nem da lei;
+ *  2. senão, o RITO da Casa (a rota devolve as etapas em ordem, com o nome que a Casa deu): a faixa e o selo dizem a
+ *     mesma etapa com o mesmo nome. Só vale quando o rito declara a etapa atual E ela é a do estado da matéria: o
+ *     portal guarda o último rito junto com o estado, mas um rito de outra etapa (corrida entre eventos) apontaria a
+ *     etapa errada, então não se confia nele;
+ *  3. senão, o mapa fixo por nome de estado (matéria sem evento com rito, ou rito incoerente) — o comportamento anterior.
+ */
+function faixaESelo(ficha: FichaOut): { estagios: EstagioTramitacao[]; rotuloSituacao: string } {
+  const fixa = derivarTramitacao(ficha.estado, ficha.desfecho);
+  if (situacaoDoDesfecho(ficha.desfecho)) return fixa;
+  const rito = ficha.rito?.atual?.chave === ficha.estado ? ficha.rito : null;
+  const daCasa = faixaDoRito(rito);
+  if (!daCasa || !rito?.atual) return fixa;
+  return { estagios: daCasa.estagios, rotuloSituacao: rito.atual.rotulo };
+}
+
 export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | null): FichaVista {
-  const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
+  const { estagios, rotuloSituacao } = faixaESelo(ficha);
   return {
     ref: derivarRef(ficha),
     titulo: ficha.ementa,
