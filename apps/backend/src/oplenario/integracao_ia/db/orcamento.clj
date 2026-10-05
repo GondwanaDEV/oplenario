@@ -10,13 +10,15 @@
 (def ^:private colunas [:id :ente_id :mensal :teto_duro :moeda :definido_por :definido_em])
 
 (defn inserir!
-  "Grava a definicao e devolve-a (com id e instante do banco)."
-  [tx {:keys [ente-id mensal teto-duro moeda definido-por]}]
+  "Grava a definicao e devolve-a (com id e instante do banco). `:pelo-relogio?` grava o instante de `clock_timestamp()`
+  em vez do `now()` da tx: para duas definicoes na mesma tx ficarem em ordem."
+  [tx {:keys [ente-id mensal teto-duro moeda definido-por pelo-relogio?]}]
   (comum/linha->kebab
    (jdbc/execute-one! tx
      (sql/format {:insert-into :integracao_ia.orcamento_ia
-                  :values [{:ente_id ente-id :mensal mensal :teto_duro teto-duro :moeda moeda
-                            :definido_por definido-por}]
+                  :values [(cond-> {:ente_id ente-id :mensal mensal :teto_duro teto-duro :moeda moeda
+                                    :definido_por definido-por}
+                             pelo-relogio? (assoc :definido_em [:clock_timestamp]))]
                   :returning colunas}))))
 
 (defn ultima
