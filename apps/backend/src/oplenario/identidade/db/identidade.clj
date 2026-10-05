@@ -5,6 +5,7 @@
   (split de privilegio, review F1.3 — codigo de tenant nao enumera CPF). HoneySQL."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.identidade.models.identidade :as mod]
             [oplenario.kernel.db-util :as comum]))
 
@@ -41,6 +42,23 @@
   (comum/linha->kebab
     (jdbc/execute-one! conn
       (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:= :id id]}))))
+
+(defn id-por-cpf
+  "ADR-0025 (entrada pelo CPF): CPF -> id da identidade | nil. Leitura ESTREITA: so' o id volta do banco — nem o nome
+  nem o CPF de ninguem passam pela memoria do caminho publico de entrada."
+  [conn cpf]
+  (:identidade/id
+   (jdbc/execute-one! conn
+     (sql/format {:select [:id] :from [:identidade.identidade] :where [:= :cpf cpf]}))))
+
+(defn casas-com-acesso-institucional
+  "ADR-0025: os `ente_id` das Casas onde a identidade tem vinculo INSTITUCIONAL ativo (servidor, vereador, admin_ente).
+  O vinculo e' tenant (FORCE RLS); a pergunta atravessa as Casas so' pela funcao estreita do banco
+  (`identidade.casas_com_acesso_institucional`, SECURITY DEFINER, EXECUTE so' do role id_resolver)."
+  [conn identidade-id]
+  (mapv :ente_id
+        (jdbc/execute! conn ["SELECT ente_id FROM identidade.casas_com_acesso_institucional(?)" identidade-id]
+                       {:builder-fn rs/as-unqualified-maps})))
 
 (defn nomes-por-ids
   "ADR-0020: ids -> {id nome}, numa consulta so' (leitura ESTREITA como `nome-por-id`: nunca materializa CPF).

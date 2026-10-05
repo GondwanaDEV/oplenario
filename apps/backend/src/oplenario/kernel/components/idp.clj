@@ -12,8 +12,9 @@
     se invalido. Fail-closed: token malformado/expirado/assinatura ruim -> nil, nunca claims parciais.
     CONTRATO (review W2): erro de INFRA (rede/JWKS indisponivel) deve LANCAR (a borda responde 500), NUNCA
     devolver nil — nil = 'token invalido' (401), e mascarar degradacao como token ruim e' incorreto.")
-  (provisionar-realm! [idp ente-id]
-    "Provisiona o realm do tenant `ente-id` (realm-por-tenant). Idempotente. Carry: impl Keycloak.")
+  (provisionar-realm! [idp ente-id] [idp ente-id opcoes]
+    "Provisiona o realm do tenant `ente-id` (realm-por-tenant). Idempotente. `opcoes` = {:nome <nome oficial da Casa>}
+    (ADR-0025: o titulo da tela de login); sem nome, o realm existente guarda o que tinha.")
   (criar-usuario! [idp ente-id usuario]
     "Cria o usuario no realm do tenant (enrollment); MFA obrigatorio na 1a sessao (§22.5.2 eixo F).")
   (convidar! [idp ente-id identidade-id]

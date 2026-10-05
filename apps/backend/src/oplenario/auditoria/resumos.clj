@@ -210,8 +210,12 @@
 (def ^:private motivo-assistente
   "Trilha do assistente em obra na frente da Clara (ADR-0024, PR #176): o handler dele é dono do registro; rotular depois do merge")
 
+(def ^:private motivo-antes-da-entrada
+  "Porta pública da entrada pelo CPF (ADR-0025), antes de haver sessão: sem ator e sem Casa, nada entra na trilha")
+
 (def sem-resumo
-  {:admin-sistema/aprovar-pedido                motivo-operacao
+  {:identidade/localizar-casas                  motivo-antes-da-entrada
+   :admin-sistema/aprovar-pedido                motivo-operacao
    :admin-sistema/definir-destino-acervo        motivo-operacao
    :admin-sistema/gerar-exportacao              motivo-operacao
    :admin-sistema/iniciar-encerramento          motivo-operacao

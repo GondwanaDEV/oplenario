@@ -31,7 +31,7 @@ export default function Home() {
         </Link>
       </p>
       <p style={{ color: "var(--texto-2)", fontSize: "var(--t-13)", maxWidth: "46ch", marginTop: "1.5rem" }}>
-        Cada Câmara tem o seu endereço de entrada e o seu portal do cidadão: use o link que a sua Câmara divulgou.
+        Servidores e vereadores entram com o CPF. O portal do cidadão de cada Câmara fica no endereço que ela divulga.
       </p>
     </main>
   );
