@@ -97,6 +97,21 @@ describe("A Câmara no console", () => {
     expect(screen.queryByRole("button", { name: /solicitar acesso/i })).toBeNull();
   });
 
+  it("o orçamento de IA definido pela linha de comando não passa por ato da própria câmara", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+      ...FICHA,
+      atuacao: [
+        { id: "a3", em: "2026-10-05T10:00:01Z", acao: "ia-orcamento-definido", operador: null,
+          detalhe: { origem: "linha-de-comando" }, selo: "aa11bb22cc33dd44" },
+        ...FICHA.atuacao,
+      ],
+    })));
+    render(<CamaraNoConsole />);
+    expect(await screen.findByText("Orçamento de IA definido")).toBeTruthy();
+    expect(screen.getByText("linha de comando da Operação")).toBeTruthy();
+    expect(screen.queryByText("pela própria câmara")).toBeNull();
+  });
+
   it("reenviar o convite chama o console e recarrega", async () => {
     const f = vi.fn().mockResolvedValueOnce(json(FICHA)).mockResolvedValueOnce(json(CASA)).mockResolvedValue(json(FICHA));
     vi.stubGlobal("fetch", f);

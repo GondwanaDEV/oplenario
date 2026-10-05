@@ -20,9 +20,11 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.idp :as idp]
+            [oplenario.kernel.db-util :as comum]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]
-            [oplenario.rotas :as rotas])
+            [oplenario.rotas :as rotas]
+            [oplenario.suporte-delegante :refer [delegando]])
   (:import (java.time Instant)))
 
 (def ^:dynamic *ds* nil)
@@ -39,18 +41,20 @@
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify idp/IdentityProvider (verificar-token [_ t] (get tokens t))))
 
-(defn- servico [tokens-casa]
+(defn- servico
+  ([tokens-casa] (servico tokens-casa (repo-op)))
+  ([tokens-casa repo-operacao]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (fake-idp-casa tokens-casa)
                                    :repo-identidade (assoc (repo-id/repositorio) :datasource {:ds *ds*})
                                    :info-ente (constantly {:nome-oficial "Câmara" :nome-curto "Câmara"})
                                    :idp-operacao (idp-admin/idp-operacao-dev)
-                                   :repo-admin-sistema (repo-op)
+                                   :repo-admin-sistema repo-operacao
                                    :operacao {:realm "operacao" :base-url "http://kc" :base-url-publico "http://kc-pub"
                                               :client-id "oplenario-console"
                                               :sessao {:absoluta-h 8 :ociosa-min 15}}})
                     it/globais)
-      ph/create-server ::ph/service-fn))
+      ph/create-server ::ph/service-fn)))
 
 (defn- ler [r] (json/read-value (:body r) json/keyword-keys-object-mapper))
 
@@ -168,3 +172,82 @@
       (fn [tx]
         (is (thrown-with-msg? Exception #"permission denied"
                               (jdbc/execute! tx ["SELECT * FROM admin_sistema.atuacao"])))))))
+
+;; ---- ADR-0017 (adendo de 05/10/2026): a entrada do operador tem o par tentativa/desfecho na ATUACAO da Operacao ----
+
+(defn- da-entrada
+  "A atuacao do operador `o` (sem Casa: a entrada nao e' de uma Casa), em ordem de gravacao."
+  [o]
+  (mapv #(update % :detalhe comum/jsonb->kw)
+        (jdbc/execute! *ds* ["SELECT id, acao, ente_id, detalhe FROM admin_sistema.atuacao WHERE operador_id = ? ORDER BY seq"
+                             (:id o)]
+                       {:builder-fn next.jdbc.result-set/as-unqualified-maps})))
+
+(defn- sessoes-do [o]
+  (:n (jdbc/execute-one! *ds* ["SELECT count(*) AS n FROM admin_sistema.sessao_operador WHERE operador_id = ?" (:id o)]
+                         {:builder-fn next.jdbc.result-set/as-unqualified-maps})))
+
+(deftest a-entrada-do-operador-grava-a-tentativa-ANTES-da-sessao-e-o-desfecho-depois
+  (let [o (operador!) visto (atom nil)
+        real (repo-op)
+        svc (servico {} (delegando real {:criar-sessao-operador!
+                                         (fn [r s]
+                                           (reset! visto {:atuacao (mapv :acao (da-entrada o)) :sessoes (sessoes-do o)})
+                                           (repo/criar-sessao-operador! r s))}))
+        r (mint! svc (token-op o))]
+    (is (= 200 (:status r)))
+    (is (some? (:sessao (ler r))))
+    (testing "no instante em que a sessao nasce, a tentativa ja' esta' na atuacao"
+      (is (= {:atuacao ["entrada-no-console-iniciada"] :sessoes 0} @visto)))
+    (testing "o desfecho vem depois e aponta a tentativa; nada sobra sem desfecho"
+      (let [[t d :as linhas] (da-entrada o)]
+        (is (= ["entrada-no-console-iniciada" "entrou-no-console"] (mapv :acao linhas)))
+        (is (nil? (:ente_id t)) "a entrada e' da Operacao, nao de uma Casa: nenhuma Casa na linha")
+        (is (= (str (:id t)) (get-in d [:detalhe :tentativa])))
+        (is (empty? (filter #(= (:id o) (:operador-id %))
+                            (repo/tentativas-sem-desfecho (repo-op) (.plusSeconds (Instant/now) 5)))))))
+    (is (true? (:integra? (atuacao/verificar-corrente *ds*))) "a cadeia de selos segue integra")))
+
+(deftest o-registro-fora-do-ar-nunca-tranca-o-login-do-operador
+  (let [o (operador!)
+        real (repo-op)
+        sem-registro (delegando real {:registrar-atuacao! (fn [_ _] (throw (ex-info "atuacao fora do ar" {})))})
+        svc (servico {} sem-registro)
+        r (mint! svc (token-op o))]
+    (testing "nem a tentativa nem o desfecho gravam: a sessao abre assim mesmo"
+      (is (= 200 (:status r)))
+      (is (= 200 (:status (pt/response-for svc :get "/operacao/eu" :headers (cookie-op (:sessao (ler r)))))))
+      (is (empty? (da-entrada o)) "sem registro nenhum: so' o log"))
+    (testing "so' o desfecho nao grava: a sessao abre, e a tentativa fica na atuacao, acusada na conferencia"
+      (let [o2 (operador!)
+            so-desfecho (delegando real {:registrar-atuacao!
+                                         (fn [r reg] (if (= "entrou-no-console" (:acao reg))
+                                                       (throw (ex-info "atuacao fora do ar" {}))
+                                                       (repo/registrar-atuacao! r reg)))})
+            r2 (mint! (servico {} so-desfecho) (token-op o2))]
+        (is (= 200 (:status r2)))
+        (is (= ["entrada-no-console-iniciada"] (mapv :acao (da-entrada o2))))
+        (is (= [(:id (first (da-entrada o2)))]
+               (mapv :id (filter #(= (:id o2) (:operador-id %))
+                                 (repo/tentativas-sem-desfecho (repo-op) (.plusSeconds (Instant/now) 5))))))))))
+
+(deftest sessao-que-nao-nasce-depois-da-tentativa-fecha-o-par-com-falhou
+  (let [o (operador!)
+        quebra (delegando (repo-op) {:criar-sessao-operador! (fn [_ _] (throw (ex-info "banco caiu na sessao" {})))})
+        svc (servico {} quebra)
+        r (mint! svc (token-op o))]
+    (is (= 500 (:status r)))
+    (let [[t f :as linhas] (da-entrada o)]
+      (is (= ["entrada-no-console-iniciada" "entrada-no-console-falhou"] (mapv :acao linhas)))
+      (is (= (str (:id t)) (get-in f [:detalhe :tentativa])))
+      (is (zero? (sessoes-do o))))
+    (is (empty? (filter #(= (:id o) (:operador-id %))
+                        (repo/tentativas-sem-desfecho (repo-op) (.plusSeconds (Instant/now) 5)))))))
+
+(deftest entrada-recusada-nao-deixa-tentativa-solta
+  (let [svc (servico {})
+        o (operador!)
+        _ (repo/desligar-operador! (repo-op) (:id o))]
+    (is (= 401 (:status (mint! svc (token-op o)))) "operador desligado: nada foi concedido")
+    (is (empty? (da-entrada o)) "sem ator ativo nao ha' tentativa")
+    (is (= 401 (:status (mint! svc "lixo"))))))
