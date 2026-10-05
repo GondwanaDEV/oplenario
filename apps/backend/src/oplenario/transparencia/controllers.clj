@@ -24,6 +24,12 @@
   (when-let [m (repo/buscar-materia repo-transparencia ente-id proposicao-id)]
     (assoc m :norma (repo/norma-da-materia repo-transparencia ente-id proposicao-id))))
 
+(defn movimentacoes-da-materia
+  "A linha do tempo PUBLICA da materia: {:movimentacoes :total :completo? :desde}, ou nil se a materia nao esta' no
+  portal (proposicao nunca protocolada, ou tenant errado) — a mesma regra da ficha."
+  [repo-transparencia ente-id proposicao-id]
+  (repo/movimentacoes-da-materia repo-transparencia ente-id proposicao-id))
+
 (def por-pagina
   "Quantos itens as listas publicas paginadas (votacoes, legislacao) entregam por pagina (rota anonima: tamanho fixo
   no servidor)."

@@ -18,6 +18,7 @@
             [oplenario.transparencia.adapters.out.dados-abertos :as adapters-out-dados-abertos]
             [oplenario.transparencia.adapters.out.ente :as adapters-out-ente]
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
+            [oplenario.transparencia.adapters.out.movimentacao :as adapters-out-movimentacao]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
             [oplenario.transparencia.adapters.out.parlamentar :as adapters-out-parlamentar]
             [oplenario.transparencia.adapters.out.vereadores :as adapters-out-vereadores]
@@ -73,6 +74,18 @@
           proposicao-id (adapters-in/proposicao-param->uuid (get-in req [:path-params :proposicao_id]))]
       (if-let [detalhe (controllers/ficha-materia repo-transparencia ente-id proposicao-id)]
         (http/json-resposta 200 (adapters-out-materia/ficha->wire detalhe (:norma detalhe)))
+        (http/json-resposta 404 {:erro "materia nao encontrada"})))))
+
+(defn- movimentacoes-da-materia-handler
+  "GET /portal/casa/:ente/materias/:proposicao_id/movimentacoes — \"Por onde a materia passou\" (PUBLICO): cada
+  movimentacao com a data e o nome da etapa no rito da Casa, da mais recente para a mais antiga, com o total e o
+  sinal de historico completo. So' de materia que o portal mostra (404 senao, a mesma voz da ficha)."
+  [repo-transparencia resolver-ente-publico]
+  (fn [req]
+    (let [ente-id       (resolver-ente-publico (get-in req [:path-params :ente]))
+          proposicao-id (adapters-in/proposicao-param->uuid (get-in req [:path-params :proposicao_id]))]
+      (if-let [r (controllers/movimentacoes-da-materia repo-transparencia ente-id proposicao-id)]
+        (http/json-resposta 200 (adapters-out-movimentacao/movimentacoes->wire r))
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
 (defn- pareceres-juridicos-handler
@@ -285,6 +298,9 @@
     ["/portal/casa/:ente/materias/:proposicao_id" :get
      [(ficha-materia-handler repo-transparencia resolver-ente-publico)]
      :route-name :transparencia/ficha-materia]
+    ["/portal/casa/:ente/materias/:proposicao_id/movimentacoes" :get
+     [(movimentacoes-da-materia-handler repo-transparencia resolver-ente-publico)]
+     :route-name :transparencia/movimentacoes-da-materia]
     ["/portal/casa/:ente/materias/:proposicao_id/pareceres-juridicos" :get
      [(pareceres-juridicos-handler repo-transparencia resolver-ente-publico
                                    (or pareceres-juridicos-publicos (fn [_ _] {:pareceres []})))]
