@@ -11,7 +11,7 @@
 
 .atuacao .nums { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin: 1.1rem 0 0; }
 .atuacao .ncard { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.9rem 1rem; }
-.atuacao .ncard b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: tabular-nums; }
+.atuacao .ncard b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); display: block; line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .atuacao .ncard span { font-size: var(--t-12); color: var(--texto-2); display: block; margin-top: 0.3rem; }
 
 .atuacao .secao-tit { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--acento-texto); margin: 1.6rem 0 0.7rem; }
@@ -26,13 +26,13 @@
 
 .atuacao .pres { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); padding: 1rem 1.1rem; }
 .atuacao .pres-top { display: flex; align-items: baseline; gap: 0.5rem; }
-.atuacao .pres-top b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); font-variant-numeric: tabular-nums; }
+.atuacao .pres-top b { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); font-variant-numeric: var(--numero-destaque); }
 .atuacao .pres-top span { font-size: var(--t-13); color: var(--texto-2); }
 .atuacao .pres-frase { font-size: var(--t-13); color: var(--texto); line-height: 1.5; margin: 0.6rem 0 0; }
 
 .atuacao .votos-g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
 .atuacao .vg { background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio); padding: 0.85rem 0.6rem; text-align: center; }
-.atuacao .vg b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); display: block; font-variant-numeric: tabular-nums; }
+.atuacao .vg b { font-family: var(--display); font-weight: 800; font-size: var(--t-21); color: var(--texto); display: block; font-variant-numeric: var(--numero-destaque); }
 .atuacao .vg span { font-size: var(--t-12); color: var(--texto-2); }
 
 .atuacao .vazio { font-size: var(--t-13); color: var(--texto-2); margin: 0; }

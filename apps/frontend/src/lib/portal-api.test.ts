@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buscarNomeCasa, buscarPublico, buscarPublicoComConsulta, resolverCasa } from "./portal-api";
+import { buscarNomeCasa, buscarPublico, buscarPublicoComConsulta, buscarPublicoDetalhado, resolverCasa } from "./portal-api";
 
 // Task 0.3 (Fatia A2.0, Portal do Cidadão) — espelha buscarOuNull de use-mesa.ts, mas SEM o header
 // Authorization (superfície pública, sem auth) e degradando SEMPRE para null (nunca lança — "degradação
@@ -221,5 +221,41 @@ describe("resolverCasa (veredito de existência da Casa)", () => {
   it("contrato de buscarNomeCasa intacto: indisponivel TAMBÉM vira null (telas internas seguem degradando)", async () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch;
     expect(await buscarNomeCasa("ente-real")).toBeNull();
+  });
+});
+
+// `buscarPublicoDetalhado` — o mesmo fetch público, mas distingue "não existe" (404) de "não consegui" (5xx, rede) e
+// aceita a query string. Existe para as páginas que dizem ao cidadão qual dos dois aconteceu.
+describe("buscarPublicoDetalhado", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("200 -> ok com o corpo camelizado", async () => {
+    global.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ "norma-id": "n1" }) })) as unknown as typeof fetch;
+    expect(await buscarPublicoDetalhado<{ normaId: string }>(["c", "legislacao", "n1"])).toEqual({ estado: "ok", dado: { normaId: "n1" } });
+  });
+
+  it("404 -> nao-encontrado; 500 e rede fora -> erro", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 404 })) as unknown as typeof fetch;
+    expect(await buscarPublicoDetalhado(["c", "legislacao", "x"])).toEqual({ estado: "nao-encontrado" });
+    global.fetch = vi.fn(async () => ({ ok: false, status: 500 })) as unknown as typeof fetch;
+    expect(await buscarPublicoDetalhado(["c", "legislacao"])).toEqual({ estado: "erro" });
+    global.fetch = vi.fn(async () => {
+      throw new Error("rede fora");
+    }) as unknown as typeof fetch;
+    expect(await buscarPublicoDetalhado(["c", "legislacao"])).toEqual({ estado: "erro" });
+  });
+
+  it("monta a query codificada, só com o que veio preenchido", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+    await buscarPublicoDetalhado(["fortaleza", "legislacao"], { tipo: "lei_complementar", ano: "2026", vazio: "" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/portal/casa/fortaleza/legislacao?tipo=lei_complementar&ano=2026", { cache: "no-store" });
+  });
+
+  it("segmento com '..' continua escapado", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) })) as unknown as typeof fetch;
+    global.fetch = fetchMock;
+    await buscarPublicoDetalhado(["fortaleza", "legislacao", ".."]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/portal/casa/fortaleza/legislacao/%2E%2E", { cache: "no-store" });
   });
 });

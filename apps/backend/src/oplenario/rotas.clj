@@ -72,6 +72,19 @@
   (when-let [v (repo-cadastros-comp/vereador-por-identidade repo-cadastros ente-id identidade-id)]
     {:id (:id v) :nome (or (not-empty (:nome-parlamentar v)) (:nome v))}))
 
+(defn vereador-no-roster
+  "O `vereador-id` compoe a Casa `ente-id` com mandato VIGENTE em `hoje`? E' o predicado da rota da Mesa
+  `registrar-voto` (sec MEDIUM-2, gate #2): o `vereador-id` vem do CORPO, e como `legislativo.votos.vereador_id`
+  e' guard ref sem FK (ADR-0001 §6: nada de FK cross-schema), ESTA e' a unica barreira contra voto para id
+  inexistente, de outra Casa ou com mandato encerrado/licenciado. Parte de `roster-da-casa` (RLS + `ente_id`
+  do tenant) e mantem so' 'vigente' — o MESMO conjunto do denominador de quorum. Extraida como defn de topo,
+  testavel contra Postgres real (mesmo racional de `colegas-da-casa`)."
+  [repo-cadastros ente-id vereador-id hoje]
+  (boolean
+   (some (fn [l] (and (= vereador-id (:vereador-id l))
+                      (= "vigente" (:estado-mandato l))))
+         (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id hoje))))
+
 (defn colegas-da-casa
   "ente-id -> [{:id :nome :partido}] dos vereadores com mandato VIGENTE hoje nesta Casa, para o convite de
   subscricao do requerimento coletivo (fatia 2c) — mesma excecao nomeada de `resolver-vereador` (§22.5.3).
@@ -498,11 +511,8 @@
         ;; de dependencia de consultar-sessao/membros-da-casa (legislativo NAO importa cadastros, §22.10); fuso
         ;; civil como os demais seams datados. Um voto ao vivo exige composicao de HOJE (nao ha `data` na aridade).
         vereador-no-roster? (fn [ente-id vereador-id]
-                              (boolean
-                               (some (fn [l] (and (= vereador-id (:vereador-id l))
-                                                  (= "vigente" (:estado-mandato l))))
-                                     (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id
-                                       (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))))
+                              (vereador-no-roster repo-cadastros ente-id vereador-id
+                                (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao)))
         ;; Override injetavel (mesmo racional de `painel-compliance` — so' serve aos testes DB-free da borda
         ;; de paineis); em producao `montar` e' chamado sem estas chaves e o `or` fecha sobre o repo real.
         presenca-resumo (or presenca-resumo

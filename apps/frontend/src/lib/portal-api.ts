@@ -47,6 +47,27 @@ export async function buscarPublicoComConsulta<T>(
   }
 }
 
+// `buscarPublicoDetalhado` — o mesmo fetch, para a página que precisa dizer ao cidadão QUAL dos dois aconteceu:
+// "isto não existe" (404) ou "não consegui agora" (5xx, rede, 400). `consulta` vira query string (só o que veio
+// preenchido); nunca lança.
+export type BuscaPublica<T> = { estado: "ok"; dado: T } | { estado: "nao-encontrado" } | { estado: "erro" };
+
+export async function buscarPublicoDetalhado<T>(
+  segmentos: string[],
+  consulta: Record<string, string> = {},
+): Promise<BuscaPublica<T>> {
+  try {
+    const caminho = segmentos.map(codificarSegmento).join("/");
+    const q = new URLSearchParams(Object.entries(consulta).filter(([, v]) => v !== "")).toString();
+    const r = await fetch(`/api/portal/casa/${caminho}${q ? `?${q}` : ""}`, { cache: "no-store" });
+    if (r.status === 404) return { estado: "nao-encontrado" };
+    if (!r.ok) return { estado: "erro" };
+    return { estado: "ok", dado: camelizarChaves(await r.json()) as T };
+  } catch {
+    return { estado: "erro" };
+  }
+}
+
 // `buscarNomeCasa` roda em SERVER COMPONENT (page.tsx), NÃO em client — por isso não pode usar
 // `buscarPublico` (fetch relativo `/api/...`, que só resolve no browser via o rewrite same-origin de
 // next.config.ts). Aqui o fetch é direto ao backend com a MESMA env var (`BACKEND_URL`) que o rewrite usa
