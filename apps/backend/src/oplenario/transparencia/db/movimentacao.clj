@@ -50,11 +50,12 @@
 (defn listar
   "As movimentacoes da materia, da MAIS RECENTE para a mais antiga, no teto (`teto-listagem`). Empate de instante: a
   abertura (protocolo) vem por ultimo, e a chave da etapa desempata para a ordem nao depender do plano de execucao.
-  So' as colunas publicas: instante, rotulo da etapa e se e' a abertura."
+  So' as colunas publicas: instante, rotulo da etapa e se e' a abertura — mais a chave da etapa, que o adapter de
+  saida usa para dizer se a linha e' votacao (`logic/desfecho/votacao?`) e NUNCA repassa."
   [tx ente-id proposicao-id]
   (comum/linhas->kebab
    (jdbc/execute! tx
-     (sql/format {:select [:ocorrido_em :etapa :inicial] :from [:transparencia.materia_movimentacao]
+     (sql/format {:select [:ocorrido_em :etapa :inicial :etapa_chave] :from [:transparencia.materia_movimentacao]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]
                   :order-by [[:ocorrido_em :desc] [:inicial :asc] [:etapa_chave :asc]]
                   :limit teto-listagem}))))

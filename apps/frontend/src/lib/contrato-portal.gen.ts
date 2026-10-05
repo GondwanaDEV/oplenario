@@ -64,6 +64,7 @@ export interface MovimentacaoOut {
   ocorridoEm: string;
   etapa: string | null;
   abertura: boolean;
+  votacao: boolean;
 }
 
 export interface MovimentacoesOut {

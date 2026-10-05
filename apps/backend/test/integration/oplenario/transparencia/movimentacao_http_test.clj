@@ -88,7 +88,7 @@
     (is (= 2 (:movimentacoes-total corpo)))
     (is (true? (:historico-completo corpo)))
     (is (= [false true] (mapv :abertura (:movimentacoes corpo))))
-    (is (= #{:ocorrido-em :etapa :abertura} (set (mapcat keys (:movimentacoes corpo))))
+    (is (= #{:ocorrido-em :etapa :abertura :votacao} (set (mapcat keys (:movimentacoes corpo))))
         "nada de ator, gatilho, contexto ou parecer")
     (is (not (re-find #"(?i)ator|gatilho|despachar|em_comissao" (:body r)))
         "nem a chave de cadastro nem o gatilho vazam no corpo")))
