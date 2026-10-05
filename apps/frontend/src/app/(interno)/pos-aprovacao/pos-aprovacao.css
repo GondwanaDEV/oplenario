@@ -70,7 +70,7 @@
 .prz-atencao .anel-c .arco { stroke: var(--amarelo-traco); }
 .prz-tranquilo .anel-c .arco { stroke: var(--marca); }   /* ver nota do anel em public.css */
 .anel-c .centro { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; line-height: 1; }
-.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); font-variant-numeric: tabular-nums; }
+.anel-c .d { font-family: var(--display); font-weight: 800; font-size: var(--t-28); color: var(--texto); font-variant-numeric: var(--numero-destaque); }
 .anel-c .u { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-2); }
 .prazo-card p, .prazo-texto { font-size: var(--t-13); color: var(--texto-2); margin: 0.8rem 0 0; line-height: 1.5; }
 

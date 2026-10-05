@@ -6,7 +6,7 @@
 <title>O Plenário — Modo TV da sessão</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -137,7 +137,7 @@
   .tribuna .barra { height: .7vw; min-height: 8px; border-radius: 999px; background: var(--tv-cartao-2); margin-top: 1vw; overflow: hidden; }
   .tribuna .barra i { display: block; height: 100%; width: 64%; background: var(--jade-claro); border-radius: inherit; }
   .quorum-tv { display: flex; align-items: baseline; gap: 1.2vw; flex-wrap: wrap; }
-  .quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
+  .quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: var(--numero-destaque); }
   .quorum-tv span { font-size: clamp(1rem, 1.4vw, 2.4rem); color: var(--palco-texto-2); }
   .quorum-tv .ok { flex-basis: 100%; font-family: var(--mono); font-weight: 600; font-size: clamp(.8rem, .95vw, 1.6rem); letter-spacing: .1em; text-transform: uppercase; color: var(--tv-sim); }
 
@@ -161,7 +161,7 @@
   .contagem { display: grid; grid-template-columns: repeat(3, 1fr) 1.5fr; gap: 1.2vw; }
   .kpi { background: var(--tv-cartao); border: 1px solid var(--palco-linha); border-radius: var(--raio-lg); padding: .9vw 1.4vw; }
   .kpi .rot { margin-bottom: .4vw; }
-  .kpi b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 3.8vw, 6.4rem); line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+  .kpi b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 3.8vw, 6.4rem); line-height: 1; color: #fff; font-variant-numeric: var(--numero-destaque); }
   .kpi.faltam b { color: var(--tv-destaque); }
   .kpi .sub { font-size: clamp(.85rem, 1vw, 1.7rem); color: var(--palco-texto-2); margin-top: .4vw; display: block; }
   .kpi.progresso { display: flex; flex-direction: column; justify-content: center; }
@@ -176,7 +176,7 @@
   .pl { min-height: 0; border-radius: var(--raio-lg); padding: .6vw 1.5vw; display: flex; align-items: center; justify-content: space-between; gap: 1vw; border: 2px solid; }
   .pl .r { display: inline-flex; align-items: center; gap: .7vw; font-family: var(--display); font-weight: 700; font-size: clamp(1.2rem, 1.9vw, 3.2rem); }
   .pl .r svg { width: 2vw; height: 2vw; min-width: 20px; min-height: 20px; }
-  .pl .n { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: tabular-nums; }
+  .pl .n { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: var(--numero-destaque); }
   .pl-sim { background: rgba(67,189,147,.14); border-color: var(--tv-sim-borda); color: var(--tv-sim); }
   .pl-nao { background: rgba(240,121,75,.13); border-color: var(--tv-nao-borda); color: var(--tv-nao); }
   .pl-abs { background: var(--tv-cartao); border-color: var(--tv-abs-borda); color: var(--tv-abs); }
@@ -203,7 +203,7 @@
   .veredito.rejeitada { color: var(--tv-nao); }
   .f-resultado .materia-res { font-family: var(--mono); font-weight: 600; font-size: clamp(1.1rem, 1.9vw, 3.2rem); color: var(--tv-destaque); }
   .f-resultado .ementa-res { font-size: clamp(1.1rem, 1.8vw, 3rem); color: #fff; max-width: 48ch; margin: 0; line-height: 1.3; }
-  .placar-final { display: flex; gap: 2.4vw; margin-top: 1vw; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3vw, 5rem); font-variant-numeric: tabular-nums; }
+  .placar-final { display: flex; gap: 2.4vw; margin-top: 1vw; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3vw, 5rem); font-variant-numeric: var(--numero-destaque); }
   .placar-final span { display: inline-flex; align-items: baseline; gap: .6vw; }
   .placar-final small { font-family: var(--mono); font-weight: 500; font-size: .42em; letter-spacing: .1em; text-transform: uppercase; color: var(--palco-texto-2); }
   .placar-final .s { color: var(--tv-sim); }

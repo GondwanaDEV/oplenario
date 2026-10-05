@@ -48,6 +48,11 @@ const CARTOES = [
     rota: "vereadores",
   },
   {
+    titulo: "Leis e normas",
+    motivo: "As leis e demais normas publicadas pela Câmara: ementa, data da publicação e o texto para baixar.",
+    rota: "leis",
+  },
+  {
     titulo: "Transparência",
     motivo: "Salários, diárias, contratos e a execução do orçamento da Câmara chegam numa fatia futura de transparência fiscal.",
   },

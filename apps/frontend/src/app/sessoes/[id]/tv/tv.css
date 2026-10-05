@@ -32,6 +32,9 @@
 .tv.cursor-oculto, .tv.cursor-oculto * { cursor: none; }
 
 /* ---------------- topo (moldura) ---------------- */
+/* Título do telão: largo, mas menos que o das telas (--largura-titulo), porque a manchete
+   da matéria tem limite de linhas e o telão lê a 15 m — a palavra inteira vale mais que a largura. */
+.tv h1 { font-stretch: 104%; }
 .tv-topo { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 2vw; padding: 1.6vw 2.4vw 1.2vw; }
 .tv-marca { display: flex; align-items: center; gap: 1vw; }
 .tv-marca .marca-simbolo { width: 3.4vw; height: 3.4vw; min-width: 40px; min-height: 40px; }
@@ -109,7 +112,7 @@
 }
 @keyframes tv-esgotado { 50% { opacity: .55; } }
 .quorum-tv { display: flex; align-items: baseline; gap: 1.2vw; flex-wrap: wrap; }
-.quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: tabular-nums; }
+.quorum-tv b { white-space: nowrap; font-family: var(--display); font-weight: 800; font-size: clamp(2.4rem, 4.4vw, 7.4rem); color: #fff; line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .quorum-tv span { font-size: clamp(1rem, 1.4vw, 2.4rem); color: var(--palco-texto-2); }
 
 /* 2b · em apreciação (docs/23 Fatia 4b) — a matéria ANUNCIADA pela Mesa é o herói até a votação abrir. O
@@ -130,7 +133,7 @@
 .contagem { display: grid; grid-template-columns: repeat(3, 1fr) 1.5fr; gap: 1.2vw; }
 .kpi { background: var(--tv-cartao); border: 1px solid var(--palco-linha); border-radius: var(--raio-lg); padding: .9vw 1.4vw; }
 .kpi .rot { margin-bottom: .4vw; }
-.kpi b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 3.8vw, 6.4rem); line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+.kpi b { display: block; font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 3.8vw, 6.4rem); line-height: 1; color: #fff; font-variant-numeric: var(--numero-destaque); }
 .kpi.faltam b { color: var(--tv-destaque); }
 .kpi .sub { font-size: clamp(.85rem, 1vw, 1.7rem); color: var(--palco-texto-2); margin-top: .4vw; display: block; }
 .kpi.progresso { display: flex; flex-direction: column; justify-content: center; }
@@ -145,7 +148,7 @@
 .tv .pl { min-height: 0; border-radius: var(--raio-lg); padding: .6vw 1.5vw; display: flex; align-items: center; justify-content: space-between; gap: 1vw; border: 2px solid; }
 .tv .pl .r { display: inline-flex; align-items: center; gap: .7vw; font-family: var(--display); font-weight: 700; font-size: clamp(1.2rem, 1.9vw, 3.2rem); }
 .tv .pl .r svg { width: 2vw; height: 2vw; min-width: 20px; min-height: 20px; }
-.tv .pl .n { font-family: var(--display); font-weight: 800; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.tv .pl .n { font-family: var(--display); font-weight: 800; font-stretch: 115%; font-size: clamp(2.2rem, 4vw, 6.8rem); line-height: 1; font-variant-numeric: var(--numero-destaque); }
 .tv .pl-sim { background: rgba(67,189,147,.14); border-color: var(--tv-sim-borda); color: var(--tv-sim); }
 .tv .pl-nao { background: rgba(240,121,75,.13); border-color: var(--tv-nao-borda); color: var(--tv-nao); }
 .tv .pl-abs { background: var(--tv-cartao); border-color: var(--tv-abs-borda); color: var(--tv-abs); }
@@ -158,7 +161,7 @@
 .tv .vt .mk-nao { background: var(--tv-nao-borda); color: #1C0A03; }
 .tv .vt .mk-abs { background: rgba(231,240,226,.3); color: #0F2418; }
 .tv .vt .vn { min-width: 0; line-height: 1.15; }
-.tv .vt .vn b { display: block; font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tv .vt .vn b { display: block; font-stretch: var(--largura-densa); font-size: clamp(.9rem, 1.2vw, 2rem); font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tv .vt .vn span { font-family: var(--mono); font-size: clamp(.75rem, .85vw, 1.4rem); color: var(--palco-texto-2); }
 
 /* nominal sem nenhum voto ainda: o miolo não pode ficar um vazio com o placar num canto (mesmo tratamento da secreta) */
@@ -182,7 +185,7 @@
 .veredito.rejeitada { color: var(--tv-nao); }
 .materia-res { font-family: var(--mono); font-weight: 600; font-size: clamp(1.1rem, 1.9vw, 3.2rem); color: var(--tv-destaque); }
 .ementa-res { font-size: clamp(1.1rem, 1.8vw, 3rem); color: #fff; max-width: 48ch; margin: 0; line-height: 1.3; }
-.placar-final { display: flex; gap: 2.4vw; margin-top: 1vw; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3vw, 5rem); font-variant-numeric: tabular-nums; }
+.placar-final { display: flex; gap: 2.4vw; margin-top: 1vw; font-family: var(--display); font-weight: 800; font-size: clamp(1.6rem, 3vw, 5rem); font-variant-numeric: var(--numero-destaque); }
 .placar-final span { display: inline-flex; align-items: baseline; gap: .6vw; }
 .placar-final small { font-family: var(--mono); font-weight: 500; font-size: .42em; letter-spacing: .1em; text-transform: uppercase; color: var(--palco-texto-2); }
 .placar-final .s { color: var(--tv-sim); }

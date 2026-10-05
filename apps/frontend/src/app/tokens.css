@@ -76,16 +76,30 @@
   --amarelo:      #CFA65C;
 
   /* ---- tipografia ---- */
-  /* Trocada em 22/09/2026 junto com o vidro. Sora e' uma geometrica angular, de
-     inflexao "startup"; contra superficie de vidro e paleta salvia ela brigava.
-     Plus Jakarta Sans tem a mesma familia geometrica com terminais MOLES — e' o
-     que combina com raio grande e borda especular. Inter no corpo porque a tela
-     densa deste produto (tabela de proposicoes, chamada nominal) vive em 13px, e
-     Inter foi desenhada para esse tamanho. JetBrains Mono e' mais redonda que a
-     IBM Plex Mono, entao o numero tabular nao volta ao registro anterior. */
-  --display: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --corpo:   'Inter', system-ui, sans-serif;
-  --mono:    'JetBrains Mono', ui-monospace, monospace;
+  /* Trocada em 05/10/2026 (antes: Plus Jakarta Sans + Inter + JetBrains Mono, de 22/09).
+     Jakarta e Inter tinham proporcao e altura-x proximas: o titulo so' se separava do
+     corpo pelo peso, e a hierarquia ficava plana. Inter e' tambem a letra padrao de
+     todo SaaS — o produto parecia generico antes de se ler uma palavra.
+     Mona Sans e' UMA familia com eixo de LARGURA (75–125%). A hierarquia passa a vir
+     da largura: titulo largo (--largura-titulo), tela normal, tabela e grade nominal
+     condensadas (--largura-densa). O produto vive em tres densidades — tabela de 13px,
+     portal de 56px, telao a 15 m — e a mesma letra cobre as tres. Altura-x alta e
+     desenho de interface: le bem em 13px. Geist Mono nos dados: mais seca que a
+     JetBrains, conversa com a grotesca. Os arquivos saem do proprio front (fontes.css). */
+  --display: 'Mona Sans', system-ui, sans-serif;
+  --corpo:   'Mona Sans', system-ui, sans-serif;
+  --mono:    'Geist Mono', ui-monospace, monospace;
+
+  /* Largura do eixo da Mona Sans. Em fonte sem o eixo, font-stretch nao faz nada. */
+  --largura-titulo: 112%;   /* h1 de pagina e manchete do portal */
+  --largura-densa:  92%;    /* tabela, grade nominal: cabe mais sem descer o corpo */
+
+  /* Numero grande isolado (placar, quorum, KPI, contador) em fonte de titulo.
+     O `tabular-nums` da Mona Sans troca o 0 por um zero CORTADO (glifo zero.tf, sem
+     alternativa no arquivo). Em coluna de numeros o corte ajuda a ler e fica; num
+     placar de 6rem ele destoa. Aqui o numero e' unico, nao ha coluna para alinhar,
+     entao o algarismo proporcional basta. */
+  --numero-destaque: normal;
 
   /* escala tipografica: 11 · 12 · 13 · 16 · 21 · 28 · 40 · 56
      O 11 entrou em 23/09/2026. A escala dizia comecar em 12, mas a auditoria achou ~66

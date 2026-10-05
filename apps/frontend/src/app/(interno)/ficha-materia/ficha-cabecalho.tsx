@@ -34,7 +34,7 @@ export function FichaCabecalho({
           <span className="especie">{especie}</span>
           <span className={`chip chip-${categoria}`}>{rotuloSituacao}</span>
         </div>
-        <h1>{proposicao.ementa}</h1>
+        <h1 className="titulo-longo">{proposicao.ementa}</h1>
         <div className="ficha-meta-linha">
           <span>
             Autoria{" "}

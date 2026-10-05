@@ -6,7 +6,7 @@
 <title>O Plenário — Sessão ao vivo · Mesa de condução</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,200..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="../sistema/tokens.css" />
 <link rel="stylesheet" href="../sistema/chassi.css" />
 <style>
@@ -98,7 +98,7 @@
   .voto-col { background: var(--palco-inset); border: 1px solid var(--palco-linha); border-radius: var(--raio-sm); padding: 0.85rem 0.9rem; }
   .voto-col .rotulo { display: flex; align-items: center; gap: 0.45rem; font-family: var(--mono); font-size: var(--t-13); text-transform: uppercase; letter-spacing: .06em; color: var(--palco-texto-2); margin: 0 0 0.35rem; }
   .voto-col .ponto { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
-  .voto-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; margin: 0; }
+  .voto-col .n { font-family: var(--display); font-weight: 800; font-size: var(--t-40); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: var(--numero-destaque); margin: 0; }
   .voto-sim .n { color: #D2E3CE; }
   .voto-nao .n { color: #F2A488; }
   .voto-abs .n { color: var(--amarelo); }
@@ -165,7 +165,7 @@
 
   /* ============== 4 · RAIL ============== */
   .quorum-num { display: flex; align-items: baseline; gap: 0.5rem; }
-  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: tabular-nums; }
+  .quorum-num b { font-family: var(--display); font-weight: 800; font-size: var(--t-40); letter-spacing: -0.02em; color: var(--marca); line-height: 1; font-variant-numeric: var(--numero-destaque); }
   .quorum-num span { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
   .quorum svg.hemi { width: 100%; height: auto; display: block; margin: 0.6rem 0 0.2rem; }
   .hemi .presente { fill: var(--acao); }
