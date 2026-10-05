@@ -76,8 +76,8 @@
                        {:status (.statusCode resp) :corpo (.body resp)})))))
 
 (defn limpar-required-actions!
-  "Zera as required-actions do usuario (ex.: `webauthn-register-passwordless`, que `criar-usuario!` do
-  IdentityProvider crava sempre) — sem isto o usuario nao consegue logar so' com senha."
+  "Zera as required-actions do usuario (a senha e o codigo do primeiro acesso, que `criar-usuario!` do IdentityProvider
+  crava sempre — ADR-0024) — sem isto a persona da demo nao entra so' com a senha semeada."
   [^HttpClient http base-url token realm kc-user-id]
   (let [resp (.send http (-> (HttpRequest/newBuilder)
                               (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id)))

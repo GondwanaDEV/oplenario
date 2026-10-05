@@ -29,6 +29,9 @@
             :web-client-id "oplenario-web"
             :redirect-uris ["http://localhost:3000/api/auth/callback"]
             :web-origins ["http://localhost:3000"]
+            ;; ADR-0024: o tema de login do O Plenario (apps/keycloak/temas/oplenario). O Keycloak sem o tema instalado
+            ;; cai no padrao (com um erro no log dele), entao ligar aqui nao derruba nada. KEYCLOAK_TEMA_LOGIN="" desliga.
+            :tema-login "oplenario"
             ;; Onda D Slice 5 Task 2: p/ onde o realm provisionado aponta o smtpServer -- quem ENVIA o
             ;; convite/e-mails de uso-unico e' o proprio Keycloak (config de realm), nao a app (nao
             ;; confundir com o carry F6 do e-mail TRANSACIONAL da app). Mailpit em dev/test.
@@ -41,6 +44,10 @@
  ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
  ;; ler este valor em vez de ter default proprio.
  :sessao {:absoluta-h 12 :ociosa-min 30}
+ ;; ADR-0024: a entrada pelo CPF (POST /auth/localizar). Ate' `limite-por-ip` consultas por IP a cada `janela-min`
+ ;; minutos, em memoria da instancia. Uma Camara inteira costuma sair por um IP so' (a rede da Casa): o teto cobre a
+ ;; chegada da equipe pela manha. ENTRADA_LIMITE_POR_IP / ENTRADA_JANELA_MIN sobrepoem.
+ :entrada {:limite-por-ip 30 :janela-min 5}
  ;; ADR-0016: o IdP do OPERADOR da plataforma — realm proprio, sem Casa. Em producao e' um Keycloak FISICAMENTE
  ;; SEPARADO (OPERACAO_KC_BASE_URL etc.); o que nao for dado aqui e' herdado de :keycloak (dev/CI: o mesmo
  ;; container). Sessao do console mais curta que a da Casa (8h absoluta, 15 min ociosa).

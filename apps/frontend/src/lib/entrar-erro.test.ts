@@ -21,4 +21,13 @@ describe("mensagemErroEntrada", () => {
       "Não foi possível concluir o login. Verifique o endereço da sua câmara e tente novamente."
     );
   });
+
+  it("ADR-0024: cada falha da entrada pelo CPF tem a sua frase — nenhuma repete o CPF", () => {
+    for (const erro of ["cpf-invalido", "sem-acesso", "sem-acesso-nesta", "muitas-tentativas", "indisponivel", "escolha"]) {
+      const m = mensagemErroEntrada(erro);
+      expect(m).toBeTruthy();
+      expect(m).not.toBe(mensagemErroEntrada("login"));
+      expect(m).not.toMatch(/\d{3}/);
+    }
+  });
 });

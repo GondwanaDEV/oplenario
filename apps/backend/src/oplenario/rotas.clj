@@ -7,6 +7,8 @@
             [oplenario.admin-sistema.components.repositorio :as repo-admin-sistema-comp]
             [oplenario.admin-sistema.diplomat.http.in :as admin-sistema-http]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
+            [oplenario.auditoria.logic :as auditoria-logic]
+            [oplenario.limite-de-taxa :as limite-taxa]
             [oplenario.restricao-da-casa :as restricao-casa]
             [oplenario.encerramento :as encerramento]
             [oplenario.agente :as agente]
@@ -346,7 +348,11 @@
            ;; modulos e o object storage, por isso no HOST (§22.10). `exportar-casa` = (fn [ente-id exportacao-id] ->
            ;; {:chave :sha256 :bytes :manifesto}); `apagar-casa` = (fn [ente-id pedido-id] -> resumo, retomavel). Sem eles
            ;; (nil), gerar/apagar respondem 503 nomeado. `executar-exportacao` (fn [f]) = o executor (testes: sincrono).
-           exportar-casa apagar-casa executar-exportacao]
+           exportar-casa apagar-casa executar-exportacao
+           ;; ADR-0024: a entrada pelo CPF. `casa-para-login` = (fn [ente-id] -> {:nome-oficial :nome-curto} | nil): a
+           ;; Casa existe e nao esta' encerrada (default: info-ente + estado da Casa). `entrada` = o limite por IP da rota
+           ;; (default: o bloco :entrada da config).
+           casa-para-login entrada]
     plataforma-ia-override :plataforma-ia
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
@@ -606,6 +612,18 @@
         ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
         ;; ela mesma).
         sessao (or sessao (:sessao (config/carregar)))
+        ;; ADR-0024: quem a entrada pelo CPF lista — a Casa que existe e nao esta' encerrada (o realm dela some no
+        ;; apagamento). Mesma inversao de dependencia de `info-ente`: identidade nunca importa cadastros/admin_sistema.
+        casa-para-login (or casa-para-login
+                            (fn [ente-id] (when-not (restricao-casa/encerrada? (estado-da-casa ente-id))
+                                            (info-ente ente-id))))
+        ;; ADR-0024: o limite por IP da entrada pelo CPF, construido UMA vez por montagem (a memoria da janela vive nele)
+        limite-localizar (let [{:keys [limite-por-ip janela-min]} (or entrada (:entrada (config/carregar)))]
+                           (limite-taxa/interceptor
+                            (limite-taxa/novo {:maximo limite-por-ip :janela-ms (* janela-min 60 1000)})
+                            {:nome ::limite-localizar
+                             :chave-de auditoria-logic/ip-de
+                             :mensagem "Muitas tentativas a partir desta rede. Espere alguns minutos e tente de novo."}))
         ;; ADR-0016: o bloco :operacao (realm/URL publica/client do console + a sessao do console)
         operacao (or operacao (:operacao (config/carregar)))
         integracao-ia (or integracao-ia (:integracao-ia (config/carregar)))
@@ -898,7 +916,8 @@
         (into (tempo-real-sse/rotas {:auth auth :canal-store canal-store :consultar-sessao consultar-sessao}))
         (into (auth-http/rotas {:info-ente info-ente :keycloak keycloak
                                 :idp idp :repo-identidade repo-identidade
-                                :relogio relogio-producao :sessao sessao}))
+                                :relogio relogio-producao :sessao sessao
+                                :casa-para-login casa-para-login :limite-localizar limite-localizar}))
         (into (identidade-http/rotas {:auth auth :repo-identidade repo-identidade :idp idp}))
         ;; ADR-0016: o console do operador. Interceptor PROPRIO (nunca o `auth` das Casas) — cross-esfera fecha.
         (into (admin-sistema-http/rotas

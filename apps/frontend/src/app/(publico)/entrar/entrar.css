@@ -72,3 +72,30 @@
 .entrar-rodape .plat { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
 .entrar-rodape .plat b { font-weight: 600; color: var(--texto); }
 .entrar-rodape .sig { width: 18px; height: 18px; flex: 0 0 auto; }
+
+/* ---- ADR-0024: a entrada pelo CPF ----
+   O campo e a nota do arquétipo login.html do design system (.campo / .mfa-nota), com os mesmos tokens já auditados
+   AA nos 2 temas. O cartão continua centrado, mas o formulário lê da esquerda (rótulo sobre o campo). */
+.entrar-form { margin-top: 1.4rem; text-align: left; }
+.entrar-campo { display: grid; gap: 0.35rem; }
+.entrar-campo label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.entrar-campo input {
+  font-family: var(--mono); font-size: var(--t-16); letter-spacing: 0.04em; color: var(--texto);
+  background: var(--surface-2); border: 1px solid var(--campo-borda); border-radius: var(--raio-sm);
+  padding: 0.7rem 0.8rem; min-height: 48px; width: 100%;
+}
+.entrar-campo input::placeholder { color: var(--texto-2); }
+.entrar-form .entrar-acao { margin-top: 1rem; }
+.entrar-passo { margin: 0.6rem 0 0; font-size: var(--t-12); color: var(--texto-2); text-align: center; }
+.entrar-cidadao { margin: 1.3rem 0 0; font-size: var(--t-12); color: var(--texto-2); line-height: 1.5; }
+
+/* a escolha da Câmara (quem atua em mais de uma) */
+.entrar-camaras { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: 0.6rem; text-align: left; }
+.entrar-camara {
+  display: flex; align-items: center; gap: 0.75rem; min-height: 52px; padding: 0.7rem 0.9rem;
+  background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  color: var(--texto); font-weight: 600; text-decoration: none;
+}
+.entrar-camara:hover { border-color: var(--texto-2); }
+.entrar-trocar { margin: 1.1rem 0 0; font-size: var(--t-13); }
+.entrar-trocar a { color: var(--marca); text-underline-offset: 3px; }

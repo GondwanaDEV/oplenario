@@ -27,6 +27,11 @@
   ;; SUPRATENANT (sobre o :ds; role id_resolver)
   (criar-identidade! [this identidade] "CPF -> id canonico (idempotente).")
   (identidade-por-cpf [this cpf])
+  (id-por-cpf [this cpf]
+    "ADR-0024: CPF -> id | nil. Leitura ESTREITA (so' o id) para o caminho PUBLICO da entrada pelo CPF.")
+  (casas-com-acesso-institucional [this identidade-id]
+    "ADR-0024: os ente-id onde a identidade tem vinculo institucional ATIVO — a unica pergunta que atravessa as Casas
+    sobre o vinculo (funcao estreita do banco; o vinculo segue sob RLS para todo o resto).")
   (identidade-por-id [this id])
   (nome-por-id [this id]
     "Leitura ESTREITA (so' :nome, sem :cpf) — pra caminhos que nao devem ver CPF (ex.: provisionar
@@ -110,6 +115,8 @@
   ;; supratenant
   (criar-identidade! [_ identidade] (id/inserir! (:ds datasource) identidade))
   (identidade-por-cpf [_ cpf] (id/por-cpf (:ds datasource) cpf))
+  (id-por-cpf [_ cpf] (id/id-por-cpf (:ds datasource) cpf))
+  (casas-com-acesso-institucional [_ identidade-id] (id/casas-com-acesso-institucional (:ds datasource) identidade-id))
   (identidade-por-id [_ id] (id/por-id (:ds datasource) id))
   (nome-por-id [_ id] (id/nome-por-id (:ds datasource) id))
   (pessoas-com-cpf-mascarado [_ ids] (id/com-cpf-mascarado-por-ids (:ds datasource) ids))

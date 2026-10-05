@@ -78,6 +78,7 @@
      ;; redirect de http://localhost:3000 e o login em prod falha com "Invalid redirect_uri".
      (get env "KEYCLOAK_REDIRECT_URIS")    (assoc-in [:keycloak :redirect-uris]   (lista-csv (get env "KEYCLOAK_REDIRECT_URIS")))
      (get env "KEYCLOAK_WEB_ORIGINS")      (assoc-in [:keycloak :web-origins]     (lista-csv (get env "KEYCLOAK_WEB_ORIGINS")))
+     (contains? env "KEYCLOAK_TEMA_LOGIN") (assoc-in [:keycloak :tema-login] (not-empty (get env "KEYCLOAK_TEMA_LOGIN")))
      (get env "KEYCLOAK_SMTP_HOST")      (assoc-in [:keycloak :smtp :host]     (get env "KEYCLOAK_SMTP_HOST"))
      (get env "KEYCLOAK_SMTP_PORT")      (assoc-in [:keycloak :smtp :port]     (Integer/parseInt (get env "KEYCLOAK_SMTP_PORT")))
      (get env "KEYCLOAK_SMTP_FROM")      (assoc-in [:keycloak :smtp :from]     (get env "KEYCLOAK_SMTP_FROM"))
@@ -86,6 +87,8 @@
      (get env "KEYCLOAK_SMTP_AUTH")      (assoc-in [:keycloak :smtp :auth]     (= "true" (get env "KEYCLOAK_SMTP_AUTH")))
      (get env "KEYCLOAK_SMTP_USUARIO")   (assoc-in [:keycloak :smtp :usuario]  (get env "KEYCLOAK_SMTP_USUARIO"))
      (get env "KEYCLOAK_SMTP_SENHA")     (assoc-in [:keycloak :smtp :senha]    (get env "KEYCLOAK_SMTP_SENHA"))
+     (get env "ENTRADA_LIMITE_POR_IP") (assoc-in [:entrada :limite-por-ip] (Integer/parseInt (get env "ENTRADA_LIMITE_POR_IP")))
+     (get env "ENTRADA_JANELA_MIN")    (assoc-in [:entrada :janela-min]    (Integer/parseInt (get env "ENTRADA_JANELA_MIN")))
      (get env "SESSAO_ABSOLUTA_H")  (assoc-in [:sessao :absoluta-h] (Integer/parseInt (get env "SESSAO_ABSOLUTA_H")))
      (get env "SESSAO_OCIOSA_MIN")  (assoc-in [:sessao :ociosa-min] (Integer/parseInt (get env "SESSAO_OCIOSA_MIN")))
      ;; ADR-0015: o broker gov.br do cidadao. Sem GOVBR_AMBIENTE = sem gov.br (o realm nao ganha o IdP e o portal

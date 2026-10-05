@@ -162,7 +162,7 @@
             (govbr-simulado/garantir-cidadao! kc-cfg {:cpf (:cpf cidada) :nome (:nome cidada) :senha senha-demo})
             (println "personas/semear-credenciais!: gov.br simulado — Cidadã entra com CPF" (:cpf cidada)
                      "e a senha de demo")))
-        (idp/provisionar-realm! idp casa/ente-id)
+        (idp/provisionar-realm! idp casa/ente-id {:nome "Câmara Municipal de Fortaleza"})
         (let [realm (str realm-prefixo casa/ente-id)
               ;; token NOVO, obtido DEPOIS da extensao — este e' o que vive 3600s e e' reusado pelas 5
               ;; personas (~8 chamadas admin: limpar-required-actions!+setar-senha! por persona).

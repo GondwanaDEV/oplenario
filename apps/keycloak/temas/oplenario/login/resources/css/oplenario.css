@@ -1,0 +1,261 @@
+/* ============================================================
+   O PLENÁRIO · tema de login do Keycloak (ADR-0024)
+   O arquétipo "auth" de produto/design-system/o-plenario/telas/login.html, servido pelo Keycloak.
+
+   Os tokens abaixo são um RECORTE de apps/frontend/src/app/tokens.css (a fonte de verdade) — só os que esta tela usa,
+   com os mesmos valores e o mesmo light-dark(). Mudou um token lá, muda aqui. O cartão usa --surface-solida (opaca),
+   como o login.html do design system: sobre o fundo com luz, o vidro deixava a cor vazar para os campos.
+   Contraste: os pares texto/fundo são os do tokens.css, já medidos AA nos dois temas.
+   ============================================================ */
+
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  src: url('../fontes/mona-sans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Mona Sans';
+  font-style: normal;
+  font-weight: 200 900;
+  font-stretch: 75% 125%;
+  font-display: swap;
+  src: url('../fontes/mona-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fontes/geist-mono-latin.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: light dark;
+
+  --jade: #3A6A48;
+  --telha: #C0693F;
+  --cobalto: #3F6E92;
+  --amarelo: #CFA65C;
+
+  --display: 'Mona Sans', system-ui, sans-serif;
+  --corpo: 'Mona Sans', system-ui, sans-serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+  --largura-titulo: 112%;
+
+  --t-12: 0.75rem;
+  --t-13: 0.8125rem;
+  --t-16: 1rem;
+  --t-21: 1.3125rem;
+
+  --raio-sm: 12px;
+  --raio-lg: 26px;
+  --raio-capsula: 999px;
+
+  --bg:             light-dark(#A6BFA2, #0F1711);
+  --surface-solida: light-dark(#E7F0E2, #1A251C);
+  --surface-2:      light-dark(#FFF7EA, #2C3D2F);
+  --linha:          light-dark(#7A9B7A, #42573F);
+  --campo-borda:    light-dark(#3F5943, #7E9C80);
+  --texto:          light-dark(#16231A, #E7F0E2);
+  --texto-2:        light-dark(#2F3E33, #A6BFA2);
+  --marca:          light-dark(#234429, #A6BFA2);
+  --acao:           light-dark(#234429, #7A9B7A);
+  --acao-hover:     light-dark(#1E4028, #8FBE92);
+  --acao-texto:     light-dark(#FFF7EA, #0B140C);
+  --acento-texto:   light-dark(#73260F, #F58A60);
+  --foco:           light-dark(#1B5490, #7FB3E6);
+  --aviso-texto:    light-dark(#5F4508, #CFA65C);
+  --amarelo-traco:  light-dark(#B07D14, #CFA65C);
+
+  --vidro-brilho: light-dark(rgba(255,255,255,.62), rgba(231,240,226,.075));
+  --sombra-cor-1: light-dark(rgba(25,33,28,.04), rgba(0,0,0,.2));
+  --sombra-cor-3: light-dark(rgba(47,93,63,.55), rgba(0,0,0,.7));
+  --sombra-alta: inset 0 1px 0 var(--vidro-brilho), 0 1px 0 var(--sombra-cor-1), 0 32px 64px -38px var(--sombra-cor-3);
+
+  --bg-luz-a: light-dark(rgba(232,178,58,.22), rgba(232,178,58,.10));
+  --bg-luz-b: light-dark(rgba(47,93,63,.18),   rgba(122,155,122,.14));
+  --bg-luz-c: light-dark(rgba(255,247,234,.34), rgba(63,110,146,.10));
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body.op-pagina {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.2rem, 5vw, 2.5rem) 1rem;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(120% 80% at 88% -12%, var(--bg-luz-a), transparent 55%),
+    radial-gradient(90% 70% at -5% 0%, var(--bg-luz-b), transparent 50%),
+    radial-gradient(70% 55% at 45% 115%, var(--bg-luz-c), transparent 60%);
+  background-attachment: fixed;
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: var(--t-16);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid var(--foco); outline-offset: 2px; border-radius: 5px;
+}
+
+/* ---------- o cartão ---------- */
+.op-cartao {
+  width: 100%;
+  max-width: 416px;
+  background: var(--surface-solida);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-lg);
+  box-shadow: var(--sombra-alta);
+  overflow: hidden;
+}
+
+/* faixa de azulejo — a assinatura (Bulcão, 4 cores da marca) */
+.op-faixa { height: 8px; display: flex; }
+.op-faixa span { flex: 1; position: relative; overflow: hidden; }
+.op-faixa span::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 0% 100%, var(--az) 0 70%, transparent 70%); }
+.op-faixa .a { background: color-mix(in srgb, var(--jade) 30%, transparent); --az: var(--jade); }
+.op-faixa .b { background: color-mix(in srgb, var(--cobalto) 30%, transparent); --az: var(--cobalto); }
+.op-faixa .c { background: color-mix(in srgb, var(--amarelo) 36%, transparent); --az: var(--amarelo-traco); }
+.op-faixa .d { background: color-mix(in srgb, var(--telha) 30%, transparent); --az: var(--telha); }
+
+.op-corpo { padding: 1.6rem clamp(1.3rem, 5vw, 1.9rem) 1.8rem; }
+
+.op-casa { display: flex; align-items: center; gap: 0.7rem; }
+.op-brasao { width: 42px; height: 42px; border-radius: 11px; flex: 0 0 auto; }
+.op-casa b { font-family: var(--display); font-weight: 700; font-size: var(--t-16); color: var(--texto); line-height: 1.15; display: block; }
+.op-casa span span { font-size: var(--t-12); color: var(--texto-2); }
+
+.op-titulo { margin: 1.4rem 0 1.2rem; }
+.op-titulo h1 {
+  font-family: var(--display); font-weight: 800; font-size: var(--t-21); font-stretch: var(--largura-titulo);
+  letter-spacing: -0.01em; color: var(--texto); margin: 0; text-wrap: balance;
+}
+.op-titulo p { font-size: var(--t-13); color: var(--texto-2); margin: 0.3rem 0 0; }
+
+/* ---------- avisos (erro, info, sucesso) ---------- */
+.op-aviso {
+  margin: 0 0 1rem; padding: 0.7rem 0.8rem;
+  background: var(--surface-2); border: 1px solid var(--linha); border-left-width: 4px;
+  border-radius: var(--raio-sm); font-size: var(--t-13); color: var(--texto); line-height: 1.45;
+}
+.op-aviso-error { border-left-color: var(--telha); }
+.op-aviso-warning { border-left-color: var(--amarelo-traco); }
+.op-aviso-success { border-left-color: var(--jade); }
+.op-aviso-info { border-left-color: var(--cobalto); }
+
+/* ---------- formulário ---------- */
+.op-form, #kc-form-login { display: block; margin: 0; }
+.op-campo { display: grid; gap: 0.35rem; margin: 0 0 0.9rem; }
+.op-rotulo, .op-entrada { display: block; }
+.op-rotulo-texto, .op-campo label, #kc-totp-settings-form label {
+  font-size: var(--t-13); font-weight: 600; color: var(--texto);
+}
+.op-input, input.op-input {
+  font-family: var(--corpo); font-size: var(--t-16); color: var(--texto);
+  background: var(--surface-2); border: 1px solid var(--campo-borda); border-radius: var(--raio-sm);
+  padding: 0.7rem 0.8rem; min-height: 48px; width: 100%;
+}
+.op-input[aria-invalid="true"] { border-color: var(--acento-texto); }
+#otp, #totp { font-family: var(--mono); letter-spacing: 0.2em; font-size: 1.15rem; }
+.op-input-grupo { position: relative; display: flex; }
+.op-input-grupo .op-input { padding-right: 3rem; }
+.op-erro-campo { display: block; font-size: var(--t-13); color: var(--acento-texto); margin-top: 0.2rem; }
+.op-ajuda { display: block; font-size: var(--t-12); color: var(--texto-2); }
+.required { color: var(--acento-texto); }
+
+.op-ver-senha {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: var(--texto-2); cursor: pointer;
+  width: 40px; height: 40px; display: grid; place-items: center; border-radius: 7px;
+}
+.op-ver-senha:hover { color: var(--texto); background: var(--surface-solida); }
+
+/* ícones desenhados com máscara SVG (sem fonte de ícone): herdam a cor do texto */
+.op-icone-olho, .op-icone-olho-fechado { display: block; width: 18px; height: 18px; background: currentColor;
+  -webkit-mask: var(--icone) center / contain no-repeat; mask: var(--icone) center / contain no-repeat; }
+.op-icone-olho { --icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+.op-icone-olho-fechado { --icone: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/svg%3E"); }
+
+.op-opcoes { margin: 0.2rem 0 0.8rem; font-size: var(--t-13); color: var(--texto-2); }
+.op-opcoes .checkbox label { display: inline-flex; align-items: center; gap: 0.45rem; font-weight: 500; }
+.op-opcoes input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--acao); }
+.op-botoes { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.4rem; }
+
+/* ---------- botões (o .btn do chassi) ---------- */
+.op-btn {
+  font-family: var(--corpo); font-weight: 600; font-size: var(--t-16);
+  border-radius: var(--raio-capsula); border: 1px solid transparent;
+  padding: 0.7rem 1.15rem; cursor: pointer; min-height: 48px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  line-height: 1.2; text-decoration: none;
+  transition: transform .12s ease, background-color .12s ease, border-color .12s ease;
+}
+.op-btn:hover { transform: translateY(-1px); }
+.op-btn-primaria { background: var(--acao); color: var(--acao-texto); box-shadow: 0 10px 22px -16px var(--sombra-cor-3); }
+.op-btn-primaria:hover { background: var(--acao-hover); }
+.op-btn-contorno { background: transparent; color: var(--texto); border-color: var(--linha); }
+.op-btn-contorno:hover { background: var(--surface-2); border-color: var(--texto-2); }
+.op-btn-bloco { width: 100%; }
+.op-btn-grande { min-height: 52px; }
+
+.op-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: var(--t-13); color: var(--marca); text-decoration: underline; text-underline-offset: 3px;
+}
+.op-outra-forma { margin-top: 1rem; text-align: center; }
+
+/* ---------- abaixo do formulário ---------- */
+.op-nota {
+  margin: 1.1rem 0 0; padding: 0.7rem 0.8rem;
+  background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  font-size: var(--t-12); color: var(--texto-2); line-height: 1.45;
+}
+.op-nota a, .op-trocar a, #kc-content a { color: var(--marca); text-underline-offset: 3px; }
+.op-trocar { margin: 1rem 0 0; text-align: center; font-size: var(--t-13); }
+
+/* conteúdo corrido das páginas herdadas (info, erro, configurar o código) */
+.instruction, #kc-info-message p, #kc-error-message p { color: var(--texto); font-size: var(--t-16); margin: 0 0 0.8rem; }
+#kc-totp-settings { padding-left: 1.2rem; margin: 0 0 1rem; font-size: var(--t-13); color: var(--texto); }
+#kc-totp-settings li { margin-bottom: 0.7rem; }
+#kc-totp-settings p { margin: 0 0 0.4rem; }
+#kc-totp-supported-apps { padding-left: 1.1rem; color: var(--texto-2); }
+#kc-totp-secret-qr-code { display: block; width: 180px; height: 180px; margin: 0.3rem 0; border-radius: 8px; background: #fff; padding: 6px; }
+#kc-totp-secret-key { font-family: var(--mono); font-size: var(--t-13); word-break: break-all; }
+
+/* escolher outro jeito de entrar */
+.op-metodos { display: grid; gap: 0.6rem; }
+.op-metodo {
+  display: flex; align-items: center; gap: 0.8rem; width: 100%; text-align: left;
+  padding: 0.8rem; background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
+  color: var(--texto); font: inherit; cursor: pointer;
+}
+.op-metodo:hover { border-color: var(--texto-2); }
+.op-metodo-corpo { flex: 1; }
+.op-metodo-titulo { font-weight: 600; font-size: var(--t-16); }
+.op-metodo-descricao { font-size: var(--t-13); color: var(--texto-2); }
+
+.op-sr {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ---------- rodapé ---------- */
+.op-rodape { margin-top: 1.5rem; text-align: center; }
+.op-plataforma { display: inline-flex; align-items: center; gap: 0.45rem; font-size: var(--t-12); color: var(--texto-2); }
+.op-plataforma img { width: 18px; height: 18px; }
+.op-plataforma b { font-weight: 600; color: var(--texto); }
+
+@media (prefers-reduced-motion: reduce) {
+  .op-btn { transition: none; }
+  .op-btn:hover { transform: none; }
+}
