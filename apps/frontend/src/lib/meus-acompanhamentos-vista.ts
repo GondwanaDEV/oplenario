@@ -18,9 +18,12 @@ export type LinhaAcompanhamentoVista = {
   situacao: { rotulo: string; categoria: CategoriaSituacao } | null;
   seguidoEm: string;
   indisponivel: boolean;
+  /** A ficha pública da matéria na Casa da lista; nulo se a matéria está indisponível (a ficha não existe ainda)
+   *  ou se a Casa não veio (servidor antigo) — nunca um link que não leva a nada. */
+  href: string | null;
 };
 
-export function derivarMeusAcompanhamentosVista(itens: MinhaMateria[]): LinhaAcompanhamentoVista[] {
+export function derivarMeusAcompanhamentosVista(itens: MinhaMateria[], enteId: string | null): LinhaAcompanhamentoVista[] {
   return itens.map((m) => {
     if (m.indisponivel || m.tipo === null || m.sequencial === null || m.ano === null) {
       return {
@@ -30,6 +33,7 @@ export function derivarMeusAcompanhamentosVista(itens: MinhaMateria[]): LinhaAco
         situacao: null,
         seguidoEm: m.seguidoEm,
         indisponivel: true,
+        href: null,
       };
     }
     const estado = m.estado ?? "";
@@ -41,6 +45,7 @@ export function derivarMeusAcompanhamentosVista(itens: MinhaMateria[]): LinhaAco
       situacao: { rotulo: rotuloSituacao, categoria: categorizarSituacao(estado) },
       seguidoEm: m.seguidoEm,
       indisponivel: false,
+      href: enteId ? `/portal/casa/${enteId}/materias/${m.proposicaoId}` : null,
     };
   });
 }
