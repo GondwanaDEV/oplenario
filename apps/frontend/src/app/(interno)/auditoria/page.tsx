@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth";
 import {
-  ATORES, CLASSES, FILTRO_INICIAL, OBJETOS, PERIODOS, canal, explicacaoDoEscopo, lacre, numero, objeto, quando, quem,
+  ATORES, CLASSES, FILTRO_INICIAL, OBJETOS, PERIODOS, canal, decisaoEmPalavras, explicacaoDoEscopo, lacre, numero, objeto, quando, quem,
   rotuloDoEscopo, seloCurto, verbo, type Filtro, type RegistroTrilha,
 } from "@/lib/trilha-auditoria-vista";
 import { exportarTrilha, useIntegridade, useTrilhaAuditoria } from "@/lib/use-trilha-auditoria";
@@ -68,7 +68,7 @@ function Evento({ r }: { r: RegistroTrilha }) {
       {aberto && (
         <dl className="ev-det">
           <div><dt>Ação</dt><dd className="mono">{r.acao}</dd></div>
-          <div><dt>Decisão</dt><dd>{r.decisao === "permitido" ? "Permitido" : r.decisao === "negado" ? "Negado pela política" : "Não concluído"}</dd></div>
+          <div><dt>Decisão</dt><dd>{decisaoEmPalavras(r.decisao)}</dd></div>
           <div><dt>Campos alterados</dt><dd>{r.campos.length ? r.campos.join(", ") : "—"}</dd></div>
           <div><dt>Canal</dt><dd>{canal(r.canal)}</dd></div>
           <p className="selo-row">

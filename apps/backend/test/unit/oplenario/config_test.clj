@@ -64,6 +64,13 @@
     (is (= "oplenario-web" (get-in c [:keycloak :web-client-id])) "client id publico default do edn")
     (is (= "http://localhost:8090" (get-in c [:keycloak :base-url-publico])) "base-url publico default do edn")))
 
+(deftest a-trilha-so-bloqueia-a-escrita-com-opt-in-explicito
+  ;; ADR-0017 (adendo): o padrao e' NAO bloquear; so' o valor exato "true" liga o modo que recusa
+  (is (false? (get-in (config/carregar {}) [:auditoria :exigir-tentativa])))
+  (is (true? (get-in (config/carregar {"AUDITORIA_EXIGIR_TENTATIVA" "true"}) [:auditoria :exigir-tentativa])))
+  (doseq [v ["" "false" "1" "TRUE" "sim"]]
+    (is (false? (get-in (config/carregar {"AUDITORIA_EXIGIR_TENTATIVA" v}) [:auditoria :exigir-tentativa])) (pr-str v))))
+
 (deftest govbr-so-existe-com-ambiente
   ;; ADR-0015: sem GOVBR_AMBIENTE o realm nao ganha o broker (fail-closed)
   (is (nil? (get-in (config/carregar {}) [:keycloak :govbr])))
