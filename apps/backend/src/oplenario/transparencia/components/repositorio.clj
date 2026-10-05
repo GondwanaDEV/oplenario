@@ -384,10 +384,10 @@
      nil se a materia nao esta' no portal (a mesma regra da ficha). Uma UNICA tx.")
   (buscar-norma [this ente-id norma-id] "Uma norma publicada por id, ou nil.")
   (norma-da-materia [this ente-id proposicao-id] "A norma publicada de uma materia, ou nil.")
-  (listar-normas [this ente-id filtro]
-    "Portal: {:normas :normas-total} — acervo as-enacted, com filtro opcional {:tipo :ano :numero} (ver
-     db/norma/listar), TRUNCADO no teto (200) mais `:normas-total` (SEM teto, `db/norma/contar`) no MESMO
-     filtro — frente 'truncamento-familia', sitio (c). Uma UNICA tx.")
+  (listar-normas [this ente-id filtro limite deslocamento]
+    "Portal: {:normas :normas-total} — UMA PAGINA (`limite` a partir de `deslocamento`) do acervo as-enacted, com
+     filtro opcional {:tipo :ano :numero} (ver db/norma/listar), mais `:normas-total` (SEM pagina, `db/norma/contar`)
+     no MESMO filtro — frente 'truncamento-familia', sitio (c). Uma UNICA tx.")
   ;; F6c Slice 4b — artefato de publicacao oficial (PROJECAO; a rota publica de download resolve o ponteiro daqui)
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     "Ponteiro do artefato de publicacao MAIS RECENTE de uma norma (objeto_store_ref + content_type + versao), ou nil.")
@@ -448,10 +448,10 @@
                  :movimentacoes (db-movimentacao/listar tx ente-id pid))))))
   (buscar-norma [this ente-id nid] (transacao this ente-id #(db-norma/buscar % ente-id nid)))
   (norma-da-materia [this ente-id pid] (transacao this ente-id #(db-norma/buscar-por-proposicao % ente-id pid)))
-  (listar-normas [this ente-id filtro]
+  (listar-normas [this ente-id filtro limite deslocamento]
     (transacao this ente-id
       (fn [tx]
-        {:normas       (db-norma/listar tx ente-id filtro)
+        {:normas       (db-norma/listar tx ente-id filtro limite deslocamento)
          :normas-total (db-norma/contar tx ente-id filtro)})))
   (artefato-mais-recente-da-norma [this ente-id norma-id]
     (transacao this ente-id #(db-artefato/mais-recente-por-norma % ente-id norma-id)))

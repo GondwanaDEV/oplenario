@@ -101,10 +101,11 @@
         (http/json-resposta 404 {:erro "materia nao encontrada"})))))
 
 (defn- listar-normas-handler
-  "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=) — acervo as-enacted (F6c Slice 3). Query-params
+  "GET /portal/casa/:ente/legislacao(?tipo=&ano=&numero=&pagina=N) — acervo as-enacted (F6c Slice 3). Query-params
   OPCIONAIS coagidos na borda (ano/numero nao-inteiro -> 400); ausentes -> filtro vazio = compat Slice 1.
-  Resposta e' o PAR {:normas :normas-total} (frente 'truncamento-familia', sitio (c)): o teto de 200 saia
-  sem sinalizar.
+  PAGINADA, 20 por pagina, como as votacoes: a resposta e' {:normas :normas-total :pagina :por-pagina} (frente
+  'truncamento-familia', sitio (c)) — o total e' do mesmo filtro, sem pagina; `:pagina` invalida -> 400. A ordem
+  e' estavel (desempate por id), entao uma norma nao repete nem some entre paginas.
 
   Ente inexistente -> 404, igual a /portal/casa/:ente (achado do teste exploratorio contra a homologacao,
   metodo docs/20): esta rota devolvia 200 com colecao VAZIA para QUALQUER id, enquanto a rota-pai devolvia
@@ -115,11 +116,12 @@
   [repo-transparencia resolver-ente-publico info-ente]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
-          filtro  (adapters-in/filtro-legislacao (:query-params req))]
+          filtro  (adapters-in/filtro-legislacao (:query-params req))
+          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))]
       (if-not (info-ente ente-id)
         (http/json-resposta 404 {:erro "ente nao encontrado"})
         (http/json-resposta 200
-          (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro)))))))
+          (adapters-out-norma/normas->wire (controllers/listar-normas repo-transparencia ente-id filtro pagina)))))))
 
 (defn- buscar-norma-handler
   [repo-transparencia resolver-ente-publico]
@@ -247,18 +249,21 @@
 ;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------
 
 (defn- listar-votacoes-handler
-  "GET /portal/casa/:ente/votacoes(?pagina=N) — as votacoes ENCERRADAS de sessoes PUBLICAS (nunca secreta, nunca em
+  "GET /portal/casa/:ente/votacoes(?pagina=N&materia=<proposicao-id>) — as votacoes ENCERRADAS de sessoes PUBLICAS (nunca secreta, nunca em
   curso), a mais recente primeiro, 20 por pagina, com o TOTAL: o cliente sabe quantas existem. `:ente` malformado ->
-  400; Casa inexistente -> 404 (a voz da rota-pai); `:pagina` invalida -> 400. `listar-votacoes` e' o seam do host (quem
-  sabe o que e' publico: sessoes; quem guarda a votacao: legislativo)."
+  400; Casa inexistente -> 404 (a voz da rota-pai); `:pagina` invalida -> 400. `:materia` (UUID da proposicao; malformado
+  ou repetido -> 400) restringe a lista as votacoes dessa materia: SO' restringe, a regra de sessao publica e' a mesma.
+  `listar-votacoes` e' o seam do host (quem sabe o que e' publico: sessoes; quem guarda a votacao: legislativo)."
   [repo-transparencia resolver-ente-publico info-ente listar-votacoes]
   (fn [req]
     (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
-          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))]
+          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))
+          materia (adapters-in/query-materia (get-in req [:query-params :materia]))]
       (if-not (info-ente ente-id)
         (http/json-resposta 404 {:erro "ente nao encontrado"})
         (http/json-resposta 200 (adapters-out-votacao/lista->wire
-                                 (controllers/votacoes-publicas repo-transparencia listar-votacoes ente-id pagina)))))))
+                                 (controllers/votacoes-publicas repo-transparencia listar-votacoes ente-id pagina
+                                                                materia)))))))
 
 (defn- votacao-publica-handler
   "GET /portal/casa/:ente/votacoes/:votacao_id — uma votacao encerrada de sessao publica; se nominal, o voto de cada
@@ -334,7 +339,7 @@
     ;; ---- Portal de VOTACOES: mais um literal no nivel de `materias`/`legislacao` ----
     ["/portal/casa/:ente/votacoes" :get
      [(listar-votacoes-handler repo-transparencia resolver-ente-publico info-ente
-                               (or votacoes-publicas (fn [_ _ _] {:votacoes [] :total 0})))]
+                               (or votacoes-publicas (fn [_ _ _ _] {:votacoes [] :total 0})))]
      :route-name :transparencia/listar-votacoes]
     ["/portal/casa/:ente/votacoes/:votacao_id" :get
      [(votacao-publica-handler repo-transparencia resolver-ente-publico info-ente

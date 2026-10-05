@@ -26,8 +26,21 @@ describe("opcoesDePresidencia", () => {
       { vereadorId: "v-bruno", rotulo: "Bruno Lima · Presidente" },
       { vereadorId: "v-helena", rotulo: "Helena Past · Vice-presidente" },
       { vereadorId: "v-ana", rotulo: "Ana Castro" },
-      { vereadorId: "v-carla", rotulo: "Vereador(a) v-carla" },
+      { vereadorId: "v-carla", rotulo: "Vereador(a) sem nome cadastrado" },
     ]);
+  });
+
+  it("dois membros sem nome não ficam com o mesmo rótulo no seletor (número de ordem, nunca o id)", () => {
+    const doisSemNome = [
+      ...membros,
+      { vereadorId: "v-dario", nomeParlamentar: null, cargoMesa: null, partido: null },
+    ] as typeof membros;
+    const rotulos = opcoesDePresidencia(doisSemNome).map((o) => o.rotulo);
+    expect(rotulos.filter((r) => r.startsWith("Vereador(a) sem nome cadastrado"))).toEqual([
+      "Vereador(a) sem nome cadastrado (1)",
+      "Vereador(a) sem nome cadastrado (2)",
+    ]);
+    expect(rotulos.join(" ")).not.toMatch(/v-carla|v-dario/);
   });
 });
 

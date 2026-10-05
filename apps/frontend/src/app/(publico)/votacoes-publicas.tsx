@@ -3,7 +3,9 @@
 // As VOTAÇÕES no portal do cidadão: o que a Câmara votou em sessão pública, o resultado em palavras e — quando a
 // votação foi nominal — o voto de cada vereador, pelo nome parlamentar. O backend só entrega votação ENCERRADA de
 // sessão pública e não secreta; na votação secreta há só o resultado, nunca quem votou como. Sem percentual nem
-// ranking de vereador. A lista tem o total e as páginas explícitos: nada é cortado em silêncio.
+// ranking de vereador. A lista tem o total e as páginas explícitos: nada é cortado em silêncio. Com `?materia=`
+// (vindo da ficha pública da matéria) a lista mostra só as votações daquela matéria e diz isso, com o caminho de volta
+// para todas.
 
 import { useEffect, useState } from "react";
 import type { VotacaoDetalheOut, VotacaoPublicaOut, VotacoesPublicasOut } from "@/lib/contrato-portal.gen";
@@ -59,12 +61,38 @@ function quando(iso: string): string {
 
 const POR_PAGINA_PADRAO = 20;
 
-export function VotacoesPublicas({ ente, votacao, pagina }: { ente: string; votacao: string | null; pagina: number }) {
+type Visao = { votacao: string | null; materia: string | null; pagina: number };
+
+// O endereço de uma visão da lista: só o que está preenchido, sempre na mesma ordem (votação, matéria, página).
+function enderecoDaLista(base: string, v: Visao): string {
+  const q = new URLSearchParams();
+  if (v.votacao) q.set("votacao", v.votacao);
+  if (v.materia) q.set("materia", v.materia);
+  if (v.pagina > 1) q.set("pagina", String(v.pagina));
+  const s = q.toString();
+  return s ? `${base}?${s}` : base;
+}
+
+export function VotacoesPublicas({
+  ente,
+  votacao,
+  pagina,
+  materia = null,
+}: {
+  ente: string;
+  votacao: string | null;
+  pagina: number;
+  materia?: string | null;
+}) {
   const lista = useBusca<VotacoesPublicasOut>({
     segmentos: [ente, "votacoes"],
-    consulta: pagina > 1 ? { pagina: String(pagina) } : {},
+    consulta: {
+      ...(materia ? { materia } : {}),
+      ...(pagina > 1 ? { pagina: String(pagina) } : {}),
+    },
   });
   const base = `/portal/casa/${encodeURIComponent(ente)}/votacoes`;
+  const daMateria = lista.fase === "pronto" ? lista.dado.votacoes.find((v) => v.materia)?.materia : undefined;
   return (
     <div className="votacoes-publicas">
       <div className="pg-cab">
@@ -78,6 +106,16 @@ export function VotacoesPublicas({ ente, votacao, pagina }: { ente: string; vota
 
       {votacao && <VotacaoAberta ente={ente} votacaoId={votacao} />}
 
+      {materia && lista.fase === "pronto" && (
+        <p className="vp-filtro" role="status">
+          Mostrando só as votações da matéria{" "}
+          <b>{daMateria ? formatarNumeroProposicao(daMateria.tipo, daMateria.sequencial, daMateria.ano) : "escolhida"}</b>.{" "}
+          <a href={base}>Ver todas as votações</a>
+          <span aria-hidden="true"> · </span>
+          <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(materia)}`}>Ver a matéria</a>
+        </p>
+      )}
+
       <h2 className="secao-tit">Votações encerradas</h2>
       {lista.fase === "carregando" && <p className="estado">Carregando…</p>}
       {lista.fase === "erro" && (
@@ -88,7 +126,9 @@ export function VotacoesPublicas({ ente, votacao, pagina }: { ente: string; vota
       {lista.fase === "pronto" && lista.dado.votacoes.length === 0 && (
         <p className="estado">
           {lista.dado.total === 0
-            ? "Nenhuma votação encerrada em sessão pública por enquanto."
+            ? materia
+              ? "Nenhuma votação encerrada em sessão pública desta matéria."
+              : "Nenhuma votação encerrada em sessão pública por enquanto."
             : "Esta página não tem votações. Volte para a primeira."}
         </p>
       )}
@@ -96,7 +136,7 @@ export function VotacoesPublicas({ ente, votacao, pagina }: { ente: string; vota
         <ul className="vp-lista" aria-label="Votações encerradas">
           {lista.dado.votacoes.map((v) => (
             <li key={v.votacaoId} className={`vp-${v.resultado}${v.votacaoId === votacao ? " atual" : ""}`}>
-              <a href={`${base}?votacao=${encodeURIComponent(v.votacaoId)}${pagina > 1 ? `&pagina=${pagina}` : ""}`}>
+              <a href={enderecoDaLista(base, { votacao: v.votacaoId, materia, pagina })}>
                 <b className="vp-titulo">{titulo(v)}</b>
                 {v.materia && <span className="vp-ementa">{v.materia.ementa}</span>}
                 <span className="vp-resultado">{resultadoEmPalavras(v)}</span>
@@ -109,24 +149,28 @@ export function VotacoesPublicas({ ente, votacao, pagina }: { ente: string; vota
         </ul>
       )}
       {lista.fase === "pronto" && lista.dado.total > 0 && (
-        <Paginas base={base} votacao={votacao} dado={lista.dado} />
+        <Paginas base={base} votacao={votacao} materia={materia} dado={lista.dado} />
       )}
     </div>
   );
 }
 
-function Paginas({ base, votacao, dado }: { base: string; votacao: string | null; dado: VotacoesPublicasOut }) {
+function Paginas({
+  base,
+  votacao,
+  materia,
+  dado,
+}: {
+  base: string;
+  votacao: string | null;
+  materia: string | null;
+  dado: VotacoesPublicasOut;
+}) {
   const porPagina = dado.porPagina || POR_PAGINA_PADRAO;
   const paginas = Math.max(1, Math.ceil(dado.total / porPagina));
   const de = dado.votacoes.length ? (dado.pagina - 1) * porPagina + 1 : 0;
   const ate = dado.votacoes.length ? de + dado.votacoes.length - 1 : 0;
-  const href = (p: number) => {
-    const q = new URLSearchParams();
-    if (votacao) q.set("votacao", votacao);
-    if (p > 1) q.set("pagina", String(p));
-    const s = q.toString();
-    return s ? `${base}?${s}` : base;
-  };
+  const href = (p: number) => enderecoDaLista(base, { votacao, materia, pagina: p });
   return (
     <nav className="vp-paginas" aria-label="Páginas de votações">
       <span>

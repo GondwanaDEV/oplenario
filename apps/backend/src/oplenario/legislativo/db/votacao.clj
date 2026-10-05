@@ -37,8 +37,9 @@
   autografo recusa por falta de texto."
   #{"proposicao" "redacao_final"})
 
-(def ^:private objetos-que-carregam-a-materia-sql
-  "O mesmo conjunto, ordenado e em vetor, p/ o `IN` do HoneySQL — pre-computado (a query roda por request)."
+(def objetos-que-carregam-a-materia-sql
+  "O mesmo conjunto, ordenado e em vetor, p/ o `IN` do HoneySQL — pre-computado (a query roda por request). Publico: o
+  filtro por materia das votacoes do portal (`votacao-publica/encerradas-das-sessoes`) usa o MESMO vocabulario."
   (vec (sort objetos-que-carregam-a-materia)))
 
 (defn abrir!

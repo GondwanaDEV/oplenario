@@ -67,9 +67,12 @@ class PortaOpenRouter:
         chave: str | None,
         url: str = URL_PADRAO,
         provedores: list[str] | None = None,
+        folga_raciocinio: int = 0,
         cliente: httpx.Client | None = None,
     ) -> None:
         self._modelo = modelo
+        # num modelo que raciocina, `max_tokens` cobre raciocinio + resposta: a folga e' somada ao limite do pedido
+        self._folga_raciocinio = folga_raciocinio
         self._chave = chave  # OPENROUTER_API_KEY, vinda do cofre (Eixo 11f)
         self._url = url.rstrip("/")
         self._provedores = list(provedores or [])
@@ -87,7 +90,7 @@ class PortaOpenRouter:
             provider["only"] = self._provedores
         corpo: dict[str, Any] = {
             "model": self._modelo,
-            "max_tokens": pedido.max_tokens,
+            "max_tokens": pedido.max_tokens + self._folga_raciocinio,
             "messages": [
                 {"role": "system", "content": pedido.instrucoes},
                 {"role": "user", "content": [{"type": "text", "text": t} for t in pedido.conteudo]},
@@ -151,9 +154,13 @@ def _normalizar(dados: dict[str, Any], latencia_ms: int) -> RespostaInferencia:
     else:
         texto = conteudo or ""
     if parada != "recusa" and not texto:
+        # o modelo que raciocina ate' o limite devolve so' o raciocinio: o detalhe diz isso (sem o conteudo, B4)
+        esgotou = escolha.get("finish_reason") == "length" and bool(mensagem.get("reasoning"))
         raise ErroIA(
             Categoria.MODELO,
-            f"resposta sem texto (finish_reason={escolha.get('finish_reason')})",
+            "o modelo esgotou o limite de tokens raciocinando, sem resposta (finish_reason=length)"
+            if esgotou
+            else f"resposta sem texto (finish_reason={escolha.get('finish_reason')})",
             retentavel=True,
             vendor=VENDOR,
         )

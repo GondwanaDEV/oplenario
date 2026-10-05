@@ -130,13 +130,14 @@
   (validado). MESMO shape usado no recibo de `POST /sessoes/:id/chamada` (201) e em cada item de
   `ChamadaOut.chamadas-conduzidas` — o ato nao inventa vocabulario de saida novo entre os dois lugares
   (precedente: `recibo-presenca->wire` reusado dentro de `recibos-presenca-lote->wire`)."
-  [{:keys [id conduzida-por membros-da-casa ocorrido-em registrado-em]}]
+  [{:keys [id conduzida-por conduzida-por-nome membros-da-casa ocorrido-em registrado-em]}]
   (validar! wire/ChamadaConduzidaOut
-            {:id (some-> id str)
-             :conduzida-por (some-> conduzida-por str)
-             :membros-da-casa membros-da-casa
-             :ocorrido-em (some-> ocorrido-em str)
-             :registrado-em (some-> registrado-em str)}
+            (cond-> {:id (some-> id str)
+                     :conduzida-por (some-> conduzida-por str)
+                     :membros-da-casa membros-da-casa
+                     :ocorrido-em (some-> ocorrido-em str)
+                     :registrado-em (some-> registrado-em str)}
+              (some? conduzida-por-nome) (assoc :conduzida-por-nome conduzida-por-nome))
             "recibo de chamada conduzida"))
 
 (defn chamada->wire

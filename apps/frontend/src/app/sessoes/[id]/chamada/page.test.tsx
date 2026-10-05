@@ -169,6 +169,47 @@ describe("PaginaChamada", () => {
     expect(marcarLinha).not.toHaveBeenCalled();
   });
 
+  it("o ato da chamada mostra o NOME de quem conduziu, nunca o prefixo do id", () => {
+    mockRetorno(
+      dadosBase({
+        semRegistroDePresenca: false,
+        chamadasConduzidas: [
+          { id: "c1", conduzidaPor: "dbf001fc-1111-4222-8333-444455556666", conduzidaPorNome: "Marta Secretaria", membrosDaCasa: 3, ocorridoEm: "2026-05-21T14:03:00Z", registradoEm: "2026-05-21T14:03:00Z" },
+        ],
+      }),
+    );
+    render(<PaginaChamada />);
+    const atos = document.querySelector('section[aria-labelledby="atos-titulo"]') as HTMLElement;
+    expect(within(atos).getByText("Marta Secretaria")).toBeTruthy();
+    expect(atos.textContent).not.toContain("dbf001fc");
+  });
+
+  it("ato sem nome no cadastro: texto neutro, nunca o prefixo do id", () => {
+    mockRetorno(
+      dadosBase({
+        semRegistroDePresenca: false,
+        chamadasConduzidas: [
+          { id: "c1", conduzidaPor: "dbf001fc-1111-4222-8333-444455556666", membrosDaCasa: 3, ocorridoEm: "2026-05-21T14:03:00Z", registradoEm: "2026-05-21T14:03:00Z" },
+        ],
+      }),
+    );
+    render(<PaginaChamada />);
+    const atos = document.querySelector('section[aria-labelledby="atos-titulo"]') as HTMLElement;
+    expect(within(atos).getByText("Servidor(a) da Câmara")).toBeTruthy();
+    expect(atos.textContent).not.toContain("dbf001fc");
+  });
+
+  it("justificativa pendente de quem não está na composição: texto neutro, nunca o prefixo do id", () => {
+    mockRetorno(dadosBase(), {
+      justificativas: [
+        { id: "j9", vereadorId: "abcd1234-0000-4000-8000-000000000000", estado: "pendente", motivo: "Atestado médico", decididoPor: null, decididoEm: null, lockVersion: 1 },
+      ],
+    });
+    render(<PaginaChamada />);
+    expect(screen.getByText("Atestado médico")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("abcd1234");
+  });
+
   it("sem pendência nenhuma: o marcador 'a registrar' NÃO aparece", () => {
     mockRetorno(dadosBase());
     render(<PaginaChamada />);

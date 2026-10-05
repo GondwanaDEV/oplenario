@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lerFiltro, rotuloDoTipo, tituloDaNorma, consultaDoFiltro, TIPOS_DE_NORMA } from "./leis-vista";
+import { lerFiltro, lerPagina, rotuloDoTipo, tituloDaNorma, consultaDaLista, consultaDoFiltro, TIPOS_DE_NORMA } from "./leis-vista";
 
 describe("rotuloDoTipo / tituloDaNorma", () => {
   it("os 5 tipos do acervo saem em palavras, nunca o código", () => {
@@ -41,6 +41,27 @@ describe("lerFiltro", () => {
 
   it("parâmetro repetido (array) usa o primeiro", () => {
     expect(lerFiltro({ ano: ["2026", "2025"] }).ano).toBe("2026");
+  });
+});
+
+describe("lerPagina", () => {
+  it("ausente, zero, negativa, texto ou grande demais: a primeira página — nunca uma lista em branco por endereço errado", () => {
+    for (const p of [undefined, "", "0", "-2", "abc", "1.5", "9999999999"]) expect(lerPagina(p)).toBe(1);
+  });
+
+  it("inteiro de 1 em diante vale; repetido usa o primeiro", () => {
+    expect(lerPagina("1")).toBe(1);
+    expect(lerPagina("3")).toBe(3);
+    expect(lerPagina(["2", "5"])).toBe(2);
+  });
+});
+
+describe("consultaDaLista", () => {
+  const f = { tipo: "lei", ano: "2026", numero: "", ignorados: [] };
+  it("o filtro e a página, na mesma ordem; a primeira página não leva ?pagina=", () => {
+    expect(Object.entries(consultaDaLista(f, 3))).toEqual([["tipo", "lei"], ["ano", "2026"], ["pagina", "3"]]);
+    expect(consultaDaLista(f, 1)).toEqual({ tipo: "lei", ano: "2026" });
+    expect(consultaDaLista({ tipo: "", ano: "", numero: "", ignorados: [] }, 1)).toEqual({});
   });
 });
 

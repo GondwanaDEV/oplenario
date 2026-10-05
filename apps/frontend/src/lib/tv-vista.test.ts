@@ -162,6 +162,21 @@ describe("itensDaPautaTv", () => {
     expect(itensDaPautaTv(pauta, placar({ encerrada: true })).some((i) => i.emVotacao)).toBe(false);
   });
 
+  it("o número do item é a posição dentro da fase: o 1º da Ordem do Dia é o 1, não o 2 da pauta toda", () => {
+    expect(itensDaPautaTv(pauta, null).map((i) => i.posicao)).toEqual([1, 1, 2]);
+  });
+
+  it("buraco na `ordem` (item retirado) não vira buraco na numeração", () => {
+    const comBuraco: PautaOut = {
+      "sessao-id": "s1",
+      itens: [
+        { id: "a", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "A", ordem: 4 },
+        { id: "b", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "B", ordem: 9 },
+      ],
+    };
+    expect(itensDaPautaTv(comBuraco, null).map((i) => i.posicao)).toEqual([1, 2]);
+  });
+
   it("sem pauta → lista vazia", () => {
     expect(itensDaPautaTv(null, null)).toEqual([]);
   });

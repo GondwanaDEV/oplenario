@@ -475,6 +475,7 @@ export interface ChamadaQuorumOut {
 export interface ChamadaConduzidaOut {
   id: string;
   conduzidaPor: string;
+  conduzidaPorNome?: string | null;
   membrosDaCasa: number;
   ocorridoEm: string;
   registradoEm: string;

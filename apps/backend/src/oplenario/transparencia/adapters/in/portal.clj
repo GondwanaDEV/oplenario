@@ -86,3 +86,11 @@
     (cond (nil? n) 1
           (< n 1)  (invalido! "pagina deve ser 1 ou maior" {:campo :pagina})
           :else    n)))
+
+(defn query-materia
+  "Query-param :materia (filtro das votacoes do portal pela proposicao) OPCIONAL -> UUID, ou nil (ausente/blank).
+  Malformado ou repetido -> :validacao/invalido (400): nunca ignora o filtro em silencio (a lista inteira sairia
+  como se fosse a da materia)."
+  [s]
+  (let [t (some-> (->single s :materia) str/trim)]
+    (when-not (str/blank? t) (->uuid t :materia))))

@@ -87,7 +87,8 @@ declarados no registro. As 8 capacidades passam por ele; transcrição e embeddi
 com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
 **Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
 ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
-reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429); o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
+reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429) — cada modelo
+da lista ganhou uma folga de raciocínio somada ao `max_tokens` (`MODELOS_OPENROUTER`), ainda não medida ao vivo; o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
 `[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).

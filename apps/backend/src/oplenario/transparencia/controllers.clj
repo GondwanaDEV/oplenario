@@ -30,12 +30,19 @@
   [repo-transparencia ente-id proposicao-id]
   (repo/movimentacoes-da-materia repo-transparencia ente-id proposicao-id))
 
+(def por-pagina
+  "Quantos itens as listas publicas paginadas (votacoes, legislacao) entregam por pagina (rota anonima: tamanho fixo
+  no servidor)."
+  20)
+
 (defn listar-normas
-  "Portal: {:normas :normas-total} do acervo de legislacao as-enacted (F6c Slice 3). `filtro` = {:tipo :ano
-  :numero} (todos opcionais, ja' coagidos na borda). Sem filtro: mais recente primeiro (compat Slice 1).
-  `:normas-total` e' o par obrigatorio do teto de 200 (frente 'truncamento-familia', sitio (c))."
-  [repo-transparencia ente-id filtro]
-  (repo/listar-normas repo-transparencia ente-id filtro))
+  "Portal: {:normas :normas-total :pagina :por-pagina} do acervo de legislacao as-enacted (F6c Slice 3), UMA PAGINA de
+  `por-pagina` normas. `filtro` = {:tipo :ano :numero} (todos opcionais, ja' coagidos na borda). Sem filtro: mais
+  recente primeiro (compat Slice 1). `:normas-total` e' do mesmo filtro, sem pagina (frente 'truncamento-familia',
+  sitio (c)): o cliente sabe quantas existem e quantas paginas faltam."
+  [repo-transparencia ente-id filtro pagina]
+  (assoc (repo/listar-normas repo-transparencia ente-id filtro por-pagina (* por-pagina (dec pagina)))
+         :pagina pagina :por-pagina por-pagina))
 
 (defn buscar-norma
   "Uma norma publicada especifica, ou nil."
@@ -142,10 +149,6 @@
 
 ;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------
 
-(def por-pagina
-  "Quantas votacoes a lista publica entrega por pagina (rota anonima: tamanho fixo no servidor)."
-  20)
-
 (def ^:private objetos-que-sao-a-materia
   "Os `objeto_tipo` de votacao cujo `objeto_id` e' a PROPRIA proposicao (o vocabulario de `legislativo`, que este
   modulo nao importa — §22.10): so' neles existe materia para ligar a ficha publica. Parecer, emenda e requerimento
@@ -165,10 +168,11 @@
 
 (defn votacoes-publicas
   "Portal: {:votacoes :total :pagina :por-pagina} das votacoes ENCERRADAS de sessoes publicas, a mais recente
-  primeiro. `listar-votacoes` e' o seam do host (fn [ente-id limite deslocamento] -> {:votacoes :total}): quem sabe
+  primeiro. `materia-id` (nil = todas) restringe as votacoes dessa materia. `listar-votacoes` e' o seam do host
+  (fn [ente-id limite deslocamento materia-id] -> {:votacoes :total}): quem sabe
   que sessao e' publica (sessoes) e quem guarda a votacao (legislativo) nao sao este modulo."
-  [repo-transparencia listar-votacoes ente-id pagina]
-  (let [{:keys [votacoes total]} (listar-votacoes ente-id por-pagina (* por-pagina (dec pagina)))]
+  [repo-transparencia listar-votacoes ente-id pagina materia-id]
+  (let [{:keys [votacoes total]} (listar-votacoes ente-id por-pagina (* por-pagina (dec pagina)) materia-id)]
     {:votacoes (com-materia repo-transparencia ente-id votacoes)
      :total total :pagina pagina :por-pagina por-pagina}))
 

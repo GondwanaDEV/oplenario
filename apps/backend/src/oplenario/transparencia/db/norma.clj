@@ -17,7 +17,21 @@
   [:ente_id :norma_id :proposicao_id :tipo_norma :numero :ano :urn :ementa :publicado_em :veiculo_publicacao
    :projetado_em])
 
-(def ^:private teto-listagem 200)
+(def ^:private teto-listagem
+  "Quantas normas UMA pagina pode devolver, no maximo (anti unbounded-read): `listar` pagina (limite + deslocamento) e
+  `(min limite teto-listagem)` garante que ninguem pede mais que isto de uma vez."
+  200)
+
+(def ^:private cols-publicas
+  "As colunas que o portal le: as do read-model + `tem_texto` — se ja' ha' artefato de publicacao para baixar (o
+  MESMO ponteiro que a rota `/artefato` consulta para decidir o 404; `db/artefato-publicacao/mais-recente-por-norma`).
+  EXISTS correlacionado, na tx do tenant (FORCE RLS isola os dois lados): nao e' JOIN, entao nao duplica norma que
+  tenha varias versoes de artefato. A tela so' oferece o botao de baixar quando e' verdadeiro."
+  (conj (mapv #(keyword (str "n." (name %))) cols)
+        [[:exists {:select [[[:inline 1]]]
+                   :from [[:transparencia.artefato_publicacao :a]]
+                   :where [:and [:= :a.ente_id :n.ente_id] [:= :a.norma_id :n.norma_id]]}]
+         :tem_texto]))
 
 (defn inserir!
   "Projeta a norma PUBLICADA (`norma.publicada`). `publicado-em` chega como java.time.Instant (parseado do
@@ -43,8 +57,8 @@
   {:pre [(some? ente-id) (some? norma-id)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
-     (sql/format {:select cols :from [:transparencia.norma]
-                  :where [:and [:= :ente_id ente-id] [:= :norma_id norma-id]]}))))
+     (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
+                  :where [:and [:= :n.ente_id ente-id] [:= :n.norma_id norma-id]]}))))
 
 (defn buscar-por-proposicao
   "A norma publicada de uma materia, se houver (a ficha da materia liga p/ ela). Devolve nil se a materia
@@ -53,8 +67,8 @@
   {:pre [(some? ente-id) (some? proposicao-id)]}
   (comum/linha->kebab
    (jdbc/execute-one! tx
-     (sql/format {:select cols :from [:transparencia.norma]
-                  :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
+     (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
+                  :where [:and [:= :n.ente_id ente-id] [:= :n.proposicao_id proposicao-id]]}))))
 
 (defn- where-listar
   "O predicado de `listar`/`contar` (portal PUBLICO) — FONTE UNICA (regra 3 da frente
@@ -67,35 +81,36 @@
     numero (conj [:= :numero numero])))
 
 (defn listar
-  "Portal PUBLICO — acervo de legislacao as-enacted (feature 16.5, F6c Slice 3). Filtro OPCIONAL por `:tipo`
-  (especie/tipo_norma), `:ano` e `:numero` — todos EXATOS e combinaveis; chave ausente/nil nao filtra
-  (especie desconhecida -> lista vazia, tolerante). SEM filtro: mais recentes por publicado_em (contrato do
-  Slice 1, preservado). COM qualquer filtro: por (ano DESC, numero DESC) — a ordem natural de 'Lei N/ANO',
-  servida por idx_norma_tipo_numero (ente_id, tipo_norma, ano DESC, numero DESC). Teto em ambos os caminhos.
-  ORDER BY sempre termina em norma_id DESC — desempate ESTAVEL (a PK e' (ente_id, norma_id)): sem ele,
-  empates em (ano,numero) [numeracao reusada entre especies quando se filtra so' por :ano/:numero] ou em
-  publicado_em [lote/mesma data] deixariam a ordem — e QUEM cai na borda do LIMIT — a cargo do plano, e uma
-  norma podia 'sumir/trocar' entre cargas (inaceitavel em dado legal). NOTA de indice: filtro por :ano ou
-  :numero SEM :tipo nao casa o prefixo do indice (tipo_norma e' o 2o nivel) — :numero-so' e' o pior caso
-  (faceta menos seletiva) — e cai em scan intra-tenant; aceitavel: o acervo de UMA camara tem cardinalidade
-  modesta (RLS por ente_id) e o teto limita o custo. O uso comum inclui :tipo (a especie e' a faceta primaria).
+  "Portal PUBLICO — acervo de legislacao as-enacted (feature 16.5, F6c Slice 3), UMA PAGINA (`limite` linhas a partir
+  de `deslocamento`). Filtro OPCIONAL por `:tipo` (especie/tipo_norma), `:ano` e `:numero` — todos EXATOS e
+  combinaveis; chave ausente/nil nao filtra (especie desconhecida -> lista vazia, tolerante). SEM filtro: mais
+  recentes por publicado_em (contrato do Slice 1, preservado). COM qualquer filtro: por (ano DESC, numero DESC) — a
+  ordem natural de 'Lei N/ANO', servida por idx_norma_tipo_numero (ente_id, tipo_norma, ano DESC, numero DESC).
+  ORDER BY sempre termina em norma_id DESC — desempate ESTAVEL (a PK e' (ente_id, norma_id)): sem ele, empates em
+  (ano,numero) [numeracao reusada entre especies quando se filtra so' por :ano/:numero] ou em publicado_em
+  [lote/mesma data] deixariam a ordem — e QUEM cai na borda do LIMIT/OFFSET — a cargo do plano, e uma norma podia
+  repetir numa pagina e sumir da outra (inaceitavel em dado legal). NOTA de indice: filtro por :ano ou :numero SEM
+  :tipo nao casa o prefixo do indice (tipo_norma e' o 2o nivel) — :numero-so' e' o pior caso (faceta menos
+  seletiva) — e cai em scan intra-tenant; aceitavel: o acervo de UMA camara tem cardinalidade modesta (RLS por
+  ente_id). O uso comum inclui :tipo (a especie e' a faceta primaria).
 
-  ARIDADE de 4: `limite` INJETAVEL (achado IMPORTANTE da revisao adversarial — mesmo racional de
-  listar-em-tramitacao/pendencia) — SO' para o teste provar 'o total nao capa' sem pagar 201 linhas; a
-  rota publica (portal, aridade de 3) cai no default `teto-listagem`. `(min limite teto-listagem)` — nunca
-  pede-se mais que o teto server-side, so' menos."
-  ([tx ente-id filtro] (listar tx ente-id filtro teto-listagem))
-  ([tx ente-id {:keys [tipo ano numero] :as filtro} limite]
-   {:pre [(some? ente-id) (pos-int? limite)]}
+  Aridades: `[tx ente filtro]` e `[tx ente filtro limite]` devolvem a PRIMEIRA pagina (os testes provam 'o total nao
+  capa' sem pagar 201 linhas); a rota publica usa a de 5 (limite + deslocamento). `(min limite teto-listagem)` —
+  nunca pede-se mais que o teto server-side, so' menos."
+  ([tx ente-id filtro] (listar tx ente-id filtro teto-listagem 0))
+  ([tx ente-id filtro limite] (listar tx ente-id filtro limite 0))
+  ([tx ente-id {:keys [tipo ano numero] :as filtro} limite deslocamento]
+   {:pre [(some? ente-id) (pos-int? limite) (nat-int? deslocamento)]}
    (let [filtros? (or tipo ano numero)]
      (comum/linhas->kebab
       (jdbc/execute! tx
-        (sql/format {:select cols :from [:transparencia.norma]
+        (sql/format {:select cols-publicas :from [[:transparencia.norma :n]]
                      :where (into [:and] (where-listar ente-id filtro))
                      :order-by (if filtros?
-                                 [[:ano :desc] [:numero :desc] [:norma_id :desc]]
-                                 [[:publicado_em :desc] [:norma_id :desc]])
-                     :limit (min limite teto-listagem)}))))))
+                                 [[:n.ano :desc] [:n.numero :desc] [:n.norma_id :desc]]
+                                 [[:n.publicado_em :desc] [:n.norma_id :desc]])
+                     :limit (min limite teto-listagem)
+                     :offset deslocamento}))))))
 
 (defn contar
   "Quantas normas do acervo (as-enacted, mesmo filtro de `listar`) existem — SEM teto (frente
