@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
-import { MovimentacoesPublicas } from "./movimentacoes-publicas";
+import { etapaAtualDasMovimentacoes, MovimentacoesPublicas } from "./movimentacoes-publicas";
 import { SecaoFicha } from "./secao-ficha";
 
 // "Por onde a matéria passou" (ficha pública): a linha do tempo com data + etapa em palavras, da mais recente para a mais
@@ -194,5 +194,19 @@ describe("SecaoFicha com a linha do tempo", () => {
     render(<SecaoFicha ente={ENTE} proposicaoId="p1" />);
     await waitFor(() => expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(ficha.ementa));
     expect(await screen.findByText(/Não foi possível carregar o histórico da matéria agora/)).toBeTruthy();
+  });
+});
+
+describe("etapaAtualDasMovimentacoes (o chip da ficha)", () => {
+  const linha = (etapa: string | null, votacao: boolean) => ({ ocorridoEm: "2026-09-23T15:00:00Z", etapa, abertura: false, votacao });
+  const dado = (movimentacoes: ReturnType<typeof linha>[]) =>
+    ({ movimentacoes, movimentacoesTotal: movimentacoes.length, historicoCompleto: true, historicoDesde: null });
+  it("pula a votação e devolve a etapa marcada como atual", () => {
+    expect(etapaAtualDasMovimentacoes(dado([linha("Aprovada em 1º turno", true), linha("Em Pauta", false)]))).toBe("Em Pauta");
+  });
+  it("só votação, histórico com erro ou ainda carregando: sem nome (o chip cai no rótulo fixo)", () => {
+    expect(etapaAtualDasMovimentacoes(dado([linha("Aprovada em 1º turno", true)]))).toBeNull();
+    expect(etapaAtualDasMovimentacoes("erro")).toBeNull();
+    expect(etapaAtualDasMovimentacoes(null)).toBeNull();
   });
 });

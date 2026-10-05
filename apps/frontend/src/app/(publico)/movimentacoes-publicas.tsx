@@ -48,11 +48,17 @@ export function useMovimentacoesPublicas(ente: string, proposicaoId: string): Mo
   return res.chave === chave ? res.dado : null;
 }
 
-/** O nome da etapa atual (a movimentação mais recente, a mesma marcada "Etapa atual"), ou null quando o histórico não
- * carregou ou o rito não nomeou a etapa. É o que o chip da ficha pública diz. */
+/** A posição da etapa atual na lista (da mais recente para a mais antiga): a mais recente que NÃO é votação, ou -1.
+ * Uma só regra para a marca "Etapa atual" e para o chip da ficha, que assim nunca divergem. */
+export function indiceDaEtapaAtual(movimentacoes: MovimentacoesOut["movimentacoes"]): number {
+  return movimentacoes.findIndex((m) => !m.votacao);
+}
+
+/** O nome da etapa atual (a mesma marcada "Etapa atual"), ou null quando o histórico não carregou, só há votação ou o
+ * rito não nomeou a etapa. É o que o chip da ficha pública diz. */
 export function etapaAtualDasMovimentacoes(dado: MovimentacoesOut | "erro" | null): string | null {
   if (!dado || dado === "erro") return null;
-  return dado.movimentacoes[0]?.etapa ?? null;
+  return dado.movimentacoes[indiceDaEtapaAtual(dado.movimentacoes)]?.etapa ?? null;
 }
 
 export function MovimentacoesPublicas({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
@@ -78,7 +84,7 @@ export function SecaoMovimentacoes({ dado }: { dado: MovimentacoesOut | "erro" |
 
 function Historico({ dado }: { dado: MovimentacoesOut }) {
   const { movimentacoes, movimentacoesTotal, historicoCompleto, historicoDesde } = dado;
-  const atual = movimentacoes.findIndex((m) => !m.votacao);
+  const atual = indiceDaEtapaAtual(movimentacoes);
   if (movimentacoes.length === 0) {
     return <p className="mov-aviso">O histórico desta matéria ainda não está disponível aqui.</p>;
   }
