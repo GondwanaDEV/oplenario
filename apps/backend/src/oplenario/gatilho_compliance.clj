@@ -190,6 +190,13 @@
         (or (repo-motor/template-vigente repo-m chave)
             (throw (ex-info (str "regra " chave " sem versao vigente no catalogo") {:chave chave}))))))
 
+(defn garantir-catalogo!
+  "Garante no catalogo do motor a versao vigente de cada regra deste gatilho. Roda no `migrate`, como o dono do banco:
+  o role de runtime (`oplenario_app`) so' LE o catalogo, que e' de todas as Casas. Idempotente. Devolve as chaves."
+  [repo-m]
+  (doseq [chave (keys regras)] (garantir-template! repo-m chave))
+  (vec (sort (keys regras))))
+
 (def ^:private zona tempo/zona-civil-padrao)
 
 (defn- dia-civil ^LocalDate [t]
