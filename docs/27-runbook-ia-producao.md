@@ -199,8 +199,10 @@ login funciona, só não está escondido.
 1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**, só por `workflow_dispatch` com a
    confirmação `trocar-keycloak` (a troca reinicia o Keycloak das Casas; tema novo em `apps/keycloak` = promover e
    rodar de novo). Ele:
-   - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<sha>`), a 26.0.0 com o diretório
-     `/opt/keycloak/themes/oplenario`;
+   - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<versão>-<sha>`) **a partir da versão que o
+     compose roda hoje** (lida da linha `image: quay.io/keycloak/keycloak:X.Y.Z`), com o diretório
+     `/opt/keycloak/themes/oplenario`. Produção roda a 26.3.5 (dev e CI, a 26.0.0); o Keycloak não sobe contra um banco
+     já migrado para uma versão mais nova, então a imagem nunca pode ser mais velha que a do compose;
    - acha no Dokploy o **compose** do Keycloak das Casas pelo nome do container que a API usa (o host de
      `KEYCLOAK_BASE_URL` da API, `<appName do compose>-keycloak-1`). O Keycloak do operador é outro e não é tocado. Sem
      exatamente um compose, sem o compose guardado no Dokploy (`raw`) ou sem exatamente uma linha
@@ -209,8 +211,9 @@ login funciona, só não está escondido.
      servidor puxa do GHCR com o login que já usa para as imagens da API;
    - **antes de trocar**, confere que o servidor consegue baixar a imagem. Um compose puxa com o login do servidor, não
      com o do app da API, então só segue se o pacote for público ou se o Dokploy tiver um registro do `ghcr.io`
-     cadastrado (Settings → Registry). Na primeira troca (05/10/2026) o pacote era privado e o servidor não tinha esse
-     login: o Keycloak ficou ~14 min fora do ar até a volta do compose;
+     cadastrado (Settings → Registry). Na primeira troca (05/10/2026) o Keycloak ficou ~14 min fora do ar até a volta
+     do compose: o pacote era privado, o servidor não tinha esse login, e a imagem partia da 26.0.0 contra a 26.3.5 de
+     produção ("Incorrect state of migration");
    - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, ou se o Keycloak
      ficar 4 min seguidos fora do ar, **volta o compose anterior**, reimplanta e falha.
 
