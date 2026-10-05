@@ -7,8 +7,8 @@ credenciada pela 5ª semente (`./demo/semear-credenciais.sh`, `apps/backend/demo
 
 A 5ª persona nomeada (**Apresentação — acesso total**) entrou depois das outras 4, especificamente para
 demo comercial de visita única (pedido do Rigoni — sócio comercial, apresentação para presidente de
-câmara): empilha `vereador`+`secretario`+`admin_ente` no MESMO vínculo, então 1 login alcança tudo que
-as 3 outras personas de trabalho alcançam juntas, sem trocar de sessão. Ver a seção própria dela abaixo
+câmara): empilha `vereador`+`secretario`+`admin_ente`+`auditor`+`juridico` no MESMO vínculo, então 1 login alcança tudo que
+as 3 outras personas de trabalho alcançam juntas, mais a trilha de auditoria da Casa inteira e a fila do jurídico, sem trocar de sessão. Ver a seção própria dela abaixo
 — ela NÃO passou pela mesma varredura de verificação ao vivo (§ "Verificado AO VIVO") que as 4
 originais, que é anterior a ela.
 
@@ -49,7 +49,7 @@ secretario/vereador/admin_ente; quem só consulta ou peticiona, não).
 | **Presidente da Mesa** | Antônio Carlos Ferreira | `vereador` · `vereador`, `admin_ente` | idem | `Plenario@2026` |
 | **Vereadora** | Fernanda Rocha Pinto | `vereador` · `vereador` | idem | `Plenario@2026` |
 | **Cidadã** | Roberta Costa Aguiar | `cidadao` · *(sem papel)* | portal → "Entrar para participar" (gov.br simulado) | — |
-| **Apresentação (acesso total)** | Patrícia Nogueira Santos | `vereador` · `vereador`, `secretario`, `admin_ente` | CPF em `/entrar` | `Plenario@2026` |
+| **Apresentação (acesso total)** | Patrícia Nogueira Santos | `vereador` · `vereador`, `secretario`, `admin_ente`, `auditor`, `juridico` | CPF em `/entrar` | `Plenario@2026` |
 | **Cidadão anônimo** | — | — (sem login) | `http://localhost:3000/portal/casa/10000000-0000-0000-0000-000000000001` | — |
 
 **Como se entra (desde 05/10/2026, [ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
@@ -64,7 +64,8 @@ secretario/vereador/admin_ente; quem só consulta ou peticiona, não).
    As personas da demo não têm: CPF e senha bastam, porque a semente define a senha e apaga as pendências.
 5. O app roteia pelo **papel do token**: `/inicio`, ou `/vereador` para quem só é vereador.
 
-**CPF de cada persona:** fixo, em `apps/backend/demo/personas.clj` (CPFs de teste). O identidade-id, que
+**CPF de cada persona:** fixo, em `apps/backend/demo/casa.clj` (`cpf-secretaria`, `cpf-presidente`,
+`cpf-vereador-comum`, `cpf-cidadao`, `cpf-apresentacao`; CPFs de teste, públicos de propósito). O identidade-id, que
 continua sendo o usuário dentro do Keycloak, sai impresso por `semear-credenciais.sh` e gravado em
 `credenciais.edn`; só precisa dele quem abre a tela do Keycloak direto, sem o CPF (os workflows de
 homologação preenchem `#username` com ele).
@@ -254,14 +255,18 @@ API direta.
 
 ---
 
-## Apresentação (acesso total) — Patrícia Nogueira Santos (`vereador` + `secretario` + `admin_ente`)
+## Apresentação (acesso total) — Patrícia Nogueira Santos (`vereador` + `secretario` + `admin_ente` + `auditor` + `juridico`)
 
 **Por que existe:** demo comercial de visita única — o Rigoni (sócio comercial) apresentando a
 plataforma para um presidente de câmara não pode gastar tempo trocando de login/perfil no meio da
 conversa. Esta persona empilha os 3 papéis de trabalho (`vereador`, `secretario`, `admin_ente`) no
 MESMO vínculo — a mesma mecânica que já prova a Presidente da Mesa (`vereador`+`admin_ente`), só com
 `secretario` a mais em cima. **1 login alcança tudo que as personas Secretária + Vereadora + Presidente
-da Mesa alcançam juntas.**
+da Mesa alcançam juntas.** Desde 28/09 e 30/09 a semente empilha também `auditor` (ADR-0017: a trilha da
+Casa inteira, a conferência da cadeia, a exportação e `/auditoria/clara`) e `juridico` (ADR-0019: a fila
+`/juridico` e o parecer assinado, com qualificação "efetivo" e OAB "CE 12345" no perfil jurídico). Na Casa
+real os dois são de servidor e nunca se somam a vereador; aqui é fixture de demonstração. Fora dela fica
+só o console do operador (`/operacao`), que tem entrada própria com chave física.
 
 **O que o dado sustenta:** o mesmo assento de vereador (idx 13 do roster, sem cargo na Mesa nem
 presidência de comissão) que dá cadastro real (mandato vigente, partido CIDADANIA) — necessário porque

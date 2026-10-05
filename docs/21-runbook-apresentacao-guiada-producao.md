@@ -86,15 +86,16 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 | **Secretária da Mesa** (Marina Alencar Freire) | `secretario` | **Atos 1, 2 e 3.** É a persona com mais superfície |
 | **Vereadora** (Fernanda Rocha Pinto) | `vereador` | A home do vereador (`/vereador`) e o cockpit de voto (`/votar`) no Ato 2 |
 | **Presidente da Mesa** (Antônio Carlos Ferreira) | `vereador`+`admin_ente` | `/administracao` (conceder e revogar acesso) e o app do vereador |
-| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente` (empilhados no MESMO vínculo) | **1 login só** — soma tudo que Secretária + Vereadora + Presidente alcançam, sem trocar de sessão (ver caixa abaixo) |
+| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente`+`auditor`+`juridico` (empilhados no MESMO vínculo) | **1 login só** — soma tudo que Secretária + Vereadora + Presidente alcançam, mais a auditoria e o jurídico, sem trocar de sessão (ver caixa abaixo) |
 | **Cidadão** | — (sem login) | Ato 4: o portal público é anônimo |
 
 - **Senha de todas:** `Plenario@2026` (fixture pública de demonstração — não é segredo de produção).
-- **CPF de cada persona:** fixo, na semente `apps/backend/demo/personas.clj`. Não muda quando a Casa é
+- **CPF de cada persona:** fixo, na semente `apps/backend/demo/casa.clj` (`cpf-apresentacao` para a Patrícia). Não muda quando a Casa é
   re-semeada, então não há mais UUID de persona para recolher antes da demo.
-- **"Acesso total" não inclui** os papéis `juridico` e `auditor` (fila `/juridico`, `/auditoria` da Casa
-  inteira, `/auditoria/clara`) nem o console do operador (`/operacao`, entrada própria com chave física).
-  Para mostrá-los, conceda o papel em `/administracao` a uma pessoa convidada.
+- **"Acesso total" inclui** `auditor` (`/auditoria` da Casa inteira, `/auditoria/clara`) e `juridico`
+  (fila `/juridico`, parecer assinado), na semente desde 28/09 e 30/09; a semente de produção de 03/10 já
+  os tinha. Fica de fora só o console do operador (`/operacao`), com entrada própria e chave física, e a
+  área da cidadã, que entra pelo gov.br no portal.
 
 > **Prepare 2 janelas/perfis antes:** uma logada como **secretária** (Atos 1–3), outra como **vereador**
 > (o `/votar` do Ato 2), e uma **janela anônima** para o Ato 4. Trocar de persona ao vivo custa ~40s de
@@ -288,7 +289,7 @@ O que **continua** sem porta de cliente — não abra, não clique, não prometa
 | "Acesso restrito" logo após o login | O papel do token não bate com a tela. Confirme que está na persona certa (secretária para o interno/Mesa) |
 | Telão sem a animação dos eventos passados | O replay do canal SSE retém ~5 min; quórum e tribuna re-hidratam do banco, a *animação* dos eventos antigos não. Reabra o telão; se precisar, conduza um evento novo pelo Comando da Mesa |
 | A sessão da demo saiu do estado esperado (alguém conduziu antes) | Recolha o estado atual (§6) e ajuste o roteiro; ou agende/abra uma sessão nova pelo próprio Comando da Mesa |
-| "Nenhuma Câmara" na tela do CPF | CPF digitado errado (confira na `personas.clj`) ou CPF de quem não é servidor nem vereador nesta Casa |
+| "Nenhuma Câmara" na tela do CPF | CPF digitado errado (confira na `casa.clj`) ou CPF de quem não é servidor nem vereador nesta Casa |
 | "Muitas tentativas" na tela do CPF | Limite de 30 consultas por IP em 5 min. Espere alguns minutos |
 | Senha recusada várias vezes, depois "conta bloqueada" | Trava temporária: 10 erros = 1 min, dobrando até 15. Espere; não é permanente |
 | A plataforma está fora | Confira `https://oplenario.calvetec.com.br/status` |

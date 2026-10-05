@@ -172,7 +172,7 @@ perfil público antes de terminar. Se ele falhar nessa espera, o container `app`
 não está de pé — conserte isso antes de seguir.
 
 Ao fim, as credenciais ficam em `e2e/.artifacts/credenciais.edn`. Para entrar pela tela não é preciso
-abri-lo: entra-se com o **CPF da persona**, fixo em `apps/backend/demo/personas.clj`. O identidade-id do
+abri-lo: entra-se com o **CPF da persona**, fixo em `apps/backend/demo/casa.clj`. O identidade-id do
 arquivo só serve para quem abre a tela do Keycloak direto (workflows, testes):
 
 ```bash
@@ -228,7 +228,7 @@ faz na licitação.
 
 Entrada única: `http://localhost:3000/entrar` (ou o link da Câmara,
 `/entrar/10000000-0000-0000-0000-000000000001`) → **CPF** da persona → **senha** na tela da Câmara.
-Senha de todas as personas: `Plenario@2026` · CPFs em `apps/backend/demo/personas.clj`. As personas não têm
+Senha de todas as personas: `Plenario@2026` · CPFs em `apps/backend/demo/casa.clj`. As personas não têm
 código do aplicativo cadastrado; CPF e senha bastam. Para trocar de persona: menu do avatar → **Sair**.
 
 > **Prepare as abas antes.** Faça login com as três personas em três janelas/perfis diferentes do
@@ -288,7 +288,7 @@ como visão, porque a Track IA ainda não tem código. Não a demonstre.
 
 ## §4 · As quatro personas
 
-Todas entram pelo CPF em `/entrar` (CPFs fixos em `apps/backend/demo/personas.clj`, senha `Plenario@2026`),
+Todas entram pelo CPF em `/entrar` (CPFs fixos em `apps/backend/demo/casa.clj`, senha `Plenario@2026`),
 menos a cidadã: o CPF dela não tem vínculo de servidor ou vereador, então ela entra pelo portal, em "Entrar
 para participar", pelo gov.br simulado (ADR-0015).
 
@@ -298,7 +298,7 @@ para participar", pelo gov.br simulado (ADR-0015).
 | Antônio Carlos Ferreira | `vereador` + `admin_ente` | Presidente da Mesa. **Não abre `/paineis/*` (403)** — use só para votar |
 | Fernanda Rocha Pinto | `vereador` | O cockpit de votação em `/votar` |
 | Roberta Costa Aguiar | (nenhum) | Cidadã. O portal é anônimo; ela quase não é necessária |
-| Patrícia Nogueira Santos | `vereador` + `secretario` + `admin_ente` | "Acesso total": um login só para a visita sem trocar de persona (docs/18) |
+| Patrícia Nogueira Santos | `vereador` + `secretario` + `admin_ente` + `auditor` + `juridico` | "Acesso total": um login só para a visita sem trocar de persona (docs/18) |
 
 ---
 
