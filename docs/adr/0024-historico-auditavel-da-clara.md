@@ -136,7 +136,16 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
     fim): nenhum comando da Mesa fica sob o botão.
   - A dica: o Comando da Mesa publica a sessão ("15ª Sessão Ordinária"); o livro de atas interno publica a ata aberta
     ("Ata da 15ª Sessão Ordinária", `dicaDaAta`); o portal, nunca.
-- Falta:
-  - a dica na chamada, na ata e na transcrição: essas telas não carregam o tipo nem o número da sessão, e o cabeçalho
-    delas diz só "Chamada de presença", "Ata", "Transcrição". Dar o nome da sessão a elas é uma leitura a mais
-    (`GET /sessoes/:id`), a decidir junto com o cabeçalho.
+- Fatia 6 (a Clara medida):
+  - Chamada, ata e transcrição leem a sessão (`GET /sessoes/:id`, a mesma leitura do Comando da Mesa) e mostram o
+    nome no cabeçalho; a leitura nunca bloqueia a tela. Com ela, a dica: a sessão na chamada e na transcrição, a ata
+    na ata (só quando a própria ata abriu).
+  - Prompt do agente `agente-v2` (`apps/ia/src/oplenario_ia/agente/laco.py`): a dica da tela é o assunto, não a
+    fonte; nenhuma ferramenta lê a trilha nem as conversas da Casa, e a resposta aponta a tela Auditoria; sem
+    ferramenta de ato não há proposta nem promessa; um inciso achado na busca leva à leitura do artigo inteiro.
+  - Conjunto `apps/ia/avaliacoes/clara-papeis.json` (9 casos, nível agente), com as ferramentas de cada papel como no
+    catálogo do core: quem só consulta pede ato, o auditor pede a trilha ou as conversas, o quórum do veto pelo
+    Regimento, a dica que vira consulta, o papel que não alcança a matéria. O avaliador ganhou o `catalogo` do
+    conjunto (descrição e entrada de cada ferramenta, como o core as expõe), `texto_contem_algum`, `chama_com` e
+    `citacoes_conferidas_min`. Com o fake, o conjunto confere o caminho do código; o juízo do modelo só aparece na
+    rodada ao vivo (ADR-0023).

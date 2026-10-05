@@ -3,6 +3,8 @@
     oplenario-ia-avaliar avaliacoes                         # fornecedor fake, custo zero (CI)
     oplenario-ia-avaliar avaliacoes --vendor anthropic      # fornecedor real: GASTA DINHEIRO; gate antes de trocar
                                                             # fornecedor ou modelo (§22.11.8)
+    oplenario-ia-avaliar avaliacoes --vendor openrouter --politica excecao-gratuita --modelo <slug>:free
+                                                            # exceção temporária à ADR-0023: sem ZDR, só `:free`
 
 O fornecedor vem SÓ da linha de comando (nunca do ambiente): o CI não passa a gastar por uma variável esquecida.
 """
@@ -19,7 +21,7 @@ from pydantic import ValidationError
 from oplenario_ia.avaliacao.agente import ConjuntoAgente, avaliar_agente
 from oplenario_ia.avaliacao.conjunto import Conjunto
 from oplenario_ia.avaliacao.harness import Relatorio, avaliar
-from oplenario_ia.config import Config
+from oplenario_ia.config import Config, avisar_excecao_gratuita
 from oplenario_ia.inferencia.fabrica import criar_porta
 from oplenario_ia.inferencia.porta import PortaInferencia
 
@@ -49,6 +51,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("caminhos", nargs="+", help="arquivos .json de conjunto ou diretórios com eles")
     ap.add_argument("--vendor", choices=["fake", "openrouter", "anthropic"], default="fake")
     ap.add_argument("--modelo", help="padrão: o do fornecedor (no OpenRouter, o slug `openai/gpt-oss-120b`)")
+    ap.add_argument(
+        "--politica",
+        choices=["zdr", "excecao-gratuita"],
+        default="zdr",
+        help="política de dado no OpenRouter: `zdr` (padrão) ou a exceção temporária à ADR-0023 (só modelo `:free`)",
+    )
     ap.add_argument("--saida", type=Path, help="grava o relatório JSON (ex.: avaliacoes/resultados/…)")
     args = ap.parse_args(argv)
 
@@ -62,8 +70,17 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     porta: PortaInferencia | None = None
     if args.vendor != "fake":
-        cfg = Config(vendor=args.vendor) if args.modelo is None else Config(vendor=args.vendor, modelo=args.modelo)
+        campos: dict[str, object] = {"vendor": args.vendor, "openrouter_politica": args.politica}
+        if args.modelo is not None:
+            campos["modelo"] = args.modelo
+        try:
+            cfg = Config.model_validate(campos)
+        except ValidationError as e:
+            print(f"configuração inválida\n{e}", file=sys.stderr)
+            return 2
         print(f"ATENÇÃO: avaliando contra {cfg.vendor}/{cfg.modelo} — isto gasta dinheiro.", file=sys.stderr)
+        if cfg.vendor == "openrouter" and cfg.openrouter_politica == "excecao-gratuita":
+            avisar_excecao_gratuita(lambda aviso: print(f"ATENÇÃO: {aviso}", file=sys.stderr))
         porta = criar_porta(cfg)
 
     relatorios: list[Relatorio] = []

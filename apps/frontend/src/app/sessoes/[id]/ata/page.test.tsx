@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import PaginaAta from "./page";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import PaginaAta, { ConteudoAta } from "./page";
+import { ProvedorDaDica, useDicaAtual } from "@/app/(interno)/clara/dica";
 
 // A Clara (ADR-0024): sem papel nos testes de sempre; o bloco da Clara liga a secretaria.
 const papeisDaClara = vi.hoisted(() => ({ atual: [] as string[] }));
@@ -22,10 +23,22 @@ const versao = (n: number, over: Record<string, unknown> = {}) => ({
 });
 
 type Resp = { status: number; body: unknown };
+
+// A sessão (ADR-0024, fatia 6): a tela lê `GET /api/sessoes/:id` para o nome no cabeçalho e a dica da Clara. Corpo
+// cru do servidor (kebab-case). Os testes que não falam dela recebem esta; os que falam trocam a resposta.
+const SESSAO = {
+  id: "s1", "sessao-legislativa-id": "sl1", "tipo-sessao": "ordinaria", "numero-sequencial": 15, estado: "encerrada",
+  modalidade: "presencial", delibera: true, "transmite-publica": true, "gera-ata-regimental": true,
+  "permite-voto-secreto": false, "permite-modalidade-remota": false, "lock-version": 3,
+};
+const sessaoDaRede = { atual: { status: 200, body: SESSAO } as Resp };
+
 function rede(get: (url: string) => Resp, post?: (corpo: Record<string, unknown>, url: string) => Resp) {
   const chamadas: Record<string, unknown>[] = [];
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const r = init?.method === "POST" && post
+    const r = url === "/api/sessoes/s1" && init?.method !== "POST"
+      ? sessaoDaRede.atual
+      : init?.method === "POST" && post
       ? post(chamadas[chamadas.push(init.body ? JSON.parse(String(init.body)) : { url }) - 1], url)
       : get(url);
     return { ok: r.status < 400, status: r.status, json: async () => r.body } as Response;
@@ -206,8 +219,80 @@ describe("PaginaAta — a Clara (ADR-0024, fatia 5)", () => {
     expect(await screen.findByRole("button", { name: "Redigir a ata" })).toBeTruthy();
     const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
     expect(lancador.getAttribute("aria-expanded")).toBe("false");
-    // a tela da ata não lê o nome da sessão (a rota da ata não o traz): sem dica, em vez de uma leitura só para ela
+    // fatia 6: a tela lê a sessão, e a Clara sabe de qual ata se trata
     fireEvent.click(lancador);
-    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).not.toContain("Nesta tela");
+    await waitFor(() =>
+      expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).toContain(
+        "Nesta tela: Ata da 15ª Sessão Ordinária",
+      ),
+    );
+  });
+});
+
+describe("PaginaAta — qual sessão é (ADR-0024, fatia 6)", () => {
+  const ataVazia = () => ({ status: 200, body: { "sessao-id": "s1", "pode-ter-ata": true, atual: null, versoes: [] } });
+  function Sonda() {
+    const dica = useDicaAtual();
+    return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+  }
+  const cabecalho = () => document.querySelector("header.topo .sessao-meta") as HTMLElement;
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    sessaoDaRede.atual = { status: 200, body: SESSAO };
+  });
+
+  it("com a sessão lida, o cabeçalho diz qual é e a tela publica a dica da ata", async () => {
+    rede(ataVazia);
+    render(
+      <ProvedorDaDica>
+        <ConteudoAta id="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(await screen.findByRole("button", { name: "Redigir a ata" })).toBeTruthy();
+    await waitFor(() => expect(cabecalho().textContent).toBe("AtaSessão ordinária nº 15"));
+    expect(cabecalho().querySelector(".quando")?.textContent).toBe("Sessão ordinária nº 15");
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe(
+        "Ata da 15ª Sessão Ordinária | Sobre a ata da 15ª Sessão Ordinária,  | Perguntar sobre esta ata",
+      ),
+    );
+    expect(vi.mocked(global.fetch).mock.calls.some(([u]) => u === "/api/sessoes/s1")).toBe(true);
+  });
+
+  it("sessão recusada (403): cabeçalho como antes, sem dica, e a ata segue", async () => {
+    sessaoDaRede.atual = { status: 403, body: { erro: "proibido" } };
+    rede(ataVazia);
+    render(
+      <ProvedorDaDica>
+        <ConteudoAta id="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(await screen.findByRole("button", { name: "Redigir a ata" })).toBeTruthy();
+    await waitFor(() =>
+      expect(vi.mocked(global.fetch).mock.calls.filter(([u]) => u === "/api/sessoes/s1")).toHaveLength(1),
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(cabecalho().textContent).toBe("Ata");
+    expect(cabecalho().querySelector(".quando")).toBeNull();
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+  });
+
+  it("ata que não abre: o nome da sessão fica no cabeçalho, mas sem dica sobre a ata", async () => {
+    rede(() => ({ status: 403, body: { erro: "proibido" } }));
+    render(
+      <ProvedorDaDica>
+        <ConteudoAta id="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(await screen.findByText("Não foi possível carregar a ata desta sessão.")).toBeTruthy();
+    await waitFor(() => expect(cabecalho().querySelector(".quando")?.textContent).toBe("Sessão ordinária nº 15"));
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
   });
 });

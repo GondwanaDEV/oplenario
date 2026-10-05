@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import PaginaTranscricao from "./page";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import PaginaTranscricao, { ConteudoTranscricao } from "./page";
+import { ProvedorDaDica, useDicaAtual } from "@/app/(interno)/clara/dica";
 
 // A Clara (ADR-0024): sem papel nos testes de sempre; o bloco da Clara liga a secretaria.
 const papeisDaClara = vi.hoisted(() => ({ atual: [] as string[] }));
@@ -30,9 +31,18 @@ const ponteiro = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// A sessão (ADR-0024, fatia 6): a tela lê `GET /api/sessoes/:id` para o nome no cabeçalho e a dica da Clara. Corpo
+// cru do servidor (kebab-case); quem não fala dela recebe esta, quem fala põe a própria rota em `rotas`.
+const SESSAO = {
+  id: "s1", "sessao-legislativa-id": "sl1", "tipo-sessao": "ordinaria", "numero-sequencial": 15, estado: "encerrada",
+  modalidade: "presencial", delibera: true, "transmite-publica": true, "gera-ata-regimental": true,
+  "permite-voto-secreto": false, "permite-modalidade-remota": false, "lock-version": 3,
+};
+
 function rede(rotas: Record<string, { status: number; body: unknown }>) {
+  const todas: Record<string, { status: number; body: unknown }> = { "/api/sessoes/s1": { status: 200, body: SESSAO }, ...rotas };
   global.fetch = vi.fn(async (url: string) => {
-    const r = rotas[url] ?? { status: 404, body: {} };
+    const r = todas[url] ?? { status: 404, body: {} };
     return { ok: r.status < 400, status: r.status, json: async () => r.body } as Response;
   }) as unknown as typeof fetch;
 }
@@ -111,6 +121,60 @@ describe("PaginaTranscricao — a Clara (ADR-0024, fatia 5)", () => {
     const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
     expect(lancador.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(lancador);
-    expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).not.toContain("Nesta tela");
+    // fatia 6: a tela lê a sessão, e a Clara sabe de qual se trata
+    await waitFor(() =>
+      expect((document.querySelector(".ast:not([hidden])") as HTMLElement).textContent).toContain(
+        "Nesta tela: 15ª Sessão Ordinária",
+      ),
+    );
+  });
+});
+
+describe("PaginaTranscricao — qual sessão é (ADR-0024, fatia 6)", () => {
+  const vazia = { "/api/sessoes/s1/transcricoes": { status: 200, body: { "sessao-id": "s1", itens: [] } } };
+  function Sonda() {
+    const dica = useDicaAtual();
+    return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+  }
+  const cabecalho = () => document.querySelector("header.topo .sessao-meta") as HTMLElement;
+  function montar() {
+    return render(
+      <ProvedorDaDica>
+        <ConteudoTranscricao id="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+  }
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("com a sessão lida, o cabeçalho diz qual é e a tela publica a dica da sessão", async () => {
+    rede(vazia);
+    montar();
+    expect(await screen.findByText(/Nenhuma gravação desta sessão foi transcrita/)).toBeTruthy();
+    await waitFor(() => expect(cabecalho().querySelector(".quando")?.textContent).toBe("Sessão ordinária nº 15"));
+    expect(cabecalho().querySelector(".tipo")?.textContent).toBe("Transcrição");
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe(
+        "15ª Sessão Ordinária | Sobre a 15ª Sessão Ordinária,  | Perguntar sobre esta sessão",
+      ),
+    );
+  });
+
+  it("sessão que não abre (404): cabeçalho como antes, sem dica, e a transcrição segue", async () => {
+    rede({ ...vazia, "/api/sessoes/s1": { status: 404, body: { erro: "nao-encontrada" } } });
+    montar();
+    expect(await screen.findByText(/Nenhuma gravação desta sessão foi transcrita/)).toBeTruthy();
+    await waitFor(() =>
+      expect(vi.mocked(global.fetch).mock.calls.filter(([u]) => u === "/api/sessoes/s1")).toHaveLength(1),
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(cabecalho().textContent).toBe("Transcrição");
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
   });
 });

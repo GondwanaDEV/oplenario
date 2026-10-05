@@ -3,6 +3,7 @@
    `--acento-texto`/`--linha`/`--surface`/`--papel*`). O documento é lido longo: medida de linha contida. */
 .sessao-meta { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .sessao-meta .tipo { font-family: var(--display); font-weight: 600; font-size: var(--t-16); color: var(--texto); }
+.sessao-meta .quando { font-family: var(--mono); font-size: var(--t-13); color: var(--texto-2); }
 
 .ata { padding-top: clamp(1.2rem, 3vw, 2rem); padding-bottom: 4rem; }
 .ata-cabeca h1 {

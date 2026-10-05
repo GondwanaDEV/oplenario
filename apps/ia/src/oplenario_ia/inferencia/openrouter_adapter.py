@@ -3,11 +3,17 @@
 Decisões (ADR-0023, sobre a ADR-0006):
 - API de chat do OpenRouter (`/chat/completions`, formato OpenAI) por `httpx`, a mesma biblioteca da fronteira com o
   core: é o formato que serve QUALQUER modelo do catálogo. Não há SDK oficial estável; o contrato é HTTP+JSON.
-- Sem retry e sem fallback de modelo: um `model` só, nunca `models` — retry, backoff e failover são política nossa
-  (§22.3.5, Eixo 13), e o modelo não troca em silêncio (§22.11.8).
-- Roteamento travado em TODA requisição: `data_collection: "deny"` e `zdr: true` (nenhum provedor que guarde ou
-  treine com o dado), `require_parameters: true` (nenhum que ignore um parâmetro do pedido), e `only` com a lista
-  de provedores aprovados quando a config a define. O failover entre provedores fica restrito a essa lista.
+- Um `model` por requisição, nunca `models` (o fallback de modelo do OpenRouter): o modelo não troca em silêncio
+  (§22.11.8). O failover de modelo é NOSSO (§22.3.5, Eixo 13): os `reservas` da config, tentados em ordem, uma vez
+  cada, só quando o modelo anterior falha de forma retentável (429, 503, 408, 5xx, rede, timeout, saída vazia) ou
+  some (404, modelo ou provedor inexistente); nunca em erro de entrada (400, 403) nem de conta (401, 402). Cada
+  troca vai ao log, e o modelo registrado é o que atendeu. Sem reservas, uma tentativa só.
+- Roteamento travado em TODA requisição. Política `zdr` (padrão): `data_collection: "deny"` e `zdr: true` (nenhum
+  provedor que guarde ou treine com o dado), `require_parameters: true` (nenhum que ignore um parâmetro do pedido), e
+  `only` com a lista de provedores aprovados quando a config a define. O failover entre provedores fica restrito a
+  essa lista. Política `excecao-gratuita` (EXCEÇÃO TEMPORÁRIA à ADR-0023, decisão do dono do produto, 05/10/2026):
+  só `require_parameters` (e `only`), porque os provedores gratuitos dos melhores modelos não cumprem ZDR nem "sem
+  coleta"; a config só a aceita com modelos `:free` da lista própria.
 - Proveniência: o modelo e o PROVEDOR que de fato atenderam vêm da resposta (`model`, `provider`), não da config.
 - O custo informado pelo OpenRouter (`usage.cost`) viaja na resposta; a taxa da plataforma é somada na tabela.
 - Erros mapeados às 6 categorias. O `detalhe` nunca leva o conteúdo nem a mensagem do provedor (que pode ecoá-lo).
@@ -15,9 +21,11 @@ Decisões (ADR-0023, sobre a ADR-0006):
 
 from __future__ import annotations
 
+import logging
 import time
+from collections.abc import Sequence
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -26,6 +34,20 @@ from oplenario_ia.inferencia.modelo import Parada, PedidoInferencia, RespostaInf
 
 VENDOR = "openrouter"
 URL_PADRAO = "https://openrouter.ai/api/v1"
+
+log = logging.getLogger("oplenario_ia.inferencia.openrouter")
+
+Politica = Literal["zdr", "excecao-gratuita"]
+
+
+class _FalhaDeStatus(Exception):
+    """Interna: o erro categorizado e se ele abre a vez da reserva (o 404 não é retentável, mas troca de modelo)."""
+
+    def __init__(self, erro: ErroIA, status: int) -> None:
+        super().__init__(erro.detalhe)
+        self.erro = erro
+        self.reserva = erro.retentavel or status == 404
+
 
 _PARADAS: dict[str, Parada] = {
     "stop": "fim",
@@ -68,11 +90,14 @@ class PortaOpenRouter:
         url: str = URL_PADRAO,
         provedores: list[str] | None = None,
         folga_raciocinio: int = 0,
+        politica: Politica = "zdr",
+        reservas: Sequence[tuple[str, int]] = (),
         cliente: httpx.Client | None = None,
     ) -> None:
-        self._modelo = modelo
-        # num modelo que raciocina, `max_tokens` cobre raciocinio + resposta: a folga e' somada ao limite do pedido
-        self._folga_raciocinio = folga_raciocinio
+        # o principal e as reservas (slug, folga), na ordem em que são tentados. Num modelo que raciocina,
+        # `max_tokens` cobre raciocinio + resposta: a folga de cada um e' somada ao limite do pedido
+        self._modelos: list[tuple[str, int]] = [(modelo, folga_raciocinio), *reservas]
+        self._politica: Politica = politica
         self._chave = chave  # OPENROUTER_API_KEY, vinda do cofre (Eixo 11f)
         self._url = url.rstrip("/")
         self._provedores = list(provedores or [])
@@ -82,15 +107,26 @@ class PortaOpenRouter:
     def vendor(self) -> str:
         return VENDOR
 
-    def corpo(self, pedido: PedidoInferencia) -> dict[str, Any]:
+    @property
+    def modelos(self) -> list[str]:
+        """Os slugs na ordem de tentativa: o principal, depois as reservas."""
+        return [m for m, _ in self._modelos]
+
+    def corpo(self, pedido: PedidoInferencia, indice: int = 0) -> dict[str, Any]:
+        modelo, folga = self._modelos[indice]
         # `require_parameters`: só atende quem honra todos os parâmetros do pedido (ex.: `max_tokens`), em vez de um
-        # provedor que os ignore em silêncio
-        provider: dict[str, Any] = {"data_collection": "deny", "zdr": True, "require_parameters": True}
+        # provedor que os ignore em silêncio. Na exceção gratuita, ZDR e "sem coleta" ficam de fora (ADR-0023, exceção
+        # temporária): nenhum provedor gratuito dos modelos escolhidos os cumpre.
+        provider: dict[str, Any] = (
+            {"require_parameters": True}
+            if self._politica == "excecao-gratuita"
+            else {"data_collection": "deny", "zdr": True, "require_parameters": True}
+        )
         if self._provedores:
             provider["only"] = self._provedores
         corpo: dict[str, Any] = {
-            "model": self._modelo,
-            "max_tokens": pedido.max_tokens + self._folga_raciocinio,
+            "model": modelo,
+            "max_tokens": pedido.max_tokens + folga,
             "messages": [
                 {"role": "system", "content": pedido.instrucoes},
                 {"role": "user", "content": [{"type": "text", "text": t} for t in pedido.conteudo]},
@@ -106,11 +142,33 @@ class PortaOpenRouter:
         if not self._chave:
             # IA fora por configuração: vira "indisponível" (R-IA-1), nunca 500
             raise ErroIA(Categoria.INFRAESTRUTURA, "OPENROUTER_API_KEY ausente", retentavel=False, vendor=VENDOR)
+        # a latência registrada é a que a pessoa esperou: desde a primeira tentativa, reservas incluídas
         inicio = time.monotonic()
+        ultimo = len(self._modelos) - 1
+        for indice, (modelo, _) in enumerate(self._modelos):
+            try:
+                return self._tentar(pedido, indice, inicio)
+            except _FalhaDeStatus as f:
+                erro, reserva = f.erro, f.reserva
+            except ErroIA as e:
+                erro, reserva = e, e.retentavel
+            if not reserva or indice == ultimo:
+                raise erro
+            # o detalhe nunca leva conteúdo (B4): só o slug e a categoria
+            log.warning(
+                "modelo %s falhou (%s: %s); tentando a reserva %s",
+                modelo,
+                erro.categoria,
+                erro.detalhe,
+                self._modelos[indice + 1][0],
+            )
+        raise AssertionError("inalcançável: há sempre ao menos um modelo")  # pragma: no cover
+
+    def _tentar(self, pedido: PedidoInferencia, indice: int, inicio: float) -> RespostaInferencia:
         try:
             r = self._cliente.post(
                 f"{self._url}/chat/completions",
-                json=self.corpo(pedido),
+                json=self.corpo(pedido, indice),
                 headers={"Authorization": f"Bearer {self._chave}", "X-Title": "O Plenario"},
             )
         except httpx.TimeoutException as e:
@@ -120,7 +178,7 @@ class PortaOpenRouter:
                 Categoria.INFRAESTRUTURA, "falha de rede até o fornecedor", retentavel=True, vendor=VENDOR
             ) from e
         if r.status_code != 200:
-            raise _erro_status(r.status_code)
+            raise _FalhaDeStatus(_erro_status(r.status_code), r.status_code)
         try:
             dados = r.json()
         except ValueError as e:
@@ -133,11 +191,12 @@ class PortaOpenRouter:
         erro = dados.get("error")
         if isinstance(erro, dict):
             codigo = erro.get("code")
-            raise _erro_status(codigo if isinstance(codigo, int) else 502)
-        return _normalizar(dados, int((time.monotonic() - inicio) * 1000))
+            status = codigo if isinstance(codigo, int) else 502
+            raise _FalhaDeStatus(_erro_status(status), status)
+        return _normalizar(dados, int((time.monotonic() - inicio) * 1000), self._modelos[indice][0])
 
 
-def _normalizar(dados: dict[str, Any], latencia_ms: int) -> RespostaInferencia:
+def _normalizar(dados: dict[str, Any], latencia_ms: int, pedido_modelo: str) -> RespostaInferencia:
     escolhas = dados.get("choices") or []
     if not escolhas:
         raise ErroIA(Categoria.MODELO, "resposta sem escolha", retentavel=True, vendor=VENDOR)
@@ -176,7 +235,8 @@ def _normalizar(dados: dict[str, Any], latencia_ms: int) -> RespostaInferencia:
         texto=texto,
         parada=parada,
         vendor=VENDOR,
-        modelo=str(dados.get("model") or ""),
+        # quem atendeu, pela resposta; sem o campo, o slug pedido (um modelo por requisição, nunca `models`)
+        modelo=str(dados.get("model") or pedido_modelo),
         provedor=provedor if isinstance(provedor, str) and provedor else None,
         uso=Uso(
             entrada=entrada,
