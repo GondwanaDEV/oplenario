@@ -124,3 +124,18 @@
     (is (.startsWith ^String csv "﻿seq,quando,quem"))
     (is (.contains ^String csv "\"Maria, a secretária\""))
     (is (.endsWith ^String csv "\r\n"))))
+
+(deftest o-hash-do-historico-da-clara-vai-ao-detalhe-e-nada-mais
+  ;; ADR-0024 item 4: a trilha continua sem conteudo; o handler da Clara deixa so' o hash da interacao guardada
+  (let [h (apply str (repeat 64 "a"))
+        r (logic/registro-da-requisicao (req :post)
+                                        {:status 200 :auditoria {:recurso-tipo "interacao_assistente" :recurso-id "i1"
+                                                                 :conteudo-sha256 h :pergunta "nao entra"}}
+                                        :agente/perguntar)]
+    (is (= h (get-in r [:detalhe :conteudo-sha256])))
+    (is (= ["interacao_assistente" "i1"] ((juxt :recurso-tipo :recurso-id) r)))
+    (is (not (re-find #"nao entra" (pr-str r))) "so' as chaves conhecidas da marca entram"))
+  (testing "o que nao e' sha256 hex nao entra"
+    (is (nil? (get-in (logic/registro-da-requisicao (req :post) {:status 200 :auditoria {:conteudo-sha256 "<script>"}}
+                                                    :agente/perguntar)
+                      [:detalhe :conteudo-sha256])))))

@@ -19,6 +19,7 @@
   Opcional de leitura que devolve conteudo de TERCEIRO (Eixo 4.5):
     :terceiro   (fn [saida] -> [{:origem :referencia}]) — vazio = nada de terceiro nesta saida"
   (:require [malli.core :as m]
+            [oplenario.kernel.canonico :as canonico]
             [malli.error :as me]
             [malli.json-schema :as json-schema]
             [malli.transform :as mt]
@@ -212,20 +213,21 @@
   a mesma entrada roda por aqui como ela (ator sem `:via`). Leitura de conteudo de terceiro por agente marca a
   execucao (seam `:marcar-terceiro`).
 
-  AUDIT (Eixo 3.5): chamada de AGENTE a entrada que escreve (`rascunho`/`ato`) vai SEMPRE ao registro, com o
-  desfecho — inclusive negada ou invalida; ato proposto = `proposta` —, pelo seam `(:registrar-chamada deps)`
-  `(fn [ator e desfecho])`. Sem o seam, a chamada de escrita por agente nao roda (fail-closed: escrita sem rastro nao
-  existe)."
+  AUDIT (Eixo 3.5, ampliado pela ADR-0024): TODA chamada de AGENTE — leitura inclusive — vai ao registro, com o
+  desfecho (inclusive negada ou invalida; ato proposto = `proposta`) e o SHA-256 do JSON canonico da saida (o que a
+  IA viu, sem guardar o conteudo), pelo seam `(:registrar-chamada deps)` `(fn [ator e desfecho resultado-sha256])`.
+  Sem o seam, a chamada por agente nao roda (fail-closed: chamada de IA sem rastro nao existe)."
   [e deps ator dados]
-  (if (and (:via ator) (not= :leitura (:classe e)))
+  (if (:via ator)
     (let [registrar (or (:registrar-chamada deps)
-                        (throw (ex-info "chamada de escrita por agente sem registro de audit" {:ferramenta (:nome e)})))]
+                        (throw (ex-info "chamada por agente sem registro de audit" {:ferramenta (:nome e)})))]
       (try
         (let [saida (executar* e deps ator dados)]
-          (registrar ator e (cond (nil? saida) "nao_encontrado" (= :ato (:classe e)) "proposta" :else "ok"))
+          (registrar ator e (cond (nil? saida) "nao_encontrado" (= :ato (:classe e)) "proposta" :else "ok")
+                     (some-> saida canonico/sha256))
           saida)
         (catch Exception ex
-          (registrar ator e (desfecho ex))
+          (registrar ator e (desfecho ex) nil)
           (throw ex))))
     (executar* e deps ator dados)))
 

@@ -161,7 +161,7 @@
                         (swap! propostas conj {:ferramenta (:nome e) :entrada entrada :apresentacao apresentacao})
                         {:proposta-id (str (random-uuid)) :titulo (:titulo apresentacao)
                          :estado "aguardando_confirmacao" :mensagem "Nada foi feito ainda."})
-              :registrar-chamada (fn [_ e desfecho] (swap! chamadas conj [(:nome e) desfecho]))}
+              :registrar-chamada (fn [_ e desfecho _] (swap! chamadas conj [(:nome e) desfecho]))}
         agente (fn [quem papeis] {:identidade-id quem :ente-id ente :papeis papeis :tipo-vinculo "servidor"
                                   :via {:agente "assistente" :execucao-id (random-uuid) :publico :secretaria
                                         :classes #{:leitura :ato} :institucional? false}})]
