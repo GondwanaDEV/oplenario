@@ -35,14 +35,16 @@
   (let [m (or (ex-message e) (.getName (class e)))]
     (subs (first (str/split-lines m)) 0 (min 200 (count (first (str/split-lines m)))))))
 
-(defn- resumo [antes depois origem]
+(defn- resumo [antes depois origem pausado?]
   (str "Orcamento de IA: mensal "
        (if antes (str "de " (:mensal antes) " para ") "definido em ") (:mensal depois)
        "; teto duro " (if antes (str "de " (:teto-duro antes) " para ") "definido em ") (:teto-duro depois)
        " (" (:moeda depois) "). "
        (if (= "linha-de-comando" origem)
          "Definido pela linha de comando, sem pessoa identificada."
-         "Definido pelo operador.")))
+         "Definido pelo operador.")
+       (when pausado?
+         " A Casa esta' suspensa: a cota segue zero e este valor vale a partir da reativacao.")))
 
 (defn definir!
   "Define o orcamento de IA da Casa e deixa o par na atuacao. `deps` = {:repo-ia :repo-op}. Devolve a definicao.
@@ -69,8 +71,9 @@
         depois (valores d)]
     (try (repo-admin/registrar-atuacao!
           repo-op {:operador-id operador-id :ente-id ente-id :acao acao-definido
-                   :detalhe (assoc base :tentativa (:tentativa aponta) :depois depois
-                                   :resumo (resumo antes depois origem))})
+                   :detalhe (cond-> (assoc base :tentativa (:tentativa aponta) :depois depois
+                                           :resumo (resumo antes depois origem (:pausado-pela-suspensao d)))
+                              (:pausado-pela-suspensao d) (assoc :pausado-pela-suspensao true))})
          (catch Exception e
            (log/error e "ia-orcamento: orcamento DEFINIDO, desfecho nao gravado na atuacao"
                       {:ente-id ente-id :tentativa (:tentativa aponta)})

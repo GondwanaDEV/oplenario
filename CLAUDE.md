@@ -319,8 +319,8 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   `tentativas-sem-desfecho` existe como função de repositório, sem tela;
 - **o login do cidadão fica na trilha (decidido em 05/10/2026):** pseudonimizado, com o par tentativa/desfecho; a
   ADR-0017 foi corrigida (adendo "Eixo 4c"), o código não mudou;
-- **falta:** definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
-  reabre e a reativação não restaura): decidir a regra.
+- **orçamento de IA de Casa suspensa (regra de 05/10/2026):** a suspensão vence. O valor definido durante a suspensão
+  fica guardado e é o que a reativação devolve; até lá a cota segue zero (ADR-0018, Eixo 2).
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
