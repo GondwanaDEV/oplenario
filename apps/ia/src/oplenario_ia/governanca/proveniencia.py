@@ -27,6 +27,15 @@ class Proveniencia(BaseModel):
     terceiro: bool = False
 
 
+class Fato(BaseModel):
+    """Um valor numérico que uma fonte ESTRUTURADA afirma (o total de votos sim de uma votação). `nomes` é como a
+    prosa o chama, sem acento e em minúsculas (`sim`, `favor`, `favoraveis`): é o que a conferência usa para saber
+    que "10 votos favoráveis" está falando deste valor."""
+
+    valor: int
+    nomes: tuple[str, ...]
+
+
 class Fonte(BaseModel):
     """A peça é uma FONTE citável: um dispositivo de norma, um trecho de transcrição, uma proposição (§22.11.7).
 
@@ -37,6 +46,10 @@ class Fonte(BaseModel):
     id: str = Field(min_length=1, pattern=r"^[^|\]\s\"]+$")
     rotulo: str
     versao: str | None = None
+    # Fonte ESTRUTURADA (um fato do core, não um texto escrito por gente): a conferência vai além do trecho literal e
+    # confere os números da afirmação que a cita contra o texto da fonte e contra `fatos` (confianca/numeros.py).
+    estruturada: bool = False
+    fatos: list[Fato] = []
 
 
 class Peca(BaseModel):

@@ -177,10 +177,37 @@ class FalaContexto(Fio):
     encerrou_em: datetime | None = None
 
 
+Modalidade = Literal["nominal", "simbolica", "secreta"]
+QuorumTipo = Literal["maioria_simples", "maioria_absoluta", "maioria_qualificada_2_3", "maioria_qualificada_3_5"]
+
+
+class VotacaoContexto(Fio):
+    """Uma votação ENCERRADA da sessão, como fato consumado (A.6, ata com o resultado das votações). Só o que a ata
+    cita: o objeto em palavras, a modalidade, o quórum, o resultado e os totais. NUNCA o voto de cada vereador — nem
+    na nominal: nome de vereador ao lado de voto, em contexto de LLM, é dado pessoal, e a lista nominal fica no anexo
+    do sistema. Chave extra no fio (o voto por vereador, se um dia o core a mandasse) é ignorada pelo `Fio`.
+
+    Simbólica não conta voto: totais nulos. `votos_necessarios` é a aritmética do core (nulo na maioria simples)."""
+
+    id: str
+    objeto: str
+    modalidade: Modalidade
+    quorum_tipo: QuorumTipo
+    votos_necessarios: int | None = None
+    base_membros: int | None = None
+    resultado: Literal["aprovada", "rejeitada"]
+    total_sim: int | None = Field(default=None, ge=0)
+    total_nao: int | None = Field(default=None, ge=0)
+    total_abstencao: int | None = Field(default=None, ge=0)
+    encerrada_em: datetime
+
+
 class ContextoSessao(Fio):
     sessao: SessaoContexto
     segmentos: list[SegmentoContexto]
     falas: list[FalaContexto]
+    # Core sem o campo (anterior a esta fatia) = sem votações: a ata sai como antes, com o resultado a confirmar.
+    votacoes: list[VotacaoContexto] = []
 
 
 # ---------- IA -> core ----------

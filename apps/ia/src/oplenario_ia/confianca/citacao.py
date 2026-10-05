@@ -3,6 +3,10 @@
 O modelo cita com a marca `[[<id da fonte> | <trecho literal>]]`. A conferência é determinística, sem outro modelo:
 a fonte citada precisa ter sido LIDA nesta execução (uma peça com aquele `id` foi enviada) e o trecho precisa estar
 naquela fonte. Citação inventada, fonte que não foi lida e trecho que a fonte não diz ficam marcados — nunca somem.
+
+Fonte ESTRUTURADA (um fato do core, como o placar de uma votação) pede mais: os números da frase que a cita também
+são conferidos contra o dado (`numeros.py`). Frase com número que o registro não tem, ou com o valor de outro fato,
+sai como `trecho_nao_encontrado`, igual ao trecho que a fonte não diz — o dado do sistema é o que vale.
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from oplenario_ia.confianca.numeros import afirmacao_antes_da_marca, divergencias
 from oplenario_ia.governanca.proveniencia import Fonte
 
 MARCA = re.compile(r"\[\[\s*([^|\]\s\"]+)\s*(?:\|\s*(.*?)\s*)?\]\]", re.DOTALL)
@@ -54,10 +59,13 @@ def conferir(texto: str, lidas: list[FonteLida]) -> list[Citacao]:
             status = "fonte_nao_lida"
         elif trecho is None or len(_normalizar(trecho)) < MIN_TRECHO:
             status = "sem_trecho"
-        elif _normalizar(trecho) in _normalizar(lida.texto):
-            status = "conferida"
-        else:
+        elif _normalizar(trecho) not in _normalizar(lida.texto) or (
+            lida.fonte.estruturada
+            and divergencias(afirmacao_antes_da_marca(texto, m.start()), lida.texto, lida.fonte.fatos)
+        ):
             status = "trecho_nao_encontrado"
+        else:
+            status = "conferida"
         citacoes.append(
             Citacao(
                 fonte_id=fonte_id,

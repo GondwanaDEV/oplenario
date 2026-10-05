@@ -4,6 +4,11 @@ instruções do produto. O rascunho é SEMPRE proposto — a secretaria revisa, 
 As falas transcritas entram como conteúdo de TERCEIRO (§22.11.4): quem falou na tribuna não é a Casa redigindo, e uma
 fala pode conter um "ignore as instruções". Isso deixa a execução contaminada e o rascunho sai sempre marcado para
 revisar com atenção — é a verdade sobre um texto que nasceu de áudio.
+
+As votações ENCERRADAS da sessão entram como fonte própria cada uma (`votacao:<id>`), montada pelo core a partir do
+registro do sistema: objeto, modalidade, quórum, resultado e placar. É um FATO, não uma fala: a Camada de Confiança
+confere os números que a ata cita contra ele (`Fonte.estruturada`), e quando a transcrição diz outra coisa vale o
+dado. O voto de cada vereador NÃO entra — nem na votação nominal: o contexto traz só os totais.
 """
 
 from __future__ import annotations
@@ -14,12 +19,12 @@ from datetime import datetime, timedelta, timezone
 
 from oplenario_ia.armazem.porta import TranscricaoGuardada
 from oplenario_ia.confianca.citacao import MARCA
-from oplenario_ia.fronteira.contrato import ContextoSessao
+from oplenario_ia.fronteira.contrato import ContextoSessao, VotacaoContexto
 from oplenario_ia.governanca.filtro import PedidoGovernado
-from oplenario_ia.governanca.proveniencia import Fonte, Peca, Proveniencia, Sigilo
+from oplenario_ia.governanca.proveniencia import Fato, Fonte, Peca, Proveniencia, Sigilo
 
 OPERACAO = "ata.redigir"
-PROMPT_VERSAO = "ata-v1"
+PROMPT_VERSAO = "ata-v2"
 
 # O beachhead (CE) não tem horário de verão: UTC-3 fixo e determinístico. Casa de outro fuso = config quando existir.
 FUSO_DA_CASA = timezone(timedelta(hours=-3))
@@ -32,10 +37,22 @@ INSTRUCOES = (
     "Não invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva "
     "entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. "
     "Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\n"
+    "As fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e "
+    "o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a "
+    "fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) "
+    "copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo "
+    "do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do "
+    "sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e "
+    "que não consta nas fontes do sistema fica como ponto a confirmar.\n"
     "Não escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata."
 )
 
 PONTO_A_CONFIRMAR = re.compile(r"\[\s*confirmar\s*:\s*([^\]]+?)\s*\]", re.IGNORECASE)
+MODALIDADES = {"nominal": "nominal", "simbolica": "simbólica", "secreta": "secreta"}
+# como a prosa chama cada total (sem acento, minúsculas): é o que liga "10 votos favoráveis" ao total de sim
+NOMES_SIM = ("sim", "favor", "favoravel", "favoraveis")
+NOMES_NAO = ("nao", "contra", "contrario", "contrarios")
+NOMES_ABSTENCAO = ("abstencao", "abstencoes", "abstiveram")
 TIPOS_SESSAO = {
     "ordinaria": "ordinária",
     "extraordinaria": "extraordinária",
@@ -92,6 +109,70 @@ def _dados_da_sessao(ctx: ContextoSessao) -> str:
     return " ".join(linhas)
 
 
+def _plural(n: int, singular: str, plural: str) -> str:
+    return f"{n} {singular if n == 1 else plural}"
+
+
+def _quorum(v: VotacaoContexto) -> str:
+    base = f" de {v.base_membros} membros da Casa" if v.base_membros is not None else ""
+    if v.quorum_tipo == "maioria_simples":
+        return "maioria simples (mais votos sim do que não)"
+    necessarios = f"{v.votos_necessarios} votos sim{base}" if v.votos_necessarios is not None else "votos sim"
+    nome = {
+        "maioria_absoluta": "maioria absoluta",
+        "maioria_qualificada_2_3": "dois terços dos membros",
+        "maioria_qualificada_3_5": "três quintos dos membros",
+    }[v.quorum_tipo]
+    return f"{nome} ({necessarios})"
+
+
+def _placar(v: VotacaoContexto) -> str | None:
+    if v.total_sim is None or v.total_nao is None or v.total_abstencao is None:
+        return None
+    return ", ".join(
+        [
+            _plural(v.total_sim, "voto sim", "votos sim"),
+            _plural(v.total_nao, "voto não", "votos não"),
+            _plural(v.total_abstencao, "abstenção", "abstenções"),
+        ]
+    )
+
+
+def texto_da_votacao(v: VotacaoContexto) -> str:
+    """O registro do sistema de uma votação, em linhas `Rótulo: valor` (o redator fake lê assim; o modelo, também).
+    Sem a hora e sem ordinal de propósito: todo número deste texto é um número que a ata pode citar sem ser marcada."""
+    placar = _placar(v) or f"sem contagem individual (votação {MODALIDADES[v.modalidade]})"
+    return "\n".join(
+        [
+            f"Matéria votada: {v.objeto}",
+            f"Modalidade: {MODALIDADES[v.modalidade]}",
+            f"Quórum exigido: {_quorum(v)}",
+            f"Placar: {placar}",
+            f"Resultado: {v.resultado}",
+        ]
+    )
+
+
+def fatos_da_votacao(v: VotacaoContexto) -> list[Fato]:
+    pares = [(v.total_sim, NOMES_SIM), (v.total_nao, NOMES_NAO), (v.total_abstencao, NOMES_ABSTENCAO)]
+    return [Fato(valor=valor, nomes=nomes) for valor, nomes in pares if valor is not None]
+
+
+def peca_da_votacao(v: VotacaoContexto) -> Peca:
+    return Peca(
+        texto=texto_da_votacao(v),
+        # o sistema já publica o resultado e os totais de toda votação encerrada (inclusive a secreta); o voto de cada
+        # vereador não chega aqui — não está no contexto. Por isso é público e NÃO leva `voto_secreto`.
+        proveniencia=Proveniencia(origem="core.votacao", sigilo=Sigilo.PUBLICO),
+        fonte=Fonte(
+            id=f"votacao:{v.id}",
+            rotulo=f"Votação de {v.objeto}, registrada pelo sistema",
+            estruturada=True,
+            fatos=fatos_da_votacao(v),
+        ),
+    )
+
+
 def ordenar(ctx: ContextoSessao, transcricoes: list[TranscricaoGuardada]) -> list[TranscricaoGuardada]:
     """Na ordem das gravações da sessão (início do segmento); a que o contexto não conhece vai para o fim."""
     ordem = {seg.id: i for i, seg in enumerate(sorted(ctx.segmentos, key=lambda s: s.iniciou_em))}
@@ -108,6 +189,9 @@ def pedido_de_ata(
             fonte=Fonte(id=f"sessao:{ctx.sessao.id}", rotulo="Dados da sessão registrados pela Mesa"),
         )
     ]
+    # as votações vêm logo depois dos dados da sessão, na ordem em que foram encerradas (o core já as manda ordenadas;
+    # ordenar aqui de novo não custa e a ata nunca depende da ordem do fio)
+    pecas += [peca_da_votacao(v) for v in sorted(ctx.votacoes, key=lambda v: (v.encerrada_em, v.id))]
     for t in ordenar(ctx, transcricoes):
         for b in blocos(t):
             quem = b.orador or "Orador não identificado"

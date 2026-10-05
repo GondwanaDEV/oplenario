@@ -1,0 +1,326 @@
+{
+  "conjunto": "ata-votacoes",
+  "versao": 1,
+  "descricao": "A.6: a ata com o resultado das votações da sessão — o registro estruturado do sistema é fonte conferível: a citação do placar confere, número errado na frase (ou sim e não trocados) reprova, e quando a gravação contradiz o dado vale o dado, com o [confirmar: …] dos dois valores. O voto de cada vereador não entra no contexto.",
+  "casos": [
+    {
+      "id": "obj-ata-placar-da-votacao-confere",
+      "tipo": "objetiva",
+      "descricao": "A ata cita o placar do registro do sistema e a frase diz os mesmos números: a citação confere, sem alerta de citação.",
+      "operacao": "ata.redigir",
+      "instrucoes": "Você redige o RASCUNHO da ata de uma sessão da Câmara Municipal, a partir dos dados da sessão e das falas transcritas da gravação. Escreva em português formal, no estilo de ata legislativa: terceira pessoa, pretérito, parágrafos corridos, na ordem em que as coisas aconteceram. Registre quem fez uso da palavra e o essencial do que disse, as matérias apreciadas e os resultados anunciados pela Presidência.\nNão invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\nAs fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e que não consta nas fontes do sistema fica como ponto a confirmar.\nNão escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata.",
+      "politica_citacao": "por_paragrafo",
+      "pecas": [
+        {
+          "texto": "Sessão ordinária nº 12. Aberta em 22/09/2026 às 18:00. Encerrada em 22/09/2026 às 21:00.",
+          "proveniencia": {
+            "origem": "core.sessao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "sessao:eval-1",
+            "rotulo": "Dados da sessão registrados pela Mesa"
+          }
+        },
+        {
+          "texto": "Matéria votada: PL 008/2026\nModalidade: nominal\nQuórum exigido: maioria simples (mais votos sim do que não)\nPlacar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada",
+          "proveniencia": {
+            "origem": "core.votacao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "votacao:eval-1",
+            "rotulo": "Votação de PL 008/2026, registrada pelo sistema",
+            "estruturada": true,
+            "fatos": [
+              {
+                "valor": 9,
+                "nomes": [
+                  "sim",
+                  "favor",
+                  "favoravel",
+                  "favoraveis"
+                ]
+              },
+              {
+                "valor": 2,
+                "nomes": [
+                  "nao",
+                  "contra",
+                  "contrario",
+                  "contrarios"
+                ]
+              },
+              {
+                "valor": 1,
+                "nomes": [
+                  "abstencao",
+                  "abstencoes",
+                  "abstiveram"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "resposta_fake": "A matéria PL 008/2026 foi aprovada por 9 votos sim, 2 votos não e 1 abstenção. [[votacao:eval-1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]",
+      "esperado": {
+        "resultado": "artefato",
+        "status_citacoes": [
+          "conferida"
+        ],
+        "enviado_contem": [
+          "<fonte id=\"votacao:eval-1\"",
+          "Placar: 9 votos sim, 2 votos não, 1 abstenção"
+        ],
+        "texto_contem": [
+          "9 votos sim"
+        ],
+        "contaminado": false
+      }
+    },
+    {
+      "id": "obj-ata-numero-errado-na-frase-nao-confere",
+      "tipo": "objetiva",
+      "descricao": "O trecho do placar é o certo, mas a frase diz 10 votos sim: o número é conferido contra o dado do sistema e a citação não confere.",
+      "operacao": "ata.redigir",
+      "instrucoes": "Você redige o RASCUNHO da ata de uma sessão da Câmara Municipal, a partir dos dados da sessão e das falas transcritas da gravação. Escreva em português formal, no estilo de ata legislativa: terceira pessoa, pretérito, parágrafos corridos, na ordem em que as coisas aconteceram. Registre quem fez uso da palavra e o essencial do que disse, as matérias apreciadas e os resultados anunciados pela Presidência.\nNão invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\nAs fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e que não consta nas fontes do sistema fica como ponto a confirmar.\nNão escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata.",
+      "politica_citacao": "por_paragrafo",
+      "pecas": [
+        {
+          "texto": "Sessão ordinária nº 12. Aberta em 22/09/2026 às 18:00. Encerrada em 22/09/2026 às 21:00.",
+          "proveniencia": {
+            "origem": "core.sessao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "sessao:eval-1",
+            "rotulo": "Dados da sessão registrados pela Mesa"
+          }
+        },
+        {
+          "texto": "Matéria votada: PL 008/2026\nModalidade: nominal\nQuórum exigido: maioria simples (mais votos sim do que não)\nPlacar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada",
+          "proveniencia": {
+            "origem": "core.votacao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "votacao:eval-1",
+            "rotulo": "Votação de PL 008/2026, registrada pelo sistema",
+            "estruturada": true,
+            "fatos": [
+              {
+                "valor": 9,
+                "nomes": [
+                  "sim",
+                  "favor",
+                  "favoravel",
+                  "favoraveis"
+                ]
+              },
+              {
+                "valor": 2,
+                "nomes": [
+                  "nao",
+                  "contra",
+                  "contrario",
+                  "contrarios"
+                ]
+              },
+              {
+                "valor": 1,
+                "nomes": [
+                  "abstencao",
+                  "abstencoes",
+                  "abstiveram"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "apenas_fake": true,
+      "resposta_fake": "A matéria PL 008/2026 foi aprovada por 10 votos sim, 2 votos não e 1 abstenção. [[votacao:eval-1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]",
+      "esperado": {
+        "resultado": "artefato",
+        "status_citacoes": [
+          "trecho_nao_encontrado"
+        ],
+        "incerteza": "revisar_com_atencao",
+        "motivos_incerteza_inclui": [
+          "citacao_nao_conferida"
+        ]
+      }
+    },
+    {
+      "id": "obj-ata-sim-e-nao-trocados-nao-conferem",
+      "tipo": "objetiva",
+      "descricao": "A frase troca os totais de sim e de não (os dois números existem no registro): a citação não confere.",
+      "operacao": "ata.redigir",
+      "instrucoes": "Você redige o RASCUNHO da ata de uma sessão da Câmara Municipal, a partir dos dados da sessão e das falas transcritas da gravação. Escreva em português formal, no estilo de ata legislativa: terceira pessoa, pretérito, parágrafos corridos, na ordem em que as coisas aconteceram. Registre quem fez uso da palavra e o essencial do que disse, as matérias apreciadas e os resultados anunciados pela Presidência.\nNão invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\nAs fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e que não consta nas fontes do sistema fica como ponto a confirmar.\nNão escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata.",
+      "politica_citacao": "por_paragrafo",
+      "pecas": [
+        {
+          "texto": "Sessão ordinária nº 12. Aberta em 22/09/2026 às 18:00. Encerrada em 22/09/2026 às 21:00.",
+          "proveniencia": {
+            "origem": "core.sessao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "sessao:eval-1",
+            "rotulo": "Dados da sessão registrados pela Mesa"
+          }
+        },
+        {
+          "texto": "Matéria votada: PL 008/2026\nModalidade: nominal\nQuórum exigido: maioria simples (mais votos sim do que não)\nPlacar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada",
+          "proveniencia": {
+            "origem": "core.votacao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "votacao:eval-1",
+            "rotulo": "Votação de PL 008/2026, registrada pelo sistema",
+            "estruturada": true,
+            "fatos": [
+              {
+                "valor": 9,
+                "nomes": [
+                  "sim",
+                  "favor",
+                  "favoravel",
+                  "favoraveis"
+                ]
+              },
+              {
+                "valor": 2,
+                "nomes": [
+                  "nao",
+                  "contra",
+                  "contrario",
+                  "contrarios"
+                ]
+              },
+              {
+                "valor": 1,
+                "nomes": [
+                  "abstencao",
+                  "abstencoes",
+                  "abstiveram"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "apenas_fake": true,
+      "resposta_fake": "A matéria PL 008/2026 foi rejeitada por 9 votos contra e 2 votos favoráveis. [[votacao:eval-1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]",
+      "esperado": {
+        "resultado": "artefato",
+        "status_citacoes": [
+          "trecho_nao_encontrado"
+        ],
+        "motivos_incerteza_inclui": [
+          "citacao_nao_conferida"
+        ]
+      }
+    },
+    {
+      "id": "obj-ata-gravacao-contradiz-o-dado-vale-o-dado",
+      "tipo": "objetiva",
+      "descricao": "A gravação diz dez votos favoráveis e o sistema registra nove: a ata fica com o dado do sistema e deixa [confirmar: …] com os dois valores.",
+      "operacao": "ata.redigir",
+      "instrucoes": "Você redige o RASCUNHO da ata de uma sessão da Câmara Municipal, a partir dos dados da sessão e das falas transcritas da gravação. Escreva em português formal, no estilo de ata legislativa: terceira pessoa, pretérito, parágrafos corridos, na ordem em que as coisas aconteceram. Registre quem fez uso da palavra e o essencial do que disse, as matérias apreciadas e os resultados anunciados pela Presidência.\nNão invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\nAs fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e que não consta nas fontes do sistema fica como ponto a confirmar.\nNão escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata.",
+      "politica_citacao": "por_paragrafo",
+      "pecas": [
+        {
+          "texto": "Sessão ordinária nº 12. Aberta em 22/09/2026 às 18:00. Encerrada em 22/09/2026 às 21:00.",
+          "proveniencia": {
+            "origem": "core.sessao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "sessao:eval-1",
+            "rotulo": "Dados da sessão registrados pela Mesa"
+          }
+        },
+        {
+          "texto": "Matéria votada: PL 008/2026\nModalidade: nominal\nQuórum exigido: maioria simples (mais votos sim do que não)\nPlacar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada",
+          "proveniencia": {
+            "origem": "core.votacao",
+            "sigilo": "publico",
+            "terceiro": false
+          },
+          "fonte": {
+            "id": "votacao:eval-1",
+            "rotulo": "Votação de PL 008/2026, registrada pelo sistema",
+            "estruturada": true,
+            "fatos": [
+              {
+                "valor": 9,
+                "nomes": [
+                  "sim",
+                  "favor",
+                  "favoravel",
+                  "favoraveis"
+                ]
+              },
+              {
+                "valor": 2,
+                "nomes": [
+                  "nao",
+                  "contra",
+                  "contrario",
+                  "contrarios"
+                ]
+              },
+              {
+                "valor": 1,
+                "nomes": [
+                  "abstencao",
+                  "abstencoes",
+                  "abstiveram"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "texto": "Está aprovado o projeto por dez votos favoráveis.",
+          "proveniencia": {
+            "origem": "transcricao",
+            "sigilo": "publico",
+            "terceiro": true
+          },
+          "fonte": {
+            "id": "transcricao:eval-t1#1",
+            "rotulo": "Presidente Lúcia, 0:00–0:09",
+            "versao": "transcrição v1"
+          }
+        }
+      ],
+      "apenas_fake": true,
+      "resposta_fake": "A matéria PL 008/2026 foi aprovada por 9 votos sim, 2 votos não e 1 abstenção. [[votacao:eval-1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]] [confirmar: a gravação indica 10 votos sim; o sistema registra 9]",
+      "esperado": {
+        "resultado": "artefato",
+        "status_citacoes": [
+          "conferida"
+        ],
+        "texto_contem": [
+          "[confirmar: a gravação indica 10 votos sim; o sistema registra 9]",
+          "9 votos sim"
+        ],
+        "texto_nao_contem": [
+          "aprovada por 10 votos"
+        ],
+        "contaminado": true
+      }
+    }
+  ]
+}
