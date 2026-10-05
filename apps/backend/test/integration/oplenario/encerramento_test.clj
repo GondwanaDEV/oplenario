@@ -46,6 +46,17 @@
 
 (defn- sql! [& args] (jdbc/execute! *dono* (vec args) opts))
 
+(defn- esperar-lock!
+  "Espera ate' 10 s por uma sessao ATIVA e BLOQUEADA numa trava (`wait_event_type = 'Lock'`) cujo comando cita `trecho`.
+  E' o banco que diz que a funcao esta' esperando; um `Thread/sleep` so' diz que ela ainda nao terminou, e numa maquina
+  lenta isso vale tambem para uma funcao que nunca esperou nada (o teste passaria sem a espera que ele guarda)."
+  [trecho]
+  (loop [i 0]
+    (cond (seq (sql! "SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()
+                      AND state = 'active' AND wait_event_type = 'Lock' AND query LIKE ?" (str "%" trecho "%"))) true
+          (>= i 200) false
+          :else (do (Thread/sleep 50) (recur (inc i))))))
+
 (defn- sql-cenario!
   "Monta um cenario que o banco recusaria pela via normal (ex.: desfazer uma confirmacao de recebimento, que um trigger
   impede): como dono, com os triggers de usuario desligados SO' nesta transacao."
@@ -612,7 +623,7 @@
         apagando (future (jdbc/with-transaction [tx *pool*]
                            (jdbc/execute! tx ["SELECT admin_sistema.apagar_dados_da_casa(?, ?)" a pedido])))]
     (is (some? ev))
-    (Thread/sleep 500)
+    (is (esperar-lock! "apagar_dados_da_casa") "o banco mostra a funcao PARADA numa trava, esperando o relay")
     (is (not (realized? apagando)) "a funcao esperou o relay")
     (deliver soltar true)
     (deref relay 10000 nil)

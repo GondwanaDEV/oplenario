@@ -106,6 +106,21 @@
       (vereador/inserir-licenca! tx {:id (random-uuid) :ente-id ente :mandato-id mandato-id
                                      :inicio inicio :fim fim :motivo "motivo"}))))
 
+(defn- esperar-bloqueados!
+  "Espera ate' 10 s por `n` sessoes ATIVAS e BLOQUEADAS numa trava (`wait_event_type = 'Lock'`) cujo comando cita
+  `trecho`; devolve quantas o banco mostrou na ultima olhada. E' o banco que diz que a leitura/escrita esta' esperando
+  a barreira. `Thread/sleep`/timeout curto so' dizem que ela ainda nao terminou: numa maquina lenta isso vale tambem
+  para quem nem chegou ao SELECT, e o teste passaria SEM o `FOR UPDATE` que ele guarda."
+  [n trecho]
+  (loop [i 0]
+    (let [achadas (count (jdbc/execute! (:ds (:datasource *repo*))
+                                        ["SELECT 1 FROM pg_stat_activity WHERE datname = current_database()
+                                          AND pid <> pg_backend_pid() AND state = 'active' AND wait_event_type = 'Lock'
+                                          AND query LIKE ?" (str "%" trecho "%")]))]
+      (if (or (>= achadas n) (>= i 200))
+        achadas
+        (do (Thread/sleep 50) (recur (inc i)))))))
+
 (defn- segurar-linha-do-mandato!
   "Abre uma tx que trava a linha do mandato com `SELECT ... FOR UPDATE` e a mantem aberta ate' o `liberar`
   ser entregue. Devolve `[segurando liberar fim-da-tx]` — o teste espera `segurando` antes de disparar os
@@ -327,7 +342,9 @@
           leu (promise)]
       (future (repo/transacao *repo* ente
                 (fn [tx] (deliver leu (vereador/mandato-licenciado-de-vereador tx ente ver (d "2026-04-10"))))))
-      (is (= :bloqueado (deref leu 2000 :bloqueado))
+      (is (= 1 (esperar-bloqueados! 1 "cadastros.mandato"))
+          "o banco mostra o SELECT do mandato PARADO numa trava enquanto outra tx segura a linha")
+      (is (= :bloqueado (deref leu 100 :bloqueado))
           "o SELECT do mandato BLOQUEIA enquanto outra tx segura a linha — sem `FOR UPDATE` ele passa direto")
       (deliver liberar true)
       @tx-fut
@@ -347,8 +364,10 @@
           t1 (tentar "2026-06-20")
           t2 (tentar "2026-04-10")]
       ;; as duas precisam estar EM VOO antes de qualquer uma commitar — sem esta espera o teste degeneraria
-      ;; em execucao serial, que passa com ou sem o lock.
-      (Thread/sleep 800)
+      ;; em execucao serial, que passa com ou sem o lock. Quem confirma que as duas estao EM VOO e' o banco (duas
+      ;; sessoes paradas na trava do mandato), nao um `Thread/sleep`: sob carga o sleep acabava antes de a segunda
+      ;; sequer abrir a transacao, e o teste passava mesmo sem o lock.
+      (is (= 2 (esperar-bloqueados! 2 "cadastros.mandato")) "as duas reassuncoes estao paradas na barreira")
       (deliver liberar true)
       @tx-fut
       (let [rs [(deref t1 20000 :timeout) (deref t2 20000 :timeout)]
