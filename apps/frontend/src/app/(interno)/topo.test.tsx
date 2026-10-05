@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { TopoInterno, arrumarNav, destinosVisiveis } from "./topo";
 import { TemaProvider } from "@/lib/tema";
 import { AuthProvider } from "@/lib/auth";
+import { MolduraDaClara } from "./clara/moldura-da-clara";
 
 // TopoInterno chama useTema() (src/lib/tema.tsx), useAuth() (src/lib/auth.tsx) e, desde a fatia
 // "demo-tres-consertos" #1, useMeuIdentidade() (busca GET /api/meu/identidade) — como useTema(), o
@@ -72,6 +73,47 @@ describe("TopoInterno", () => {
     fireEvent.click(casa);
     fireEvent.pointerDown(document.body);
     expect(casa.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("a entrada 'Clara' abre o painel expandido ali mesmo — não leva à antiga tela cheia /assistente (ADR-0024, fatia 5)", async () => {
+    global.fetch = vi.fn(async (url: string | URL | Request) =>
+      String(url).includes("/api/meu/identidade")
+        ? ({ ok: true, json: async () => ({ nome: "Marina Alencar Freire", papeis: ["secretario"] }) } as Response)
+        : ({ ok: false, status: 404, json: async () => ({}) } as Response),
+    ) as unknown as typeof fetch;
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["secretario"]}'>
+        <TemaProvider>
+          <MolduraDaClara>
+            <TopoInterno area="Central da Casa" />
+          </MolduraDaClara>
+        </TemaProvider>
+      </AuthProvider>
+    );
+    const entrada = await screen.findByRole("button", { name: "Clara" });
+    expect(screen.queryByRole("link", { name: "Clara" })).toBeNull();
+    expect(document.querySelector('a[href^="/assistente"]')).toBeNull();
+    expect(entrada.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById(entrada.getAttribute("aria-controls") ?? "")?.tagName).toBe("ASIDE");
+    fireEvent.click(entrada);
+    expect(document.documentElement.dataset.clara).toBe("expandido");
+    expect(document.activeElement).toBe(screen.getByLabelText("Sua pergunta"));
+    await waitFor(() => expect(entrada.getAttribute("aria-expanded")).toBe("true"));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(entrada);
+    cleanup();
+    delete document.documentElement.dataset.clara;
+    // sem a Clara na tela (fora da moldura), a entrada não aparece — nem como link para a rota antiga
+    render(
+      <AuthProvider tokenQuery='{"sub":"u","papeis":["secretario"]}'>
+        <TemaProvider>
+          <TopoInterno area="Central da Casa" />
+        </TemaProvider>
+      </AuthProvider>
+    );
+    await screen.findByText("Marina Alencar Freire");
+    expect(screen.queryByRole("button", { name: "Clara" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Clara" })).toBeNull();
   });
 
   it("enquanto a identidade carrega, mostra um rótulo HONESTO — nunca um nome fixo/inventado", () => {
@@ -170,16 +212,16 @@ describe("destinosVisiveis — a nav por papel", () => {
   });
 
   it("quem é SÓ administrador da Casa vê só a área dele — nada que o leve a 'Acesso restrito' (ADR-0005)", () => {
-    expect(rotulos(["admin_ente"])).toEqual(["Caixa", "IA da Casa", "Administração", "Auditoria"]);
+    expect(rotulos(["admin_ente"])).toEqual(["Caixa", "Clara", "IA da Casa", "Administração", "Auditoria"]);
   });
 
   it("o controle interno (auditor) vê só a trilha de auditoria (ADR-0017)", () => {
-    expect(rotulos(["auditor"])).toEqual(["Caixa", "Auditoria"]);
+    expect(rotulos(["auditor"])).toEqual(["Caixa", "Clara", "Auditoria"]);
     expect(rotulos(["secretario"])).toContain("Auditoria");
   });
 
   it("o jurídico (juridico) vê a fila de pareceres e as contas — nada das telas da secretaria (ADR-0019, ADR-0021)", () => {
-    expect(rotulos(["juridico"])).toEqual(["Caixa", "Jurídico", "Contas"]);
+    expect(rotulos(["juridico"])).toEqual(["Caixa", "Clara", "Jurídico", "Contas"]);
     expect(rotulos(["secretario"])).toContain("Jurídico");
     expect(rotulos(["admin_ente"])).not.toContain("Jurídico");
     expect(rotulos(["vereador"])).not.toContain("Jurídico");
@@ -271,8 +313,8 @@ describe("arrumarNav — os grupos da barra", () => {
   });
 
   it("quem vê poucas entradas (administração, auditoria, jurídico) continua com a barra plana", () => {
-    expect(forma(["admin_ente"])).toEqual(["Caixa", "IA da Casa", "Administração", "Auditoria"]);
-    expect(forma(["auditor"])).toEqual(["Caixa", "Auditoria"]);
-    expect(forma(["juridico"])).toEqual(["Caixa", "Jurídico", "Contas"]);
+    expect(forma(["admin_ente"])).toEqual(["Caixa", "Clara", "IA da Casa", "Administração", "Auditoria"]);
+    expect(forma(["auditor"])).toEqual(["Caixa", "Clara", "Auditoria"]);
+    expect(forma(["juridico"])).toEqual(["Caixa", "Clara", "Jurídico", "Contas"]);
   });
 });

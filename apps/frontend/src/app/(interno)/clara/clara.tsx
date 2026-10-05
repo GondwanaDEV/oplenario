@@ -48,8 +48,10 @@ import "./clara.css";
 export type Tamanho = "recolhido" | "aberto" | "expandido";
 type Vista = "conversa" | "historico" | "guardada";
 
+/** A secretaria: as quatro perguntas da antiga tela cheia /assistente (ADR-0024, fatia 5), inclusive a da tramitação. */
 export const SUGESTOES_CLARA_SECRETARIA = [
   "Qual a situação do PL 11/2026?",
+  "Por onde passou o PL 11/2026?",
   "O que vai ser votado na próxima sessão?",
   "Qual o quórum para derrubar um veto?",
 ];

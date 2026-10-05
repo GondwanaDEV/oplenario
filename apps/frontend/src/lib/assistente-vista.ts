@@ -127,7 +127,7 @@ export function comRotuloDoPasso(c: CitacaoVista, passos: PassoAgente[]): Citaca
 
 export function mensagemDeErroAssistente(status: number): string {
   if (status === 400) return "Escreva a pergunta com 2 a 1000 caracteres.";
-  if (status === 403) return "A Clara é da secretaria e dos vereadores.";
+  if (status === 403) return "A Clara não está disponível para o seu acesso nesta Casa.";
   return "Não foi possível falar com a Clara agora. Siga pela tela.";
 }
 
