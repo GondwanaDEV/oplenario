@@ -38,10 +38,11 @@
 
 (def ^:private cpf-valido "52998224725")
 
-(defn- fake-repo-identidade [papeis capturado]
+(defn- fake-repo-identidade [papeis capturado & {:keys [ja-entrou?]}]
   #_{:clj-kondo/ignore [:missing-protocol-method]}
   (reify repo-id/RepoIdentidade
     (snapshot-ator [_ _e _i] {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})
+    (ja-entrou-na-casa? [_ _e _i] (boolean ja-entrou?))
     (criar-identidade! [_ m] (swap! capturado conj [:criar-identidade m]) (:id m))
     (identidade-por-id [_ id] {:id id :cpf cpf-valido :nome "Helena Matos"})
     ;; DELIBERADAMENTE ainda expoe :cpf aqui (igual identidade-por-id) mesmo o handler de producao ja'
@@ -69,7 +70,7 @@
 
 (defn- ->uuid [s] (when s (java.util.UUID/fromString s)))
 
-(defn- fake-idp [capturado & {:keys [convidar-lanca? convidar-lanca-inexistente?]}]
+(defn- fake-idp [capturado & {:keys [convidar-lanca? convidar-lanca-inexistente? existia? corrigir-lanca]}]
   (reify idp/IdentityProvider
     (verificar-token [_ t]
       ;; mesma normalizacao E' mesmo fail-closed de idp-dev/keycloak-idp (MINOR-3, review Task 8): token
@@ -84,7 +85,10 @@
               (:ente-id c)       (update :ente-id ->uuid))))
         (catch Exception _ nil)))
     (provisionar-realm! [_ e] (swap! capturado conj [:provisionar-realm e]) true)
-    (criar-usuario! [_ e u] (swap! capturado conj [:criar-usuario e u]) {:keycloak-user-id "kc-1"})
+    (criar-usuario! [_ e u] (swap! capturado conj [:criar-usuario e u]) {:keycloak-user-id "kc-1" :existia? (boolean existia?)})
+    (corrigir-email-do-convite! [_ e i email]
+      (when corrigir-lanca (throw (ex-info "kc recusou" {:tipo corrigir-lanca})))
+      (swap! capturado conj [:corrigir-email e i email]) true)
     (convidar! [_ e i]
       (cond
         convidar-lanca-inexistente?
@@ -94,11 +98,12 @@
         :else (do (swap! capturado conj [:convidar e i]) true)))
     (resetar-mfa! [_ _e _i] true)))
 
-(defn- service-fn [papeis capturado & {:keys [convidar-lanca? convidar-lanca-inexistente?]}]
+(defn- service-fn [papeis capturado & {:keys [convidar-lanca? convidar-lanca-inexistente? existia? corrigir-lanca ja-entrou?]}]
   (-> (http/servico (config/carregar)
                     (rotas/montar {:idp (fake-idp capturado :convidar-lanca? convidar-lanca?
-                                                   :convidar-lanca-inexistente? convidar-lanca-inexistente?)
-                                   :repo-identidade (fake-repo-identidade papeis capturado)})
+                                                   :convidar-lanca-inexistente? convidar-lanca-inexistente?
+                                                   :existia? existia? :corrigir-lanca corrigir-lanca)
+                                   :repo-identidade (fake-repo-identidade papeis capturado :ja-entrou? ja-entrou?)})
                     it/globais)
       ph/create-server ::ph/service-fn))
 
@@ -216,3 +221,49 @@
     (is (= 404 (:status r))
         "IMPORTANT-1: UUID bem-formado mas NAO provisionado neste realm -> `idp/convidar!` lanca :idp/usuario-inexistente -> o handler mapeia p/ 404, nunca deixa cair no :else->500 global")
     (is (empty? @cap) "convidar! lancou ANTES de qualquer swap! de sucesso — nada foi capturado")))
+
+;; ---------- reconceder a quem ja' tem conta: o convite vai para o e-mail informado (opcao A, 05/10/2026) ----------
+
+(defn- reconceder [& opts]
+  (let [cap (atom []) ente (random-uuid) ident (random-uuid)
+        r (pt/response-for (apply service-fn #{"admin_ente"} cap opts)
+                           :post "/identidade/acessos"
+                           :headers (com-bearer (token ente (random-uuid)))
+                           :body (json/write-value-as-string
+                                  {:identidade-id (str ident) :tipo "vereador"
+                                   :papeis ["vereador"] :email "helena.nova@camara.local"}))]
+    {:r r :cap @cap :corpo (ler-json r)}))
+
+(deftest conta-que-nunca-entrou-recebe-o-convite-no-email-novo
+  (let [{:keys [r cap corpo]} (reconceder :existia? true :ja-entrou? false)]
+    (is (= 201 (:status r)))
+    (is (= [:conceder-acesso :provisionar-realm :criar-usuario :corrigir-email :convidar] (mapv first cap))
+        "o e-mail e' trocado ANTES de o convite sair")
+    (is (= "helena.nova@camara.local" (last (some #(when (= :corrigir-email (first %)) %) cap))))
+    (is (= "atualizado" (:email corpo)))))
+
+(deftest conta-que-ja-entrou-nao-tem-o-email-trocado-pelo-admin
+  (let [{:keys [r cap corpo]} (reconceder :existia? true :ja-entrou? true)]
+    (is (= 201 (:status r)) "o acesso e' concedido do mesmo jeito")
+    (is (not-any? #(= :corrigir-email (first %)) cap)
+        "o admin_ente nao troca o e-mail de quem ja' entrou: com o link do convite ele assumiria a conta")
+    (is (= "mantido" (:email corpo)) "a tela diz que o convite foi para o e-mail que a pessoa tem na conta")))
+
+(deftest credencial-ja-cadastrada-no-idp-tambem-mantem-o-email
+  ;; segunda guarda: mesmo sem primeiro acesso registrado aqui, o Keycloak recusa se a pessoa ja' cadastrou a credencial
+  (let [{:keys [r cap corpo]} (reconceder :existia? true :ja-entrou? false :corrigir-lanca :idp/conta-ja-ativa)]
+    (is (= 201 (:status r)))
+    (is (= :convidar (first (last cap))))
+    (is (= "mantido" (:email corpo)))))
+
+(deftest email-de-outra-pessoa-da-casa-409-sem-mandar-convite
+  (let [{:keys [r cap]} (reconceder :existia? true :ja-entrou? false :corrigir-lanca :idp/email-em-uso)]
+    (is (= 409 (:status r)))
+    (is (re-find #"outra pessoa" (:erro (ler-json r))))
+    (is (not-any? #(= :convidar (first %)) cap) "nenhum convite sai")))
+
+(deftest conta-nova-nao-passa-pela-correcao
+  (let [{:keys [r cap corpo]} (reconceder :existia? false)]
+    (is (= 201 (:status r)))
+    (is (not-any? #(= :corrigir-email (first %)) cap))
+    (is (= "novo" (:email corpo)))))

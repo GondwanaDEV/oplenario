@@ -50,6 +50,8 @@
   ;; TENANT (com-tenant*)
   (criar-vinculo! [this ente-id vinculo])
   (vinculos-de [this ente-id identidade-id])
+  (ja-entrou-na-casa? [this ente-id identidade-id]
+    "A identidade ja' entrou nesta Casa por algum vinculo? Guarda da troca de e-mail no reconvite.")
   (mudar-estado-vinculo! [this ente-id id estado])
   (adicionar-papel! [this ente-id papel])
   (papeis-de [this ente-id identidade-id])
@@ -123,6 +125,7 @@
   ;; tenant
   (criar-vinculo! [this ente-id v] (transacao this ente-id #(vinc/criar! % v)))
   (vinculos-de [this ente-id ident] (transacao this ente-id #(vinc/vinculos-de % ente-id ident)))
+  (ja-entrou-na-casa? [this ente-id ident] (transacao this ente-id #(vinc/ja-entrou? % ente-id ident)))
   (mudar-estado-vinculo! [this ente-id id estado] (transacao this ente-id #(vinc/mudar-estado! % id estado)))
   (adicionar-papel! [this ente-id p] (transacao this ente-id #(vinc/adicionar-papel! % p)))
   (papeis-de [this ente-id ident] (transacao this ente-id #(vinc/papeis-de % ente-id ident)))
