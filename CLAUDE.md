@@ -297,8 +297,9 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   têm ato que peça o par (não há agendador em produção; 7 de 9 consumidores só projetam); um teste de inventário
   (`atos_fora_do_http_test`) reprova job, comando ou consumidor novo sem classificação;
 - **resumo em palavras para toda escrita (05/10/2026):** `auditoria/resumos.clj` dá uma frase a cada rota de escrita
-  ("Publicou a pauta da sessão"); das 169, 149 têm rótulo e 20 têm motivo escrito (operador, satélite de IA, duas do
-  assistente). O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
+  ("Publicou a pauta da sessão"); das 170, 151 têm rótulo e 19 têm motivo escrito (operador, satélite de IA e a
+  porta da entrada pelo CPF). A Clara tem frase fixa ("Perguntou à Clara", "Reportou um erro numa resposta da IA"),
+  nunca o texto da pergunta. O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
   selo, então registro anterior segue sem ele. `resumo_de_toda_escrita_test` reprova escrita nova sem rótulo nem
   motivo. A leitura devolve `recurso.do-ato` e a tela decide a etiqueta só por esse campo, nunca pelo texto do rótulo;
 - **na Operação (05/10/2026):** `ia-orcamento` e a entrada do operador gravam na atuação da Operação o par
@@ -306,8 +307,7 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
   `tentativas-sem-desfecho` existe como função de repositório, sem tela;
 - **falta:** a ADR diz que o login do cidadão não entra na trilha, mas o código o registra (agora com duas linhas por
-  entrada): decidir se corrige o texto ou tira o registro; dar rótulo a `agente/perguntar` e
-  `agente/reportar-erro-ia`; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
+  entrada): decidir se corrige o texto ou tira o registro; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
   reabre e a reativação não restaura): decidir a regra.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:

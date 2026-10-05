@@ -145,3 +145,24 @@
     (is (:integra (logic/verificar c)))
     (is (not (:integra (logic/verificar [(assoc (first c) :rotulo "Outro texto")])))
         "o rotulo e' selado: trocar o texto depois quebra a corrente")))
+
+;; ---- o assistente da Casa (a Clara, ADR-0024) ----
+
+(deftest as-escritas-do-assistente-tem-rotulo
+  (testing "perguntar e reportar erro sao atos da pessoa na Casa: tem frase na trilha, nao motivo de excecao"
+    (is (= "Perguntou à Clara" (resumos/rotulo-da-acao :agente/perguntar)))
+    (is (= "Reportou um erro numa resposta da IA" (resumos/rotulo-da-acao :agente/reportar-erro-ia)))
+    (is (not-any? #(contains? resumos/sem-resumo %) [:agente/perguntar :agente/reportar-erro-ia])))
+  (testing "a pergunta feita: a frase fixa, o hash no detalhe, e o TEXTO da pergunta fora do registro"
+    (let [h (apply str (repeat 64 "b"))
+          r (logic/registro-da-requisicao (assoc (req :post) :json-params {:pergunta "qual o quorum do PL 42"})
+                                          {:status 200 :auditoria {:recurso-tipo "interacao_assistente"
+                                                                   :recurso-id "i1" :conteudo-sha256 h}}
+                                          :agente/perguntar)]
+      (is (= ["Perguntou à Clara" "interacao_assistente" "i1"] ((juxt :rotulo :recurso-tipo :recurso-id) r)))
+      (is (= h (get-in r [:detalhe :conteudo-sha256])))
+      (is (not (re-find #"quorum" (pr-str r))) "o texto da pergunta nunca entra na trilha")))
+  (testing "o reporte que nao chegou ao satelite (503) ou a execucao inexistente (404) nao diz que reportou"
+    (doseq [status [404 503]]
+      (is (nil? (:rotulo (logic/registro-da-requisicao (req :post) {:status status} :agente/reportar-erro-ia)))
+          (str status)))))

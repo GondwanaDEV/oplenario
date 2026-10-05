@@ -530,3 +530,7 @@ apareciam em `/auditoria` e no CSV só com a ação em palavras soltas ("concede
 - **Teste estrutural:** `auditoria/resumo_de_toda_escrita_test` lê a tabela de rotas do host (a mesma do teste da
   tentativa) e reprova escrita nova sem rótulo nem motivo, entrada que sobrou de rota que sumiu, rótulo que parece
   rota/enum/UUID e rótulo repetido. Provado tirando uma entrada: o vermelho nomeia a ação.
+- **Atualização (05/10/2026):** com a Clara na `main`, as 2 do assistente ganharam rótulo fixo: "Perguntou à Clara"
+  (`agente/perguntar`) e "Reportou um erro numa resposta da IA" (`agente/reportar-erro-ia`). A frase nunca leva o
+  texto da pergunta; o handler continua deixando só o hash da interação. A rota de entrada pelo CPF (ADR-0025) entrou
+  depois, como exceção. Hoje: 170 rotas de escrita, 151 com rótulo e 19 com motivo.
