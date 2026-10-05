@@ -132,6 +132,7 @@ describe("Minha atuação", () => {
         eu: { ator: { "ente-id": ENTE, papeis: ["vereador"], "tipo-vinculo": "vereador" } },
         painel: painel(),
         perfil: perfil(),
+        votos: meusVotos(),
       });
       semToken();
       const link = await screen.findByRole("link", { name: /Trocar meu e-mail de acesso/ });
@@ -141,7 +142,7 @@ describe("Minha atuação", () => {
     });
 
     it("modo dev (token de dev): sem o link", async () => {
-      mockApi({ eu: { ator: { "ente-id": ENTE } }, painel: painel(), perfil: perfil() });
+      mockApi({ eu: { ator: { "ente-id": ENTE } }, painel: painel(), perfil: perfil(), votos: meusVotos() });
       renderizar();
       await screen.findByRole("list", { name: "Números do mandato" });
       expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
