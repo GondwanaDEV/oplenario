@@ -353,6 +353,8 @@
     ficha-e-janelas-override :ficha-e-janelas-publicas
     ;; a lista publica dos vereadores em exercicio (mesmo cuidado de nome: a defn de topo tem o mesmo nome)
     vereadores-em-exercicio-override :vereadores-em-exercicio
+    ;; override de teste do seam de voto publico por vereador (a regra vive em `votacoes-publicas`)
+    votacoes-com-voto-publico-override :votacoes-com-voto-publico
     :as deps-de-montar}]
   (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
         ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
@@ -852,6 +854,17 @@
                                          (fn [ente-id votacao-id]
                                            (when (and repo-sessoes repo-legislativo)
                                              (votacoes-publicas/buscar repo-sessoes repo-legislativo ente-id votacao-id)))
+                                         ;; voto POR VEREADOR (perfil publico, CSV de votos nominais, contagem do
+                                         ;; catalogo): so' sai o de votacao de sessao PUBLICA — a mesma regra das
+                                         ;; votacoes acima, entregue como o conjunto de ids. Sem os dois repos
+                                         ;; montados, nenhum voto sai.
+                                         :votacoes-com-voto-publico
+                                         (or votacoes-com-voto-publico-override
+                                             (fn [ente-id]
+                                               (if (and repo-sessoes repo-legislativo)
+                                                 (votacoes-publicas/ids-de-votacoes-publicas
+                                                  repo-sessoes repo-legislativo ente-id)
+                                                 #{})))
                                          ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
                                          ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
                                          ;; mesma inversao de dependencia sobre cadastros (§22.10).

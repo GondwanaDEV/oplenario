@@ -35,7 +35,8 @@
             [oplenario.transparencia.controllers :as controllers]
             [oplenario.transparencia.db.parlamentar :as db-parlamentar]
             [oplenario.transparencia.diplomat.consumers :as consumers]
-            [oplenario.transparencia.suporte-presenca :as sp])
+            [oplenario.transparencia.suporte-presenca :as sp]
+            [oplenario.transparencia.suporte-voto-publico :as voto-publico])
   (:import (java.time LocalDate)
            (java.util UUID)))
 
@@ -190,7 +191,8 @@
       (votar! ente pid vereador)
       (drenar!)
       (presenca! ente (random-uuid) vereador "entrada")
-      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga)]
+      (let [p (controllers/perfil-parlamentar *repo-transparencia* ente vereador janela-larga
+                                              (voto-publico/tudo-publico *ds*))]
         (is (= 1 (count (:materias p))) "a materia de autoria aparece")
         (is (= 1 (:materias-total p)) "o total do universo (sem teto) acompanha a lista")
         (is (= pid (:proposicao-id (first (:materias p)))))
