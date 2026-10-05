@@ -30,6 +30,10 @@
                                           :motivo "fronteira de servico: o satelite pede a credencial de uma execucao do agente institucional (B.8)"}
  :integracao-ia/revogar-credencial-institucional {:categoria :servico
                                                   :motivo "fronteira de servico: o satelite encerra a credencial da execucao do agente institucional"}
+ :identidade/listar-acessos {:categoria :so-tela
+                             :motivo "a lista de acessos que o admin da Casa concede e revoga na tela (ADR-0005, adendo); agente nao administra acesso"}
+ :identidade/revogar-acesso {:categoria :so-tela
+                             :motivo "revogar acesso e' ato do admin_ente, na tela, com motivo (ADR-0005, adendo); o agente nunca tira nem da' acesso a ninguem"}
  :identidade/agentes-institucionais {:categoria :so-tela
                                      :motivo "o painel do admin da Casa com os agentes institucionais; agente nao administra agente"}
  :identidade/ligar-agente-institucional {:categoria :so-tela
@@ -216,6 +220,9 @@
                                :motivo "o catalogo de dados abertos do portal (anonimo); arquivo para baixar, nao acao de agente"}
  :transparencia/baixar-dataset {:categoria :so-tela
                                 :motivo "o download CSV do dataset aberto (anonimo); o agente consulta o dominio pelas suas ferramentas"}
+ ;; ---------- Onda E: a lista dos vereadores em exercicio no portal ----------
+ :transparencia/listar-vereadores {:categoria :so-tela
+                                   :motivo "a lista publica dos vereadores em exercicio no portal do cidadao (anonimo); o agente le por vereadores_da_casa"}
  ;; ---------- ADR-0017: a trilha de auditoria da Casa ----------
  :auditoria/trilha {:categoria :so-tela
                     :motivo "a trilha de auditoria e' prova de integridade lida por pessoas; o agente nao le rastro de pessoas"}

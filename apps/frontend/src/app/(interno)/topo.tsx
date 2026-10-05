@@ -20,6 +20,7 @@
 // gatilho 2º-uso), não deste componente.
 
 import Link from "next/link";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTema } from "@/lib/tema";
 import { useAuth } from "@/lib/auth";
 import { useMeuIdentidade } from "@/lib/use-meu-identidade";
@@ -28,7 +29,12 @@ import { comToken } from "@/lib/nav";
 import { useContagemDaCaixa } from "@/lib/use-comunicados";
 import "./topo.css";
 
-const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; todos?: true }[] = [
+type Grupo = "Matérias" | "Sessões" | "Cidadão" | "Casa";
+
+/** A ordem dos grupos na barra. Os destinos SEM grupo (Central, Caixa, Busca, Assistente) ficam soltos, antes deles. */
+const GRUPOS: Grupo[] = ["Matérias", "Sessões", "Cidadão", "Casa"];
+
+const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; todos?: true; grupo?: Grupo }[] = [
   // Primeiro da lista de propósito: é o ponto de partida (a tela que responde "o que eu faço agora?") e a
   // única porta para as telas de sessão ao vivo, que não têm entrada de navegação própria.
   { rotulo: "Central", href: "/inicio" },
@@ -43,61 +49,61 @@ const DESTINOS_NAV: { rotulo: string; href: string; papel?: string | string[]; t
   // quem pergunta (credencial delegada, ADR-0010) e responde citando. Gated "secretario" (GuardSecretaria; o backend
   // aceita secretario ou vereador).
   { rotulo: "Assistente", href: "/assistente" },
-  // Faixa B / B.4 — as normas de referencia (LOM, Regimento, leis) que o assistente consulta; a secretaria importa e
-  // confere. Gated "secretario" (GuardSecretaria + exige-papel no backend).
-  { rotulo: "Normas", href: "/normas" },
-  // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
-  // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
-  { rotulo: "Conferências", href: "/conferencias" },
-  // ADR-0019 — a fila do parecer jurídico: o jurídico da Casa (papel `juridico`) redige e assina; a secretaria pede e
-  // acompanha. É a única tela de trabalho do jurídico. Gated no GuardJuridico + exige-papel no backend.
-  { rotulo: "Jurídico", href: "/juridico", papel: ["juridico", "secretario"] },
-  // ADR-0021 Parte B — o julgamento das contas do Prefeito (e o acompanhamento das contas da Mesa). Secretaria, vereador
-  // e jurídico leem; só a secretaria registra. Gated no GuardContas + exige-papel no backend.
-  { rotulo: "Contas", href: "/contas", papel: ["secretario", "vereador", "juridico"] },
-  // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
-  // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
-  { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente" },
-  // ADR-0005 — a área do administrador da Casa (conceder acesso aos vereadores). Só para o admin_ente.
-  { rotulo: "Administração", href: "/administracao", papel: "admin_ente" },
-  // ADR-0017 — a trilha de auditoria. O servidor recorta pelo papel (auditor = a Casa inteira, admin_ente = os acessos,
-  // secretaria = a própria); o `auditor` (controle interno) é quem mais a usa — é a única tela dele.
-  { rotulo: "Auditoria", href: "/auditoria", papel: ["auditor", "admin_ente", "secretario"] },
-  { rotulo: "Painéis da Mesa", href: "/paineis/mesa" },
-  { rotulo: "Tramitação", href: "/tramitacao" },
+  { rotulo: "Proposições", href: "/proposicoes", grupo: "Matérias" },
+  { rotulo: "Tramitação", href: "/tramitacao", grupo: "Matérias" },
   // Fatia 2b — a fila de cargas não recebidas (o rito exige que quem recebe assine). Ao lado de Tramitação:
   // é a outra metade do mesmo trabalho. Gated "secretario" (GuardSecretaria + exige-papel no backend).
-  { rotulo: "Recebimentos", href: "/recebimentos" },
-  // Faixa A / A.2 da Track IA — gravações enviadas pelo PC da transmissão que ainda não têm sessão. Gated
-  // "secretario" (GuardSecretaria + exige-papel no backend). Vincular leva a gravação à transcrição e à ata.
-  { rotulo: "Gravações", href: "/gravacoes" },
-  { rotulo: "Proposições", href: "/proposicoes" },
-  // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
-  // Proposições (documento administrativo não é matéria legislativa).
-  { rotulo: "Expediente", href: "/expediente" },
-  // Onda C Slice C2 — leitura da pauta de uma sessão agendada + convocação derivada (gated "secretario").
-  { rotulo: "Pauta", href: "/pauta-convocacao" },
+  { rotulo: "Recebimentos", href: "/recebimentos", grupo: "Matérias" },
+  // Faixa B / B.8 — a conferência das proposições: a IA deixa uma nota técnica em rascunho a cada proposição
+  // protocolada, e a secretaria aproveita ou descarta. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Conferências", href: "/conferencias", grupo: "Matérias" },
+  // ADR-0019 — a fila do parecer jurídico: o jurídico da Casa (papel `juridico`) redige e assina; a secretaria pede e
+  // acompanha. É a única tela de trabalho do jurídico. Gated no GuardJuridico + exige-papel no backend.
+  { rotulo: "Jurídico", href: "/juridico", papel: ["juridico", "secretario"], grupo: "Matérias" },
+  // ADR-0021 Parte B — o julgamento das contas do Prefeito (e o acompanhamento das contas da Mesa). Secretaria, vereador
+  // e jurídico leem; só a secretaria registra. Gated no GuardContas + exige-papel no backend.
+  { rotulo: "Contas", href: "/contas", papel: ["secretario", "vereador", "juridico"], grupo: "Matérias" },
+  // Faixa B / B.4 — as normas de referencia (LOM, Regimento, leis) que o assistente consulta; a secretaria importa e
+  // confere. Gated "secretario" (GuardSecretaria + exige-papel no backend).
+  { rotulo: "Normas", href: "/normas", grupo: "Matérias" },
+  { rotulo: "Painéis da Mesa", href: "/paineis/mesa", grupo: "Sessões" },
   // Agendar sessão (GAP docs/20 → tela de servidor): cria a sessão no estado agendada. Gated "secretario"
   // (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota ficaria órfã.
-  { rotulo: "Agendar sessão", href: "/agendar-sessao" },
+  { rotulo: "Agendar sessão", href: "/agendar-sessao", grupo: "Sessões" },
+  // Onda C Slice C2 — leitura da pauta de uma sessão agendada + convocação derivada (gated "secretario").
+  { rotulo: "Pauta", href: "/pauta-convocacao", grupo: "Sessões" },
   // Tempos da tribuna (pedido do stakeholder: "3 min e adicionais de 1 min") — a tabela de tempos regimentais
   // da Casa. Gated "secretario" (GuardSecretaria na página + exige-papel no backend). Sem esta entrada a rota
   // ficaria órfã.
-  { rotulo: "Tempos da tribuna", href: "/tempos-da-tribuna" },
-  // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
-  { rotulo: "Vereadores", href: "/cadastros/vereadores" },
+  { rotulo: "Tempos da tribuna", href: "/tempos-da-tribuna", grupo: "Sessões" },
+  // Faixa A / A.2 da Track IA — gravações enviadas pelo PC da transmissão que ainda não têm sessão. Gated
+  // "secretario" (GuardSecretaria + exige-papel no backend). Vincular leva a gravação à transcrição e à ata.
+  { rotulo: "Gravações", href: "/gravacoes", grupo: "Sessões" },
   // Onda E — o livro de atas: as atas publicadas das sessões (a de sessão secreta, só para a secretaria — o servidor
   // filtra). Sem papel: vereador e secretaria leem o mesmo livro.
-  { rotulo: "Atas", href: "/atas" },
+  { rotulo: "Atas", href: "/atas", grupo: "Sessões" },
   // Onda E fatia 2 — Calendário institucional (a agenda da Casa: sessões agendadas + prazos de
   // compliance). Sem esta entrada a rota existiria órfã, alcançável só por URL digitada.
-  { rotulo: "Calendário", href: "/calendario" },
+  { rotulo: "Calendário", href: "/calendario", grupo: "Sessões" },
   // O balcão de atendimento ao cidadão (6.1 e-SIC, 6.2 ouvidoria, 5.10 LGPD): as filas do que o cidadão pediu pelo
   // portal, pelo prazo legal que vence primeiro. Gated "secretario" (GuardSecretaria + exige-papel no backend).
-  { rotulo: "Atendimento", href: "/atendimento" },
+  { rotulo: "Atendimento", href: "/atendimento", grupo: "Cidadão" },
   // Moderação de comentários (GAP docs/20 → tela de servidor): fila de pendentes + aprovar/rejeitar.
   // Gated "secretario" (GuardSecretaria na página + exige-papel no backend).
-  { rotulo: "Moderação", href: "/moderacao" },
+  { rotulo: "Moderação", href: "/moderacao", grupo: "Cidadão" },
+  // Onda B Slice 6 — Expediente (gerar documento + Protocolo Geral) é área de topo nova, não sub-rota de
+  // Proposições (documento administrativo não é matéria legislativa).
+  { rotulo: "Expediente", href: "/expediente", grupo: "Casa" },
+  // Cadastro de Vereadores (Task 9) — cadastros estruturais, área de topo nova (arquétipo master-detail).
+  { rotulo: "Vereadores", href: "/cadastros/vereadores", grupo: "Casa" },
+  // Faixa B / B.9 — a IA da Casa: consumo × orçamento e o que as pessoas fizeram com o resultado. Só para o
+  // administrador da Casa (exige-papel "admin_ente" no backend) — por isso a entrada só aparece para ele.
+  { rotulo: "IA da Casa", href: "/paineis/ia", papel: "admin_ente", grupo: "Casa" },
+  // ADR-0005 — a área do administrador da Casa (conceder acesso aos vereadores). Só para o admin_ente.
+  { rotulo: "Administração", href: "/administracao", papel: "admin_ente", grupo: "Casa" },
+  // ADR-0017 — a trilha de auditoria. O servidor recorta pelo papel (auditor = a Casa inteira, admin_ente = os acessos,
+  // secretaria = a própria); o `auditor` (controle interno) é quem mais a usa — é a única tela dele.
+  { rotulo: "Auditoria", href: "/auditoria", papel: ["auditor", "admin_ente", "secretario"], grupo: "Casa" },
 ];
 
 /** As entradas da nav que o ator vê. Entrada com `papel` só aparece para quem tem (um d)ele; a marcada `todos` (a
@@ -113,6 +119,29 @@ export function destinosVisiveis(papeis: string[]) {
     d.todos ? true : d.papel ? [d.papel].flat().some((p) => papeis.includes(p)) : !soAdministracao);
 }
 
+/** Até este número de entradas a barra fica plana: quem só administra, só audita ou só dá parecer vê 2 a 4 links e
+ *  não ganha nada com um clique a mais. */
+const MAX_SEM_GRUPOS = 6;
+
+type Destino = (typeof DESTINOS_NAV)[number];
+export type ItemDaNav = { tipo: "link"; destino: Destino } | { tipo: "grupo"; nome: Grupo; destinos: Destino[] };
+
+/** Arruma as entradas visíveis na barra. Com 21 a 23 entradas soltas (a secretaria), o menu tomava duas linhas inteiras
+ *  e o topo chegava a 199 px no desktop. Aqui ficam soltas as portas de entrada (as sem grupo) e o resto entra em
+ *  Matérias · Sessões · Cidadão · Casa, cada grupo uma lista que abre no clique. Grupo com uma entrada só vira o link
+ *  dela, e quem vê poucas entradas continua com a barra plana. */
+export function arrumarNav(destinos: Destino[]): ItemDaNav[] {
+  if (destinos.length <= MAX_SEM_GRUPOS) return destinos.map((destino) => ({ tipo: "link", destino }));
+  const soltos: ItemDaNav[] = destinos.filter((d) => !d.grupo).map((destino) => ({ tipo: "link", destino }));
+  const grupos: ItemDaNav[] = GRUPOS.flatMap((nome): ItemDaNav[] => {
+    const doGrupo = destinos.filter((d) => d.grupo === nome);
+    if (doGrupo.length === 0) return [];
+    if (doGrupo.length === 1) return [{ tipo: "link", destino: doGrupo[0] }];
+    return [{ tipo: "grupo", nome, destinos: doGrupo }];
+  });
+  return [...soltos, ...grupos];
+}
+
 export function TopoInterno({ area }: { area: string }) {
   const { tema, alternar } = useTema();
   const { token } = useAuth();
@@ -123,6 +152,57 @@ export function TopoInterno({ area }: { area: string }) {
   const nome = estado === "pronto" && dados ? dados.nome : estado === "carregando" ? "Carregando…" : "Sessão";
   const papel =
     estado === "pronto" && dados ? rotuloPapel(dados.papeis) : estado === "carregando" ? "" : "indisponível";
+  // Qual grupo da barra está aberto (um por vez). Fecha no Esc (devolvendo o foco ao botão), no clique fora da barra,
+  // quando o foco sai dela e ao escolher um destino.
+  const [aberto, setAberto] = useState<Grupo | null>(null);
+  const navRef = useRef<HTMLElement>(null);
+  const idBase = useId();
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: PointerEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setAberto(null);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setAberto(null);
+      navRef.current?.querySelector<HTMLButtonElement>(`[aria-controls="${idBase}-${aberto}"]`)?.focus();
+    };
+    const foco = (e: FocusEvent) => {
+      if (!navRef.current?.contains(e.target as Node)) setAberto(null);
+    };
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", esc);
+    document.addEventListener("focusin", foco);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", esc);
+      document.removeEventListener("focusin", foco);
+    };
+  }, [aberto, idBase]);
+
+  const linkDe = (d: Destino) => (
+    <Link
+      key={d.href}
+      href={comToken(d.href, token)}
+      aria-current={d.rotulo === area ? "page" : undefined}
+      onClick={() => setAberto(null)}
+      // prefetch={false}: cada destino da nav é autenticado e, sem sessão válida, responde 401 e
+      // redireciona para /entrar. O prefetch do Next dispara essas navegações em segundo plano — que
+      // abortam em massa (ERR_ABORTED) e nunca deixam a rede assentar (achado do teste exploratório:
+      // "prefetch storm"). Sem prefetch, a rota só é buscada no clique real. Custo: primeira navegação
+      // sem pré-aquecimento — desprezível numa barra de app interno.
+      prefetch={false}
+    >
+      {d.rotulo}
+      {d.href === "/caixa" && porLer !== null && porLer > 0 && (
+        <>
+          {/* o número é visual; o leitor de tela ouve a frase (", 3 por ler") como parte do link */}
+          <span className="nav-contagem" aria-hidden="true">{porLer > 99 ? "99+" : porLer}</span>
+          <span className="sr-only">, {porLer === 1 ? "1 por ler" : `${porLer} por ler`}</span>
+        </>
+      )}
+    </Link>
+  );
   return (
     <header className="topo topo-interno">
       <div className="envelope topo-grade">
@@ -135,29 +215,32 @@ export function TopoInterno({ area }: { area: string }) {
         </div>
         <div className="topo-sep" aria-hidden="true" />
         <span className="area-tag">{area}</span>
-        <nav className="nav-interna" aria-label="Navegação interna">
-          {destinosVisiveis(dados?.papeis ?? []).map((d) => (
-            <Link
-              key={d.href}
-              href={comToken(d.href, token)}
-              aria-current={d.rotulo === area ? "page" : undefined}
-              // prefetch={false}: cada destino da nav é autenticado e, sem sessão válida, responde 401 e
-              // redireciona para /entrar. O prefetch do Next dispara essas navegações em segundo plano — que
-              // abortam em massa (ERR_ABORTED) e nunca deixam a rede assentar (achado do teste exploratório:
-              // "prefetch storm"). Sem prefetch, a rota só é buscada no clique real. Custo: primeira navegação
-              // sem pré-aquecimento — desprezível numa barra de app interno.
-              prefetch={false}
-            >
-              {d.rotulo}
-              {d.href === "/caixa" && porLer !== null && porLer > 0 && (
-                <>
-                  {/* o número é visual; o leitor de tela ouve a frase (", 3 por ler") como parte do link */}
-                  <span className="nav-contagem" aria-hidden="true">{porLer > 99 ? "99+" : porLer}</span>
-                  <span className="sr-only">, {porLer === 1 ? "1 por ler" : `${porLer} por ler`}</span>
-                </>
-              )}
-            </Link>
-          ))}
+        <nav className="nav-interna" aria-label="Navegação interna" ref={navRef}>
+          {arrumarNav(destinosVisiveis(dados?.papeis ?? [])).map((item) =>
+            item.tipo === "link" ? (
+              linkDe(item.destino)
+            ) : (
+              <div className="nav-grupo" key={item.nome}>
+                <button
+                  type="button"
+                  className="nav-grupo-btn"
+                  aria-expanded={aberto === item.nome}
+                  aria-controls={`${idBase}-${item.nome}`}
+                  data-atual={item.destinos.some((d) => d.rotulo === area) || undefined}
+                  onClick={() => setAberto(aberto === item.nome ? null : item.nome)}
+                >
+                  {item.nome}
+                  {item.destinos.some((d) => d.rotulo === area) && <span className="sr-only">, contém a página atual</span>}
+                  <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+                    <path d="M2 4.5 6 8.5 10 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <ul className="nav-grupo-lista" id={`${idBase}-${item.nome}`} hidden={aberto !== item.nome}>
+                  {item.destinos.map((d) => <li key={d.href}>{linkDe(d)}</li>)}
+                </ul>
+              </div>
+            )
+          )}
         </nav>
         <div className="topo-dir">
           <button className="tema-btn" type="button" aria-pressed={tema === "escuro"} onClick={alternar} title="Alternar tema claro / escuro">

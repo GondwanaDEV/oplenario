@@ -251,12 +251,14 @@ describe("SecaoPerfilVereador", () => {
     );
   });
 
-  it("trilha aponta para a página inicial do portal, não para a lista de matérias", async () => {
+  it("trilha sobe para a página inicial e para a lista de vereadores, não para a lista de matérias", async () => {
     const { container } = await renderizarPerfil(perfilWire);
     const migalha = container.querySelector(".migalha") as HTMLElement;
-    const link = migalha.querySelector("a") as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe("/portal/casa/fortaleza");
-    expect(link.textContent).toBe("Início");
+    const [inicio, lista] = [...migalha.querySelectorAll("a")] as HTMLAnchorElement[];
+    expect(inicio.getAttribute("href")).toBe("/portal/casa/fortaleza");
+    expect(inicio.textContent).toBe("Início");
+    expect(lista.getAttribute("href")).toBe("/portal/casa/fortaleza/vereadores");
+    expect(lista.textContent).toBe("Vereadores");
     expect(migalha.textContent).toContain("Helena Past");
     expect(migalha.textContent).not.toMatch(/matérias/i);
   });
@@ -269,6 +271,7 @@ describe("SecaoPerfilVereador", () => {
     expect(hrefs).not.toContain("/portal/casa/casa/estranha");
     expect(hrefs).toContain("/portal/casa/casa%2Festranha");
     expect(hrefs).toContain("/portal/casa/casa%2Festranha#esic-titulo");
+    expect(hrefs).toContain("/portal/casa/casa%2Festranha/vereadores");
     expect(hrefs).toContain("/portal/casa/casa%2Festranha/materias/p1");
   });
 

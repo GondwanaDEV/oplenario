@@ -13,7 +13,8 @@
             [oplenario.transparencia.wire.out.dados-abertos :as dados-abertos]
             [oplenario.transparencia.wire.out.materia :as materia]
             [oplenario.transparencia.wire.out.norma :as norma]
-            [oplenario.transparencia.wire.out.parlamentar :as parlamentar]))
+            [oplenario.transparencia.wire.out.parlamentar :as parlamentar]
+            [oplenario.transparencia.wire.out.vereadores :as vereadores]))
 
 (def manifesto
   "NormaOut ANTES de MateriaOut/FichaOut (referencia nomeada: FichaOut aninha NormaOut em :norma —
@@ -50,7 +51,10 @@
    ;; Onda E — dados abertos. Folhas antes do agregado.
    ["ColunaDadosAbertosOut" dados-abertos/ColunaDadosAbertosOut]
    ["DatasetAbertoOut" dados-abertos/DatasetAbertoOut]
-   ["DadosAbertosOut" dados-abertos/DadosAbertosOut]])
+   ["DadosAbertosOut" dados-abertos/DadosAbertosOut]
+   ;; a lista publica dos vereadores em exercicio (GET /portal/casa/:ente/vereadores) — a folha antes do agregado.
+   ["VereadorDaListaOut" vereadores/VereadorDaListaOut]
+   ["VereadoresOut" vereadores/VereadoresOut]])
 
 (defn gerar-tudo [] (ts/gerar manifesto))
 

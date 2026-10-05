@@ -59,3 +59,17 @@
 .adm-setor-opcoes { list-style: none; margin: 0; padding: 0; max-height: 18rem; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0 0.8rem; }
 .adm-setor-opcoes label { display: flex; align-items: center; gap: 0.55rem; min-height: 44px; color: var(--texto); }
 .adm-setor-opcoes input { width: 1.15rem; height: 1.15rem; flex: none; accent-color: var(--marca); }
+/* ADR-0005, adendo: quem tem acesso e a revogacao (motivo obrigatorio) */
+.adm-acessos .adm-lista { align-self: stretch; }
+.adm-acesso { display: grid; gap: 0.6rem; }
+.adm-acesso .adm-linha { flex-wrap: wrap; }
+.adm-acesso .adm-quem span { overflow-wrap: anywhere; }
+.adm-revogar { display: grid; gap: 0.6rem; }
+.adm-revogar .campo { display: grid; gap: 0.3rem; }
+.adm-revogar label { font-size: var(--t-13); font-weight: 600; color: var(--texto); }
+.adm-revogar textarea, .adm-revogar input { font: inherit; padding: 0.45rem 0.6rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface); color: var(--texto); box-sizing: border-box; width: 100%; max-width: 40rem; }
+.adm-revogar input { min-height: 44px; }
+.adm-revogar textarea:focus-visible, .adm-revogar input:focus-visible { outline: none; border-color: var(--foco); box-shadow: 0 0 0 4px color-mix(in srgb, var(--foco) 18%, transparent); }
+
+/* texto auxiliar sob o campo (reconvite: para onde o convite vai de verdade) */
+.adm-revogar .campo-dica { color: var(--texto-2); font-size: var(--t-12); margin: 0.35rem 0 0; max-width: 60ch; }

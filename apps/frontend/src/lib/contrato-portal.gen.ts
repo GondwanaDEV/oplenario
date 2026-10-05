@@ -146,3 +146,15 @@ export interface DatasetAbertoOut {
 export interface DadosAbertosOut {
   datasets: DatasetAbertoOut[];
 }
+
+export interface VereadorDaListaOut {
+  vereadorId: string;
+  nomeParlamentar: string | null;
+  nomeCivil: string;
+  partido: string | null;
+  cargoMesa: string | null;
+}
+
+export interface VereadoresOut {
+  vereadores: VereadorDaListaOut[];
+}

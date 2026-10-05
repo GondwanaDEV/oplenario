@@ -21,6 +21,7 @@
   no payload do Keycloak por aqui, em vez de depender de disciplina de destructuring."
   (:require [oplenario.http :as http]
             [oplenario.identidade.adapters.in.acesso :as adapters-in]
+            [oplenario.identidade.adapters.out.acessos :as adapters-out-acessos]
             [oplenario.identidade.adapters.out.agente-institucional :as adapters-out-agente]
             [oplenario.identidade.adapters.out.meu-identidade :as adapters-out-meu]
             [oplenario.identidade.models.identidade :as mod]
@@ -85,6 +86,35 @@
           (if (= :conflito/vinculo-nao-ativo (:tipo (ex-data e)))
             (http/json-resposta 409 {:erro "vinculo suspenso — reativar e' uma operacao separada, nao este endpoint"})
             (throw e)))))))
+
+;; ADR-0005 (adendo "Revogar acesso") ------------------------------------------------------------------------------
+(defn- listar-acessos-handler
+  "GET /identidade/acessos — os acessos que a tela concede (vereador, auditor, juridico) da Casa DO ATOR, ativos e
+  revogados, um por pessoa e papel. A Casa vem do ator: a RLS faz o resto. Nome, nunca CPF."
+  [repo-identidade]
+  (fn [req]
+    (http/json-resposta 200 (adapters-out-acessos/acessos->wire
+                             (repo/acessos-da-casa repo-identidade (:ente-id (:ator req)) adapters-in/papeis-concediveis)))))
+
+(defn- revogar-acesso-handler
+  "POST /identidade/acessos/:identidade-id/revogacao {papel, motivo} — o `admin_ente` tira UM dos papeis que concedeu.
+  O motivo e' obrigatorio e fica gravado com quem revogou e quando; nada e' apagado, e conceder de novo continua possivel.
+  Efeito na PROXIMA chamada da pessoa: o ator e' recalculado a cada requisicao (`resolver-sessao`), a sessao nao guarda
+  papel. Sem papel nenhum sobrando na Casa, o vinculo dela e' encerrado e a mesma sessao passa a dar 401.
+
+  404 fail-closed: id que nao e' UUID, pessoa sem esse papel ATIVO nesta Casa, ou papel que so' existe em outra Casa
+  (a RLS esconde — o `admin_ente` da Casa B nao descobre nada da Casa A). Papel fora do conjunto da tela (`admin_ente`,
+  `secretario`) e' 400 na validacao: a Casa nao perde o ultimo administrador por esta rota."
+  [repo-identidade]
+  (fn [req]
+    (let [ator (:ator req)
+          r (adapters-in/revogar-acesso->dominio ator (get-in req [:path-params :identidade-id]) (:json-params req))]
+      (if-not r
+        (http/json-resposta 404 {:erro "acesso nao encontrado"})
+        (let [res (repo/revogar-acesso! repo-identidade (:ente-id ator) r)]
+          (if (:revogado? res)
+            (http/json-resposta 200 (adapters-out-acessos/revogacao->wire res))
+            (http/json-resposta 404 {:erro "acesso nao encontrado"})))))))
 
 (defn- reenviar-convite-handler
   "POST /identidade/acessos/:identidade-id/convite. So' reenvia (o KC invalida o codigo anterior). O e-mail
@@ -173,6 +203,12 @@
       ["/identidade/acessos" :post
        [auth papel it/corpo-json (conceder-acesso-handler repo-identidade idp)]
        :route-name :identidade/conceder-acesso]
+      ["/identidade/acessos" :get
+       [auth papel (listar-acessos-handler repo-identidade)]
+       :route-name :identidade/listar-acessos]
+      ["/identidade/acessos/:identidade-id/revogacao" :post
+       [auth papel it/corpo-json (revogar-acesso-handler repo-identidade)]
+       :route-name :identidade/revogar-acesso]
       ["/identidade/acessos/:identidade-id/convite" :post
        [auth papel (reenviar-convite-handler idp)]
        :route-name :identidade/reenviar-convite]
