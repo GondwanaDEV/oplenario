@@ -392,7 +392,7 @@
       (repo-leg/criar-transicao! repo ente (assoc t :id (random-uuid) :template-id tid)))
     tid))
 
-(defn- protocolar-e-tramitar!
+(defn protocolar-e-tramitar!
   "Protocola 1 materia (autor = vereador `idx` do roster, round-robin) e percorre `:caminho` via o
   ENGINE real (`transicionar!`, Disciplina 5) — nunca `mudar-estado-proposicao!` (bypassaria o motor).
 

@@ -71,3 +71,26 @@
                :objeto-id (->str objeto-id) :proposicao (proposicao-resumo proposicao)
                :votos-registrados votos-registrados})
             "votacao aberta"))
+
+(defn votacao-encerrada->wire
+  "{:votacao-id :modalidade :objeto-tipo :objeto-id :proposicao :resultado :total-* :base-membros
+  :votos|:votos-registrados} (controllers/votacao-encerrada) -> VotacaoEncerradaOut. `:votos` (lista
+  {vereador-id voto}) SO' atravessa quando `:modalidade` e' EXATAMENTE 'nominal'; `:votos-registrados` so'
+  na 'secreta' — o schema `:multi` fecha cada ramo, entao um ramo errado reprova a validacao (500) em vez
+  de vazar (sigilo §22.6, mesma fronteira de `votacao-aberta->wire`). Totais/base so' viajam quando o
+  dominio os tem (a 'simbolica' nao apura individual)."
+  [{:keys [votacao-id modalidade objeto-tipo objeto-id proposicao resultado total-sim total-nao total-abstencao
+           base-membros votos votos-registrados]}]
+  (validado wire/VotacaoEncerradaOut
+            (cond-> {:votacao-id (->str votacao-id) :modalidade modalidade :objeto-tipo objeto-tipo
+                     :objeto-id (->str objeto-id) :proposicao (proposicao-resumo proposicao)
+                     :resultado resultado}
+              (some? total-sim)        (assoc :total-sim total-sim)
+              (some? total-nao)        (assoc :total-nao total-nao)
+              (some? total-abstencao)  (assoc :total-abstencao total-abstencao)
+              (some? base-membros)     (assoc :base-membros base-membros)
+              (= "nominal" modalidade) (assoc :votos (mapv (fn [v] {:vereador-id (->str (:vereador-id v))
+                                                                    :voto (:voto v)})
+                                                           votos))
+              (= "secreta" modalidade) (assoc :votos-registrados votos-registrados))
+            "votacao encerrada"))

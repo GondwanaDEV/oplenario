@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { ProximaSessaoRail } from "./proxima-sessao-rail";
 import type { SliSessaoOut } from "@/lib/use-mesa";
 
@@ -171,5 +171,21 @@ describe("ProximaSessaoRail", () => {
   it("agendada sem data: 'data a definir', sem quebrar", () => {
     render(<ProximaSessaoRail sliSessoes={[agendada("sem-data", null)]} sliSessoesTotal={1} />);
     expect(screen.getByText(/data a definir/)).toBeDefined();
+  });
+
+  // Miudeza de 05/10/2026: o aviso de corte mandava "conferir o painel de sessões completo" — tela que NÃO
+  // existe. O destino que existe e lista TODAS as sessões (GET /sessoes, falha fechada no teto) é o calendário.
+  it("o aviso de corte leva ao calendário (com o token dev) e não promete 'painel de sessões'", () => {
+    render(<ProximaSessaoRail token="tk" sliSessoes={[sessao("aberta")]} sliSessoesTotal={214} />);
+    const aviso = screen.getByRole("status");
+    expect(aviso.textContent).not.toMatch(/painel de sess/i);
+    const link = within(aviso).getByRole("link", { name: /calendário/i });
+    expect(link.getAttribute("href")).toBe("/calendario?token=tk");
+  });
+
+  it("sem token dev o link do calendário é o caminho limpo", () => {
+    render(<ProximaSessaoRail sliSessoes={[sessao("aberta")]} sliSessoesTotal={214} />);
+    const link = within(screen.getByRole("status")).getByRole("link", { name: /calendário/i });
+    expect(link.getAttribute("href")).toBe("/calendario");
   });
 });

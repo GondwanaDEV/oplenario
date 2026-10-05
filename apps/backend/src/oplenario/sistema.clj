@@ -69,6 +69,21 @@
              (not (tr-comp/tem-senha? config)))
     (if (true? (get-in config [:valkey :exigir-senha])) :recusar :avisar)))
 
+(defn registro-de-consumidores
+  "O registro UNICO de consumidores do relay do outbox (tipo -> [{:nome :handler}]): cada modulo funde os seus. Publico
+  para o teste de inventario (`auditoria/atos-fora-do-http-test`, ADR-0017) ler dele os consumidores que o host de fato
+  monta, em vez de repetir a lista."
+  [canal-store resolver-identidade-do-vereador]
+  (-> (tr-consumer/registro canal-store)
+      (transparencia-consumers/registrar)
+      (paineis-consumers/registrar)
+      (legislativo-consumers/registrar resolver-identidade-do-vereador)
+      ;; Faixa A / A.3 (ADR-0008): a fronteira com a IA promove eventos de dominio escolhidos
+      ;; (gravacao vinculada) a eventos de integracao no feed que o satelite puxa.
+      (integracao-ia-consumers/registrar)
+      ;; ADR-0016: o 1o acesso do 1o administrador ativa a Casa no registro (handoff)
+      (admin-sistema-consumers/registrar)))
+
 (defn novo-sistema
   "Monta o sistema a partir do config carregado. Cresce por agregacao conforme os modulos chegam."
   [config]
@@ -109,15 +124,7 @@
         ;; nenhum component ja' iniciado no momento em que este registro e' montado.
         resolver-identidade-do-vereador (fn [tx ente-id vereador-id]
                                           (repo-cadastros/identidade-do-vereador-em-tx tx ente-id vereador-id))
-        registro    (-> (tr-consumer/registro canal-store)
-                        (transparencia-consumers/registrar)
-                        (paineis-consumers/registrar)
-                        (legislativo-consumers/registrar resolver-identidade-do-vereador)
-                        ;; Faixa A / A.3 (ADR-0008): a fronteira com a IA promove eventos de dominio escolhidos
-                        ;; (gravacao vinculada) a eventos de integracao no feed que o satelite puxa.
-                        (integracao-ia-consumers/registrar)
-                        ;; ADR-0016: o 1o acesso do 1o administrador ativa a Casa no registro (handoff)
-                        (admin-sistema-consumers/registrar))]
+        registro    (registro-de-consumidores canal-store resolver-identidade-do-vereador)]
    (component/system-map
    :datasource      (datasource/datasource config)
    ;; EventBus (producer): grava no shared.outbox na tx do ato. Stateless (sem Lifecycle); os Repo que

@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import PaginaPlenario from "./page";
 import type { SessaoOut } from "@/lib/contrato";
 import { TemaProvider } from "@/lib/tema";
-import { aplicarEvento, estadoInicial, hidratarComposicao, hidratarVotacao, type EstadoPlenario, type PlacarVotacao } from "@/lib/plenario-reducer";
+import { aplicarEvento, estadoInicial, hidratarComposicao, hidratarVotacao, hidratarVotacaoEncerrada, type EstadoPlenario, type PlacarVotacao } from "@/lib/plenario-reducer";
 
 // O telão da Mesa (`/sessoes/:id/plenario`). `use-plenario` tem testes próprios (a recuperação por snapshot na
 // carga e na reconexão); aqui a prova é de PÁGINA: ela liga a hidratação por snapshot (`comQuorum` +
@@ -158,6 +158,59 @@ describe("Telão da Mesa — placar nominal com o NOME do vereador", () => {
     const itens = screen.getAllByRole("listitem").filter((li) => li.closest("ul")?.getAttribute("aria-label") === "Votos nominais");
     expect(itens.map((li) => li.querySelector("b")?.textContent)).toEqual(["Ana Ribeiro", "Bruno Lima", "Vereador(a)"]);
     semUuid();
+  });
+
+  // O defeito (04/10/2026, CLAUDE.md §3): recarregar o telão DEPOIS do encerramento perdia o placar. O estado
+  // hidratado por `GET /votacao-encerrada` tem de mostrar o MESMO que o `votacao.encerrada` ao vivo.
+  describe("depois de RECARREGAR com a votação já encerrada (resultado hidratado, sem evento SSE)", () => {
+    const encerradaCrua = {
+      votacaoId: "vt1", modalidade: "nominal", objetoTipo: "proposicao", objetoId: "p1",
+      proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar em prédios públicos" },
+      resultado: "aprovada", totalSim: 1, totalNao: 1, totalAbstencao: 0, baseMembros: 3,
+      votos: [{ vereadorId: ANA, voto: "sim" }, { vereadorId: BRUNO, voto: "nao" }],
+    };
+    const hidratado = () => {
+      const e = hidratarComposicao(aberta(), composicao);
+      return hidratarVotacaoEncerrada(e, encerradaCrua as never, e.votacaoEventoSeq);
+    };
+
+    it("mostra a votação encerrada, o resultado, o placar e a grade nominal COM NOME", () => {
+      montar(hidratado());
+      expect(screen.getByRole("heading", { name: "Votação encerrada" })).toBeTruthy();
+      expect(screen.queryByText("Votação em curso")).toBeNull();
+      expect(document.querySelector(".placar-resultado")?.textContent).toBe("aprovada");
+      const lista = screen.getByRole("list", { name: "Votos nominais" });
+      expect(lista.textContent).toContain("Ana Ribeiro");
+      expect(lista.textContent).toContain("Bruno Lima");
+      semUuid();
+    });
+
+    it("é o MESMO bloco que o telão ao vivo mostra ao receber `votacao.encerrada` (a ementa é o único acréscimo do HTTP)", () => {
+      let ao = hidratarComposicao(aberta(), composicao);
+      ao = aplicarEvento(ao, { tipo: "votacao.aberta", seq: 1, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "objeto-tipo": "proposicao", "objeto-id": "p1" } } as never);
+      ao = aplicarEvento(ao, { tipo: "voto.registrado", seq: 2, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": ANA, voto: "sim" } } as never);
+      ao = aplicarEvento(ao, { tipo: "voto.registrado", seq: 3, dados: { "votacao-id": "vt1", "sessao-id": "s1", modalidade: "nominal", "vereador-id": BRUNO, voto: "nao" } } as never);
+      ao = aplicarEvento(ao, { tipo: "votacao.encerrada", seq: 4, dados: { "votacao-id": "vt1", "sessao-id": "s1", resultado: "aprovada", modalidade: "nominal", "total-sim": 1, "total-nao": 1, "total-abstencao": 0, "base-membros": 3 } } as never);
+      const bloco = () => document.querySelector(".placar-bloco")?.textContent;
+      montar(ao);
+      const aoVivo = bloco();
+      cleanup();
+      montar(hidratado());
+      expect(aoVivo).toBeTruthy();
+      expect(bloco()).toBe(aoVivo);
+    });
+
+    it("votação SECRETA hidratada: só o resultado e o agregado, nunca a grade nem nome", () => {
+      const e = hidratarComposicao(aberta(), composicao);
+      montar(hidratarVotacaoEncerrada(e, {
+        votacaoId: "vt1", modalidade: "secreta", objetoTipo: "proposicao", objetoId: "p1", resultado: "rejeitada",
+        totalSim: 0, totalNao: 2, totalAbstencao: 0, baseMembros: 3, votosRegistrados: 2,
+      } as never, e.votacaoEventoSeq));
+      expect(screen.getByRole("heading", { name: "Votação encerrada" })).toBeTruthy();
+      expect(document.querySelector(".placar-resultado")?.textContent).toBe("rejeitada");
+      expect(screen.queryByRole("list", { name: "Votos nominais" })).toBeNull();
+      expect(document.body.textContent).not.toContain("Ana Ribeiro");
+    });
   });
 
   it("votação SECRETA continua sem grade nominal (sigilo não regride)", () => {

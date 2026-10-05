@@ -19,8 +19,10 @@ import { modoReal } from "./modo";
 
 type Estado = "carregando" | "pronto" | "erro";
 
-export function useEu(token: string | null): { papeis: string[] | null; estado: Estado } {
+export function useEu(token: string | null): { papeis: string[] | null; tipoVinculo: string | null; estado: Estado } {
   const [papeis, setPapeis] = useState<string[] | null>(null);
+  // `ator["tipo-vinculo"]`: "cidadao" é a sessão aberta pelo gov.br (ADR-0015); o resto é institucional.
+  const [tipoVinculo, setTipoVinculo] = useState<string | null>(null);
   const [estado, setEstado] = useState<Estado>(modoReal() ? "carregando" : "pronto");
 
   useEffect(() => {
@@ -30,12 +32,14 @@ export function useEu(token: string | null): { papeis: string[] | null; estado: 
       try {
         const r = await apiFetch("/api/eu", { token: token ?? undefined, cache: "no-store" });
         if (!r.ok) throw new Error(`eu ${r.status}`);
-        const d = (await r.json()) as { ator?: { papeis?: unknown } };
+        const d = (await r.json()) as { ator?: { papeis?: unknown; "tipo-vinculo"?: unknown } };
         const ps = Array.isArray(d?.ator?.papeis)
           ? (d.ator!.papeis as unknown[]).filter((p): p is string => typeof p === "string")
           : [];
+        const tipo = d?.ator?.["tipo-vinculo"];
         if (vivo) {
           setPapeis(ps);
+          setTipoVinculo(typeof tipo === "string" ? tipo : null);
           setEstado("pronto");
         }
       } catch {
@@ -50,5 +54,5 @@ export function useEu(token: string | null): { papeis: string[] | null; estado: 
     };
   }, [token]);
 
-  return { papeis, estado };
+  return { papeis, tipoVinculo, estado };
 }

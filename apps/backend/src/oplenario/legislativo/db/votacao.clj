@@ -118,6 +118,21 @@
                   :order-by [[:criado_em :desc]]
                   :limit 1}))))
 
+(defn encerrada-da-sessao
+  "A votacao 'encerrada' MAIS RECENTE desta sessao, ou nil — o RESULTADO pra recuperacao de estado (o telao
+  que recarrega depois do encerramento; `aberta-da-sessao` so' le votacao aberta). 'anulada' NAO e'
+  resultado: o filtro e' EXATAMENTE `estado = 'encerrada'`. Ordena pelo instante do ENCERRAMENTO
+  (`atualizado_em`, gravado por `encerrar!`; o trigger congela a linha terminal, entao nao muda depois), nao
+  pela abertura: a ultima a ENCERRAR e' a que o plenario viu por ultimo. `id` desempata, pra ordem ser
+  deterministica."
+  [tx ente-id sessao-id]
+  (comum/linha->kebab
+   (jdbc/execute-one! tx
+     (sql/format {:select colunas :from [:legislativo.votacoes]
+                  :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id] [:= :estado [:inline "encerrada"]]]
+                  :order-by [[:atualizado_em :desc] [:id :desc]]
+                  :limit 1}))))
+
 (defn contar-votos-secretos
   "Quantos votos SECRETOS ja' foram registrados nesta votacao — o MESMO tick anonimo que `voto.registrado`
   secreto ja' expoe ao vivo (§22.6), nunca uma apuracao por valor (sim/nao/abstencao): isso vazaria MAIS
