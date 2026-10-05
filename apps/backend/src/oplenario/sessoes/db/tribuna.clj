@@ -58,6 +58,22 @@
                   :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]]
                   :order-by [[:fase :asc] [:ordem :asc] [:criado_em :asc] [:id :asc]]}))))
 
+(defn inscricoes-atendidas
+  "Os ids das inscricoes da sessao que JA' se cumpriram: tem uma fala ENCERRADA ligada a elas (`inscricao_id`).
+  A inscricao e' a intencao de falar e a fala e' a execucao — cumprida a fala, a intencao acabou, e quem ja'
+  falou nao esta mais na fila de quem ainda vai falar. Fala EM CURSO nao conta (a pessoa ainda esta com a
+  palavra), nem fala de tipo `aparte`: o aparte nao consome a inscricao de ninguem — a semantica dele (a
+  fala-mae e' suspensa ou encerrada junto?) segue [GAP] de dominio aberto. Derivado dos fatos que ja' existem
+  (`fala_executada.inscricao_id` + `encerrou_em`): nao cria estado novo e nao muda a inscricao gravada."
+  [tx ente-id sessao-id]
+  (->> (jdbc/execute! tx
+         (sql/format {:select-distinct [:inscricao_id] :from [:sessoes.fala_executada]
+                      :where [:and [:= :ente_id ente-id] [:= :sessao_id sessao-id]
+                              [:<> :inscricao_id nil] [:<> :encerrou_em nil]
+                              [:<> :tipo_fala "aparte"]]}))
+       comum/linhas->kebab
+       (into #{} (map :inscricao-id))))
+
 (defn- estado+lock [tx ente-id id]
   (-> (jdbc/execute-one! tx
         (sql/format {:select [:estado :lock_version] :from [:sessoes.inscricao_oradores]

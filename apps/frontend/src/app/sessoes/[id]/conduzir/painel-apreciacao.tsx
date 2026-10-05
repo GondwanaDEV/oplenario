@@ -57,7 +57,7 @@ export function PainelApreciacao({
       <ol className="apr-lista">
         {itens.map((it) => (
           <li key={it.id} className={it.emApreciacao ? "apr-atual" : undefined}>
-            <span className="apr-ord">{it.ordem}</span>
+            <span className="apr-ord">{it.posicao}</span>
             <span className="apr-it">
               <b>{it.sigla}</b>
               <span>{it.descricao}</span>

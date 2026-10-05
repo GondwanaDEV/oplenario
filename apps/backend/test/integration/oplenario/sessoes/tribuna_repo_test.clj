@@ -65,6 +65,56 @@
       (is (= ["iniciada" "pausada"] (mapv :tipo (:marcos r))) "os marcos sao os da fala em curso")
       (is (= [iid] (mapv :id (:inscricoes r))) "a fila traz a inscricao registrada"))))
 
+;; ---------- a fila so' mostra quem AINDA vai falar: o repo diz quais inscricoes ja' foram cumpridas ----------
+
+(defn- inscrever! [ente sid fase]
+  (:id (repo/inscrever! *repo* ente {:id (random-uuid) :sessao-id sid :vereador-id (random-uuid)
+                                     :origem-inscricao "pre_sessao_secretaria" :fase fase
+                                     :created-by (random-uuid)})))
+
+(deftest tribuna-da-sessao-diz-quais-inscricoes-ja-foram-atendidas
+  (let [ente (random-uuid) sid (agendar! ente)
+        falou (inscrever! ente sid "ordem_do_dia")
+        falando (inscrever! ente sid "ordem_do_dia")
+        espera (inscrever! ente sid "ordem_do_dia")
+        {f1 :id} (repo/iniciar-fala! *repo* ente {:id (random-uuid) :sessao-id sid :orador-id (random-uuid)
+                                                  :tipo-fala "principal" :fase "ordem_do_dia" :iniciou-em f0
+                                                  :inscricao-id falou :created-by (random-uuid)})]
+    (repo/encerrar-fala! *repo* ente {:id f1 :encerrou-em (mais f0 60) :lock-version 0 :updated-by (random-uuid)})
+    (repo/iniciar-fala! *repo* ente {:id (random-uuid) :sessao-id sid :orador-id (random-uuid)
+                                     :tipo-fala "principal" :fase "ordem_do_dia" :iniciou-em (mais f0 90)
+                                     :inscricao-id falando :created-by (random-uuid)})
+    (let [r (repo/tribuna-da-sessao *repo* ente sid)]
+      (is (= #{falou} (set (:inscricoes-atendidas r)))
+          "so' a inscricao cuja fala ENCERROU esta atendida: a da fala em curso e a que espera, nao")
+      (is (= #{falou falando espera} (set (map :id (:inscricoes r))))
+          "a leitura crua segue trazendo todas; quem decide o que a fila mostra e' o controller"))))
+
+(deftest tribuna-da-sessao-aparte-nao-consome-a-inscricao
+  ;; O aparte e' a pergunta de dominio ainda aberta (a fala-mae e' suspensa ou encerrada junto?): este corte NAO a
+  ;; decide — uma fala de tipo aparte nao cumpre inscricao, so' a fala principal/de fase.
+  (let [ente (random-uuid) sid (agendar! ente)
+        insc (inscrever! ente sid "ordem_do_dia")
+        {mae :id} (repo/iniciar-fala! *repo* ente {:id (random-uuid) :sessao-id sid :orador-id (random-uuid)
+                                                   :tipo-fala "principal" :fase "ordem_do_dia" :iniciou-em f0
+                                                   :created-by (random-uuid)})
+        {ap :id} (repo/iniciar-fala! *repo* ente {:id (random-uuid) :sessao-id sid :orador-id (random-uuid)
+                                                  :tipo-fala "aparte" :fala-pai-id mae :fase "ordem_do_dia"
+                                                  :iniciou-em (mais f0 10) :inscricao-id insc
+                                                  :created-by (random-uuid)})]
+    (repo/encerrar-fala! *repo* ente {:id ap :encerrou-em (mais f0 40) :lock-version 0 :updated-by (random-uuid)})
+    (is (empty? (:inscricoes-atendidas (repo/tribuna-da-sessao *repo* ente sid))))))
+
+(deftest tribuna-da-sessao-atendidas-nao-vazam-de-outra-sessao
+  (let [ente (random-uuid) sid-a (agendar! ente) sid-b (agendar! ente)
+        insc-a (inscrever! ente sid-a "ordem_do_dia")
+        {fa :id} (repo/iniciar-fala! *repo* ente {:id (random-uuid) :sessao-id sid-a :orador-id (random-uuid)
+                                                  :tipo-fala "principal" :fase "ordem_do_dia" :iniciou-em f0
+                                                  :inscricao-id insc-a :created-by (random-uuid)})]
+    (repo/encerrar-fala! *repo* ente {:id fa :encerrou-em (mais f0 60) :lock-version 0 :updated-by (random-uuid)})
+    (is (= #{insc-a} (set (:inscricoes-atendidas (repo/tribuna-da-sessao *repo* ente sid-a)))))
+    (is (empty? (:inscricoes-atendidas (repo/tribuna-da-sessao *repo* ente sid-b))))))
+
 ;; ---------- escopo por FALA-ID (achado I1): marcos de uma fala ANTERIOR nao vazam p/ a fala em curso ----------
 
 (deftest tribuna-da-sessao-marcos-nao-vazam-de-fala-anterior

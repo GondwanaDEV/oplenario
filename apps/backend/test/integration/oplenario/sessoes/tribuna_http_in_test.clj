@@ -120,6 +120,38 @@
     (is (= 200 (:status r)))
     (is (= 300 (:tempo-concedido-segundos (:orador-atual (ler-json r)))))))
 
+;; ---------- a fila so' mostra quem AINDA vai falar (12/09 retriado em 04/10: quem ja' falou seguia inscrito) ----------
+
+(defn- inscricao-doc [id vereador ordem]
+  {:id id :vereador-id vereador :origem-inscricao "pre_sessao_secretaria" :fase "ordem_do_dia" :ordem ordem
+   :estado "inscrita" :lock-version 0})
+
+(deftest inscricao-cuja-fala-ja-encerrou-sai-da-fila
+  (let [ente (random-uuid) sid (random-uuid)
+        ja-falou (random-uuid) vai-falar (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-aberta ente id))
+                                  (fn [_ _] {:fala-em-curso nil :marcos []
+                                             :inscricoes [(inscricao-doc ja-falou (random-uuid) 1)
+                                                          (inscricao-doc vai-falar (random-uuid) 2)]
+                                             :inscricoes-atendidas #{ja-falou}}))
+        r (pt/response-for (service-fn* #{} repo-s)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (is (= [(str vai-falar)] (mapv :inscricao-id (:inscritos (ler-json r))))
+        "so' quem ainda vai falar fica na fila; quem ja' teve a fala encerrada sai")))
+
+(deftest inscricao-com-fala-em-curso-segue-na-fila-para-a-tela-marcar-quem-fala
+  ;; deliberado: o cockpit da Mesa marca "Falando" na linha da fila (`ehOrador`), entao a inscricao da fala EM CURSO
+  ;; segue na leitura; so' a fala ENCERRADA cumpre a inscricao.
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-aberta ente id))
+                                  (fn [_ _] {:fala-em-curso (fala-em-curso-doc) :marcos []
+                                             :inscricoes [(inscricao-doc inscricao-orador-1 orador-1 1)]
+                                             :inscricoes-atendidas #{}}))
+        r (pt/response-for (service-fn* #{} repo-s)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= [(str inscricao-orador-1)] (mapv :inscricao-id (:inscritos (ler-json r)))))))
+
 ;; ---------- 2: nenhuma fala em curso -> orador-atual nil, marcos vazio ----------
 
 (deftest sem-fala-alguma-orador-atual-nil

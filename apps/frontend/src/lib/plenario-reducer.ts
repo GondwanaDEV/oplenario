@@ -43,6 +43,9 @@ export interface OradorAtual {
   iniciouEm: string; // âncora do cronômetro client-side
   /** Tempo-limite fotografado na fala (s; mig 0081). `null`/ausente = sem limite — só conta o decorrido. */
   tempoConcedidoSegundos?: number | null;
+  /** A inscrição que esta fala cumpre (quando veio da fila). Ao ENCERRAR a fala, a inscrição sai da fila de
+   * quem ainda vai falar. Ausente = fala sem inscrição (ex.: questão de ordem). */
+  inscricaoId?: string;
 }
 
 export interface Inscrito {
@@ -416,6 +419,7 @@ function lerOradorAtualTribuna(o: unknown): OradorAtual | null | undefined {
     iniciouEm: x.iniciouEm,
     // campo torto não descarta o orador: só perde o limite (a TV volta a contar, nunca inventa "esgotado")
     tempoConcedidoSegundos: finito(x.tempoConcedidoSegundos) ? x.tempoConcedidoSegundos : null,
+    inscricaoId: typeof x.inscricaoId === "string" ? x.inscricaoId : undefined,
   };
 }
 
@@ -723,6 +727,7 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
           fase: evento.dados.fase,
           iniciouEm: evento.dados["iniciou-em"],
           tempoConcedidoSegundos: finito(evento.dados["tempo-concedido-segundos"]) ? evento.dados["tempo-concedido-segundos"] : null,
+          inscricaoId: typeof evento.dados["inscricao-id"] === "string" ? evento.dados["inscricao-id"] : undefined,
         },
         marcosCronometro: [],
       };
@@ -738,13 +743,22 @@ export function aplicarEvento(estado: EstadoPlenario, evento: EventoPlenario): E
         ],
       };
 
-    case "fala.encerrada":
+    case "fala.encerrada": {
+      // A fila é de quem AINDA vai falar: a fala que encerra cumpre a inscrição ligada a ela, e a inscrição sai.
+      // Só quando a fala encerrada é a corrente (é dela que se sabe a inscrição) e não é aparte — o aparte não
+      // consome a inscrição de ninguém (a semântica dele segue em aberto no domínio, e o backend faz o mesmo).
+      // Fora desses casos o reducer não adivinha: `precisaRehidratar` pede a re-busca, e é o servidor quem diz a fila.
+      const corrente = base.oradorAtual && base.oradorAtual.falaId === evento.dados["fala-id"] ? base.oradorAtual : null;
+      const cumprida = corrente && corrente.tipoFala !== "aparte" ? corrente.inscricaoId : undefined;
       return {
         ...base,
         oradorAtual: null,
         marcosCronometro: [],
         ultimaFalaEncerrada: { falaId: evento.dados["fala-id"], tempoSegundos: evento.dados["tempo-segundos"] },
+        inscritos: cumprida ? base.inscritos.filter((i) => i.inscricaoId !== cumprida) : base.inscritos,
+        precisaRehidratar: true,
       };
+    }
 
     case "inscricao.registrada": {
       const id = evento.dados["inscricao-id"];

@@ -697,6 +697,9 @@
   [:map {:closed true}
    [:id :string]
    [:conduzida-por :string]
+   ;; o NOME de quem conduziu (seam `nome-na-casa`, so' de quem tem vinculo nesta Casa). So' a leitura
+   ;; `GET /sessoes/:id/chamada` o preenche; no recibo do POST fica ausente. nil = a tela escreve o texto neutro.
+   [:conduzida-por-nome {:optional true} [:maybe :string]]
    [:membros-da-casa :int]
    [:ocorrido-em :string]
    [:registrado-em :string]])

@@ -237,7 +237,7 @@ export function PainelVotacao({
                     <option value="">— escolha a matéria —</option>
                     {candidatos.map((c) => (
                       <option key={c.objetoId} value={c.objetoId}>
-                        {c.sigla ? `${c.sigla} · ${nomeFase(c.fase)}` : `${nomeFase(c.fase)} · item ${c.ordem}`}
+                        {c.sigla ? `${c.sigla} · ${nomeFase(c.fase)}` : `${nomeFase(c.fase)} · item ${c.posicao}`}
                       </option>
                     ))}
                   </select>

@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { useTribunaMesa, type EventoCronometroManual } from "@/lib/use-tribuna-mesa";
-import { derivarFila, membrosInscriveis, rotuloOradorAtual, FASES_TRIBUNA } from "@/lib/tribuna-mesa-vista";
+import { derivarFila, membrosInscriveis, rotuloOradorAtual, FASES_TRIBUNA, SEM_NOME_CADASTRADO } from "@/lib/tribuna-mesa-vista";
 import { segundosDecorridos, formatarTempo, relogioDaFala, tempoDaFala } from "@/lib/cronometro";
 import { estaPausado, segundosAdicionaisConcedidos, apartesConcedidos } from "@/lib/cronometro-mesa-vista";
 
@@ -242,7 +242,7 @@ export function PainelTribuna({ sessaoId, token }: { sessaoId: string; token: st
                   <option value="">— escolha o orador —</option>
                   {inscriveis.map((m) => (
                     <option key={m.vereadorId} value={m.vereadorId}>
-                      {m.nomeParlamentar ?? `Vereador(a) ${m.vereadorId.slice(0, 8)}`}
+                      {m.nomeParlamentar ?? SEM_NOME_CADASTRADO}
                       {m.cargoMesa ? ` · ${m.cargoMesa}` : ""}
                     </option>
                   ))}

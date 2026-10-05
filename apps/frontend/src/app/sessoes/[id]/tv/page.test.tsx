@@ -121,6 +121,24 @@ describe("Modo TV — fases", () => {
     expect(screen.getByText("Energia solar em prédios públicos")).toBeTruthy();
   });
 
+  it("a pauta do dia numera cada fase a partir do 1 (a Ordem do Dia não herda o número do Expediente)", () => {
+    montar({
+      sessao: { estado: "agendada", "aberta-em": null },
+      estado: { estado: "agendada" },
+      pauta: {
+        "sessao-id": "s1",
+        itens: [
+          { id: "i1", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata", ordem: 1 },
+          { id: "i2", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura de ofício", ordem: 2 },
+          { id: "i3", fase: "ordem_do_dia", "tipo-item": "proposicao", "proposicao-id": "p22", ordem: 3,
+            proposicao: { tipo: "projeto_lei", ano: 2026, sequencial: 22, ementa: "Energia solar em prédios públicos" } },
+        ],
+      },
+    });
+    const numeros = [...document.querySelectorAll(".pauta .ord")].map((e) => e.textContent);
+    expect(numeros).toEqual(["1", "2", "1"]);
+  });
+
   it("votação nominal: podem votar, já votaram, faltam, placar e nomes", () => {
     montar({
       estado: {

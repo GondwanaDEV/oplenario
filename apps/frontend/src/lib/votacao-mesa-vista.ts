@@ -14,6 +14,7 @@ import type {
   QuorumTipo,
   VotacaoAbertaResumo,
 } from "./use-votacao-mesa";
+import { numerarNaFase } from "./posicao-na-fase";
 import { formatarNumeroProposicao } from "./proposicoes-vista";
 import { LEGENDA_SIM, PERGUNTA_VOTACAO, fraseDosPrecisos } from "./contas-vista";
 import type { QuorumContas } from "./contrato-contas";
@@ -75,7 +76,10 @@ export interface ItemPautaObjeto {
 export interface CandidatoObjeto {
   objetoId: string;
   fase: string;
+  /** A `ordem` gravada (uma só por pauta): serve para ordenar, não para ser lida. */
   ordem: number;
+  /** O número que se lê: a posição do item dentro da fase, contando todos os itens ativos dela. */
+  posicao: number;
   /** "PL 22/2026" quando a pauta traz o resumo; null sem ele (o seletor cai para fase + posição). */
   sigla: string | null;
 }
@@ -83,12 +87,16 @@ export interface CandidatoObjeto {
 /** Os itens da pauta que servem de objeto de votação: proposições com `proposicaoId` resolvido. Emenda/
  * parecer/requerimento entram por outra porta (fora desta fatia) — aqui o objeto é a matéria da pauta. */
 export function candidatosObjeto(itens: ItemPautaObjeto[]): CandidatoObjeto[] {
+  // a posição conta TODOS os itens da fase (o comunicado e a leitura também ocupam lugar), por isso vem antes do filtro
+  const posicoes = numerarNaFase(itens);
   return itens
-    .filter((i) => i.tipoItem === "proposicao" && typeof i.proposicaoId === "string" && i.proposicaoId)
-    .map((i) => ({
+    .map((i, idx) => ({ i, posicao: posicoes[idx] }))
+    .filter(({ i }) => i.tipoItem === "proposicao" && typeof i.proposicaoId === "string" && i.proposicaoId)
+    .map(({ i, posicao }) => ({
       objetoId: i.proposicaoId as string,
       fase: i.fase,
       ordem: i.ordem,
+      posicao,
       sigla: i.proposicao ? formatarNumeroProposicao(i.proposicao.tipo, i.proposicao.sequencial, i.proposicao.ano) : null,
     }))
     .sort((a, b) => a.ordem - b.ordem);

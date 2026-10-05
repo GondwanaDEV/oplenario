@@ -44,6 +44,26 @@ afterEach(() => {
 });
 
 describe("PautasOficiais", () => {
+  it("a pauta publicada numera cada fase a partir do 1, pelo que foi congelado", async () => {
+    const congelada = {
+      ...oficial,
+      vigente: {
+        ...oficial.vigente,
+        itens: [
+          { id: "a", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata", ordem: 1 },
+          { id: "b", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura de ofício", ordem: 2 },
+          { id: "c", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "Leitura do parecer", ordem: 6 },
+          { id: "d", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "Leitura da emenda", ordem: 7 },
+        ],
+      },
+    };
+    mockar({ [`/api/portal/casa/${ENTE}/pautas`]: lista, [`/api/portal/casa/${ENTE}/pautas/s1`]: congelada });
+    render(<PautasOficiais ente={ENTE} sessao={null} />);
+    const secao = await screen.findByRole("region", { name: "Pauta da 12ª Sessão Ordinária" });
+    const itens = within(secao).getAllByRole("listitem").filter((li) => li.querySelector(".po-fase"));
+    expect(itens.map((li) => (li as HTMLLIElement).value)).toEqual([1, 2, 1, 2]);
+  });
+
   it("abre a última pauta publicada: versão, data, os itens com link à matéria e as publicações anteriores", async () => {
     mockar({ [`/api/portal/casa/${ENTE}/pautas`]: lista, [`/api/portal/casa/${ENTE}/pautas/s1`]: oficial });
     render(<PautasOficiais ente={ENTE} sessao={null} />);

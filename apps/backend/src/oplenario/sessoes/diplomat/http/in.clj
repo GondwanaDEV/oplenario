@@ -653,13 +653,17 @@
   por vereador; adapters/out projeta. nil (sessao inexistente) -> 404. Sessao agendada SEM data marcada
   (`agendada-para` e' opcional na API e nullable na coluna) -> 409 ACIONAVEL, nunca o 500 'erro interno' do
   interceptor global: quem agendou sem marcar a data precisa saber que e' isso que falta."
-  [repo-sessoes roster-da-casa relogio]
+  [repo-sessoes roster-da-casa relogio nome-na-casa]
   (fn [req]
     (let [ator (:ator req)
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
       (try
         (if-let [chamada (controllers/chamada-da-sessao repo-sessoes roster-da-casa ator id relogio)]
-          (http/json-resposta 200 (adapters-out-presenca/chamada->wire chamada))
+          ;; o nome de quem conduziu so' depois da authz (que roda dentro de `chamada-da-sessao`): quem nao pode
+          ;; ver a chamada nao dispara leitura nenhuma em identidade.
+          (http/json-resposta 200 (adapters-out-presenca/chamada->wire
+                                   (update chamada :chamadas-conduzidas
+                                           #(controllers/nomear-atos-de-chamada nome-na-casa (:ente-id ator) %))))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
           (if (= :conflito/sessao-sem-data (:tipo (ex-data e)))
@@ -1014,7 +1018,7 @@
   `PSQLException` sqlstate 23505 numa SEGUNDA colisao (o RETRY UNICO ja' esta' DENTRO do controller —
   `congelar!`; so' a segunda colisao chega aqui crua, carry escrito na docstring dela) -> 409 traduzido,
   NUNCA o 500 generico. Sucesso -> 201 com os metadados (NUNCA o binario)."
-  [repo-sessoes roster-da-casa dados-da-casa relogio serializador-folha renderizador-pdf objeto-store]
+  [repo-sessoes roster-da-casa dados-da-casa relogio serializador-folha renderizador-pdf objeto-store nome-na-casa]
   (fn [req]
     (let [ator (:ator req)
           id   (adapters-in/id-param->uuid (get-in req [:path-params :id]))]
@@ -1022,7 +1026,8 @@
         (if-let [row (controllers/gerar-folha! repo-sessoes roster-da-casa dados-da-casa ator id relogio
                                                {:serializador serializador-folha
                                                 :renderizador-pdf renderizador-pdf
-                                                :objeto-store objeto-store})]
+                                                :objeto-store objeto-store
+                                                :nome-na-casa nome-na-casa})]
           (http/json-resposta 201 (adapters-out-folha/folha->wire row))
           (http/json-resposta 404 {:erro "sessao nao encontrada"}))
         (catch clojure.lang.ExceptionInfo e
@@ -1369,7 +1374,7 @@
      [auth (it/exige-papel "secretario") it/corpo-json (registrar-presenca-lote-handler repo-sessoes roster-da-casa relogio)]
      :route-name :sessoes/registrar-presenca-lote]
     ["/sessoes/:id/chamada" :get
-     [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio)]
+     [auth (it/exige-papel "secretario") (chamada-handler repo-sessoes roster-da-casa relogio nome-na-casa)]
      :route-name :sessoes/chamada]
     ;; MESMO path do GET acima, metodo diferente — Pedestal despacha por (path, metodo); nao ha' o risco de
     ;; sombreamento literal-vs-param ja' documentado em `/gravacoes`/`/minha-justificativa` (nao existe filho
@@ -1522,7 +1527,7 @@
     ["/sessoes/:id/folha" :post
      [auth (it/exige-papel "secretario")
       (gerar-folha-handler repo-sessoes roster-da-casa dados-da-casa relogio
-                           serializador-folha renderizador-pdf objeto-store)]
+                           serializador-folha renderizador-pdf objeto-store nome-na-casa)]
      :route-name :sessoes/gerar-folha]
     ["/sessoes/:id/folhas" :get
      [auth (it/exige-papel "secretario") (listar-folhas-handler repo-sessoes nome-na-casa)]

@@ -12,6 +12,7 @@ import { usePlenario, type EstadoConexao } from "@/lib/use-plenario";
 import { usePauta } from "@/lib/use-pauta";
 import { formatarTempo } from "@/lib/cronometro";
 import { assentosHemiciclo } from "@/lib/hemiciclo";
+import { posicoesNaFase } from "@/lib/posicao-na-fase";
 import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
 import { Tribuna } from "./tribuna";
 import { BotaoModoTv } from "../botao-modo-tv";
@@ -198,6 +199,7 @@ const NOME_TIPO_ITEM: Record<string, string> = {
 function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPlenario; pauta: PautaOut | null }) {
   const emCurso = estado.estado === "aberta";
   const itens = pauta?.itens ?? [];
+  const posicoes = posicoesNaFase(itens);
   return (
     <section className="bloco palco" aria-labelledby="materia-titulo">
       <div className="palco-cabeca">
@@ -228,7 +230,7 @@ function Palco({ sessao, estado, pauta }: { sessao: SessaoOut; estado: EstadoPle
           <ol className="pauta-lista">
             {itens.map((it) => (
               <li key={it.id} className="pauta-item">
-                <span className="pauta-ordem" aria-hidden="true">{it.ordem}</span>
+                <span className="pauta-ordem" aria-hidden="true">{posicoes.get(it.id)}</span>
                 <span className="pauta-corpo">
                   <span className="pauta-fase">{nomeFase(it.fase)}</span>
                   <span className="pauta-desc">

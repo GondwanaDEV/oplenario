@@ -302,6 +302,82 @@
         {:keys [html]} (render-str doc)]
     (is (not (str/includes? html "MOVIMENTAÇ")))))
 
+;; ---------- numeracao das secoes: continua mesmo sem as secoes condicionais ----------
+
+(defn- numeros-das-secoes
+  "Os numeros que a folha imprime antes do ponto medio de cada titulo de secao (`<h2 ...>N · TITULO`), em ordem."
+  [html]
+  (mapv #(Long/parseLong (second %))
+        (re-seq #"<h2 class=\"folha-secao-titulo\"[^>]*>(\d+) · " (marcacao html))))
+
+(deftest numeracao-das-secoes-e-continua-com-todas-as-secoes
+  (let [{:keys [html]} (render-str documento-base)]
+    (is (= (vec (range 1 11)) (numeros-das-secoes html))
+        "licenciados, sem-assento e movimentacoes presentes: 1 a 10, como sempre foi")))
+
+(deftest numeracao-das-secoes-e-continua-sem-licenciados-sem-assento-e-movimentacoes
+  ;; as tres secoes condicionais ausentes: antes a folha pulava 5, 6 e 7 e ia de 4 direto a 8.
+  (let [doc (assoc documento-base :linhas [linha-presente] :serie {})
+        {:keys [html]} (render-str doc)]
+    (is (= (vec (range 1 8)) (numeros-das-secoes html)))
+    (is (not (str/includes? html "FORA DO DENOMINADOR")))
+    (is (not (str/includes? html "PRESENÇAS SEM ASSENTO")))
+    (is (not (str/includes? html "MOVIMENTAÇÕES")))))
+
+(deftest numeracao-das-secoes-e-continua-so-sem-movimentacoes
+  (let [doc (assoc documento-base :serie {})
+        {:keys [html]} (render-str doc)]
+    (is (= (vec (range 1 10)) (numeros-das-secoes html)))))
+
+(deftest numeracao-das-secoes-e-continua-so-sem-licenciados
+  (let [doc (assoc documento-base :linhas [linha-presente linha-sem-assento])
+        {:keys [html]} (render-str doc)]
+    (is (= (vec (range 1 10)) (numeros-das-secoes html)))))
+
+(deftest titulos-das-secoes-seguem-a-ordem-do-documento
+  (let [doc (assoc documento-base :linhas [linha-presente] :serie {})
+        {:keys [html]} (render-str doc)
+        titulos (mapv second (re-seq #"<h2 class=\"folha-secao-titulo\"[^>]*>\d+ · ([^<]+)" (marcacao html)))]
+    (is (= ["A SESSÃO" "APURAÇÃO DO QUÓRUM" "ATOS DE CHAMADA CONDUZIDA" "RELAÇÃO NOMINAL"
+            "JUSTIFICATIVAS DE AUSÊNCIA" "CONFERÊNCIA" "REGISTRO DE CONGELAMENTO"]
+           titulos))))
+
+;; ---------- quem conduziu a chamada: nome, nunca o prefixo do id ----------
+
+(defn- celulas-dos-atos [html]
+  (let [bloco (second (re-find #"(?s)<table class=\"tabela-atos\">(.*?)</table>" (marcacao html)))]
+    (mapv second (re-seq #"<td>([^<]*)</td>" bloco))))
+
+(deftest ato-de-chamada-mostra-o-nome-de-quem-conduziu
+  (let [quem #uuid "dbf001fc-1111-4222-8333-444455556666"
+        doc (assoc documento-base :atos-de-chamada-conduzida
+                   [{:id (random-uuid) :ente-id sid :sessao-id sid :conduzida-por quem
+                     :conduzida-por-nome "Marta Secretaria" :membros-da-casa 2
+                     :ocorrido-em instante :registrado-em instante}])
+        {:keys [html]} (render-str doc)]
+    (is (str/includes? html "Marta Secretaria"))
+    (is (not (str/includes? html "dbf001fc")) "o prefixo do id nao aparece em lugar nenhum da folha")
+    (is (not (str/includes? html "Conduzida por (id)")) "o cabecalho deixa de dizer que e' um id")
+    (is (str/includes? html ">Conduzida por<"))))
+
+(deftest ato-de-chamada-sem-nome-usa-texto-neutro-e-nunca-o-id
+  (let [quem #uuid "dbf001fc-1111-4222-8333-444455556666"
+        doc (assoc documento-base :atos-de-chamada-conduzida
+                   [{:id (random-uuid) :ente-id sid :sessao-id sid :conduzida-por quem
+                     :membros-da-casa 2 :ocorrido-em instante :registrado-em instante}])
+        {:keys [html]} (render-str doc)]
+    (is (some #{"Servidor(a) da Câmara"} (celulas-dos-atos html)))
+    (is (not (str/includes? html "dbf001fc")))))
+
+(deftest nome-de-quem-conduziu-e-escapado
+  (let [doc (assoc documento-base :atos-de-chamada-conduzida
+                   [{:id (random-uuid) :ente-id sid :sessao-id sid :conduzida-por (random-uuid)
+                     :conduzida-por-nome "<b>injetado</b>" :membros-da-casa 2
+                     :ocorrido-em instante :registrado-em instante}])
+        {:keys [html]} (render-str doc)]
+    (is (not (str/includes? (marcacao html) "<b>injetado</b>")))
+    (is (str/includes? html "&lt;b&gt;injetado&lt;/b&gt;"))))
+
 ;; ---------- o aviso obrigatorio do STUB-ICP-v0 ----------
 
 (deftest aviso-stub-icp-esta-presente

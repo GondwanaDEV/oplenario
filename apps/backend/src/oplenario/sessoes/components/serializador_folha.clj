@@ -233,9 +233,13 @@
          "<tr><td colspan=\"7\" class=\"folha-secao-texto\" style=\"padding:3mm 1.5mm;\">Não há nenhum registro de presença nesta sessão. A relação traz a composição da Casa na data.</td></tr>")
        "</tbody></table>"))
 
-(defn- tabela-licenciados [licenciados]
+(defn- tabela-licenciados
+  "Secao CONDICIONAL: devolve nil sem licenciados, senao uma fn de numero -> HTML (o numero e' dado por
+  `corpo-html`, que numera so' as secoes que existem — ver `numerar-secoes`)."
+  [licenciados]
   (when (seq licenciados)
-    (str "<h2 class=\"folha-secao-titulo\">5 · FORA DO DENOMINADOR — LICENCIADOS<sup class=\"chamada-nota\">2</sup></h2>"
+    (fn [n]
+     (str "<h2 class=\"folha-secao-titulo\">" n " · FORA DO DENOMINADOR — LICENCIADOS<sup class=\"chamada-nota\">2</sup></h2>"
          "<div class=\"folha-secao-texto\">O vereador licenciado consta desta folha, mas fica fora do total de membros usado na apuração — durante a licença, quem compõe a Casa é o suplente, com mandato próprio.</div>"
          "<table class=\"tabela-linhas\">"
          "<colgroup><col class=\"conf\"/><col class=\"ordem\"/><col class=\"vereador\"/>"
@@ -243,11 +247,14 @@
          "<thead>" (cabecalho-tabela-linhas "Licenciados" (count licenciados)) "</thead>"
          "<tbody>"
          (apply str (map (fn [linha] (linha-relacao-html {:linha linha :licenciado? true})) licenciados))
-         "</tbody></table>")))
+         "</tbody></table>"))))
 
-(defn- tabela-sem-assento [sem-assento]
+(defn- tabela-sem-assento
+  "Secao CONDICIONAL (nil sem linhas, senao fn de numero -> HTML); ver `tabela-licenciados`."
+  [sem-assento]
   (when (seq sem-assento)
-    (str "<h2 class=\"folha-secao-titulo\">6 · FORA DA COMPOSIÇÃO — PRESENÇAS SEM ASSENTO<sup class=\"chamada-nota\">6</sup></h2>"
+    (fn [n]
+     (str "<h2 class=\"folha-secao-titulo\">" n " · FORA DA COMPOSIÇÃO — PRESENÇAS SEM ASSENTO<sup class=\"chamada-nota\">6</sup></h2>"
          "<div class=\"folha-secao-texto\">Há registro de presença para quem não consta como vereador com mandato vigente nesta data. Verifique o cadastro da legislatura antes de dar fé aos totais.</div>"
          "<table class=\"tabela-linhas\">"
          "<colgroup><col class=\"conf\"/><col class=\"ordem\"/><col class=\"vereador\"/>"
@@ -255,7 +262,7 @@
          "<thead>" (cabecalho-tabela-linhas "Presenças sem assento" (count sem-assento)) "</thead>"
          "<tbody>"
          (apply str (map (fn [linha] (linha-relacao-html {:linha linha})) sem-assento))
-         "</tbody></table>")))
+         "</tbody></table>"))))
 
 ;; ---------- 1 · cabecalho da Casa ----------
 
@@ -331,6 +338,10 @@
 
 ;; ---------- 5 · atos de chamada conduzida ----------
 
+(def ^:private nome-neutro-de-quem-conduziu
+  "Quando o cadastro nao traz o nome de quem conduziu a chamada: texto neutro, nunca o prefixo do id."
+  "Servidor(a) da Câmara")
+
 (defn- atos-html [atos]
   (str "<h2 class=\"folha-secao-titulo\">3 · ATOS DE CHAMADA CONDUZIDA</h2>"
        (if (seq atos)
@@ -343,19 +354,19 @@
               "<thead>"
               "<tr><th scope=\"col\">Hora do fato<sup class=\"chamada-nota\">4</sup></th>"
               "<th scope=\"col\">Hora do registro<sup class=\"chamada-nota\">4</sup></th>"
-              "<th scope=\"col\">Conduzida por (id)</th><th scope=\"col\">Membros da Casa no ato</th></tr>"
+              "<th scope=\"col\">Conduzida por</th><th scope=\"col\">Membros da Casa no ato</th></tr>"
               "</thead>"
               "<tbody>"
               (apply str
                      (map (fn [ato]
                             (str "<tr><td>" (esc (fmt-hora (:ocorrido-em ato))) "</td>"
                                  "<td>" (esc (fmt-hora (:registrado-em ato))) "</td>"
-                                 "<td>" (esc (subs (str (:conduzida-por ato)) 0 8)) "</td>"
+                                 "<td>" (esc (or (nao-branco (:conduzida-por-nome ato)) nome-neutro-de-quem-conduziu)) "</td>"
                                  "<td>" (esc (:membros-da-casa ato)) "</td></tr>"))
                           atos))
               "</tbody></table>")
          "<div class=\"folha-secao-texto\">Nenhum ato de chamada conduzida registrado nesta sessão.</div>")
-       "<div class=\"folha-secao-texto\">Cada chamada conduzida é um ato datado e imutável; uma chamada não se apaga — corrige-se com outra chamada, por isso pode haver mais de um ato nesta seção. \"Conduzida por\" identifica o operador por id técnico — a resolução do nome não faz parte desta fatia.</div>"))
+       "<div class=\"folha-secao-texto\">Cada chamada conduzida é um ato datado e imutável; uma chamada não se apaga — corrige-se com outra chamada, por isso pode haver mais de um ato nesta seção. \"Conduzida por\" é o servidor que registrou a chamada, pelo nome cadastrado na Casa quando a folha foi congelada; sem nome no cadastro, a folha escreve \"Servidor(a) da Câmara\".</div>"))
 
 ;; ---------- 9 · movimentacoes durante a sessao (so' quem tem mais de 1 evento) ----------
 
@@ -383,7 +394,8 @@
                               (when (> (count eventos) 1)
                                 [(:vereador-id linha) (get nomes (:vereador-id linha)) eventos])))))]
     (when (seq grupos)
-      (str "<h2 class=\"folha-secao-titulo\">7 · MOVIMENTAÇÕES DURANTE A SESSÃO</h2>"
+     (fn [n]
+      (str "<h2 class=\"folha-secao-titulo\">" n " · MOVIMENTAÇÕES DURANTE A SESSÃO</h2>"
            "<div class=\"folha-secao-texto\">Constam aqui apenas os vereadores com mais de um registro nesta sessão. Para os demais, o único registro é o da relação nominal.</div>"
            ;; Esta e' a tabela de SERIE LONGA — a que mais cresce (55 vereadores entrando, saindo e
            ;; retornando numa sessao de painel instavel). E' justamente a que nao pode quebrar pagina sem
@@ -396,13 +408,13 @@
            "</thead>"
            "<tbody>"
            (apply str (map (fn [[_vid nome eventos]] (eventos-html nome eventos)) grupos))
-           "</tbody></table>"))))
+           "</tbody></table>")))))
 
 ;; ---------- 10 · justificativas de ausencia ----------
 
-(defn- justificativas-html [linhas justificativas]
+(defn- justificativas-html [n linhas justificativas]
   (let [nomes (mapa-nomes linhas)]
-    (str "<h2 class=\"folha-secao-titulo\">8 · JUSTIFICATIVAS DE AUSÊNCIA</h2>"
+    (str "<h2 class=\"folha-secao-titulo\">" n " · JUSTIFICATIVAS DE AUSÊNCIA</h2>"
          (if (seq justificativas)
            (str "<table class=\"tabela-justificativas\">"
                 "<colgroup><col class=\"vereador\"/><col class=\"decisao\"/><col class=\"motivo\"/><col class=\"decidido\"/></colgroup>"
@@ -426,12 +438,13 @@
 
 ;; ---------- 11 · conferencia (assinaturas fisicas) ----------
 
-(def ^:private conferencia-html
+(defn- conferencia-html
   ;; A chamada da nota 8 fica AQUI porque e' aqui que a escolha nao-legal do formato mais aparece: a coluna
   ;; de conferencia manual e o campo de assinatura ao pe' sao invencao deste sistema, nao exigencia de
   ;; regimento. A regra do documento (e o comentario de folha.css §13) e' que toda nota tem ponto de
   ;; chamada — nota empilhada sem citacao no corpo e' rodape que ninguem alcanca.
-  (str "<h2 class=\"folha-secao-titulo\">9 · CONFERÊNCIA</h2>"
+  [n]
+  (str "<h2 class=\"folha-secao-titulo\">" n " · CONFERÊNCIA</h2>"
        "<div class=\"folha-secao-texto\">As assinaturas abaixo são físicas. O sistema não as coleta, não as valida e não as guarda<sup class=\"chamada-nota\">7</sup>. A coluna de conferência da relação nominal e os campos de assinatura abaixo são escolha deste sistema, não exigência legal<sup class=\"chamada-nota\">8</sup>.</div>"
        "<table class=\"tabela-conferencia\"><tr>"
        "<td><div class=\"linha-assinatura\"></div><div class=\"rotulo-assinatura\">Secretaria da Casa — nome e matrícula</div></td>"
@@ -440,9 +453,9 @@
 
 ;; ---------- 12 · registro de congelamento ----------
 
-(defn- congelamento-html [{:keys [spec-versao sessao]} versao]
+(defn- congelamento-html [n {:keys [spec-versao sessao]} versao]
   (str "<div class=\"folha-congelamento\">"
-       "<h2 class=\"folha-secao-titulo\" style=\"margin-top:0;\">10 · REGISTRO DE CONGELAMENTO</h2>"
+       "<h2 class=\"folha-secao-titulo\" style=\"margin-top:0;\">" n " · REGISTRO DE CONGELAMENTO</h2>"
        "<div class=\"campo\"><span class=\"rotulo\">Especificação: </span><span class=\"valor\">" (esc spec-versao) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Sessão: </span><span class=\"valor\">" (esc (subs (str (:id sessao)) 0 8)) "</span></div>"
        "<div class=\"campo\"><span class=\"rotulo\">Versão: </span><span class=\"valor\">"
@@ -478,6 +491,14 @@
 (defn- css-inline []
   (slurp (io/resource "folha/folha.css")))
 
+(defn- numerar-secoes
+  "Imprime as secoes que EXISTEM, numerando-as em sequencia a partir de `primeiro`. Cada elemento de `secoes`
+  e' nil (secao condicional ausente: nao ocupa numero) ou uma fn de numero -> HTML. A folha deixou de pular
+  numero quando licenciados, presencas sem assento ou movimentacoes nao existem; com todas presentes o
+  resultado e' o mesmo de sempre (5, 6, 7 e depois 8, 9, 10)."
+  [primeiro secoes]
+  (apply str (map-indexed (fn [i secao] (secao (+ primeiro i))) (remove nil? secoes))))
+
 (defn- corpo-html
   [{:keys [cabecalho-da-casa linhas quorum serie justificativas atos-de-chamada-conduzida] :as documento} versao]
   (let [{:keys [nominal licenciados sem-assento]} (particionar-linhas linhas)]
@@ -487,12 +508,13 @@
          (quorum-html quorum)
          (atos-html atos-de-chamada-conduzida)
          (tabela-relacao-nominal nominal)
-         (tabela-licenciados licenciados)
-         (tabela-sem-assento sem-assento)
-         (movimentacoes-html linhas serie)
-         (justificativas-html linhas justificativas)
-         conferencia-html
-         (congelamento-html documento versao)
+         ;; 1-4 sao sempre impressas; da quinta em diante so' as que existem, em sequencia.
+         (numerar-secoes 5 [(tabela-licenciados licenciados)
+                            (tabela-sem-assento sem-assento)
+                            (movimentacoes-html linhas serie)
+                            #(justificativas-html % linhas justificativas)
+                            conferencia-html
+                            #(congelamento-html % documento versao)])
          notas-html
          emissao-html)))
 

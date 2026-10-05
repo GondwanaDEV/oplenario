@@ -166,6 +166,54 @@
            (:quorum body))
         "numerador = o que o motor conta (2); denominador = so' as cadeiras (1); e o desvio e' PUBLICADO")))
 
+;; ---------- quem conduziu a chamada: o NOME (so' de quem tem vinculo nesta Casa), nunca o prefixo do id ----------
+
+(defn- fake-repo-identidade-com-nomes
+  "Como `fake-repo-identidade`, mais o seam de nomes: `nomes` = {identidade-id nome} de quem tem vinculo NESTA Casa."
+  [papeis nomes]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-id/RepoIdentidade
+    (snapshot-ator [_ _ente-id _identidade-id]
+      {:vinculo-ativo {:id (random-uuid) :tipo "servidor"} :papeis papeis})
+    (vinculos-de [_ _ente-id identidade-id]
+      (if (contains? nomes identidade-id) [{:id (random-uuid) :tipo "servidor" :estado "ativo"}] []))
+    (nome-por-id [_ identidade-id] {:id identidade-id :nome (get nomes identidade-id)})))
+
+(defn- chamada-com-ato
+  "GET da chamada de uma sessao aberta com UM ato conduzido por `quem`; devolve o corpo."
+  [quem repo-identidade]
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes
+                (fn [_ id] (sessao-aberta ente id))
+                (fn [_ _ _]
+                  {:presencas [] :justificativas []
+                   :chamadas-conduzidas [{:id (random-uuid) :ente-id ente :sessao-id sid :conduzida-por quem
+                                          :membros-da-casa 0 :ocorrido-em aberta-em :registrado-em aberta-em}]}))
+        r (pt/response-for (-> (http/servico (config/carregar)
+                                             (rotas/montar {:idp (idp-dev/idp-dev)
+                                                            :repo-identidade repo-identidade
+                                                            :repo-sessoes repo-s
+                                                            :repo-cadastros (fake-repo-cadastros-roster (fn [_ _] []))
+                                                            :objeto-store nil})
+                                             it/globais)
+                               ph/create-server ::ph/service-fn)
+                           :get (url sid) :headers (com-auth (token ente (random-uuid))))]
+    (is (= 200 (:status r)))
+    (ler-json r)))
+
+(deftest chamada-traz-o-nome-de-quem-conduziu-quando-tem-vinculo-na-casa
+  (let [quem (random-uuid)
+        ato (first (:chamadas-conduzidas
+                    (chamada-com-ato quem (fake-repo-identidade-com-nomes #{"secretario"} {quem "Marta Secretaria"}))))]
+    (is (= (str quem) (:conduzida-por ato)) "o id continua la' (proveniencia)")
+    (is (= "Marta Secretaria" (:conduzida-por-nome ato)))))
+
+(deftest chamada-sem-vinculo-na-casa-nao-traz-nome
+  (let [quem (random-uuid)
+        ato (first (:chamadas-conduzidas
+                    (chamada-com-ato quem (fake-repo-identidade-com-nomes #{"secretario"} {(random-uuid) "Outra"}))))]
+    (is (not (contains? ato :conduzida-por-nome)) "sem vinculo nesta Casa o nome nao sai — ausente, nunca null")))
+
 ;; ---------- T14: multi-tenant ----------
 
 (deftest t14-sessao-inexistente-no-tenant-404
