@@ -46,6 +46,11 @@ describe("PainelApreciacao", () => {
     expect(screen.queryByText("Em apreciação", { selector: ".apr-selo" })).toBeNull();
   });
 
+  it("o número ao lado de cada item é a posição dentro da fase (a Ordem do Dia recomeça no 1)", () => {
+    const { container } = render(<PainelApreciacao sessaoId="s1" token="tok" pauta={pauta()} onAnunciado={() => {}} />);
+    expect([...container.querySelectorAll(".apr-ord")].map((e) => e.textContent)).toEqual(["1", "1"]);
+  });
+
   it("anunciar: POST sem corpo na rota do item, aviso de sucesso e recarga da pauta", async () => {
     const onAnunciado = vi.fn();
     render(<PainelApreciacao sessaoId="s1" token="tok" pauta={pauta()} onAnunciado={onAnunciado} />);

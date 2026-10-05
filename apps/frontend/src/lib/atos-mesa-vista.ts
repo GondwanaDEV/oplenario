@@ -62,7 +62,14 @@ export function opcoesDePresidencia(membros: ComposicaoMembroOut[]): OpcaoMembro
     .map((m) => ({
       vereadorId: m.vereadorId,
       rotulo: m.cargoMesa ? `${nomeDoMembro(m.vereadorId, membros)} · ${m.cargoMesa}` : nomeDoMembro(m.vereadorId, membros),
-    }));
+    }))
+    // dois membros sem nome cadastrado teriam o MESMO rótulo neutro e seriam indistinguíveis no seletor: o
+    // repetido ganha um número de ordem (nunca o id).
+    .map((o, i, todas) => {
+      const iguaisAntes = todas.slice(0, i).filter((x) => x.rotulo === o.rotulo).length;
+      const repetido = todas.filter((x) => x.rotulo === o.rotulo).length > 1;
+      return repetido ? { ...o, rotulo: `${o.rotulo} (${iguaisAntes + 1})` } : o;
+    });
 }
 
 export interface AtoNaLinhaDoTempo {

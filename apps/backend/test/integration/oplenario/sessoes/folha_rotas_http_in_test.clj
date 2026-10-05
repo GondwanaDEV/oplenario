@@ -244,6 +244,41 @@
     (is (= 1 (count (:folhas body))) "a lista de versoes nao cai por causa do rotulo")
     (is (not (contains? (first (:folhas body)) :gerada-por-nome)))))
 
+;; ---------- a folha dos proximos congelamentos: quem conduziu a chamada, pelo NOME ----------
+
+(defn- congelar-folha-com-ato
+  "Congela a folha de uma sessao encerrada cuja chamada foi conduzida por `quem`, com a identidade `repo-id`, e
+  devolve {:html texto-do-html-congelado :ente :sessao}."
+  [quem repo-id]
+  (let [ente (random-uuid) sid (random-uuid) ident (random-uuid)
+        ato (fn [id] {:id (random-uuid) :ente-id ente :sessao-id id :conduzida-por quem :membros-da-casa 2
+                      :ocorrido-em (Instant/parse "2026-06-30T13:30:00Z")
+                      :registrado-em (Instant/parse "2026-06-30T13:30:00Z")})
+        repo-s (fake-repo-sessoes {:sessao-fn (fn [_ id] (sessao-encerrada ente id))
+                                   :folha-fn (fn [_ id] (assoc (lido-fechada ente id) :chamadas-conduzidas [(ato id)]))})
+        svc (service-fn* #{"secretario"} repo-s (fake-objeto-store) repo-id)
+        auth (com-auth (token ente ident))]
+    (is (= 201 (:status (pt/response-for svc :post (url-gerar sid) :headers auth))))
+    (:body (pt/response-for svc :get (url-html sid 1) :headers auth))))
+
+(deftest folha-congelada-traz-o-nome-de-quem-conduziu-a-chamada
+  (let [quem #uuid "dbf001fc-1111-4222-8333-444455556666"
+        html (congelar-folha-com-ato quem (fake-repo-identidade #{"secretario"} {quem "Marta Secretaria"} false))]
+    (is (str/includes? html "Marta Secretaria"))
+    (is (not (str/includes? html "dbf001fc")) "o prefixo do id nao aparece em lugar nenhum da folha")))
+
+(deftest folha-congelada-sem-vinculo-na-casa-usa-texto-neutro-e-nunca-o-id
+  (let [quem #uuid "dbf001fc-1111-4222-8333-444455556666"
+        html (congelar-folha-com-ato quem (fake-repo-identidade #{"secretario"} {(random-uuid) "Outra Pessoa"} false))]
+    (is (str/includes? html "Servidor(a) da Câmara"))
+    (is (not (str/includes? html "dbf001fc")))))
+
+(deftest folha-congelada-degrada-para-texto-neutro-quando-a-leitura-do-nome-falha
+  (let [quem #uuid "dbf001fc-1111-4222-8333-444455556666"
+        html (congelar-folha-com-ato quem (fake-repo-identidade #{"secretario"} {quem "Marta"} true))]
+    (is (str/includes? html "Servidor(a) da Câmara") "o congelamento nao cai por causa do rotulo")
+    (is (not (str/includes? html "dbf001fc")))))
+
 (deftest sem-token-401
   (let [repo-s (fake-repo-sessoes {:sessao-fn (fn [_ _] nil) :folha-fn (fn [_ _] nil)})
         r (pt/response-for (service-fn* #{"secretario"} repo-s) :post (url-gerar (random-uuid)))]

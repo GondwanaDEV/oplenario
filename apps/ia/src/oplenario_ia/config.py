@@ -59,14 +59,23 @@ class Config(BaseModel):
 
 MODELO_OPENROUTER_PADRAO = "openai/gpt-oss-120b"  # provisório (05/10/2026), ADR-0023
 
-# Os modelos com que o satélite pode SUBIR pelo OpenRouter (ADR-0023). Entra aqui o que passou pela avaliação
-# (`oplenario-ia-avaliar`, R-IA-4) — a avaliação em si monta a `Config` direto e roda qualquer slug fixo.
-MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(
-    {
-        MODELO_OPENROUTER_PADRAO,
-        "qwen/qwen3.8-27b:free",  # gratuito: limite diário de requisições do OpenRouter, não serve a produção
-    }
-)
+# Os modelos com que o satélite pode SUBIR pelo OpenRouter (ADR-0023), cada um com a sua FOLGA DE RACIOCÍNIO: num
+# modelo que raciocina, o `max_tokens` cobre o raciocínio E a resposta, e os limites das capacidades (1000 a 2000)
+# foram medidos num modelo que não raciocina — o qwen gratuito gastou os 2000 inteiros raciocinando e devolveu texto
+# vazio (05/10/2026). A folga soma ao limite do pedido; paga-se só o que o modelo gera. Entra aqui o que passou pela
+# avaliação (`oplenario-ia-avaliar`, R-IA-4) — a avaliação em si monta a `Config` direto e roda qualquer slug fixo.
+MODELOS_OPENROUTER: dict[str, int] = {
+    MODELO_OPENROUTER_PADRAO: 4000,
+    "qwen/qwen3.8-27b:free": 8000,  # gratuito: limite diário de requisições do OpenRouter, não serve a produção
+}
+MODELOS_OPENROUTER_PERMITIDOS: frozenset[str] = frozenset(MODELOS_OPENROUTER)
+
+
+def folga_de_raciocinio(modelo: str) -> int:
+    """Os tokens a mais que o modelo ganha para raciocinar antes da resposta; 0 para modelo fora da lista."""
+    return MODELOS_OPENROUTER.get(modelo, 0)
+
+
 _SLUG_OPENROUTER = re.compile(r"^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]*$")
 
 

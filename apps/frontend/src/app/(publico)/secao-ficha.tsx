@@ -22,6 +22,7 @@ import { useSessaoCidada } from "@/lib/use-sessao-cidada";
 import { AcompanharMateria, ComporComentario, DenunciarComentario } from "./participar-materia";
 import { MovimentacoesPublicas } from "./movimentacoes-publicas";
 import { PareceresJuridicosPublicos } from "./pareceres-juridicos-publicos";
+import { VotacoesDaMateria } from "./votacoes-da-materia";
 import "./participacao.css";
 
 export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId: string }) {
@@ -113,7 +114,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
             <a href={`/portal/casa/${encodeURIComponent(ente)}/leis/${encodeURIComponent(vista.normaPublicada.normaId)}`}>
               {tituloDaNorma(vista.normaPublicada)}
             </a>
-            , com o texto oficial para baixar.
+            {vista.normaPublicada.temTexto
+              ? ", com o texto oficial para baixar."
+              : ". O texto desta norma ainda não foi publicado aqui."}
           </span>
         </p>
       )}
@@ -174,6 +177,9 @@ export function SecaoFicha({ ente, proposicaoId }: { ente: string; proposicaoId:
 
       {/* ADR-0019: só aparece se a Casa já deliberou a matéria e há parecer jurídico assinado; a seção some sozinha se não */}
       <PareceresJuridicosPublicos ente={ente} proposicaoId={proposicaoId} />
+
+      {/* só aparece se a matéria já teve votação encerrada em sessão pública; a seção some sozinha se não */}
+      <VotacoesDaMateria ente={ente} proposicaoId={proposicaoId} />
 
       <section className="secao" aria-label="Participação cidadã">
         <h2>O que a população está dizendo</h2>

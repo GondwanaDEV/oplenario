@@ -29,7 +29,7 @@
     {:norma-id (->str (:norma-id n)) :proposicao-id (->str (:proposicao-id n))
      :tipo-norma (:tipo-norma n) :numero (:numero n) :ano (:ano n) :urn (:urn n)
      :ementa (:ementa n) :publicado-em (->str (:publicado-em n))
-     :veiculo-publicacao (:veiculo-publicacao n)}))
+     :veiculo-publicacao (:veiculo-publicacao n) :tem-texto (:tem-texto n)}))
 
 (defn ->wire
   "Materia (dominio) -> MateriaOut (item de listagem)."

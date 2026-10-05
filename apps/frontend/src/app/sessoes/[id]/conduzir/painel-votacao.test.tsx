@@ -90,6 +90,21 @@ describe("PainelVotacao — abrir", () => {
     expect(screen.getByRole("option", { name: "PL 22/2026 · Ordem do Dia" })).toBeTruthy();
   });
 
+  it("sem sigla, o seletor diz a posição dentro da fase — não a ordem da pauta toda", () => {
+    montar({
+      votacaoAberta: null,
+      itens: [
+        { id: "e1", tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 1 },
+        { id: "e2", tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 2 },
+        { id: "e3", tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 3 },
+        { id: "e4", tipoItem: "comunicado", proposicaoId: null, fase: "expediente", ordem: 4 },
+        { id: "o1", tipoItem: "proposicao", proposicaoId: "p1", fase: "ordem_do_dia", ordem: 5 },
+      ],
+    });
+    expect(screen.getByRole("option", { name: "Ordem do Dia · item 1" })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /item 5/ })).toBeNull();
+  });
+
   it("a matéria anunciada (em apreciação) vem pré-escolhida — Abrir votação direto", async () => {
     montar({
       votacaoAberta: null,

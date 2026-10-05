@@ -87,7 +87,8 @@ declarados no registro. As 8 capacidades passam por ele; transcrição e embeddi
 com modelo de `MODELOS_OPENROUTER_PERMITIDOS` (`openai/gpt-oss-120b`, padrão provisório, e `qwen/qwen3.8-27b:free`).
 **Conferido ao vivo (05/10/2026, chave gratuita sem crédito):** o formato da resposta bate com o adaptador, a política de
 ZDR é obedecida (404 quando nenhum provedor a cumpre); o qwen gratuito passou em `base-comum` e `copiloto-relator` e
-reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429); o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
+reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a conta gratuita devolve 429) — cada modelo
+da lista ganhou uma folga de raciocínio somada ao `max_tokens` (`MODELOS_OPENROUTER`), ainda não medida ao vivo; o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
 `[GAP]` jurídico, agora com o OpenRouter como contratado. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
@@ -345,12 +346,11 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 - Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
   por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
 
-**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 39 abertos · 45 fechados · 0 sem decidir.
+**Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 15 abertos · 69 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
 - o mesmo `secretario` abre, vota, encerra e emite o autógrafo (decisão do Daouda);
 - gerar remessa ao TCE sem rota; convocação oficial inexistente;
-- **aceitar a remessa pela rota não cumpre a obrigação** (reproduzido em 05/10): ela segue pendente e o sweep a vence.
-  O módulo `compliance` não emite evento nenhum; o conserto é de desenho (reavaliar no aceite).
+- a rota da Mesa aceita voto de quem está ausente justificado (confirmar se é regra da Casa).
 
 **Frentes de 05/10/2026 (do exploratório), todas na `main`:**
 - **Portal do cidadão:** `/portal/casa/[ente]/leis` (lista filtrável e ficha da norma), `/vereadores` (quem está em
@@ -374,11 +374,33 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   aparecem no card de compliance.
 - **Votos:** `votos.vereador_id` segue sem FK (ADR-0001 §6 proíbe FK entre schemas); a integridade é a recusa na
   aplicação, provada com Postgres real, mais um CHECK contra UUID nulo.
+- **Segunda rodada de 05/10 (PRs #143 a #153):**
+  - **Compliance:** aceitar a remessa cumpre a obrigação. O gatilho do host (`gatilho_compliance.clj`, parte
+    `:remessas`) reavalia a competência no aceite e, antes do sweep, em toda leitura do painel. O módulo `compliance`
+    continua sem emitir evento.
+  - **Voto por vereador só de sessão pública:** CSV de dados abertos, perfil público e "Minha atuação" leem
+    `voto_parlamentar` por `parlamentar/da-votacao-publica` (fail-closed); leitura nova que esqueça reprova o
+    `voto_publico_estrutura_test`.
+  - **Tramitação pública:** `transparencia.materia_movimentacao` (por evento; os eventos `proposicao.protocolada` e
+    `transicionou` carregam o rótulo da etapa) e "Por onde a matéria passou" na ficha pública. Histórico incompleto
+    aparece como "disponível a partir de".
+  - **Portal:** lista de leis paginada (20 por página), `tem-texto` na norma (sem botão de baixar quando não há),
+    `/votacoes?materia=` ligando a ficha às votações, menu com destinos distintos, acompanhamentos com link, exemplo
+    de protocolo do e-SIC correto, título da norma no lugar da URN, notificação com sigla e fase em palavras.
+  - **Proposições:** um só rótulo de estado para ficha, lista e quadro (`rotularEstado`); `em_pauta` é "Em Plenário";
+    estado desconhecido cai em "Em tramitação"; autor vereador ligado ao cadastro; filtro com as 8 espécies.
+  - **Sessão:** item numerado por posição dentro da fase (só apresentação); nome no lugar do prefixo de UUID na
+    chamada e nas próximas folhas; folha com numeração contínua; fila da tribuna sem quem já falou.
+  - **Pós-aprovação:** o prazo de sanção ou veto é informado ao gerar o autógrafo (opcional, sem padrão; não se
+    corrige depois; prazo no passado → 400).
+  - **Dashboard da Mesa:** gráfico colorido por posição, cartões com link, plural de verdade, denominador na vitrine.
 - **Falta:**
-  - voto nominal em sessão secreta sai no CSV de dados abertos e no perfil público do vereador;
+  - autógrafo, sanção e promulgação na linha do tempo da ficha da matéria (a rota da ficha não os devolve);
+  - o vereador ver o próprio voto de sessão secreta (hoje "Minha atuação" usa a rota pública);
+  - a faixa "Onde está a matéria" ainda depende do nome do estado (nenhuma rota devolve a ordem das etapas do rito);
+  - não vistos em browser: o formulário do prazo do Executivo, o telão e a TV ao vivo, a folha em PDF com nome;
   - link no app para a página de conta do Keycloak, onde a pessoa troca o próprio e-mail (o `admin_ente` só troca o
     de quem nunca entrou, ao reconceder);
-  - a lista de leis corta em 200 sem paginar; a ficha da matéria não leva às votações dela;
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
     acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
     (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,

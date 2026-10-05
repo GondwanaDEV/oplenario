@@ -327,7 +327,7 @@ function Pauta({ itens, rotulo, oficial }: { itens: ItemPautaTv[]; rotulo: strin
         <ol className="pauta">
           {itens.map((it) => (
             <li key={it.id} className={it.emVotacao || it.emApreciacao ? "atual" : undefined}>
-              <span className="ord">{it.ordem}</span>
+              <span className="ord">{it.posicao}</span>
               <span className="it">
                 <b>{it.sigla}</b>
                 <span>{it.descricao}</span>

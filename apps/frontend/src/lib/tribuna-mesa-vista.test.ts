@@ -44,8 +44,9 @@ describe("derivarFila", () => {
     expect(fila[0].ehOrador).toBe(false);
   });
   it("membro sem nome-parlamentar cai num rótulo honesto, nunca vazio", () => {
-    const fila = derivarFila([inscrito({ vereadorId: "v3" })], membros, null);
+    const fila = derivarFila([inscrito({ vereadorId: "dbf001fc-1111-4222-8333-444455556666" })], membros, null);
     expect(fila[0].nome).toMatch(/Vereador/);
+    expect(fila[0].nome).not.toContain("dbf001fc");
   });
 });
 

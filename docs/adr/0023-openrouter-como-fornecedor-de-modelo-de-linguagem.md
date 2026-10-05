@@ -46,8 +46,16 @@ pelo OpenRouter.**
    provedores, então o preço muda conforme quem atende. Por isso ele fica sem linha na `precos.json` e o custo vem
    do `usage.cost` declarado. Ainda não passou pela avaliação (R-IA-4): rodar `oplenario-ia-avaliar` com ele antes de
    ligar: os prompts das capacidades só foram medidos contra o fake até hoje.
-8. **Chave:** `OPENROUTER_API_KEY`, do cofre (Eixo 11f). Sem ela, a execução sai "indisponível" (R-IA-1), nunca 500.
-9. **Fora do escopo do OpenRouter:** a transcrição (Whisper + pyannote no sherpa-onnx) e os embeddings da busca
+8. **Folga de raciocínio por modelo (05/10/2026):** num modelo que raciocina, o `max_tokens` cobre o raciocínio E a
+   resposta, e os limites das capacidades (1000 a 2000) foram medidos num modelo que não raciocina. Na avaliação, o
+   qwen gratuito gastou os 2000 inteiros raciocinando e devolveu texto vazio (`finish_reason=length`). Cada modelo de
+   `MODELOS_OPENROUTER` (`config.py`) declara a folga somada ao limite do pedido: 4000 no `gpt-oss-120b`, 8000 no qwen
+   gratuito. Paga-se só o que o modelo gera. O `reasoning.effort` NÃO vai por padrão: com `require_parameters`, um
+   provedor que não o aceite sairia do roteamento. Quando acontece mesmo assim, o erro diz "o modelo esgotou o limite
+   de tokens raciocinando" (sem o raciocínio, B4). **Não medido ao vivo:** o qwen gratuito estava com limite no
+   provedor (429) e a cota diária quase no fim; reavaliar com `oplenario-ia-avaliar` quando houver crédito.
+9. **Chave:** `OPENROUTER_API_KEY`, do cofre (Eixo 11f). Sem ela, a execução sai "indisponível" (R-IA-1), nunca 500.
+10. **Fora do escopo do OpenRouter:** a transcrição (Whisper + pyannote no sherpa-onnx) e os embeddings da busca
    (fastembed) continuam self-host — nada sai do cluster, e o OpenRouter não oferece transcrição com diarização.
    Trocar embeddings mudaria a dimensão do índice e pediria reindexação; não foi pedido.
 

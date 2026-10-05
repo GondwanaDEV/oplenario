@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import type { PautaOficialOut, PautasPublicasOut, SessaoPautaPublicaOut } from "@/lib/contrato-sessoes.gen";
 import { buscarPublico } from "@/lib/portal-api";
+import { posicoesNaFase } from "@/lib/posicao-na-fase";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { quando, seloDaPublicacao } from "@/lib/publicacao-pauta-vista";
 import { nomeFase, nomeTipoSessao } from "@/lib/rotulos-sessao";
@@ -92,6 +93,8 @@ function PautaAberta({ ente, sessaoId }: { ente: string; sessaoId: string }) {
   if (carga.fase === "carregando") return <p className="estado">Carregando a pauta…</p>;
   if (carga.fase === "erro") return <p className="estado" role="alert">Pauta não encontrada.</p>;
   const { sessao, vigente, versoes } = carga.dado;
+  // o número de cada item é a posição dele DENTRO da fase, pelo que foi congelado (a `ordem` do snapshot é uma só)
+  const posicoes = posicoesNaFase(vigente?.itens ?? []);
   return (
     <section className="po-aberta" aria-label={`Pauta da ${tituloSessao(sessao)}`}>
       <h2>{tituloSessao(sessao)}</h2>
@@ -106,7 +109,7 @@ function PautaAberta({ ente, sessaoId }: { ente: string; sessaoId: string }) {
           </p>
           <ol className="po-itens">
             {vigente.itens.map((it) => (
-              <li key={it.id}>
+              <li key={it.id} value={posicoes.get(it.id)}>
                 <span className="po-fase">{nomeFase(it.fase)}</span>
                 {it.proposicaoId ? (
                   <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(it.proposicaoId)}`}>

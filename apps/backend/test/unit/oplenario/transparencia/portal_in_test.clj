@@ -68,3 +68,16 @@
       "query-params ausentes -> filtro todo-nil (compat Slice 1)")
   (is (= {:tipo "resolucao" :ano nil :numero nil}
          (portal/filtro-legislacao {:tipo "resolucao"})) "so' a especie"))
+
+;; ---------- query-materia (filtro das votacoes pela proposicao) ----------
+
+(deftest query-materia-uuid-opcional
+  (let [id (random-uuid)]
+    (is (= id (portal/query-materia (str id))))
+    (is (= id (portal/query-materia (str "  " id " "))) "espacos nas pontas nao reprovam")
+    (is (nil? (portal/query-materia nil)) "ausente = sem filtro")
+    (is (nil? (portal/query-materia "")) "vazio = sem filtro")))
+
+(deftest query-materia-malformada-ou-repetida-e-400
+  (is (invalido? #(portal/query-materia "nao-e-uuid")) "nunca ignora o filtro em silencio")
+  (is (invalido? #(portal/query-materia [(str (random-uuid)) (str (random-uuid))])) "repetido e' ambiguo"))

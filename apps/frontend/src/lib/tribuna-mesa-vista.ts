@@ -23,9 +23,12 @@ export const FASES_TRIBUNA: { valor: string; rotulo: string }[] = [
   "tribuna_livre_cidadao",
 ].map((valor) => ({ valor, rotulo: nomeFase(valor) }));
 
+/** Quando a composição não traz o nome parlamentar: texto neutro, nunca o prefixo do id. */
+export const SEM_NOME_CADASTRADO = "Vereador(a) sem nome cadastrado";
+
 export function nomeDoMembro(vereadorId: string, membros: ComposicaoMembroOut[]): string {
   const m = membros.find((x) => x.vereadorId === vereadorId);
-  return m?.nomeParlamentar ?? `Vereador(a) ${vereadorId.slice(0, 8)}`;
+  return m?.nomeParlamentar ?? SEM_NOME_CADASTRADO;
 }
 
 export interface LinhaFila {

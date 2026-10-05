@@ -3,14 +3,15 @@
 // LEIS E NORMAS no portal do cidadão (GET /portal/casa/{ente}/legislacao): a lista do acervo publicado — a lei como foi
 // promulgada e publicada — e a ficha de cada norma. Só o que o backend entrega: tipo, número, ano, ementa, data e
 // veículo da publicação, o identificador oficial (URN LexML) e o link para a matéria de origem. O texto da norma vem do
-// artefato de publicação (download), não da ficha. Filtro por tipo/ano/número, que a rota suporta; a rota não pagina
-// e corta em um teto no servidor, e por isso a lista diz quando o acervo é maior do que mostra (o total vem sem teto).
-// Não há rota de escrita para promulgar/publicar norma ainda: Casa sem norma publicada é o estado vazio.
+// artefato de publicação (download), não da ficha — e só é oferecido quando o servidor diz que existe (`temTexto`), para
+// o cidadão não clicar num botão que leva a um erro. Filtro por tipo/ano/número, que a rota suporta, e lista paginada
+// (20 por página, com o total e as páginas ditos: nada é cortado em silêncio). Os filtros ficam na URL e se mantêm ao
+// trocar de página. Casa sem norma publicada é o estado vazio.
 
 import { useEffect, useState } from "react";
 import type { NormaOut, NormasOut } from "@/lib/contrato-portal.gen";
 import { formatarData } from "@/lib/formatar-data";
-import { TIPOS_DE_NORMA, consultaDoFiltro, filtroAtivo, rotuloDoTipo, tituloDaNorma, type FiltroDeLeis } from "@/lib/leis-vista";
+import { TIPOS_DE_NORMA, consultaDaLista, filtroAtivo, rotuloDoTipo, tituloDaNorma, type FiltroDeLeis } from "@/lib/leis-vista";
 import { buscarPublicoDetalhado, type BuscaPublica } from "@/lib/portal-api";
 import "./leis-e-normas.css";
 
@@ -41,8 +42,33 @@ function plural(n: number): string {
   return `${n} ${n === 1 ? "norma publicada" : "normas publicadas"}`;
 }
 
-export function LeisDaCasa({ ente, filtro }: { ente: string; filtro: FiltroDeLeis }) {
-  const carga = useBuscaPublica<NormasOut>([ente, "legislacao"], consultaDoFiltro(filtro));
+const POR_PAGINA_PADRAO = 20;
+
+// O endereço da lista com o filtro e a página pedidos: só o que está preenchido, na mesma ordem do servidor.
+function enderecoDaLista(ente: string, filtro: FiltroDeLeis, pagina: number): string {
+  const q = new URLSearchParams(consultaDaLista(filtro, pagina)).toString();
+  return q ? `${rotaDaLista(ente)}?${q}` : rotaDaLista(ente);
+}
+
+function Paginas({ ente, filtro, dado }: { ente: string; filtro: FiltroDeLeis; dado: NormasOut }) {
+  const porPagina = dado.porPagina || POR_PAGINA_PADRAO;
+  const paginas = Math.max(1, Math.ceil(dado.normasTotal / porPagina));
+  const de = dado.normas.length ? (dado.pagina - 1) * porPagina + 1 : 0;
+  const ate = dado.normas.length ? de + dado.normas.length - 1 : 0;
+  return (
+    <nav className="ln-paginas" aria-label="Páginas de leis e normas">
+      <span>
+        {de > 0 ? `Mostrando ${de} a ${ate} de ${dado.normasTotal}` : `${dado.normasTotal} no total`} · página {dado.pagina} de{" "}
+        {paginas}
+      </span>
+      {dado.pagina > 1 && <a href={enderecoDaLista(ente, filtro, dado.pagina - 1)}>Página anterior</a>}
+      {dado.pagina < paginas && <a href={enderecoDaLista(ente, filtro, dado.pagina + 1)}>Próxima página</a>}
+    </nav>
+  );
+}
+
+export function LeisDaCasa({ ente, filtro, pagina = 1 }: { ente: string; filtro: FiltroDeLeis; pagina?: number }) {
+  const carga = useBuscaPublica<NormasOut>([ente, "legislacao"], consultaDaLista(filtro, pagina));
   const filtrando = filtroAtivo(filtro);
   const busca = carga.fase === "pronto" ? carga.busca : null;
   const dado = busca?.estado === "ok" ? busca.dado : null;
@@ -98,17 +124,17 @@ export function LeisDaCasa({ ente, filtro }: { ente: string; filtro: FiltroDeLei
         </p>
       )}
       {dado && dado.normas.length === 0 && (
-        <p className="estado">{filtrando ? "Nenhuma norma encontrada com esses filtros." : "Esta Câmara ainda não publicou leis aqui."}</p>
+        <p className="estado">
+          {dado.normasTotal > 0
+            ? "Esta página não tem normas. Volte para a primeira."
+            : filtrando
+              ? "Nenhuma norma encontrada com esses filtros."
+              : "Esta Câmara ainda não publicou leis aqui."}
+        </p>
       )}
       {dado && dado.normas.length > 0 && (
         <>
           <p className="ln-total">{plural(dado.normasTotal)}</p>
-          {dado.normasTotal > dado.normas.length && (
-            <p className="ln-aviso" role="status">
-              Mostrando {dado.normas.length} de {dado.normasTotal} normas. Use os filtros de tipo, ano e número para chegar às
-              demais.
-            </p>
-          )}
           <ul className="ln-lista" aria-label="Leis e normas publicadas">
             {dado.normas.map((n) => (
               <li key={n.normaId}>
@@ -122,6 +148,7 @@ export function LeisDaCasa({ ente, filtro }: { ente: string; filtro: FiltroDeLei
           </ul>
         </>
       )}
+      {dado && dado.normasTotal > 0 && <Paginas ente={ente} filtro={filtro} dado={dado} />}
     </div>
   );
 }
@@ -177,9 +204,13 @@ export function FichaDaNorma({ ente, normaId }: { ente: string; normaId: string 
             <dd className="ln-urn">{norma.urn}</dd>
           </dl>
           <div className="ln-links">
-            <a className="btn btn-primaria" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
-              Baixar o texto publicado
-            </a>
+            {norma.temTexto ? (
+              <a className="btn btn-primaria" href={`/api/portal/casa/${encodeURIComponent(ente)}/legislacao/${encodeURIComponent(norma.normaId)}/artefato`}>
+                Baixar o texto publicado
+              </a>
+            ) : (
+              <p className="ln-sem-texto">O texto desta norma ainda não foi publicado aqui.</p>
+            )}
             <a href={`/portal/casa/${encodeURIComponent(ente)}/materias/${encodeURIComponent(norma.proposicaoId)}`}>
               Ver a matéria que deu origem a esta norma
             </a>
