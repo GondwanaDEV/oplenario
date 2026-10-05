@@ -39,6 +39,23 @@ describe("useEu", () => {
     expect(result.current.papeis).toEqual([]);
   });
 
+  it("modo real -> devolve o tipo do vínculo (a sessão do gov.br é a de 'cidadao'); ausente = null", async () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+    global.fetch = vi.fn(
+      async () => ({ ok: true, json: async () => ({ ator: { papeis: [], "tipo-vinculo": "cidadao" } }) }) as Response
+    ) as unknown as typeof fetch;
+    const a = renderHook(() => useEu(null));
+    await waitFor(() => expect(a.result.current.estado).toBe("pronto"));
+    expect(a.result.current.tipoVinculo).toBe("cidadao");
+
+    global.fetch = vi.fn(
+      async () => ({ ok: true, json: async () => ({ ator: { papeis: ["secretario"] } }) }) as Response
+    ) as unknown as typeof fetch;
+    const b = renderHook(() => useEu(null));
+    await waitFor(() => expect(b.result.current.estado).toBe("pronto"));
+    expect(b.result.current.tipoVinculo).toBeNull();
+  });
+
   it("modo real + resposta malformada (sem ator.papeis) -> papeis [], estado 'erro'", async () => {
     vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
     global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({}) }) as Response) as unknown as typeof fetch;

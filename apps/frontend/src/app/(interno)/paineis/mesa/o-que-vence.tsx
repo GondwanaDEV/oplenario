@@ -52,8 +52,7 @@ export function OQueVence({ vista, token = null }: { vista: MesaVista["oQueVence
         {vista.truncamentoCompliance && (
           <p role="status" className="aviso-corte">
             Mostrando <b>{vista.truncamentoCompliance.exibidos} de {vista.truncamentoCompliance.total}</b>{" "}
-            obrigações do TCE em aberto — pode haver prazos mais distantes fora desta lista. Confira o
-            painel de compliance completo.
+            obrigações do TCE em aberto — pode haver prazos mais distantes fora desta lista.
           </p>
         )}
         {vista.truncamentoPendencias && (

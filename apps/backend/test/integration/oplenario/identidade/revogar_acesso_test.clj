@@ -309,7 +309,11 @@
 
 (deftest http-lista-de-acessos-so-da-propria-casa-e-sem-cpf
   (let [svc (servico) casa-a (random-uuid) casa-b (random-uuid) adm-a (admin! casa-a)
-        a (identidade! "Ursula da A") b (identidade! "Vitor da B")]
+        ;; o CPF de quem aparece na lista e' conhecido pelo teste: a prova de "nunca CPF" e' o VALOR nao estar no
+        ;; corpo. Procurar "11 digitos seguidos" reprovava de vez em quando sem defeito — um UUID da resposta pode
+        ;; ter 11 digitos em sequencia (visto no CI: "93252026668").
+        cpf-a (cpf-valido)
+        a (id/inserir! *ds* {:id (random-uuid) :cpf cpf-a :nome "Ursula da A"}) b (identidade! "Vitor da B")]
     (conceder! casa-a a "vereador" ["vereador"])
     (conceder! casa-b b "vereador" ["vereador"])
     (let [r (pt/response-for svc :get "/identidade/acessos" :headers {"Authorization" (bearer casa-a adm-a)})
@@ -317,7 +321,8 @@
       (is (= 200 (:status r)))
       (is (= ["Ursula da A"] (map :nome (:acessos corpo))) "so' a Casa A, so' os papeis concediveis")
       (is (= "vereador" (:papel (first (:acessos corpo)))))
-      (is (nil? (re-find #"\d{11}" (:body r))) "nunca CPF"))))
+      (is (not (str/includes? (:body r) cpf-a)) "nunca CPF")
+      (is (not (re-find #"(?i)\"cpf\"" (:body r))) "nem a chave"))))
 
 (deftest http-reconceder-pela-rota-de-sempre-reabre-o-acesso
   (let [svc (servico) ente (random-uuid) adm (admin! ente) iid (identidade! "Wanda")

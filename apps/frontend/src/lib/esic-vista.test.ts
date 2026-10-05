@@ -51,11 +51,21 @@ describe("derivarStatusEsic", () => {
     expect(r.rotuloSituacao).toBe("Indeferido");
   });
 
-  it("fail-closed: estado fora do enum conhecido -> faixa mínima, rótulo = estado cru, nunca lança", () => {
+  it("fail-closed: estado fora do enum conhecido -> faixa mínima, rótulo em palavras (nunca a chave), nunca lança", () => {
     const r = derivarStatusEsic({ estado: "xpto-desconhecido", diasRestantes: 3 });
     expect(r.estagios).toEqual([{ rotulo: "Protocolado", situacao: "ativo" }]);
-    expect(r.rotuloSituacao).toBe("xpto-desconhecido");
+    expect(r.rotuloSituacao).toBe("Xpto desconhecido");
     expect(r.diasRestantes).toBe(3);
+  });
+
+  it("estado desconhecido com underscore vira palavras com maiúscula inicial, sem a chave crua", () => {
+    const r = derivarStatusEsic({ estado: "aguardando_orgao", diasRestantes: null });
+    expect(r.rotuloSituacao).toBe("Aguardando orgao");
+    expect(r.rotuloSituacao).not.toContain("_");
+  });
+
+  it("estado vazio -> texto neutro, nunca string vazia", () => {
+    expect(derivarStatusEsic({ estado: "", diasRestantes: null }).rotuloSituacao).toBe("Situação não informada");
   });
 
   it("diasRestantes undefined-ish (null) é repassado sem fabricar número", () => {

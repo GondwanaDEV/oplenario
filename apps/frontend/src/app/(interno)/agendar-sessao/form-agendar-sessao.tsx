@@ -15,6 +15,7 @@ import { nomeTipoSessao } from "@/lib/rotulos-sessao";
 import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
 import {
   agendadaParaIso,
+  rotuloDaSessaoLegislativa,
   sessoesLegislativasDisponiveis,
   validarAgendar,
   validarAudiencia,
@@ -137,7 +138,7 @@ export function FormAgendarSessao({ token }: { token: string | null }) {
                 <option value="">— escolha o período —</option>
                 {legislativas.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.id.slice(0, 8)} · {l.sessoesCount} sessão(ões)
+                    {rotuloDaSessaoLegislativa(l, legislativas)}
                   </option>
                 ))}
               </select>

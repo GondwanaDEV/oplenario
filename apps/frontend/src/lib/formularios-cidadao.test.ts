@@ -6,6 +6,8 @@ import {
   corpoLgpd,
   corpoManifestacao,
   direitoDaUrl,
+  rotuloDaLista,
+  rotuloEstado,
 } from "./formularios-cidadao";
 
 describe("formulários do cidadão — o que vai ao backend", () => {
@@ -45,6 +47,15 @@ describe("formulários do cidadão — o que vai ao backend", () => {
       corpo: { tipo: "elogio", assunto: "Atendimento", descricao: "Muito bom.", anonima: true },
     });
     expect(corpoManifestacao({ tipo: "x", assunto: "a", descricao: "b", anonima: false })).toEqual({ ok: false, campo: "tipo" });
+  });
+
+  it("estado e tipo que a tela não conhece saem em palavras, nunca a chave do backend", () => {
+    expect(rotuloEstado("aguardando_orgao")).toBe("Aguardando orgao");
+    expect(rotuloEstado("")).toBe("Situação não informada");
+    expect(rotuloEstado("em_analise")).toBe("Em análise");
+    expect(rotuloDaLista(TIPOS_MANIFESTACAO, "pedido_especial")).toBe("Pedido especial");
+    expect(rotuloDaLista(DIREITOS_LGPD, "portabilidade_dos_dados")).toBe("Portabilidade dos dados");
+    expect(rotuloDaLista(DIREITOS_LGPD, "acessar")).toBe(DIREITOS_LGPD.find((d) => d.valor === "acessar")!.rotulo);
   });
 
   it("o direito pedido na URL (balcão LGPD) só vale se existir", () => {

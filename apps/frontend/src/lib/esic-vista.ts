@@ -19,6 +19,7 @@
 // fail-closed cobre qualquer valor fora do vocabulário conhecido sem lançar (mesmo padrão de
 // `derivarTramitacao`).
 
+import { humanizarChave } from "./humanizar-chave";
 import type { EstagioTramitacao } from "./tramitacao-vista";
 
 export const DIAS_TOTAL_LAI = 20;
@@ -64,7 +65,12 @@ export function derivarStatusEsic(status: { estado: string; diasRestantes: numbe
     case "indeferido":
       return { estagios: faixaConcluida(), rotuloSituacao: ROTULO_POR_ESTADO.indeferido, diasRestantes };
     default:
-      // fail-closed: estado fora do enum conhecido -> faixa mínima honesta, nunca lança.
-      return { estagios: FAIXA_MINIMA, rotuloSituacao: status.estado, diasRestantes };
+      // fail-closed: estado fora do enum conhecido -> faixa mínima honesta, nunca lança. O rótulo sai em
+      // palavras (a chave do backend não é texto para o cidadão).
+      return {
+        estagios: FAIXA_MINIMA,
+        rotuloSituacao: humanizarChave(status.estado, "Situação não informada"),
+        diasRestantes,
+      };
   }
 }

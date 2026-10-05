@@ -3,6 +3,7 @@ import {
   FORM_AUDIENCIA_VAZIO,
   validarAudiencia,
   agendadaParaIso,
+  rotuloDaSessaoLegislativa,
   sessoesLegislativasDisponiveis,
   validarAgendar,
   TIPOS_SESSAO,
@@ -40,6 +41,51 @@ describe("sessoesLegislativasDisponiveis", () => {
   });
   it("lista vazia -> nenhuma opção", () => {
     expect(sessoesLegislativasDisponiveis([])).toEqual([]);
+  });
+});
+
+// Miudeza de 05/10/2026: o seletor mostrava `id.slice(0, 8)` do período. Não há rota que devolva número/ano da
+// sessão legislativa (só `GET /cadastros/legislatura-vigente`, que é a legislatura, outro id); o que existe de
+// verdade são as datas das próprias sessões do período — dali sai o ano, em palavras.
+describe("rotuloDaSessaoLegislativa — o período em palavras, nunca o id", () => {
+  const com = (id: string, n: number, quando: string | null): SessaoOut => ({ ...sessao(id, n), agendadaPara: quando });
+  const rotulos = (sessoes: SessaoOut[]) => {
+    const ops = sessoesLegislativasDisponiveis(sessoes);
+    return ops.map((o) => rotuloDaSessaoLegislativa(o, ops));
+  };
+
+  it("um ano só: 'Sessão legislativa de 2025 · 2 sessões'; o singular não usa parênteses", () => {
+    expect(rotulos([com("a", 1, "2025-03-10T17:00:00Z"), com("a", 2, "2025-04-10T17:00:00Z")])).toEqual([
+      "Sessão legislativa de 2025 · 2 sessões",
+    ]);
+    expect(rotulos([com("a", 1, "2025-03-10T17:00:00Z")])).toEqual(["Sessão legislativa de 2025 · 1 sessão"]);
+  });
+
+  it("período que atravessa a virada do ano: 'de 2025 a 2026'", () => {
+    expect(rotulos([com("a", 1, "2025-12-10T17:00:00Z"), com("a", 2, "2026-02-10T17:00:00Z")])).toEqual([
+      "Sessão legislativa de 2025 a 2026 · 2 sessões",
+    ]);
+  });
+
+  it("o ano é o da Casa (America/Fortaleza): 31/12 22h local não vira o ano seguinte", () => {
+    expect(rotulos([com("a", 1, "2026-01-01T01:30:00Z")])).toEqual(["Sessão legislativa de 2025 · 1 sessão"]);
+  });
+
+  it("usa a data de abertura quando não há data agendada, e sem nenhuma data diz isso em palavras", () => {
+    const aberta = { ...com("a", 1, null), abertaEm: "2024-05-02T13:00:00Z" };
+    expect(rotulos([aberta])).toEqual(["Sessão legislativa de 2024 · 1 sessão"]);
+    expect(rotulos([com("b", 1, null)])).toEqual(["Sessão legislativa sem datas registradas · 1 sessão"]);
+  });
+
+  it("dois períodos com o mesmo texto se distinguem pela última sessão numerada, não pelo id", () => {
+    const r = rotulos([
+      com("a", 1, "2025-03-10T17:00:00Z"), com("a", 2, "2025-04-10T17:00:00Z"),
+      com("b", 7, "2025-05-10T17:00:00Z"), com("b", 9, "2025-06-10T17:00:00Z"),
+    ]);
+    expect(new Set(r).size).toBe(2);
+    expect(r.join("|")).toContain("última: nº 2");
+    expect(r.join("|")).toContain("última: nº 9");
+    expect(r.join("|")).not.toMatch(/\ba\b·|\bb\b·/);
   });
 });
 
