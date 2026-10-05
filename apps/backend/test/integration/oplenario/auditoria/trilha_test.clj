@@ -115,6 +115,19 @@
       (is (true? (:integra (ler (pt/response-for svc :get "/auditoria/integridade" :headers (como ente ana)))))
           "anular o IP nao quebra a corrente"))))
 
+(deftest o-ato-sem-rotulo-do-handler-sai-com-o-resumo-da-acao-na-tela-e-no-csv
+  ;; ADR-0017 1-C: `/identidade/acessos` (a acao `identidade/conceder-acesso`) nao tem marca de handler nesta rota de
+  ;; teste, como as ~110 escritas que nunca tiveram: o rotulo vem de `auditoria.resumos`, gravado e selado no registro
+  (let [ente (random-uuid) svc (servico ente (atom []))]
+    (is (= 201 (:status (pt/response-for svc :post "/identidade/acessos" :body "{}" :headers (como ente beto)))))
+    (let [[r] (:registros (trilha svc ente ana))]
+      (is (= ["identidade/conceder-acesso" "escrita" "permitido" "Concedeu um acesso à Casa"]
+             ((juxt :acao :classe :decisao (comp :rotulo :recurso)) r))))
+    (is (true? (:integra (ler (pt/response-for svc :get "/auditoria/integridade" :headers (como ente ana)))))
+        "o rotulo gravado entra no selo e a corrente confere")
+    (let [csv (:body (pt/response-for svc :get "/auditoria/exportar.csv" :headers (como ente ana)))]
+      (is (str/includes? csv "Concedeu um acesso à Casa") "o CSV traz o mesmo rotulo na coluna `rotulo`"))))
+
 (deftest cada-papel-ve-o-seu-escopo
   (let [ente (random-uuid) svc (servico ente (atom []))]
     (pt/response-for svc :post (str "/materias/" prop "/despachar") :body "{}" :headers (como ente maria))

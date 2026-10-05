@@ -41,6 +41,14 @@ describe("trilha de auditoria — a lógica pura", () => {
     expect(objeto({ ...base, decisao: "negado" }).detalhe).toMatch(/barrado pela política/);
   });
 
+  it("o resumo da ação que o servidor grava (ADR-0017 1-C) é o título, sem mudança de tela: o rótulo vem pronto, em palavras", () => {
+    // o handler não deu rótulo do objeto; o servidor gravou o rótulo do ato ("Concedeu um acesso à Casa")
+    const concedeu: RegistroTrilha = { ...base, acao: "identidade/conceder-acesso", recurso: { tipo: null, id: null, rotulo: "Concedeu um acesso à Casa" } };
+    expect(objeto(concedeu).titulo).toBe("Concedeu um acesso à Casa");
+    // o registro antigo, sem rótulo e sem recurso, segue legível como sempre (a corrente não se reescreve)
+    expect(objeto({ ...concedeu, recurso: null }).titulo).toBe("conceder acesso · Acessos e identidade");
+  });
+
   it("quem: pessoa pelo papel; cidadão pseudonimizado; agente com 'via'", () => {
     expect(quem(base.ator)).toEqual({ nome: "Maria Secretária", papel: "Secretaria", iniciais: "MS" });
     expect(quem({ tipo: "cidadao", nome: "Cidadão #a1b2c3", papeis: [], via: null })).toMatchObject({
