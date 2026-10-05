@@ -186,7 +186,92 @@ describe("middleware — toda página autenticada está atrás do gate", () => {
   });
 
   it.each(rotas)("%s está no matcher (sem isso o Next nem chama o middleware)", (rota) => {
-    const primeiro = `/${rota.split("/")[1]}`;
-    expect(config.matcher).toContain(`${primeiro}/:path*`);
+    expect(casaNoMatcher(rota)).toBe(true);
+  });
+});
+
+/** O matcher é uma expressão do Next ("/(...)"); aqui ela vale como regex sobre o caminho inteiro. */
+function casaNoMatcher(caminho: string): boolean {
+  return config.matcher.some((m) => new RegExp(`^${m}$`).test(caminho));
+}
+
+// 05/10/2026: deny-by-default. Quem chega sem sessão em qualquer caminho que não seja público vai direto à tela do
+// CPF; a raiz não é mais uma página de passagem ("Entrar na sua Câmara"), e um caminho desconhecido não abre um 404.
+describe("middleware — sem sessão, todo caminho que não é público vai direto ao login", () => {
+  it("a raiz sem sessão → /entrar, sem `redirect` (não há para onde voltar)", () => {
+    const resp = middleware(req("/"));
+    expect(resp.status).toBe(307);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe("/entrar");
+    expect(location.search).toBe("");
+  });
+
+  it("a raiz com sessão → /inicio (que leva cada papel à sua tela)", () => {
+    const resp = middleware(req("/", "sessao=segredo-opaco"));
+    expect(new URL(resp.headers.get("location")!).pathname).toBe("/inicio");
+  });
+
+  it("caminho desconhecido sem sessão → /entrar com o destino; com sessão → segue (e o Next dá o 404)", () => {
+    const resp = middleware(req("/qualquer-coisa/abc?x=1"));
+    expect(resp.status).toBe(307);
+    const location = new URL(resp.headers.get("location")!);
+    expect(location.pathname).toBe("/entrar");
+    expect(location.searchParams.get("redirect")).toBe("/qualquer-coisa/abc?x=1");
+    expect(middleware(req("/qualquer-coisa", "sessao=segredo-opaco")).headers.get("location")).toBeNull();
+  });
+
+  it("o que é público passa sem sessão: portal, entrada, status, API, internos e arquivos estáticos", () => {
+    for (const caminho of [
+      "/portal/casa/abc",
+      "/entrar",
+      "/entrar/escolher",
+      "/entrar/abc",
+      "/status",
+      "/api/auth/login",
+      "/_next/static/chunks/x.js",
+      "/fontes/MonaSans.woff2",
+      "/favicon.ico",
+      "/globe.svg",
+      "/operacao/entrar",
+    ]) {
+      expect(middleware(req(caminho)).headers.get("location"), caminho).toBeNull();
+    }
+  });
+
+  it("prefixo parecido com um público não passa: /portalx, /statusx e /entrarx pedem sessão", () => {
+    for (const caminho of ["/portalx", "/statusx", "/entrarx"]) {
+      expect(new URL(middleware(req(caminho)).headers.get("location")!).pathname, caminho).toBe("/entrar");
+    }
+  });
+
+  it("o matcher cobre a raiz e o caminho desconhecido, e deixa de fora a API e os internos do Next", () => {
+    expect(casaNoMatcher("/")).toBe(true);
+    expect(casaNoMatcher("/qualquer-coisa")).toBe(true);
+    expect(casaNoMatcher("/portal/casa/abc")).toBe(true);
+    expect(casaNoMatcher("/api/auth/login")).toBe(false);
+    expect(casaNoMatcher("/_next/static/x.js")).toBe(false);
+  });
+
+  // As páginas públicas em disco (o grupo `(publico)` e as que ficam na raiz do app sem grupo autenticado) abrem sem
+  // sessão. Página pública nova fora de `CAMINHOS_PUBLICOS` reprova aqui — o defeito seria ela cair no login.
+  const APP = join(__dirname, "app");
+  function paginasPublicas(dir: string, prefixo: string): string[] {
+    return readdirSync(dir).flatMap((nome) => {
+      const caminho = join(dir, nome);
+      if (!statSync(caminho).isDirectory()) return nome === "page.tsx" ? [prefixo || "/"] : [];
+      return paginasPublicas(caminho, /^\(.*\)$/.test(nome) ? prefixo : `${prefixo}/${nome}`);
+    });
+  }
+  const publicas = paginasPublicas(join(APP, "(publico)"), "")
+    .filter((r) => r !== "/")
+    .map((r) => r.replace(/\[[^\]]+\]/g, "abc"));
+
+  it("mede as páginas públicas de verdade", () => {
+    expect(publicas).toContain("/portal/casa/abc/leis");
+    expect(publicas).toContain("/entrar");
+  });
+
+  it.each(publicas)("%s (pública) abre sem sessão", (rota) => {
+    expect(middleware(req(rota)).headers.get("location")).toBeNull();
   });
 });
