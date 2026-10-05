@@ -5,7 +5,12 @@
 
   Conjunto por publico = o que um agente daquele publico PODE oferecer (o publico vem da credencial delegada,
   ADR-0010); expoe MENOS do que a permissao da pessoa (Eixo 2), e a ferramenta ainda exige o papel dela a cada
-  chamada (interseccao, Eixo 3.2)."
+  chamada (interseccao, Eixo 3.2). Um papel so' entra no `:papeis` de uma entrada quando as rotas da tela dela (`:rotas`)
+  ja' o atendem (o agente nunca le mais do que a tela da pessoa), ou quando o dado e' publico por natureza (as normas
+  vigentes da Casa, os vereadores em exercicio).
+
+  Nenhuma ferramenta le a trilha da Casa nem o historico da Clara (ADR-0024: o auditor le os dois pela tela, nunca pela
+  Clara; o que a Clara consulta vai ao fornecedor de IA) — `catalogo-consulta-test` reprova a que tentar."
   (:require [oplenario.comunicacao.diplomat.catalogo :as comunicacao]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.autorizacao :as authz]
@@ -43,6 +48,14 @@
                 "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado" "enviar_comunicado"
                 ;; ADR-0021 Parte B: o vereador le as contas e a ficha (quantos votos rejeitam o parecer)
                 "contas_da_casa" "prestacao_de_contas"}
+   ;; Fatia 4 da Clara: o juridico, o controle interno (auditor) e o administrador da Casa. So' LEITURA (a credencial
+   ;; deste publico nunca recebe `ato`, nem como proposta) e so' o que a tela de algum deles ja' le, mais o que e'
+   ;; publico por natureza: as normas da Casa (o texto vigente conferido da LOM e do RI, que o vereador tambem le sem
+   ;; tela) e os vereadores em exercicio (portal). A materia, os pareceres juridicos e as contas, so' o juridico
+   ;; alcanca (o `:papeis` de cada entrada).
+   :consulta #{"situacao_da_materia" "tramitacao_da_materia" "pauta_da_sessao" "ata_da_sessao" "buscar_dispositivos"
+               "ler_dispositivo" "vereadores_da_casa" "pareceres_juridicos_da_materia" "contas_da_casa"
+               "prestacao_de_contas" "ler_caixa" "ler_comunicado" "ler_leitura_do_comunicado"}
    ;; B.8 (ADR-0013): o agente institucional da Casa (sem pessoa) — le a materia e as normas, e so' deixa RASCUNHO
    :institucional #{"situacao_da_materia" "buscar_dispositivos" "ler_dispositivo" "registrar_nota_tecnica"}})
 

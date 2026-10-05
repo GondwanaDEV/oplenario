@@ -25,7 +25,7 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
    no satélite: o satélite continua sem conteúdo. Por estar no core e ter `ente_id` com RLS, a tabela entra sozinha no
    inventário da Casa (ADR-0018): é exportada no encerramento e apagada no apagamento, sem lista a manter.
 2. **O que se guarda por pergunta:**
-   - a pergunta, quem perguntou (`identidade_id`) e com que público (`secretaria`, `vereador`…);
+   - a pergunta, quem perguntou (`identidade_id`) e com que público (`secretaria`, `vereador`, `consulta`);
    - o desfecho: `resposta` ou `indisponivel` (a pergunta sem resposta também fica);
    - a resposta como a tela recebeu: texto, citações conferidas, parágrafos sem fonte, incerteza, conteúdo de
      terceiro;
@@ -38,7 +38,8 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
    Prova o que a IA viu sem duplicar dado pessoal. Amplia o audit da ADR-0010, que registrava só as chamadas que
    escrevem.
 3. **Quem lê:** a própria pessoa e o `auditor` (controle interno) da Casa. Cada leitura do auditor vai à trilha. Nem
-   o `admin_ente` nem o operador da plataforma leem. **O auditor lê pela tela, nunca pela Clara** (decisão do Daouda,
+   o `admin_ente` nem o operador da plataforma leem o histórico de outra pessoa (o `admin_ente` lê só o seu, desde a
+   fatia 4). **O auditor lê pela tela, nunca pela Clara** (decisão do Daouda,
    05/10/2026): o histórico e a trilha não viram ferramenta do agente, porque o que a Clara consulta vai ao fornecedor
    de IA.
 4. **Ligação com a trilha:** cada linha guarda `conteudo_sha256`, o SHA-256 do registro canônico (pergunta,
@@ -91,6 +92,37 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
   - A dica da tela: a página publica do que trata (`useDicaDaClara`) e o painel mostra "Nesta tela: PL 42/2026" com
     "Perguntar sobre esta matéria", que só começa a pergunta no campo. Na ficha da matéria e no editor.
   - A Clara no app do vereador, o mesmo painel, sempre com o conjunto do vereador; o botão sobe acima das abas.
+- Fatia 4 (a Clara para toda a Casa):
+  - O `juridico`, o `auditor` e o `admin_ente` perguntam à Clara pelo público novo `consulta`, que **só lê**: a
+    credencial delegada desse público recebe só a classe `leitura` (`agente.clj`, `classes-do-publico`), e o banco
+    recusa outra (`credencial_consulta_so_leitura`, migration `20261005000260`). Sem `publico` no corpo, vale
+    secretaria > vereador > consulta. Os três leem o próprio histórico; o escopo da Casa continua só do auditor.
+  - O conjunto `consulta` (`catalogo.clj`) só oferece o que a tela de cada papel já lê, mais o que é público por
+    natureza:
+
+    | Ferramenta | juridico | auditor | admin_ente |
+    |---|---|---|---|
+    | situação e tramitação da matéria, pareceres jurídicos, contas | sim | não | não |
+    | pauta e ata da sessão, comunicados da própria caixa | sim | sim | sim |
+    | normas da Casa (LOM e RI, texto vigente conferido), vereadores em exercício | sim | sim | sim |
+
+    O auditor e o `admin_ente` não leem a matéria pela tela (a rota é da secretaria, do vereador e do jurídico), então
+    a Clara também não. As normas e os vereadores não têm tela para esses papéis, mas são públicos (o vereador já lia
+    as normas pela Clara sem tela de `/normas`).
+  - **O auditor não consulta a trilha nem o histórico pela Clara:** nenhuma ferramenta do catálogo aponta para
+    `/auditoria`, `/agente/historico` ou `/agente/conversas`, nem lê `oplenario.auditoria` por fora da rota
+    (`catalogo_consulta_test`). No painel, quem é só auditor lê "A Clara não lê a trilha nem as conversas da Casa.
+    Para isso, use a Auditoria", com o link para `/auditoria/clara`.
+  - No painel, as sugestões e o texto de abertura seguem o que cada um alcança: o jurídico vê perguntas sobre matéria
+    e contas; o auditor e o `admin_ente`, sobre pauta, atas, Regimento e comunicados.
+  - A trilha dá frase às duas escritas da Clara: "Perguntou à Clara" e "Reportou erro numa resposta da IA".
+  - A dica da tela também na Mesa da audiência, em montar pauta, no editor de parecer de comissão, no pedido de parecer
+    jurídico e na nota técnica do jurídico (`dicaDaSessao`, `dicaDaPauta`, `dicaDaMateriaPeloNumero`).
+  - No app do vereador, "Pedir à Clara" (na home) abre o próprio painel expandido em vez de levar a uma tela cheia;
+    `/vereador/assistente` continua existindo e redireciona para `/vereador?clara=expandida`. O painel ganhou o que só
+    a tela cheia tinha: o modelo da resposta e o aviso de que um ato vira proposta. A moldura expõe `useAbrirClara()`.
+    O app do vereador não tem aba "Assistente" (a fatia 3 dizia que tinha).
 - Falta:
-  - outras telas publicarem a dica (sessão, parecer, pauta);
-  - a aba "Assistente" do app do vereador continua como tela cheia.
+  - a Clara nas telas da sessão fora do grupo interno (conduzir, chamada, plenário, folha, ata), e por isso a dica
+    nelas; o livro de atas também é candidato à dica;
+  - o `/assistente` da secretaria segue como tela cheia, ao lado do painel.
