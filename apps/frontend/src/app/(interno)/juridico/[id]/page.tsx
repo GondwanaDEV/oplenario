@@ -38,6 +38,7 @@ import type { PedidoJuridicoOut } from "@/lib/contrato-juridico.gen";
 import { GuardJuridico } from "../../guard-juridico";
 import { ParecerAssinado } from "../parecer-assinado";
 import { TopoInterno } from "../../topo";
+import { dicaDaMateriaPeloNumero, useDicaDaClara } from "../../clara/dica";
 import "../juridico.css";
 
 export default function PaginaPedido() {
@@ -55,6 +56,8 @@ function Conteudo() {
   const { estado, setEstado } = usePedidoJuridico(token, id ?? null);
   const ehJuridico = papeis.includes("juridico");
   const ehSecretaria = papeis.includes("secretario");
+  // A Clara: a matéria do pedido ("Nesta tela: PL 42/2026"). A consulta avulsa não tem matéria: sem dica.
+  useDicaDaClara(estado.fase === "pronto" ? dicaDaMateriaPeloNumero(estado.dado.proposicao?.ref) : null);
 
   return (
     <>
