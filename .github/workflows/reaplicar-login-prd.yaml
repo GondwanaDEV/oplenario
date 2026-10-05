@@ -7,8 +7,10 @@ name: Reaplicar o login das Camaras (prd)
 #
 # O provisionamento grava TAMBEM o SMTP e o gov.br do realm a partir da config de quem roda. Por isso o comando roda
 # com o ambiente da API de producao, lido do Dokploy (nunca com valores escritos aqui); so' o banco troca para a porta
-# externa (a mesma do `migrate` do build-api-prd). Se o Keycloak que a API usa nao for alcancavel daqui, o job para
-# antes de tocar em qualquer coisa.
+# externa (a mesma do `migrate` do build-api-prd). Em producao a API fala com o Keycloak pela rede interna do Dokploy
+# (nome do container), fora do alcance do runner: o job usa entao a URL publica (KEYCLOAK_BASE_URL_PUBLICO) e deixa o
+# gov.br do realm como esta' (as URLs do broker saem da base interna). Se nenhuma das duas responde, para antes de tocar
+# em qualquer coisa.
 #
 # NUNCA automatico: so' workflow_dispatch, e ainda assim com a frase de confirmacao. Rodar DEPOIS da promocao que leva o
 # comando para a imagem da API (o job confere isso antes) e, de preferencia, depois do build-keycloak-prd: sem o tema
@@ -110,11 +112,24 @@ jobs:
               print("::error::a API nao tem KEYCLOAK_BASE_URL no Dokploy")
               sys.exit(1)
           PY
-          kc=$(grep '^KEYCLOAK_BASE_URL=' "$RUNNER_TEMP/api.env" | head -1 | cut -d= -f2-)
+          valor() { grep "^$1=" "$RUNNER_TEMP/api.env" | head -1 | cut -d= -f2-; }
+          kc=$(valor KEYCLOAK_BASE_URL)
           echo "Keycloak da API: $kc"
           if ! curl -sf -o /dev/null --max-time 20 "$kc/realms/master"; then
-            echo "::error::o Keycloak que a API usa ($kc) nao responde daqui: nada foi tocado"
-            exit 1
+            # A API fala com o Keycloak pela rede interna do Dokploy (nome do container), que o runner nao alcanca. O
+            # admin do Keycloak e' o mesmo pela URL publica (a mesma do semear-hml). O que muda com a base: so' o broker
+            # do gov.br, cujas URLs saem dela (emissor e token pela interna) — por isso as GOVBR_* ficam de fora e o
+            # gov.br do realm NAO e' reconvergido daqui: o que a API gravou nele fica como esta'.
+            pub=$(valor KEYCLOAK_BASE_URL_PUBLICO)
+            pub=${pub:-https://keycloak.calvetec.com.br}
+            if [ -z "$pub" ] || ! curl -sf -o /dev/null --max-time 20 "$pub/realms/master"; then
+              echo "::error::nem o Keycloak interno ($kc) nem o publico (${pub:-ausente}) respondem daqui: nada foi tocado"
+              exit 1
+            fi
+            echo "Keycloak interno fora de alcance daqui; usando o publico ($pub), sem reconvergir o gov.br do realm"
+            grep -v -e '^KEYCLOAK_BASE_URL=' -e '^GOVBR_' "$RUNNER_TEMP/api.env" > "$RUNNER_TEMP/api.env.novo" || true
+            echo "KEYCLOAK_BASE_URL=$pub" >> "$RUNNER_TEMP/api.env.novo"
+            mv "$RUNNER_TEMP/api.env.novo" "$RUNNER_TEMP/api.env"
           fi
 
       - name: Reaplicar
