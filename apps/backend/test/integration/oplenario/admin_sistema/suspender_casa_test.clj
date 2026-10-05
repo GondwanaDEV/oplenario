@@ -284,6 +284,24 @@
         (is (= {:mensal 100M :teto-duro 120M} (select-keys (repo-ia/orcamento-atual (rp-ia) ente) [:mensal :teto-duro])))
         (is (= [{:mensal "100" :teto-duro "120"} {:mensal "0" :teto-duro "0"} {:mensal "100" :teto-duro "120"}]
                (mapv #(update-vals % (fn [v] (some-> v bigdec .stripTrailingZeros .toPlainString))) (orcamentos ente))))))
+    (testing "orcamento definido com a Casa suspensa: a cota segue zero e o valor novo vale na reativacao"
+      (let [ente (casa-ativa! ana)]
+        (repo-ia/definir-orcamento! (rp-ia) {:ente-id ente :mensal 100M :teto-duro 120M :moeda "USD" :definido-por "op"})
+        (aprovar! svc beto (get-in (ler (pedir! svc ana ente "inadimplencia")) [:pedido :id]))
+        (outbox/drenar! *ds* registro)
+        (let [d (repo-ia/definir-orcamento! (rp-ia) {:ente-id ente :mensal 300M :teto-duro 360M :moeda "USD"
+                                                     :definido-por "op"})]
+          (is (= {:mensal 300M :teto-duro 360M} (select-keys d [:mensal :teto-duro])) "a definicao pedida fica guardada")
+          (is (true? (:pausado-pela-suspensao d)) "e quem definiu sabe que so' vale na reativacao"))
+        (is (= {:mensal 0M :teto-duro 0M} (select-keys (repo-ia/orcamento-atual (rp-ia) ente) [:mensal :teto-duro]))
+            "a suspensao vence: a cota da Casa suspensa nao reabre")
+        (is (= {:mensal "0" :teto-duro "0"}
+               (update-vals (last (orcamentos ente)) (fn [v] (some-> v bigdec .stripTrailingZeros .toPlainString))))
+            "o satelite segue com a cota zero")
+        (reativar! svc ana ente)
+        (outbox/drenar! *ds* registro)
+        (is (= {:mensal 300M :teto-duro 360M} (select-keys (repo-ia/orcamento-atual (rp-ia) ente) [:mensal :teto-duro]))
+            "a reativacao devolve o que foi definido durante a suspensao, nao o de antes dela")))
     (testing "Casa que so' media: volta a so' medir (definicao sem valor)"
       (let [ente (casa-ativa! ana)]
         (aprovar! svc beto (get-in (ler (pedir! svc ana ente "pedido_da_casa")) [:pedido :id]))

@@ -122,7 +122,21 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
     `/vereador/assistente` continua existindo e redireciona para `/vereador?clara=expandida`. O painel ganhou o que só
     a tela cheia tinha: o modelo da resposta e o aviso de que um ato vira proposta. A moldura expõe `useAbrirClara()`.
     O app do vereador não tem aba "Assistente" (a fatia 3 dizia que tinha).
+- Fatia 5 (uma Clara só, também nas telas da sessão):
+  - `/assistente` deixa de ser uma tela cheia: redireciona para `/inicio?clara=expandida`, como `/vereador/assistente`.
+    A tela cheia sai do código; o que só ela tinha foi para o painel (a sugestão "Por onde passou o PL 11/2026?"). A
+    entrada "Clara" do menu abre o painel ali mesmo (`useAbrirClara`) e aparece para todo papel que tem a Clara.
+  - A Clara entra nas telas da sessão que a Mesa opera: Comando da Mesa (`conduzir`), chamada, ata e transcrição
+    (`sessoes/[id]/com-clara.tsx`, o mesmo `AuthProvider` da página com a moldura por dentro). Ficam fora, de
+    propósito, o telão (`plenario`) e a TV, projetados ao público, e a folha, que é para imprimir; um teste reprova se
+    alguma delas ganhar a Clara.
+  - Nessas telas a moldura é `discreta`: o botão recolhido é só o glifo; no computador o conteúdo termina antes da
+    faixa do botão; no celular, a chamada põe o botão dentro da barra de comando e o Comando da Mesa leva a entrada
+    para o cabeçalho, ao lado do Modo TV, sem botão flutuante. Medido no navegador (1280 e 390 px, rolando do topo ao
+    fim): nenhum comando da Mesa fica sob o botão.
+  - A dica: o Comando da Mesa publica a sessão ("15ª Sessão Ordinária"); o livro de atas interno publica a ata aberta
+    ("Ata da 15ª Sessão Ordinária", `dicaDaAta`); o portal, nunca.
 - Falta:
-  - a Clara nas telas da sessão fora do grupo interno (conduzir, chamada, plenário, folha, ata), e por isso a dica
-    nelas; o livro de atas também é candidato à dica;
-  - o `/assistente` da secretaria segue como tela cheia, ao lado do painel.
+  - a dica na chamada, na ata e na transcrição: essas telas não carregam o tipo nem o número da sessão, e o cabeçalho
+    delas diz só "Chamada de presença", "Ata", "Transcrição". Dar o nome da sessão a elas é uma leitura a mais
+    (`GET /sessoes/:id`), a decidir junto com o cabeçalho.

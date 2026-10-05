@@ -61,6 +61,29 @@ describe("SecaoFicha", () => {
     expect(screen.getByText(/matéria não encontrada/i)).toBeTruthy();
   });
 
+  it("com o rito da Casa -> a faixa 'Onde este projeto está' segue a ordem do rito, com o nome que a Casa deu", async () => {
+    const etapa = (chave: string, rotulo: string) => ({ chave, rotulo, terminal: false });
+    const comRito = {
+      ...fichaFake,
+      estado: "instrucao",
+      rito: {
+        "ordem-unica": true,
+        etapas: [etapa("entrada", "Entrada na Mesa"), etapa("instrucao", "Em instrução"), etapa("plenario_unico", "Plenário único")],
+        atual: etapa("instrucao", "Em instrução"),
+        anteriores: null,
+        proximas: [etapa("plenario_unico", "Plenário único")],
+      },
+    };
+    mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : comRito) }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".ficha-cab .num")?.textContent).toBe("PL 042/2026"));
+    expect(
+      screen.getByRole("img", {
+        name: "Tramitação de PL 042/2026: concluídos Entrada na Mesa; atual Em instrução; pendente Plenário único.",
+      }),
+    ).toBeTruthy();
+  });
+
   it("dado real -> cabeçalho (ref+ementa+autoria) + faixa de tramitação + permalink", async () => {
     mockFetch((url) => ({ ok: true, json: async () => (url.endsWith("/comentarios") ? [] : fichaFake) }));
     render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
@@ -102,6 +125,26 @@ describe("SecaoFicha", () => {
       String(c[0]).endsWith("/movimentacoes"),
     );
     expect(buscas.length).toBe(1);
+  });
+
+  it("a votação mais recente não vira o chip: chip e 'Etapa atual' dizem a mesma etapa", async () => {
+    const movimentacoes = {
+      movimentacoes: [
+        { "ocorrido-em": "2026-09-23T15:36:29Z", etapa: "Aprovada em 1º turno", abertura: false, votacao: true },
+        { "ocorrido-em": "2026-09-23T15:35:39Z", etapa: "Em Pauta", abertura: false, votacao: false },
+        { "ocorrido-em": "2026-09-01T09:00:00Z", etapa: "Protocolada", abertura: true, votacao: false },
+      ],
+      "movimentacoes-total": 3,
+      "historico-completo": true,
+      "historico-desde": null,
+    };
+    mockFetch((url) => ({
+      ok: true,
+      json: async () => (url.endsWith("/comentarios") ? [] : url.endsWith("/movimentacoes") ? movimentacoes : fichaFake),
+    }));
+    render(<SecaoFicha ente="fortaleza" proposicaoId="p1" />);
+    await waitFor(() => expect(document.querySelector(".estado-chip")?.textContent).toBe("Em Pauta"));
+    expect(document.querySelector(".mov-item[aria-current='step'] .mov-etapa")?.textContent).toBe("Em Pauta");
   });
 
   it("histórico indisponível: o chip cai no rótulo fixo", async () => {

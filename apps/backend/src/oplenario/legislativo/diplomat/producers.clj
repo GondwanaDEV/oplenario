@@ -3,7 +3,9 @@
   shared.outbox). SEMPRE dentro da `tx` do ato (atomicidade outbox-com-o-ato, §22.9 E2): a linha do evento
   so existe se a tx commitou. Chamado pelo Repo-Component, que compoe o ato + a emissao na MESMA tx do
   tenant (§3-bis). A vocabulario/contrato do evento mora em events/; aqui e' so o ATO de emitir."
-  (:require [oplenario.kernel.eventos :as eventos]
+  (:require [clojure.tools.logging :as log]
+            [malli.core :as m]
+            [oplenario.kernel.eventos :as eventos]
             [oplenario.legislativo.events.artefato-publicacao :as ev-artefato]
             [oplenario.legislativo.events.norma :as ev-norma]
             [oplenario.legislativo.events.notificacao :as ev-notificacao]
@@ -12,16 +14,27 @@
             [oplenario.legislativo.events.resumo :as ev-resumo]
             [oplenario.legislativo.events.votacao :as ev-votacao]))
 
+(defn- sem-rito-invalido
+  "O `:rito` da faixa do portal e' ACESSORIO: o ato (protocolar, transicionar) nunca pode falhar por ele. Rito que nao
+  casa com o contrato publico (`ev/RitoPublicoPayload`) sai do payload, com log, em vez de o construtor do evento lancar
+  e derrubar o ato na mesma tx. O portal sem rito cai no mapa fixo."
+  [payload]
+  (if (and (some? (:rito payload)) (not (m/validate ev/RitoPublicoPayload (:rito payload))))
+    (do (log/warn "legislativo: rito da materia fora do contrato publico — evento emitido sem rito"
+                  {:proposicao-id (:proposicao-id payload)})
+        (dissoc payload :rito))
+    payload))
+
 (defn emitir-protocolada!
   "Emite `proposicao.protocolada` no `bus` DENTRO da `tx` corrente (gate eixo H). `payload` casa
   events/ProtocoladaPayload — o snapshot publico que o portal (transparencia) projeta."
   [bus tx ente-id payload]
-  (eventos/emitir! bus tx (ev/protocolada ente-id payload)))
+  (eventos/emitir! bus tx (ev/protocolada ente-id (sem-rito-invalido payload))))
 
 (defn emitir-transicionou!
   "Emite `proposicao.transicionou` no `bus` DENTRO da `tx` corrente. `payload` casa events/TransicionouPayload."
   [bus tx ente-id payload]
-  (eventos/emitir! bus tx (ev/transicionou ente-id payload)))
+  (eventos/emitir! bus tx (ev/transicionou ente-id (sem-rito-invalido payload))))
 
 (defn emitir-recebida!
   "Emite `proposicao.recebida` (fatia 2b) no `bus` DENTRO da `tx` do recibo."

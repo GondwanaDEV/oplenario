@@ -48,6 +48,21 @@
   (orcamento-atual [this ente-id] "A definicao mais recente, ou nil.")
   (contar-propostas [this ente-id desde ate] "B.9: {estado n} das propostas criadas em [desde, ate)."))
 
+;; ADR-0018 (Eixo 2), regra de 05/10/2026: com a Casa SUSPENSA a suspensao vence. O orcamento que o operador define
+;; nesse meio-tempo fica guardado (e' o valor que a reativacao devolve, por `orcamento/ultima-exceto`), mas a cota segue
+;; zero: logo depois dele entra de novo a definicao 0/0 da suspensao, e o satelite so' recebe essa. As duas linhas usam o
+;; relogio do banco (`clock_timestamp()`), nao o `now()` da tx, que seria o mesmo instante para as duas e deixaria a
+;; ordem para o id sorteado.
+(def definido-pela-suspensao "operacao:casa-suspensa")
+(def definido-pela-reativacao "operacao:casa-reativada")
+
+(defn- definir-com-a-casa-suspensa! [tx o]
+  (let [guardada (orcamento/inserir! tx (assoc o :pelo-relogio? true))
+        pausa (orcamento/inserir! tx {:ente-id (:ente-id o) :mensal 0M :teto-duro 0M :moeda (or (:moeda o) "USD")
+                                      :definido-por definido-pela-suspensao :pelo-relogio? true})]
+    (eventos/inserir-saida! tx (logic/evento-orcamento pausa))
+    (assoc guardada :pausado-pela-suspensao true)))
+
 (defrecord RepoIntegracaoIAPg [datasource]
   RepoIntegracaoIA
   (listar-eventos [_ depois limite]
@@ -90,9 +105,11 @@
   (definir-orcamento! [_ o]
     (tenancy/com-tenant* (:ds datasource) (:ente-id o)
       (fn [tx]
-        (let [d (orcamento/inserir! tx o)]
-          (eventos/inserir-saida! tx (logic/evento-orcamento d))
-          d))))
+        (if (= definido-pela-suspensao (:definido-por (orcamento/ultima tx (:ente-id o))))
+          (definir-com-a-casa-suspensa! tx o)
+          (let [d (orcamento/inserir! tx o)]
+            (eventos/inserir-saida! tx (logic/evento-orcamento d))
+            d)))))
   (orcamento-atual [_ ente-id]
     (tenancy/com-tenant* (:ds datasource) ente-id #(orcamento/atual % ente-id)))
   (contar-propostas [_ ente-id desde ate]
@@ -136,9 +153,6 @@
 ;; na mesma tx. A suspensao grava 0/0 (o satelite fica "esgotada": nem o que a pessoa pede roda); a reativacao devolve
 ;; a definicao que valia antes — ou uma SEM VALOR, se antes a Casa so' media. Idempotentes pelo que a ultima diz.
 ;; ---------------------------------------------------------------------------------------------
-
-(def definido-pela-suspensao "operacao:casa-suspensa")
-(def definido-pela-reativacao "operacao:casa-reativada")
 
 (defn- definir-em-tx! [tx o]
   (let [d (orcamento/inserir! tx o)]

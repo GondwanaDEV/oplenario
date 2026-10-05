@@ -327,3 +327,106 @@ describe("Clara — o painel retrátil", () => {
     expect(screen.queryByText(/Nesta tela/)).toBeNull();
   });
 });
+
+// ADR-0024, fatia 5: a tela cheia /assistente da secretaria virou este painel expandido. O que ela provava passa a ser
+// provado aqui, para nada se perder no caminho.
+describe("Clara — o que a antiga tela cheia /assistente fazia", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    delete document.documentElement.dataset.clara;
+  });
+
+  const SSE_SEM_FONTE = [
+    'event: passo\ndata: {"ferramenta":"situacao_da_materia","argumentos":{"tipo":"projeto_lei","sequencial":11,"ano":2026},"ok":true}',
+    'event: resposta\ndata: {"texto":"Segundo o sistema da Casa, ementa: Merenda escolar. [[ferramenta:situacao_da_materia#1 | ementa: Merenda escolar]]\\n\\nIsso é tudo.","citacoes":[{"fonte-id":"ferramenta:situacao_da_materia#1","trecho":"ementa: Merenda escolar","status":"conferida"}],"paragrafos-sem-fonte":[1],"incerteza":"normal","modelo":"fake-1","contaminado":false}',
+    'event: fim\ndata: {"execucao-id":"e1"}',
+    "",
+  ].join("\n\n");
+
+  it("a resposta marca o parágrafo sem fonte, lista de onde veio e diz o modelo; sem o id da execução, nada de 'Reportar erro'", async () => {
+    mockar({ "/api/agente/perguntas": [{ texto: SSE_SEM_FONTE }] });
+    render(<Clara token="tok" />);
+    abrir();
+    perguntar("situação do PL 11/2026?");
+    expect(await screen.findByText("Consultou a situação do PL 11/2026")).toBeTruthy();
+    const semFonte = screen.getByText("Sem fonte — confira").closest("p");
+    expect(semFonte?.textContent).toContain("Isso é tudo.");
+    const fontes = screen.getByRole("list", { name: "Fontes" });
+    expect(within(fontes).getByText("A situação do PL 11/2026")).toBeTruthy();
+    expect(within(fontes).getByText(/ementa: Merenda escolar/)).toBeTruthy();
+    expect(screen.getByText("Modelo: fake-1")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reportar erro" })).toBeNull();
+  });
+
+  it("a secretaria tem as quatro perguntas da tela cheia, e a sugestão pergunta direto", async () => {
+    const fetchMock = mockar({ "/api/agente/perguntas": [{ texto: SSE("c-1") }] });
+    render(<Clara token="tok" conjunto="secretaria" />);
+    abrir();
+    for (const s of ["Qual a situação do PL 11/2026?", "Por onde passou o PL 11/2026?", "O que vai ser votado na próxima sessão?", "Qual o quórum para derrubar um veto?"]) {
+      expect(screen.getByRole("button", { name: s })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Por onde passou o PL 11/2026?" }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("/api/agente/perguntas");
+    expect(JSON.parse(init.body as string)).toEqual({ pergunta: "Por onde passou o PL 11/2026?" });
+  });
+
+  it("erro do core vira frase, nunca tela quebrada", async () => {
+    mockar({ "/api/agente/perguntas": [{ status: 403 }] });
+    render(<Clara token="tok" />);
+    abrir();
+    perguntar("oi, tudo bem?");
+    expect(await screen.findByText("A Clara não está disponível para o seu acesso nesta Casa.")).toBeTruthy();
+  });
+
+  it("B.6: a proposta preparada leva à tela de confirmar — nunca confirma no painel", async () => {
+    mockar({
+      "/api/agente/perguntas": [
+        {
+          texto: [
+            'event: passo\ndata: {"ferramenta":"protocolar_requerimento","argumentos":{},"ok":true}',
+            'event: proposta\ndata: {"id":"p-9","titulo":"Protocolar o requerimento “Obra”","ritual":"assinatura"}',
+            'event: fim\ndata: {}',
+            "",
+          ].join("\n\n"),
+        },
+      ],
+    });
+    render(<Clara token="tok" />);
+    abrir();
+    perguntar("protocole um requerimento");
+    expect(await screen.findByText("Preparou uma proposta de requerimento — nada foi protocolado")).toBeTruthy();
+    expect(screen.getByText("Proposta: nada foi feito ainda")).toBeTruthy();
+    expect(screen.getByText("Protocolar o requerimento “Obra”")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Revisar e assinar" }).getAttribute("href")).toBe("/propostas/p-9?token=tok");
+    expect(screen.queryByRole("button", { name: /Confirmar/ })).toBeNull();
+  });
+
+  it("8.4: 'Reportar erro' vai ao core com o id da execução na IA", async () => {
+    const fetchMock = mockar({
+      "/api/agente/perguntas": [{ texto: SSE("c-1") }],
+      "/api/ia/execucoes/": [{ json: { reportado: true } }],
+    });
+    render(<Clara token="tok" />);
+    abrir();
+    perguntar("situação do PL 11/2026?");
+    fireEvent.click(await screen.findByRole("button", { name: "Reportar erro" }));
+    fireEvent.click(screen.getByRole("radio", { name: "A fonte não diz isso" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    expect(await screen.findByText("Obrigado — isso entra na revisão da IA.")).toBeTruthy();
+    const reporte = fetchMock.mock.calls.find(([u]) => u === "/api/ia/execucoes/ia-7/reportes");
+    expect(JSON.parse((reporte?.[1] as RequestInit).body as string)).toEqual({ categoria: "citacao_errada" });
+  });
+
+  it("no app do vereador pede o conjunto do vereador (quem tem os dois papéis não cai no da secretaria)", async () => {
+    const fetchMock = mockar({ "/api/agente/perguntas": [{ texto: SSE("c-1") }] });
+    render(<Clara token="tok" publico="vereador" />);
+    abrir();
+    perguntar("oi, tudo bem?");
+    await screen.findByText("Consultou a situação do PL 11/2026");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ pergunta: "oi, tudo bem?", publico: "vereador" });
+  });
+});

@@ -78,7 +78,11 @@ jobs:
               try { await p.screenshot({ path: `shots/${nome}.png`, fullPage: true }); } catch {}
               await p.close();
               const ok = esperado.test(t) && !ERRO_TELA.test(t);
-              rec(rota, ok ? 'OK' : 'ERRO', ok ? 'renderizou' : t.slice(0, 160));
+              // diz POR QUE reprovou: o inicio da tela nao mostra a frase de erro que esta' mais abaixo
+              const m = ERRO_TELA.exec(t);
+              const motivo = m ? `frase de erro na tela: "…${t.slice(Math.max(0, m.index - 80), m.index + 120)}…"`
+                               : `texto esperado ausente: ${t.slice(0, 160)}`;
+              rec(rota, ok ? 'OK' : 'ERRO', ok ? 'renderizou' : motivo);
             } catch (e) { rec(rota, 'ERRO', String(e).split('\n')[0].slice(0, 140)); }
           }
 
@@ -90,8 +94,9 @@ jobs:
             if (!ok) rec('login', 'ERRO', 'login da persona apresentacao falhou (id do seed atual?)');
 
             // ---------- telas ----------
-            await tela(ctx, '/assistente', '1-assistente', /A assistente da Casa\. Pergunte em palavras/);
-            // ADR-0024 fatia 4: o endereco antigo leva a /vereador com a Clara expandida (o texto so aparece com ela aberta)
+            // ADR-0024 fatias 4 e 5: os enderecos antigos da tela cheia levam a Central (/inicio) e a /vereador com a
+            // Clara expandida (o texto so aparece com ela aberta)
+            await tela(ctx, '/assistente', '1-assistente', /Pergunte o que precisar saber da Casa/);
             await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /Pergunte o que precisar saber da Casa/);
             await tela(ctx, '/normas', '3-normas', /Normas da Casa/);
             await tela(ctx, '/propostas', '4-propostas', /Propostas do assistente/);

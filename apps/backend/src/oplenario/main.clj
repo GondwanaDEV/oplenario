@@ -64,7 +64,9 @@
                       {:ente-id ente :mensal (valor mensal) :teto-duro (valor teto)
                        :moeda (or moeda "USD") :definido-por "operador (linha de comando)"})]
                (println "[oplenario] orcamento de IA definido:" (str (:mensal d)) "/ teto" (str (:teto-duro d))
-                        (:moeda d) "— a IA recebe pelo feed; registrado na atuacao da Operacao"))
+                        (:moeda d) "— a IA recebe pelo feed; registrado na atuacao da Operacao")
+               (when (:pausado-pela-suspensao d)
+                 (println "[oplenario] a Casa esta' SUSPENSA: a cota segue zero; este valor vale a partir da reativacao")))
              (finally (component/stop ds))))
 
       ;; ADR-0022/ADR-0020: compara os anexos do banco com os blobs do object storage (relata; --apagar-orfaos so' tira do
