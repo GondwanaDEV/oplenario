@@ -105,6 +105,18 @@
      (sql/format {:select cols :from [:transparencia.materia]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]]}))))
 
+(defn por-ids
+  "As materias PUBLICADAS no portal entre os `ids` (so' o cabecalho: tipo, numero, ano, ementa). Id sem materia
+  projetada simplesmente nao volta — quem chama trata a falta (a votacao aparece sem link, nunca com materia
+  inventada). Lote pequeno (uma pagina de votacoes)."
+  [tx ente-id ids]
+  (if (empty? ids)
+    []
+    (comum/linhas->kebab
+     (jdbc/execute! tx
+       (sql/format {:select [:proposicao_id :tipo :ano :sequencial :ementa] :from [:transparencia.materia]
+                    :where [:and [:= :ente_id ente-id] [:in :proposicao_id (vec ids)]]})))))
+
 (defn listar-por-autor
   "Materias de AUTORIA de um vereador (Onda E fatia 2, perfil publico), por NUMERACAO DECRESCENTE.
 

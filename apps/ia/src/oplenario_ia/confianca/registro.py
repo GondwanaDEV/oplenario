@@ -43,6 +43,7 @@ class RegistroExecucao(BaseModel):
     # fornecedor — sempre o EFETIVAMENTE usado (§22.3.5)
     vendor: str
     modelo: str | None = None
+    provedor: str | None = None  # quem atendeu atrás do gateway (OpenRouter → Anthropic, Bedrock…), ADR-0023
     uso: Uso | None = None
     custo: Custo | None = None
     latencia_ms: int | None = None

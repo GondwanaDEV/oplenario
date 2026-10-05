@@ -76,11 +76,13 @@
   VISTA interna, best-effort, pode atrasar sob esta janela estreita. Fix correto = `legislativo` trocar
   `now()` por `clock_timestamp()` no DEFAULT de `ocorrido_em` (E em `efetivado_em`) — decisao que tambem
   afeta `historico-da-proposicao` (a prova de auditoria Inv.10), fora do escopo de uma fatia de `paineis`."
-  [tx {:keys [ente-id proposicao-id estado transicionou-em]}]
+  [tx {:keys [ente-id proposicao-id estado transicionou-em terminal]}]
   {:pre [(some? ente-id) (some? proposicao-id) (some? estado) (some? transicionou-em)]}
   (let [r (jdbc/execute-one! tx
             (sql/format {:update :paineis.tramitacao
-                         :set {:estado estado :transicionou_em transicionou-em}
+                         ;; `terminal` = o RITO da Casa declara o estado de destino como fim de processo
+                         ;; (evento `para-terminal`); ausente (evento anterior ao campo) = nao afirma = false.
+                         :set {:estado estado :transicionou_em transicionou-em :terminal (boolean terminal)}
                          :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
                                  [:<= :transicionou_em transicionou-em]]}))]
     (when-not (zero? (:next.jdbc/update-count r 0))
@@ -100,6 +102,17 @@
                   :where [:= :ente_id ente-id]
                   :group-by [:estado]
                   :order-by [[:n :desc] [:estado :asc]]}))))
+
+(defn contar-em-tramitacao
+  "O manchete 'Proposicoes em tramitacao' do dashboard da Mesa: as materias do tenant cujo estado ATUAL o rito
+  da Casa NAO declara terminal (`terminal`, carimbado pelo evento `proposicao.transicionou`). NAO filtra por
+  NOME de estado — `estado` e' texto livre de template por Casa (memoria 'estado e' morto'); o que e' fim de
+  processo vem do rito. O board (`listar-board`/`resumo`) segue mostrando TUDO."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (:n (jdbc/execute-one! tx
+        (sql/format {:select [[[:count :*] :n]] :from [:paineis.tramitacao]
+                     :where [:and [:= :ente_id ente-id] [:= :terminal false]]}))))
 
 (defn listar-board
   "O board (§16.11): as proposicoes do tenant SEM FILTRO DE ESTADO (diferenca-chave vs. o portal publico,

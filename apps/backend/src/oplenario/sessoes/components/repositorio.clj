@@ -21,7 +21,9 @@
             [oplenario.sessoes.db.presenca :as presenca]
             [oplenario.sessoes.db.regra-pauta :as regra-pauta]
             [oplenario.sessoes.components.repositorio-publicacao :as repo-publicacao]
+            [oplenario.sessoes.components.repositorio-sessao-publica :as repo-sessao-publica]
             [oplenario.sessoes.db.sessao :as sessao]
+            [oplenario.sessoes.db.sessao-publica :as sessao-publica]
             [oplenario.sessoes.db.transcricao :as transcricao]
             [oplenario.sessoes.db.tribuna :as tribuna]
             [oplenario.sessoes.logic :as logic]
@@ -853,6 +855,12 @@
     "a ausencia e' registrada na audiencia em curso (ou depois dela)"
     (and (= "desistiu" para) (not (contains? logic-aud/estados-que-aceitam-inscricao (:estado sessao))))
     "a audiencia ja' terminou"))
+
+;; portal-votacoes-publicas: quais sessoes o portal pode mostrar (a regra do livro de atas), para o host filtrar as votacoes
+(extend-type RepoSessoesPg
+  repo-sessao-publica/RepoSessaoPublica
+  (sessoes-publicas [this ente-id] (transacao this ente-id #(sessao-publica/publicas-da-casa % ente-id)))
+  (sessao-publica [this ente-id sessao-id] (transacao this ente-id #(sessao-publica/publica % ente-id sessao-id))))
 
 (extend-type RepoSessoesPg
   repo-audiencia/RepoAudiencia

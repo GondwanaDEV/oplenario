@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { rotularObrigacao } from "./rotulos-compliance";
+import { rotularEstadoRemessa, rotularObrigacao } from "./rotulos-compliance";
+
+describe("rotularEstadoRemessa — o ciclo da remessa ao TCE em palavras", () => {
+  // Vocabulário da FONTE: `compliance.logic/estados-remessa` (rascunho -> validada -> submetida ->
+  // {aceita | rejeitada}).
+  it.each([
+    ["rascunho", "Em preparação"],
+    ["validada", "Validada, pronta para enviar"],
+    ["submetida", "Enviada, aguardando o TCE"],
+    ["aceita", "Aceita pelo TCE"],
+    ["rejeitada", "Rejeitada pelo TCE"],
+  ])("%s -> %s", (estado, rotulo) => {
+    expect(rotularEstadoRemessa(estado)).toBe(rotulo);
+  });
+
+  it("fail-closed: estado fora do ciclo devolve o próprio valor", () => {
+    expect(rotularEstadoRemessa("devolvida")).toBe("devolvida");
+  });
+});
 
 describe("rotularObrigacao — a obrigação de compliance em palavras", () => {
   it.each([

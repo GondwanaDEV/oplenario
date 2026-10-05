@@ -25,6 +25,8 @@
 
 (defn- rollups-fake []
   {:tramitacao [{:estado "em_comissao" :n 5} {:estado "protocolada" :n 2}]
+   ;; 7 proposicoes no total, 1 delas em estado que o rito declara terminal (nao esta' em tramitacao)
+   :tramitacao-em-tramitacao 6
    :pendencias [{:estado "pendente" :n 4} {:estado "vencido" :n 1} {:estado "concluido" :n 9}]
    :sessoes    [{:estado-atual "aberta" :n 1} {:estado-atual "encerrada" :n 8}
                 {:estado-atual "arquivada" :n 3} {:estado-atual "nao_realizada" :n 2}]})
@@ -41,6 +43,13 @@
   (let [{:keys [tramitacao]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (= 7 (:total tramitacao)) "total = soma das contagens (5+2)")
     (is (= [{:estado "em_comissao" :n 5} {:estado "protocolada" :n 2}] (:por-estado tramitacao)))))
+
+(deftest tramitacao-em-tramitacao-nao-soma-as-encerradas
+  ;; "Proposicoes em tramitacao" era `total` (soma de TODOS os estados, incl. aprovadas e arquivadas). O
+  ;; manchete agora vem de uma contagem propria (estado nao-terminal no rito); `total` segue sendo tudo.
+  (let [{:keys [tramitacao]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
+    (is (= 6 (:em-tramitacao tramitacao)))
+    (is (= 7 (:total tramitacao)) "total continua sendo a soma de todos os estados do board")))
 
 (deftest pendencias-rollup-so-fases-abertas-no-manchete
   (let [{:keys [pendencias]} (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]
@@ -62,9 +71,11 @@
         "o card de compliance entra e sai identico (embed opaco, nunca reprojetado)")))
 
 (deftest tenant-vazio-projeta-zeros
-  (let [out (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} card-compliance-fake presenca-fake esic-fake relatores-fake)]
+  (let [out (mesa/mesa->wire {:tramitacao [] :tramitacao-em-tramitacao 0 :pendencias [] :sessoes []}
+                             card-compliance-fake presenca-fake esic-fake relatores-fake)]
     (is (m/validate wire/MesaOut out))
     (is (= 0 (get-in out [:tramitacao :total])))
+    (is (= 0 (get-in out [:tramitacao :em-tramitacao])))
     (is (= 0 (get-in out [:pendencias :abertas])))
     (is (= 0 (get-in out [:sessoes :em-curso])))
     (is (= [] (get-in out [:sessoes :por-situacao])))))
@@ -72,7 +83,7 @@
 (deftest drift-de-contrato-lanca
   ;; um card nao-mapa viola MesaOut (:compliance-tce :map) -> adapters/out lanca (nunca corpo malformado).
   (is (thrown? clojure.lang.ExceptionInfo
-               (mesa/mesa->wire {:tramitacao [] :pendencias [] :sessoes []} "nao-mapa" presenca-fake esic-fake relatores-fake))))
+               (mesa/mesa->wire {:tramitacao [] :tramitacao-em-tramitacao 0 :pendencias [] :sessoes []} "nao-mapa" presenca-fake esic-fake relatores-fake))))
 
 (deftest cards-novos-embutidos-opacos-verbatim
   (let [out (mesa/mesa->wire (rollups-fake) card-compliance-fake presenca-fake esic-fake relatores-fake)]

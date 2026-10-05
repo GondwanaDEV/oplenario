@@ -118,7 +118,8 @@ class Nucleo:
                 "vendor": r.vendor,
                 "modelo": r.modelo,
                 "uso": r.uso,
-                "custo": calcular(r.uso, r.vendor, r.modelo, self._precos),
+                "provedor": r.provedor,
+                "custo": calcular(r.uso, r.vendor, r.modelo, self._precos, r.custo_informado),
                 "latencia_ms": r.latencia_ms,
                 "parada": r.parada,
             }

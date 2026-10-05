@@ -59,6 +59,7 @@ export interface ComissaoMembro {
 
 export interface TramitacaoResumoOut {
   total: number;
+  emTramitacao: number;
   porEstado: Record<string, unknown>[];
 }
 

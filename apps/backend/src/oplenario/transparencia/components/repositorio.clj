@@ -380,6 +380,9 @@
      a borda nao sabe que truncou. Sao SEIS statements no caminho comum, nao cinco (achado C-4, revisao
      Task 4) — e CINCO quando `janelas` e' vazia: `resumo-presenca` curto-circuita e nao emite statement
      nenhum (ver a docstring dela).")
+  (materias-por-ids [this ente-id proposicao-ids]
+    "Portal de votacoes: o cabecalho (tipo, numero, ano, ementa) das materias PUBLICADAS entre os ids. Id sem materia
+     projetada nao volta.")
   (resumo-dados-abertos [this ente-id] "Onda E: {dataset {:linhas :atualizado-em}} de cada dataset aberto.")
   (linhas-dados-abertos [this ente-id chave]
     "Onda E: o dataset `chave` (\"proposicoes\" | \"legislacao\" | \"votos-nominais\") INTEIRO, na ordem estavel."))
@@ -421,6 +424,8 @@
            :votos-total       (:total por-opcao)
            :votos-por-opcao   (dissoc por-opcao :total)
            :presenca          (db-parlamentar/resumo-presenca tx ente-id vid janelas)}))))
+  (materias-por-ids [this ente-id ids]
+    (transacao this ente-id #(db-materia/por-ids % ente-id ids)))
   (resumo-dados-abertos [this ente-id]
     (transacao this ente-id #(db-dados-abertos/resumo % ente-id)))
   (linhas-dados-abertos [this ente-id chave]
