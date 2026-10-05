@@ -58,7 +58,7 @@ def _paragrafo_confere(texto: str, inicio: int, fonte: Fonte, por_id: dict[str, 
     citadas = {x.group(1) for x in MARCA.finditer(bloco)}
     if any(c != fonte.id and c in por_id and por_id[c].fonte.estruturada for c in citadas):
         return False  # uma votação por parágrafo
-    return not divergencias(MARCA.sub(" ", bloco), fonte.canonicas, fonte.identificadores)
+    return not divergencias(MARCA.sub(" ", bloco), fonte.canonicas, fonte.identificadores, fonte.duvidas_canonicas)
 
 
 def conferir(texto: str, lidas: list[FonteLida]) -> list[Citacao]:

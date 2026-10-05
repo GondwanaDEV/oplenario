@@ -101,7 +101,9 @@ def test_cada_votacao_encerrada_vira_uma_fonte_estruturada_publica_logo_depois_d
     )
     assert v.fonte is not None and v.fonte.estruturada
     assert v.fonte.canonicas == ["aprovada por 9 votos a favor, 2 contra e 1 abstenção"]
-    assert v.fonte.identificadores == ["PL 008/2026"], "o número da matéria cita-se como o sistema o escreve"
+    assert v.fonte.identificadores == ["PL 008/2026", "votação nominal"], (
+        "a matéria e a modalidade como o sistema as escreve"
+    )
     assert v.texto == (
         "Matéria votada: PL 008/2026\nModalidade: nominal\n"
         "Quórum exigido: maioria simples (mais votos sim do que não)\n"

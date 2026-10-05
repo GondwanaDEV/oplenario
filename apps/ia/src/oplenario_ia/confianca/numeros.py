@@ -59,7 +59,10 @@ _PALAVRAS = frozenset(
 _PREFIXOS = ("unanim", "unânim", "nenhum")  # unanimidade, unânime(s), nenhum, nenhuma…
 _ROMANO = re.compile(r"m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})")
 _PALAVRA = re.compile(r"[^\W\d_]+")
-_CONFIRMAR = re.compile(r"\[confirmar: [^\[\]]*\]")
+# A dúvida declarada só sai da conferência quando é a dúvida CANÔNICA: a gravação diz um número e o sistema registra o
+# valor do DADO. Qualquer outro `[confirmar: …]` no parágrafo da votação fica à vista do conferidor — senão o bloco
+# viraria um lugar para escrever qualquer afirmação ("[confirmar: na verdade rejeitada]") num parágrafo "conferido".
+_CONFIRMAR = re.compile(r"\[confirmar: a gravação indica [0-9]{1,4} ([^\[\]]*)\]")
 # categorias que não têm lugar numa frase de votação: números, marcas combinantes, controle/formatação/uso privado
 _SUSPEITAS = ("N", "M", "Cf", "Cc", "Co", "Cs", "Cn")
 
@@ -97,12 +100,15 @@ def sinais_numericos(texto_normalizado: str) -> list[str]:
 _MOLDURA = frozenset(
     {
         "a", "o", "as", "os", "da", "do", "das", "dos", "de", "em", "na", "no", "e", "foi", "pelo", "pela",
-        "votação", "votacao", "nominal", "simbólica", "simbolica", "secreta", "matéria", "materia", "proposição",
-        "proposicao", "plenário", "plenario", "sessão", "sessao", "nesta", "submetida", "submetido", "colocada",
-        "colocado", "resultado", "registrou", "registrado", "registrada", "sistema",
+        "votação", "votacao", "matéria", "materia", "proposição", "proposicao", "plenário", "plenario", "sessão",
+        "sessao", "nesta", "submetida", "submetido", "colocada", "colocado", "resultado", "registrou", "registrado",
+        "registrada", "sistema",
     }
 )  # fmt: skip
-_PONTUACAO = frozenset(".,;:()\"'“”‘’—–-")
+# A MODALIDADE não é moldura: "votação secreta" numa votação nominal é afirmação falsa feita só com palavras inocentes.
+# Ela entra como peça canônica DA FONTE ("votação nominal", gerada do dado), como o identificador da matéria.
+# Pontuação: só a de frase. Travessão, hífen, barra, parêntese e aspas ficam de fora — "PL 008/2026-A" é outra matéria.
+_PONTUACAO = frozenset(".,;:")
 _PECA = re.compile(r"[^\W_]+|\S")
 
 
@@ -111,17 +117,26 @@ def fora_da_moldura(texto_normalizado: str) -> list[str]:
     return [p for p in _PECA.findall(texto_normalizado) if p not in _MOLDURA and p not in _PONTUACAO]
 
 
+def _peca(texto_normalizado: str) -> re.Pattern[str]:
+    """A peça canônica como PALAVRA INTEIRA: não casa colada em letra ou algarismo ("desaprovada por…", "19 votos")."""
+    return re.compile(r"(?<![^\W_])" + re.escape(texto_normalizado) + r"(?![^\W_])")
+
+
 def divergencias(
-    paragrafo: str, frases_canonicas: list[str] | tuple[str, ...], identificadores: list[str]
+    paragrafo: str,
+    frases_canonicas: list[str] | tuple[str, ...],
+    identificadores: list[str],
+    duvidas_canonicas: list[str] | tuple[str, ...] = (),
 ) -> list[str]:
     """Por que o parágrafo (já sem as marcas de citação) NÃO confere com a fonte estruturada; vazio = confere."""
-    texto = _CONFIRMAR.sub(" ", normalizar(paragrafo))
+    duvidas = {normalizar(d) for d in duvidas_canonicas}
+    texto = _CONFIRMAR.sub(lambda m: " " if m.group(1) in duvidas else m.group(0), normalizar(paragrafo))
     frases = sorted({normalizar(f) for f in frases_canonicas}, key=len, reverse=True)
-    if not any(f in texto for f in frases):
+    if not any(_peca(f).search(texto) for f in frases):
         return ["o parágrafo não traz nenhuma frase canônica do registro do sistema"]
     resto = texto
     for peca in sorted({*frases, *(normalizar(i) for i in identificadores)}, key=len, reverse=True):
-        resto = resto.replace(peca, " ")
+        resto = _peca(peca).sub(" ", resto)
     # as duas redes: o sinal numérico (o motivo mais útil de ler no log) e, por fim, tudo o que não é moldura
     sobras = list(dict.fromkeys([*sinais_numericos(resto), *fora_da_moldura(resto)]))
     return [f"sobrou '{s}' no parágrafo, fora do registro do sistema" for s in sobras]

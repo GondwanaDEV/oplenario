@@ -104,9 +104,10 @@ def test_o_paragrafo_com_a_frase_canonica_confere_e_a_unanimidade_tambem() -> No
     assert status(paragrafo(p), p) == ["conferida"]
     unanime = paragrafo(p).replace(canonica(p), "aprovada por unanimidade, com 10 votos a favor")
     assert status(unanime, p) == ["conferida"]
-    assert status(
-        paragrafo(votacao(None, None, None, modalidade="simbolica")), votacao(None, None, None, modalidade="simbolica")
-    ) == ["conferida"]
+    simbolica = votacao(None, None, None, modalidade="simbolica")
+    assert status(paragrafo(simbolica).replace("Votação nominal", "Votação simbólica"), simbolica) == ["conferida"]
+    # a modalidade é peça do dado: "nominal" numa votação simbólica não confere
+    assert status(paragrafo(simbolica), simbolica) == ["trecho_nao_encontrado"]
 
 
 # ---------- o que a revisão de segurança já pegou ----------
@@ -366,8 +367,11 @@ _CANONICA = "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
 _IDENT = "PL 008/2026"
 
 
+_DUVIDAS = ["votos a favor; o sistema registra 9", "votos contra; o sistema registra 2"]
+
+
 def _diverge(paragrafo: str) -> bool:
-    return bool(divergencias(paragrafo, [_CANONICA], [_IDENT]))
+    return bool(divergencias(paragrafo, [_CANONICA], [_IDENT, "votação nominal"], _DUVIDAS))
 
 
 def test_a_moldura_do_roteiro_confere() -> None:
@@ -396,3 +400,27 @@ def test_numero_colado_em_palavra_reprova() -> None:
 def test_simbolo_fora_da_pontuacao_comum_reprova() -> None:
     assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA} (+ outros).")
     assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA} %.")
+
+
+def test_modalidade_errada_reprova_mesmo_com_o_placar_certo() -> None:
+    # "secreta" não é moldura: só a modalidade do DADO ("votação nominal") é peça canônica desta fonte
+    assert _diverge(f"Votação secreta: {_IDENT}, {_CANONICA}.")
+    assert _diverge(f"Votação simbólica: {_IDENT}, {_CANONICA}.")
+    assert not _diverge(f"Votação nominal: {_IDENT}, {_CANONICA}.")
+
+
+def test_confirmar_so_e_excluido_quando_e_a_duvida_canonica() -> None:
+    base = f"Votação nominal: {_IDENT}, {_CANONICA}."
+    assert not _diverge(f"{base} [confirmar: a gravação indica 10 votos a favor; o sistema registra 9]")
+    # o valor do "sistema registra" tem de ser o do dado
+    assert _diverge(f"{base} [confirmar: a gravação indica 10 votos a favor; o sistema registra 10]")
+    # e o bloco não é lugar para outra afirmação
+    assert _diverge(f"{base} [confirmar: na verdade rejeitada]")
+    assert _diverge(f"{base} [confirmar: horário]")
+
+
+def test_peca_canonica_so_casa_como_palavra_inteira() -> None:
+    assert _diverge(f"Votação nominal: {_IDENT}, re{_CANONICA}.")  # colada em letra: nem chega a casar
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA.replace('9 votos', '19 votos')}.")
+    assert _diverge(f"Votação nominal: {_IDENT}-A, {_CANONICA}.")  # outra matéria
+    assert _diverge(f"Votação nominal: {_IDENT}/2, {_CANONICA}.")

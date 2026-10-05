@@ -167,6 +167,11 @@ migration: é o mesmo caminho dos oradores e da pauta.
   matéria", "foi", "resultado", pontuação comum). Qualquer outra palavra ou símbolo reprova. Só a lista de proibidos
   deixava passar o que muda o sentido sem número: "não foi aprovada por…", "desaprovada por…" (a canônica casa dentro
   da palavra), "rejeitada" ao lado da frase de "aprovada", número colado em palavra.
+- **Modalidade, dúvida e palavra inteira:** a modalidade ("votação nominal") é peça canônica da fonte, não moldura:
+  "votação secreta" numa votação nominal reprova. O `[confirmar: …]` só sai da conferência quando é a dúvida canônica
+  ("a gravação indica N votos a favor; o sistema registra 9", com o valor do dado); qualquer outro bloco fica à vista
+  do conferidor e reprova o parágrafo. As peças canônicas só casam como palavra inteira ("19 votos" e "desaprovada"
+  não casam), e a pontuação aceita é só a de frase (`. , ; :`): "PL 008/2026-A" é outra matéria.
 - **O que isto garante:** o parágrafo de uma votação só contém o placar como o SISTEMA o escreveria, dentro de uma
   moldura conhecida. **O que NÃO garante:** o conferidor não entende português; a ordem das palavras da moldura não é
   conferida. A revisão humana do rascunho continua obrigatória. O custo é ruído aceito e fail-closed: o modelo tem de

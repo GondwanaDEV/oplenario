@@ -179,6 +179,22 @@ def frase_do_quorum(v: VotacaoContexto) -> str | None:
     return "era necessário 1 voto" if n == 1 else f"eram necessários {n} votos"
 
 
+def frase_da_modalidade(v: VotacaoContexto) -> str:
+    """A modalidade como a ata a escreve ("votação nominal"). Peça canônica da fonte, não moldura: só a do DADO casa."""
+    return f"votação {MODALIDADES[v.modalidade]}"
+
+
+def duvidas_canonicas(v: VotacaoContexto) -> list[str]:
+    """O que pode fechar um `[confirmar: a gravação indica N …]` desta votação: o rótulo e o valor do registro."""
+    if v.total_sim is None or v.total_nao is None or v.total_abstencao is None:
+        return []
+    return [
+        f"votos a favor; o sistema registra {v.total_sim}",
+        f"votos contra; o sistema registra {v.total_nao}",
+        f"abstenções; o sistema registra {v.total_abstencao}",
+    ]
+
+
 def frases_canonicas(v: VotacaoContexto) -> list[str]:
     """O conjunto FECHADO de frases que a ata pode usar para esta votação — a única fonte de verdade do que confere."""
     return [f for f in (frase_do_resultado(v), frase_da_unanimidade(v), frase_do_quorum(v)) if f is not None]
@@ -195,7 +211,8 @@ def peca_da_votacao(v: VotacaoContexto) -> Peca:
             rotulo=f"Votação de {v.objeto}, registrada pelo sistema",
             estruturada=True,
             canonicas=frases_canonicas(v),
-            identificadores=[v.objeto],
+            identificadores=[v.objeto, frase_da_modalidade(v)],
+            duvidas_canonicas=duvidas_canonicas(v),
         ),
     )
 

@@ -43,6 +43,9 @@ class Fonte(BaseModel):
     estruturada: bool = False
     canonicas: list[str] = []
     identificadores: list[str] = []
+    # o que pode vir dentro de um `[confirmar: a gravação indica N …]` desta fonte: o rótulo e o valor do DADO
+    # ("votos a favor; o sistema registra 9"). Outro `[confirmar]` no parágrafo da votação fica na conferência.
+    duvidas_canonicas: list[str] = []
 
 
 class Peca(BaseModel):

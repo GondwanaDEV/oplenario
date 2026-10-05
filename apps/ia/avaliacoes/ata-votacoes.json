@@ -38,7 +38,13 @@
               "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
             ],
             "identificadores": [
-              "PL 008/2026"
+              "PL 008/2026",
+              "votação nominal"
+            ],
+            "duvidas_canonicas": [
+              "votos a favor; o sistema registra 9",
+              "votos contra; o sistema registra 2",
+              "abstenções; o sistema registra 1"
             ]
           }
         }
@@ -94,7 +100,13 @@
               "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
             ],
             "identificadores": [
-              "PL 008/2026"
+              "PL 008/2026",
+              "votação nominal"
+            ],
+            "duvidas_canonicas": [
+              "votos a favor; o sistema registra 9",
+              "votos contra; o sistema registra 2",
+              "abstenções; o sistema registra 1"
             ]
           }
         }
@@ -146,7 +158,13 @@
               "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
             ],
             "identificadores": [
-              "PL 008/2026"
+              "PL 008/2026",
+              "votação nominal"
+            ],
+            "duvidas_canonicas": [
+              "votos a favor; o sistema registra 9",
+              "votos contra; o sistema registra 2",
+              "abstenções; o sistema registra 1"
             ]
           }
         }
@@ -198,7 +216,13 @@
               "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
             ],
             "identificadores": [
-              "PL 008/2026"
+              "PL 008/2026",
+              "votação nominal"
+            ],
+            "duvidas_canonicas": [
+              "votos a favor; o sistema registra 9",
+              "votos contra; o sistema registra 2",
+              "abstenções; o sistema registra 1"
             ]
           }
         }
@@ -250,7 +274,13 @@
               "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
             ],
             "identificadores": [
-              "PL 008/2026"
+              "PL 008/2026",
+              "votação nominal"
+            ],
+            "duvidas_canonicas": [
+              "votos a favor; o sistema registra 9",
+              "votos contra; o sistema registra 2",
+              "abstenções; o sistema registra 1"
             ]
           }
         },
