@@ -97,26 +97,53 @@ def test_cada_dispositivo_lido_e_uma_fonte_com_a_vigencia() -> None:
     assert laco.dispositivos_do_resultado(_resultado("pauta_da_sessao", {"itens": []})) == []
 
 
+LER_O_ARTIGO = ("ler_dispositivo", {"norma-id": NORMA["id"], "endereco": "art2"})
+
+
 @pytest.mark.parametrize(
-    ("pergunta", "chamada"),
+    ("pergunta", "chamadas"),
     [
         (
             "O que diz o art. 2º do Regimento?",
-            ("ler_dispositivo", {"especie": "regimento_interno", "endereco": "art2"}),
+            [("ler_dispositivo", {"especie": "regimento_interno", "endereco": "art2"})],
         ),
-        ("E o artigo 10 da Lei Orgânica?", ("ler_dispositivo", {"especie": "lei_organica", "endereco": "art10"})),
+        ("E o artigo 10 da Lei Orgânica?", [("ler_dispositivo", {"especie": "lei_organica", "endereco": "art10"})]),
+        # agente-v2: a busca acha o inciso (art2_cpt_inc1); o agente lê o artigo inteiro antes de responder
         (
             "Qual o quórum para derrubar um veto?",
-            ("buscar_dispositivos", {"consulta": "Qual o quórum para derrubar um veto?"}),
+            [("buscar_dispositivos", {"consulta": "Qual o quórum para derrubar um veto?"}), LER_O_ARTIGO],
         ),
-        ("Qual o prazo para emendas?", ("buscar_dispositivos", {"consulta": "Qual o prazo para emendas?"})),
+        (
+            "Qual o prazo para emendas?",
+            [("buscar_dispositivos", {"consulta": "Qual o prazo para emendas?"}), LER_O_ARTIGO],
+        ),
     ],
 )
-def test_o_plano_vai_as_normas(pergunta: str, chamada: tuple[str, dict[str, Any]]) -> None:
+def test_o_plano_vai_as_normas(pergunta: str, chamadas: list[tuple[str, dict[str, Any]]]) -> None:
     nucleo, _ = _nucleo()
     mcp = McpNormas()
     laco.executar(nucleo, mcp, pergunta, ENTE, "c")
-    assert mcp.chamadas == [chamada]
+    assert mcp.chamadas == chamadas
+
+
+def test_o_trecho_achado_na_busca_leva_ao_artigo_e_a_resposta_cita_os_dois() -> None:
+    nucleo, _ = _nucleo()
+    r = laco.executar(nucleo, McpNormas(), "Qual o quórum para derrubar um veto?", ENTE, "c")
+    assert r.artefato is not None
+    assert [(c.fonte_id, c.status) for c in r.artefato.citacoes] == [
+        (f"norma:{NORMA['id']}#art2_cpt_inc1", "conferida"),
+        (f"norma:{NORMA['id']}#art2", "conferida"),
+    ]
+
+
+def test_sem_ler_dispositivo_a_busca_basta() -> None:
+    class SoBusca(McpNormas):
+        def ferramentas(self) -> list[Ferramenta]:
+            return [f for f in FERRAMENTAS if f.nome != "ler_dispositivo"]
+
+    mcp = SoBusca()
+    laco.executar(_nucleo()[0], mcp, "Qual o quórum para derrubar um veto?", ENTE, "c")
+    assert [n for n, _ in mcp.chamadas] == ["buscar_dispositivos"]
 
 
 def test_resposta_normativa_cita_o_dispositivo_conferido() -> None:

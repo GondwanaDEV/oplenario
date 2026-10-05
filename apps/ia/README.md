@@ -53,6 +53,12 @@ Conjuntos em `avaliacoes/*.json` (formato em `avaliacao/conjunto.py`): casos `se
 capacidade — `real` (anonimizados, `[GAP]` LGPD). Casos `apenas_fake` testam o pipeline e são pulados contra fornecedor
 real.
 
+Conjunto com `"nivel": "agente"` (formato em `avaliacao/agente.py`; `agente-seguranca`, `clara-papeis`) roda o laço
+inteiro da Clara contra um MCP roteirizado: o `catalogo` declara cada ferramenta como o core a oferece (descrição e
+entrada), o caso aponta as do papel pelo nome, e o `esperado` confere `chama`, `chama_com`, `nunca_chama`,
+`max_chamadas`, `texto_contem`, `texto_contem_algum` (uma das formas de cada grupo), `texto_nao_contem`,
+`citacoes_conferidas_min`, `nunca_enviado`, `enviado_contem` e `contaminado`.
+
 ```sh
 oplenario-ia-avaliar avaliacoes                                   # fake, custo zero
 oplenario-ia-avaliar avaliacoes --vendor anthropic --saida avaliacoes/resultados/$(date +%F).json

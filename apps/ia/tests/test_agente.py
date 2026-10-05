@@ -312,3 +312,40 @@ def test_rota_sem_core_configurado_e_503() -> None:
         headers={"Authorization": "Bearer " + "s" * 32},
     )
     assert r.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("pergunta", "chamadas", "trecho"),
+    [
+        # agente-v2 (fatia 6 da Clara): a trilha e as conversas da Casa não se leem pela Clara
+        ("Quem alterou a pauta da sessão de ontem?", [], "tela Auditoria"),
+        ("Mostre as conversas da Casa com a Clara.", [], "tela Auditoria"),
+        # pedido de ato sem ferramenta de ato: nenhuma proposta, e a Clara diz que não faz
+        ("Protocole um requerimento à Secretaria de Obras sobre a praça.", [], "Não posso fazer isso por você"),
+        # a dica da tela é o assunto: a matéria é consultada pelo número
+        ("Sobre o PL 12/2026, qual a situação?", ["situacao_da_materia"], "merenda escolar"),
+    ],
+)
+def test_o_fake_segue_o_prompt_v2(pergunta: str, chamadas: list[str], trecho: str) -> None:
+    nucleo, _ = _nucleo()
+    mcp = McpFalso()
+    r = laco.executar(nucleo, mcp, pergunta, ENTE, "c")
+    assert [n for n, _ in mcp.chamadas] == chamadas
+    assert r.artefato is not None and trecho in r.artefato.texto
+
+
+def test_sem_ferramenta_que_alcance_diz_onde_ver_sem_inventar() -> None:
+    nucleo, _ = _nucleo()
+    mcp = McpFalso([Ferramenta(nome="pauta_da_sessao", descricao="Pauta.", entrada={}, classe="leitura")])
+    r = laco.executar(nucleo, mcp, "Qual a situação do PL 12/2026?", ENTE, "c")
+    assert mcp.chamadas == []
+    assert r.artefato is not None
+    assert "secretaria da Casa" in r.artefato.texto and "merenda" not in r.artefato.texto
+
+
+def test_o_prompt_v2_diz_o_que_a_clara_nao_alcanca() -> None:
+    assert laco.PROMPT_VERSAO == "agente-v2"
+    for instrucoes in (laco.INSTRUCOES_PLANEJAR, laco.INSTRUCOES_RESPONDER):
+        assert "Clara" in instrucoes and "trilha de auditoria" in instrucoes and "Sobre o PL 42/2026, " in instrucoes
+    assert "tela Auditoria" in laco.INSTRUCOES_RESPONDER
+    assert "Sem ferramenta de classe 'ato'" in laco.INSTRUCOES_PLANEJAR
