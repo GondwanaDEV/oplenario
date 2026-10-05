@@ -147,12 +147,25 @@ migration: é o mesmo caminho dos oradores e da pauta.
 - **Sigilo:** o voto de cada vereador **não entra, nem na votação nominal** — a consulta não lê `votos` nem
   `votos_secretos`, o mapa é uma allowlist e o `wire/out` é fechado. Votação secreta leva só o resultado e os totais
   que o sistema já publica. Sessão secreta continua 403 e nem consulta votação.
-- **No satélite:** cada votação vira uma fonte `votacao:<id>` estruturada (`Fonte.estruturada` + `Fonte.fatos`), pública
-  e **não** de terceiro, que passa pelo filtro B1–B4 como as demais. A Camada de Confiança confere, além do trecho
-  literal, os números da frase que cita a fonte (`confianca/numeros.py`), por PAPEL (sim, não, abstenção, quórum,
-  composição) e na votação certa: uma só normalização e uma só leitura para a frase e para o registro (dígitos
-  Unicode, sobrescritos e caracteres invisíveis valem o número que o olho lê); o que a leitura não sabe interpretar com
-  certeza ("1.000", "1,5", "9/2", "-7", "7º", "mil", dúzia) reprova em vez de passar; número que conta votos e não tem
-  papel reprova; casamento por número inteiro. Reprovado sai `trecho_nao_encontrado`. Se a gravação contradiz o dado,
-  vale o dado e a instrução manda `[confirmar: a gravação indica X; o sistema registra Y]`. Prompt `ata-v2`.
+- **No satélite:** cada votação vira uma fonte `votacao:<id>` estruturada (`Fonte.estruturada`), pública e **não** de
+  terceiro, que passa pelo filtro B1–B4 como as demais. O texto da fonte traz as linhas `Frase do resultado`, `Frase da
+  unanimidade` (só se o dado é unânime) e `Frase do quórum`: o conjunto FECHADO de frases canônicas, geradas do dado por
+  uma função pura (`ata/redacao.py:frases_canonicas`, a mesma que o redator fake usa para escrever). Prompt `ata-v2`.
+- **O que a Camada de Confiança confere (`confianca/numeros.py`), sem interpretar prosa:** o parágrafo que cita
+  `votacao:<id>` (sem as marcas de citação, que o texto limpo da ata também tira) confere se (a) contém, por substring
+  exata, uma frase canônica DAQUELA votação e (b) tiradas as frases canônicas e o identificador canônico da matéria
+  ("PL 008/2026"), também por substring exata, NÃO sobra nenhum sinal numérico: qualquer caractere de categoria N
+  (sobrescrito, romano Unicode, fração, largura total, outros alfabetos), marca combinante, caractere invisível ou letra
+  fora do alfabeto latino (homóglifo), uma lista fechada de palavras (zero…dezenove, dezenas, centenas, mil, milhão,
+  meia, meio, dúzia, dobro, metade, terço, quarto, maioria, minoria, unanim*, nenhum*, todos, ambos, vários, empate,
+  ordinais por extenso) e algarismos romanos isolados. Uma só normalização (NFKC, minúsculas, espaços colapsados) para o
+  parágrafo, as frases e os identificadores. Nada é mascarado: data e hora que sobram reprovam; o `[confirmar: …]`
+  (dúvida declarada) é a única exclusão, por delimitador exato, e o resto do parágrafo ainda tem de passar. Duas votações
+  citadas no mesmo parágrafo: nenhuma confere. Reprovado sai `trecho_nao_encontrado` (vira ponto a confirmar na revisão).
+- **O que isto garante:** o parágrafo de uma votação só contém o placar como o SISTEMA o escreveria. **O que NÃO
+  garante:** o conferidor não entende português. Expressão numérica fora da lista de palavras passa, e afirmação sem
+  número ("rejeitada" ao lado da frase de "aprovada") também. A revisão humana do rascunho continua obrigatória. O custo
+  é ruído aceito e fail-closed: o modelo tem de citar a votação numa frase própria, sem outros números.
+- **Gravação que contradiz o dado:** vale o dado, e a instrução manda `[confirmar: a gravação indica X; o sistema
+  registra Y]`; o roteiro do fake faz isso para algarismos e com uma votação só.
 - **Core antigo:** contexto sem `votacoes` vale lista vazia (a ata sai como antes).

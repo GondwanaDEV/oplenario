@@ -40,7 +40,7 @@ NOMINAL = {
 }
 SIMBOLICA = {
     "id": "vot-2",
-    "objeto": "requerimento",
+    "objeto": "um requerimento",
     "modalidade": "simbolica",
     "quorum-tipo": "maioria_simples",
     "base-membros": 13,
@@ -100,18 +100,20 @@ def test_cada_votacao_encerrada_vira_uma_fonte_estruturada_publica_logo_depois_d
         False,
     )
     assert v.fonte is not None and v.fonte.estruturada
-    assert [(f.valor, f.nomes[0]) for f in v.fonte.fatos] == [(9, "sim"), (2, "nao"), (1, "abstencao"), (13, "membro")]
-    assert v.fonte.livres == [8, 2026] and v.fonte.pares == [(8, 2026)], "o número da matéria cita-se sem papel"
+    assert v.fonte.canonicas == ["aprovada por 9 votos a favor, 2 contra e 1 abstenção"]
+    assert v.fonte.identificadores == ["PL 008/2026"], "o número da matéria cita-se como o sistema o escreve"
     assert v.texto == (
         "Matéria votada: PL 008/2026\nModalidade: nominal\n"
         "Quórum exigido: maioria simples (mais votos sim do que não)\n"
-        "Placar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada"
+        "Placar: 9 votos sim, 2 votos não, 1 abstenção\nResultado: aprovada\n"
+        "Frase do resultado: aprovada por 9 votos a favor, 2 contra e 1 abstenção"
     )
 
 
 def test_quorum_qualificado_diz_quantos_votos_e_de_quantos_membros() -> None:
     t = pedido_de_ata(ctx_com(SECRETA_2_3), [T1], ENTE, "c").pecas[1].texto
     assert "Quórum exigido: dois terços dos membros (9 votos sim de 13 membros da Casa)" in t
+    assert "Frase do quórum: eram necessários 9 votos" in t
     assert "Modalidade: secreta" in t and "Resultado: rejeitada" in t
 
 
@@ -119,9 +121,7 @@ def test_simbolica_nao_inventa_placar() -> None:
     peca = pedido_de_ata(ctx_com(SIMBOLICA), [T1], ENTE, "c").pecas[1]
     assert "Placar: sem contagem individual (votação simbólica)" in peca.texto
     assert peca.fonte is not None
-    assert [f.nomes[0] for f in peca.fonte.fatos] == ["membro"], (
-        "só a composição: nenhum total de sim, não ou abstenção"
-    )
+    assert peca.fonte.canonicas == ["aprovada em votação simbólica"], "nenhum total de sim, não ou abstenção"
 
 
 def test_o_voto_de_cada_vereador_nao_entra_nem_se_o_fio_o_trouxesse() -> None:
@@ -147,14 +147,14 @@ def rascunho(ctx: ContextoSessao, transcricoes: list[Any] | None = None, porta: 
     return r
 
 
-def test_fake_escreve_o_trecho_da_votacao_a_partir_do_dado_e_a_citacao_confere() -> None:
+def test_fake_escreve_a_frase_canonica_da_votacao_e_a_citacao_confere() -> None:
     r = rascunho(ctx_com(NOMINAL, SIMBOLICA, SECRETA_2_3))
     assert all(c.status == "conferida" for c in r.citacoes), [(c.fonte_id, c.status) for c in r.citacoes]
     limpo = texto_limpo(r.texto)
-    assert "Votação nominal: PL 008/2026, aprovada, com 9 votos sim, 2 votos não e 1 abstenção." in limpo
-    assert "Votação simbólica: requerimento, aprovada." in limpo
+    assert "Votação nominal: PL 008/2026, aprovada por 9 votos a favor, 2 contra e 1 abstenção." in limpo
+    assert "Votação simbólica: um requerimento, aprovada em votação simbólica." in limpo
     assert (
-        "Votação secreta: redação final do PL 012/2026, rejeitada, com 7 votos sim, 5 votos não e 0 abstenções."
+        "Votação secreta: redação final do PL 012/2026, rejeitada por 7 votos a favor, 5 contra e 0 abstenções."
         in limpo
     )
     assert [c.fonte_id for c in r.citacoes if c.fonte_id.startswith("votacao:")] == [
@@ -164,7 +164,8 @@ def test_fake_escreve_o_trecho_da_votacao_a_partir_do_dado_e_a_citacao_confere()
     ]
     assert pontos_a_confirmar(r.texto) == ["horário de encerramento"], "resultado já não sai como ponto a confirmar"
     paragrafo = next(p for p in r.texto.split("\n\n") if "PL 008/2026" in p)
-    assert paragrafo.index("[[votacao:vot-1") > paragrafo.index("9 votos sim")
+    assert paragrafo.index("[[votacao:vot-1") > paragrafo.index("9 votos a favor")
+    assert len([p for p in r.texto.split("\n\n") if "votacao:" in p]) == 3, "uma votação por parágrafo"
 
 
 def test_o_rotulo_da_citacao_diz_que_veio_do_registro_do_sistema() -> None:
@@ -177,57 +178,51 @@ def test_transcricao_que_contradiz_o_dado_vale_o_dado_e_sai_confirmar_com_os_doi
     contradiz = transcricao(
         "t9",
         "seg-1",
-        [Trecho(0, 9, "Está aprovado o projeto por dez votos favoráveis.", "SPK_0", "v-pres", "Presidente Lúcia")],
+        [Trecho(0, 9, "Está aprovado o projeto por 10 votos favoráveis.", "SPK_0", "v-pres", "Presidente Lúcia")],
     )
     r = rascunho(ctx_com(NOMINAL), [contradiz])
     limpo = texto_limpo(r.texto)
-    assert "aprovada, com 9 votos sim, 2 votos não e 1 abstenção." in limpo, "vale o dado do sistema"
-    assert "[confirmar: a gravação indica 10 votos sim; o sistema registra 9]" in limpo
+    assert "aprovada por 9 votos a favor, 2 contra e 1 abstenção." in limpo, "vale o dado do sistema"
+    assert "[confirmar: a gravação indica 10 votos a favor; o sistema registra 9]" in limpo
     votacao = [c for c in r.citacoes if c.fonte_id == "votacao:vot-1"]
     assert [c.status for c in votacao] == ["conferida"], "o dado que ficou na ata confere com o registro"
 
 
 def test_transcricao_que_concorda_nao_gera_ponto_a_confirmar() -> None:
     concorda = transcricao(
-        "t9", "seg-1", [Trecho(0, 9, "Aprovado por nove votos favoráveis.", "SPK_0", "v-pres", "Presidente Lúcia")]
+        "t9", "seg-1", [Trecho(0, 9, "Aprovado por 9 votos favoráveis.", "SPK_0", "v-pres", "Presidente Lúcia")]
     )
     assert PONTO_A_CONFIRMAR.findall(texto_limpo(rascunho(ctx_com(NOMINAL), [concorda]).texto)) == [
         "horário de encerramento"
     ]
 
 
-def redator_que_erra(frase: str) -> Any:
-    def roteiro(_: Any) -> str:
-        return f"{frase} [[votacao:vot-1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]"
-
-    return roteiro
+FRASE = "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
 
 
-def test_numero_errado_na_frase_nao_confere_mesmo_com_o_trecho_certo() -> None:
-    porta = PortaFake(
-        {OPERACAO: redator_que_erra("O PL 008/2026 foi aprovado por 10 votos sim, 2 votos não e 1 abstenção.")}
-    )
+def redator(paragrafo_da_votacao: str) -> Any:
+    return lambda _: f"{paragrafo_da_votacao} [[votacao:vot-1 | {FRASE}]]"
+
+
+def test_numero_errado_no_paragrafo_nao_confere_mesmo_com_o_trecho_certo() -> None:
+    porta = PortaFake({OPERACAO: redator("O PL 008/2026 foi aprovado por 10 votos a favor, 2 contra e 1 abstenção.")})
     r = rascunho(ctx_com(NOMINAL), porta=porta)
     assert [c.status for c in r.citacoes] == ["trecho_nao_encontrado"]
     assert "citacao_nao_conferida" in r.incerteza.motivos and r.incerteza.nivel == "revisar_com_atencao"
 
 
-def test_sim_e_nao_trocados_nao_conferem() -> None:
-    porta = PortaFake(
-        {OPERACAO: redator_que_erra("O PL 008/2026 foi rejeitado por 9 votos contra e 2 votos favoráveis.")}
-    )
-    r = rascunho(ctx_com(NOMINAL), porta=porta)
-    assert [c.status for c in r.citacoes] == ["trecho_nao_encontrado"]
+def test_a_frase_do_modelo_fora_do_conjunto_canonico_nao_confere() -> None:
+    for fora in (
+        "O PL 008/2026 foi rejeitado por 9 votos contra e 2 votos favoráveis.",
+        "O PL 008/2026 foi aprovado por nove votos favoráveis, dois contrários e uma abstenção.",
+        "O PL 008/2026 foi aprovado em votação nominal.",
+    ):
+        r = rascunho(ctx_com(NOMINAL), porta=PortaFake({OPERACAO: redator(fora)}))
+        assert [c.status for c in r.citacoes] == ["trecho_nao_encontrado"], fora
 
 
-def test_frase_correta_com_o_modelo_dizendo_por_extenso_confere() -> None:
-    porta = PortaFake(
-        {
-            OPERACAO: redator_que_erra(
-                "O PL 008/2026 foi aprovado por nove votos favoráveis, dois contrários e uma abstenção."
-            )
-        }
-    )
+def test_o_paragrafo_com_a_frase_copiada_confere() -> None:
+    porta = PortaFake({OPERACAO: redator(f"Votação nominal: PL 008/2026, {FRASE}.")})
     assert [c.status for c in rascunho(ctx_com(NOMINAL), porta=porta).citacoes] == ["conferida"]
 
 
@@ -244,7 +239,7 @@ def test_a_votacao_chega_ao_fornecedor_pelo_filtro_com_a_redacao_de_identificado
     corpo = fonte.split("\n", 1)[1]
     assert "fulano@exemplo.com.br" not in corpo and "[REDIGIDO:EMAIL]" in corpo
     assert not fonte.startswith("<conteudo_de_terceiro"), "fato do sistema, não conteúdo de terceiro"
-    assert "9 votos sim, 2 votos não, 1 abstenção" in corpo
+    assert "Frase do resultado: aprovada por 9 votos a favor, 2 contra e 1 abstenção" in corpo
     [ex] = reg.eventos()
     assert ex.redacoes == {"email": 1}
 
@@ -297,7 +292,7 @@ def test_ata_solicitada_com_votacoes_vira_rascunho_com_o_resultado_conferido() -
     assert p["n-citacoes"] == p["n-citacoes-conferidas"], "toda citação, inclusive as das votações, conferida"
     g = arm.rascunho(p["rascunho-id"])
     assert g is not None
-    assert "Votação nominal: PL 008/2026, aprovada, com 9 votos sim, 2 votos não e 1 abstenção." in g.texto
+    assert "Votação nominal: PL 008/2026, aprovada por 9 votos a favor, 2 contra e 1 abstenção." in g.texto
     assert sum(c["fonte_id"].startswith("votacao:") for c in g.citacoes) == 2
 
 

@@ -1,20 +1,20 @@
-"""A conferência de números contra uma fonte estruturada (confianca/numeros.py): uma só leitura nos dois lados,
-fail-closed no que não se sabe interpretar, conferência por PAPEL e por votação, casamento por número inteiro.
-O texto da ata é o que a pessoa lê; o conferidor lê o mesmo."""
+"""A conferência de números de uma fonte estruturada (confianca/numeros.py): casamento exato com as frases canônicas do
+dado e sobra zero de sinal numérico, sem interpretar prosa. O que a revisão de segurança já pegou e a propriedade
+"o que o roteiro do fake escreve confere; qualquer número ou sinal a mais, não"."""
 
 from __future__ import annotations
 
 import pytest
 
 from oplenario_ia.ata.fake import _votacao
-from oplenario_ia.ata.redacao import peca_da_votacao
+from oplenario_ia.ata.redacao import frases_canonicas, peca_da_votacao
 from oplenario_ia.confianca.citacao import FonteLida, conferir
-from oplenario_ia.confianca.numeros import afirmacao_da_marca, divergencias, ler, normalizar, papel
+from oplenario_ia.confianca.numeros import divergencias, normalizar, sinais_numericos
 from oplenario_ia.fronteira.contrato import VotacaoContexto
 from oplenario_ia.governanca.proveniencia import Fonte, Peca
 
 
-def votacao(
+def contexto(
     sim: int | None = 9,
     nao: int | None = 2,
     abst: int | None = 1,
@@ -23,26 +23,28 @@ def votacao(
     objeto: str = "PL 008/2026",
     quorum: str = "maioria_simples",
     necessarios: int | None = None,
-    base: int | None = 13,
     modalidade: str = "nominal",
-) -> Peca:
-    return peca_da_votacao(
-        VotacaoContexto.model_validate(
-            {
-                "id": id_,
-                "objeto": objeto,
-                "modalidade": modalidade,
-                "quorum-tipo": quorum,
-                "votos-necessarios": necessarios,
-                "base-membros": base,
-                "resultado": "aprovada",
-                "total-sim": sim,
-                "total-nao": nao,
-                "total-abstencao": abst,
-                "encerrada-em": "2026-09-22T22:10:00Z",
-            }
-        )
+    resultado: str = "aprovada",
+) -> VotacaoContexto:
+    return VotacaoContexto.model_validate(
+        {
+            "id": id_,
+            "objeto": objeto,
+            "modalidade": modalidade,
+            "quorum-tipo": quorum,
+            "votos-necessarios": necessarios,
+            "base-membros": 13,
+            "resultado": resultado,
+            "total-sim": sim,
+            "total-nao": nao,
+            "total-abstencao": abst,
+            "encerrada-em": "2026-09-22T22:10:00Z",
+        }
     )
+
+
+def votacao(*args: int | None, **kw: object) -> Peca:
+    return peca_da_votacao(contexto(*args, **kw))  # type: ignore[arg-type]
 
 
 def lida(p: Peca) -> FonteLida:
@@ -50,359 +52,304 @@ def lida(p: Peca) -> FonteLida:
     return FonteLida(fonte=p.fonte, texto=p.texto)
 
 
-def problemas(frase: str, peca: Peca | None = None) -> list[str]:
-    p = peca or votacao()
+def canonica(p: Peca) -> str:
     assert p.fonte is not None
-    return divergencias(frase, p.fonte, p.texto)
+    return p.fonte.canonicas[0]
 
 
-def valores(texto: str) -> list[int]:
-    return [n.valor for n in ler(texto).numeros]
+def status(texto: str, *pecas: Peca) -> list[str]:
+    return [c.status for c in conferir(texto, [lida(p) for p in pecas])]
 
 
-def test_a_frase_certa_confere_e_a_do_registro_tambem() -> None:
-    assert problemas("A matéria PL 008/2026 foi aprovada por 9 votos sim, 2 votos não e 1 abstenção") == []
-    assert problemas("aprovada por nove votos favoráveis, dois contrários e uma abstenção") == []
+def paragrafo(p: Peca, antes: str = "", depois: str = "") -> str:
+    """O parágrafo que o fake escreveria, com `antes`/`depois` acrescentados à frase, e a marca de citação."""
+    assert p.fonte is not None
+    return f"{antes}Votação nominal: PL 008/2026, {canonica(p)}{depois}. [[{p.fonte.id} | {canonica(p)}]]"
 
 
-# ---------- 1. uma só leitura: o que o olho lê é o que o conferidor lê ----------
+# ---------- o conjunto fechado de frases canônicas ----------
+
+
+def test_frases_canonicas_sao_um_conjunto_fechado_e_pequeno() -> None:
+    assert frases_canonicas(contexto()) == ["aprovada por 9 votos a favor, 2 contra e 1 abstenção"]
+    assert frases_canonicas(contexto(10, 0, 0, quorum="maioria_absoluta", necessarios=7)) == [
+        "aprovada por 10 votos a favor, 0 contra e 0 abstenções",
+        "aprovada por unanimidade, com 10 votos a favor",
+        "eram necessários 7 votos",
+    ]
+    assert frases_canonicas(contexto(1, 0, 0, quorum="maioria_absoluta", necessarios=1)) == [
+        "aprovada por 1 voto a favor, 0 contra e 0 abstenções",
+        "aprovada por unanimidade, com 1 voto a favor",
+        "era necessário 1 voto",
+    ]
+    assert frases_canonicas(contexto(None, None, None, modalidade="simbolica")) == ["aprovada em votação simbólica"]
+    assert frases_canonicas(contexto(0, 10, 0, resultado="rejeitada")) == [
+        "rejeitada por 0 votos a favor, 10 contra e 0 abstenções"
+    ], "unanimidade só para aprovada: a frase não existe se o dado não a sustenta"
+    assert len(frases_canonicas(contexto(9, 2, 1, quorum="maioria_absoluta", necessarios=7))) == 2
+
+
+def test_unanimidade_so_existe_se_o_dado_for_unanime() -> None:
+    assert not any("unanimidade" in f for f in frases_canonicas(contexto(9, 2, 1)))
+    assert not any("unanimidade" in f for f in frases_canonicas(contexto(9, 0, 1)))
+    assert not any("unanimidade" in f for f in frases_canonicas(contexto(0, 0, 0)))
+    p = votacao(9, 2, 1)
+    assert status(paragrafo(p).replace(canonica(p), "aprovada por unanimidade, com 9 votos a favor", 1), p) == [
+        "trecho_nao_encontrado"
+    ]
+
+
+def test_o_paragrafo_com_a_frase_canonica_confere_e_a_unanimidade_tambem() -> None:
+    p = votacao(10, 0, 0)
+    assert status(paragrafo(p), p) == ["conferida"]
+    unanime = paragrafo(p).replace(canonica(p), "aprovada por unanimidade, com 10 votos a favor")
+    assert status(unanime, p) == ["conferida"]
+    assert status(
+        paragrafo(votacao(None, None, None, modalidade="simbolica")), votacao(None, None, None, modalidade="simbolica")
+    ) == ["conferida"]
+
+
+# ---------- o que a revisão de segurança já pegou ----------
 
 
 @pytest.mark.parametrize(
-    "escrito",
-    ["９", "٩", "⁹", "⑨", "९"],
-    ids=["largura-total", "arabe-indico", "sobrescrito", "circulado", "devanagari"],
+    "intruso",
+    ["¹⁰", "１０", "٩", "९", "⑩", "Ⅳ", "½", "10/2", "1.000", "1,5", "−7", "7º", "7ª", "22/09/2026", "18h30", "19:45"],
 )
-def test_digito_unicode_vira_o_numero_que_o_olho_le(escrito: str) -> None:
-    assert valores(f"{escrito} votos sim") == [9]
-    assert problemas(f"aprovada por {escrito} votos sim, 2 votos não e 1 abstenção") == []
-
-
-def test_unicode_errado_reprova_como_o_ascii_errado() -> None:
-    erro = ["10 dito para 'sim', mas o registro do sistema é 9"]
-    assert problemas("aprovada por １０ votos sim") == erro
-    assert problemas("aprovada por ¹⁰ votos sim") == erro
-    assert problemas("aprovada por ١٠ votos sim") == erro
-
-
-def test_caractere_invisivel_no_meio_do_numero_nao_o_parte_em_dois() -> None:
-    # 1 e 0 existem no registro (1 abstenção, 0...), mas o olho lê 10
-    assert valores("1​0 votos sim") == [10]
-    assert valores("1­0 votos sim") == [10]
-    assert problemas("aprovada por 1​0 votos sim") == ["10 dito para 'sim', mas o registro do sistema é 9"]
-
-
-def test_a_mesma_normalizacao_e_leitura_nos_dois_lados() -> None:
+def test_qualquer_numero_em_qualquer_formato_a_mais_reprova(intruso: str) -> None:
     p = votacao()
-    assert p.fonte is not None
-    placar = next(ln for ln in p.texto.split("\n") if ln.startswith("Placar:"))
-    # o texto do registro, lido pela mesma função, dá a cada número o papel e o valor que o DADO estruturado tem
-    lidos = ler(placar).numeros
-    assert [n.valor for n in lidos] == [9, 2, 1]
-    for n in lidos:
-        f = papel(n, p.fonte.fatos)
-        assert f is not None and f.valor == n.valor
-    assert normalizar("Três ⁹ Ｓim​") == "tres 9 sim"
+    assert status(paragrafo(p, depois=f", com {intruso}"), p) == ["trecho_nao_encontrado"], intruso
+    assert status(paragrafo(p, antes=f"{intruso} "), p) == ["trecho_nao_encontrado"], intruso
 
 
-@pytest.mark.parametrize(
-    "frase",
-    [
-        "aprovada por 1.000 votos sim",
-        "aprovada por 1,5 votos sim",
-        "aprovada por 1.0 votos sim",
-        "aprovada por 1 0 votos sim",
-        "aprovada por 1 0 votos sim",
-        "aprovada por 1 0 votos sim",
-        "aprovada por 1 0 votos sim",
-        "aprovada por 1\n0 votos sim",
-    ],
-)
-def test_separador_de_milhar_decimal_ou_espaco_no_meio_nao_e_conferido(frase: str) -> None:
-    assert problemas(frase), frase
+def test_data_e_hora_nao_sao_mascaradas_a_frase_vai_para_confirmar() -> None:
+    p = votacao()
+    assert status(paragrafo(p, antes="Em 22/09/2026, às 18h30, "), p) == ["trecho_nao_encontrado"]
+    assert status(paragrafo(p, antes="Às 18:30, "), p) == ["trecho_nao_encontrado"]
 
 
-def test_um_ponto_zero_nao_vira_dez_nem_nove() -> None:
-    leitura = ler("1.0 votos sim")
-    assert leitura.duvidas and leitura.numeros == []
+def test_numero_trocado_no_placar_nao_e_a_frase_canonica() -> None:
+    p = votacao(9, 2, 1)
+    assert status(paragrafo(p).replace("9 votos a favor", "10 votos a favor", 1), p) == ["trecho_nao_encontrado"]
+    assert status(paragrafo(p).replace("2 contra", "9 contra", 1), p) == ["trecho_nao_encontrado"]
 
 
-@pytest.mark.parametrize("frase", ["-9 votos sim", "−9 votos sim", "+9 votos sim", "9-2 votos", "9–2"])
-def test_sinal_ou_intervalo_nao_e_conferido(frase: str) -> None:
-    assert problemas(f"aprovada por {frase}"), frase
-
-
-def test_zero_a_esquerda_e_o_mesmo_numero() -> None:
-    assert valores("09 votos sim, 002 votos não, 01 abstenção") == [9, 2, 1]
-    assert problemas("aprovada por 09 votos sim, 002 votos não e 01 abstenção") == []
-    assert problemas("aprovada por 010 votos sim") == ["10 dito para 'sim', mas o registro do sistema é 9"]
-
-
-# ---------- extenso: confere de verdade ou marca ----------
-
-
-@pytest.mark.parametrize(
-    ("extenso", "valor"),
-    [("sete", 7), ("dezenove", 19), ("vinte e um", 21), ("trinta e três", 33), ("cento e vinte e cinco", 125)],
-)
-def test_extenso_e_lido_por_inteiro(extenso: str, valor: int) -> None:
-    assert valores(f"{extenso} votos") == [valor]
-
-
-def test_extenso_errado_reprova_e_certo_confere() -> None:
-    assert problemas("aprovada por dez votos favoráveis") == ["10 dito para 'sim', mas o registro do sistema é 9"]
-    assert problemas("aprovada por nove votos favoráveis") == []
-    assert problemas("aprovada por vinte e um votos sim") == ["21 dito para 'sim', mas o registro do sistema é 9"]
-
-
-def test_dois_e_tres_nao_viram_cinco() -> None:
-    assert valores("dois e três") == [2, 3]
-
-
-@pytest.mark.parametrize(
-    "frase", ["mil votos sim", "uma dúzia de votos", "duas dezenas de votos", "um milhão de votos"]
-)
-def test_extenso_que_nao_se_interpreta_vira_duvida(frase: str) -> None:
-    assert ler(frase).duvidas, frase
-    assert problemas(f"aprovada por {frase}"), frase
-
-
-def test_nenhum_e_sem_valem_zero_e_so_conferem_se_o_registro_for_zero() -> None:
-    assert problemas("aprovada, com nenhuma abstenção") == ["0 dito para 'abstencao', mas o registro do sistema é 1"]
-    assert problemas("aprovada, sem abstenções") == ["0 dito para 'abstencao', mas o registro do sistema é 1"]
-    assert problemas("aprovada, com nenhuma abstenção e sem votos contrários", votacao(10, 0, 0)) == []
-
-
-def test_unanimidade_so_confere_se_o_registro_for_unanime() -> None:
-    erro = ["unanimidade, mas o registro do sistema tem voto contrário, abstenção ou não tem placar"]
-    assert problemas("aprovada por unanimidade") == erro
-    assert problemas("aprovada por unanimidade", votacao(12, 0, 0)) == []
-    assert problemas("aprovada por unanimidade", votacao(None, None, None, modalidade="simbolica")) == erro
-
-
-# ---------- ordinais, número colado, referências ----------
-
-
-@pytest.mark.parametrize("frase", ["o 7º voto", "a 7ª votação", "o 1o turno", "o 9° vereador", "o 7ºs"])
-def test_ordinal_nao_e_contagem_e_nao_passa(frase: str) -> None:
-    assert problemas(frase), frase
-
-
-def test_numero_colado_na_palavra_e_lido_e_conferido() -> None:
-    assert valores("9votos sim") == [9]
-    assert problemas("aprovada por 10votos sim") == ["10 dito para 'sim', mas o registro do sistema é 9"]
-
-
-def test_barra_so_passa_como_a_referencia_da_materia() -> None:
-    assert problemas("o PL 008/2026 foi aprovado por 9 votos sim") == []
-    assert problemas("o PL 012/2026 foi aprovado por 9 votos sim"), "outra matéria: 12/2026 não é a desta votação"
-    assert problemas("aprovada por 9/2"), "9/2 não é data nem referência: não se sabe ler"
-    assert problemas("aprovada por 10/2"), "10/2 (era engolido como data)"
-
-
-def test_data_e_hora_completas_nao_sao_placar() -> None:
-    assert problemas("Em 22/09/2026, às 18h30, o PL 008/2026 foi aprovado por 9 votos sim") == []
-
-
-def test_numero_solto_que_o_registro_nao_tem_reprova() -> None:
-    assert problemas("conforme o art. 7") == ["7 não consta no registro do sistema"]
-    assert problemas("com 12 vereadores presentes") == [
-        "12 'vereadores' não tem papel conhecido no registro do sistema"
-    ]
-
-
-def test_a_fracao_do_quorum_qualificado_passa() -> None:
-    p = votacao(9, 4, 0, quorum="maioria_qualificada_2_3", necessarios=9)
-    assert problemas("exigia dois terços dos membros, ou 9 votos necessários, e teve 9 votos sim", p) == []
-    assert problemas("exigia 2/3 dos membros, ou eram necessários 9 votos", p) == []
-    assert problemas("eram necessários 8 votos", p) == ["8 dito para 'necessario', mas o registro do sistema é 9"]
-
-
-# ---------- 3. o número certo no campo certo, na votação certa ----------
-
-
-def test_sim_e_nao_trocados_reprovam_mesmo_com_os_dois_numeros_no_registro() -> None:
-    assert problemas("rejeitada por 9 votos contra e 2 votos favoráveis") == [
-        "9 dito para 'nao', mas o registro do sistema é 2",
-        "2 dito para 'sim', mas o registro do sistema é 9",
-    ]
-
-
-def test_7_a_favor_2_contra_nao_passa_com_os_campos_trocados() -> None:
-    assert problemas("aprovada por 7 votos a favor e 2 contra", votacao(2, 7, 0)) == [
-        "7 dito para 'sim', mas o registro do sistema é 2",
-        "2 dito para 'nao', mas o registro do sistema é 7",
-    ]
-    assert problemas("aprovada por 7 votos a favor e 2 contra", votacao(7, 2, 0)) == []
+def test_campos_trocados_nao_conferem_mesmo_com_os_dois_numeros_no_dado() -> None:
+    p = votacao(2, 7, 0)  # no dado: 2 a favor, 7 contra
+    trocado = paragrafo(p).replace("2 votos a favor, 7 contra", "7 votos a favor, 2 contra", 1)
+    assert "7 votos a favor, 2 contra" in trocado
+    assert status(trocado, p) == ["trecho_nao_encontrado"]
+    assert status(paragrafo(p), p) == ["conferida"]
 
 
 def test_o_numero_de_outra_votacao_da_mesma_sessao_nao_confere() -> None:
     a, b = votacao(7, 2, 0, id_="a"), votacao(5, 4, 0, id_="b")
-    assert problemas("aprovada por 7 votos sim", a) == []
-    assert problemas("aprovada por 7 votos sim", b) == ["7 dito para 'sim', mas o registro do sistema é 5"]
-    texto = "O PL 008/2026 teve 7 votos sim. [[votacao:b | Placar: 5 votos sim, 4 votos não, 0 abstenções]]"
-    assert [c.status for c in conferir(texto, [lida(b)])] == ["trecho_nao_encontrado"]
+    texto_de_b = paragrafo(b)
+    assert status(texto_de_b, a, b) == ["conferida"]
+    de_b_citando_a = f"Votação nominal: PL 008/2026, {canonica(b)}. [[votacao:a | {canonica(a)}]]"
+    assert status(de_b_citando_a, a, b) == ["trecho_nao_encontrado"], "a frase de B não sustenta a citação de A"
 
 
-def test_numero_sem_papel_ao_lado_de_voto_reprova_mesmo_que_exista_no_registro() -> None:
-    # "7 votos a 2" (sim a não) com 7 e 2 existindo no registro em campos trocados passaria só por "existir"
-    assert problemas("aprovada por 7 votos a 2", votacao(2, 7, 0)) == [
-        "7 'votos' não tem papel conhecido no registro do sistema",
-        "2 não consta no registro do sistema",
-    ]
+def test_duas_votacoes_no_mesmo_paragrafo_nao_conferem() -> None:
+    a, b = votacao(7, 2, 0, id_="a"), votacao(5, 4, 0, id_="b")
+    junto = f"{paragrafo(a)} E {canonica(b)}. [[votacao:b | {canonica(b)}]]"
+    assert status(junto, a, b) == ["trecho_nao_encontrado", "trecho_nao_encontrado"]
+    # placar IGUAL nas duas: a frase serve às duas, e só a regra "uma votação por parágrafo" as barra
+    c = votacao(7, 2, 0, id_="c")
+    mesma_frase = f"{paragrafo(a)} [[votacao:c | {canonica(c)}]]"
+    assert status(mesma_frase, a, c) == ["trecho_nao_encontrado", "trecho_nao_encontrado"]
+    assert status(paragrafo(a), a, c) == ["conferida"]
+    separado = f"{paragrafo(a)}\n\n{paragrafo(b)}"
+    assert status(separado, a, b) == ["conferida", "conferida"]
 
 
-def test_papeis_do_quorum_e_da_composicao() -> None:
-    p = votacao(9, 2, 1, quorum="maioria_absoluta", necessarios=7, base=13)
-    assert problemas("eram necessários 7 votos sim, de 13 membros", p) == []
-    assert problemas("eram necessários 8 votos sim, de 13 membros", p) == [
-        "8 dito para 'necessario', mas o registro do sistema é 7"
-    ]
-    assert problemas("eram necessários 7 votos sim, de 14 membros", p) == [
-        "14 dito para 'membro', mas o registro do sistema é 13"
-    ]
-
-
-# ---------- 4. token inteiro, não pedaço ----------
-
-
-def test_17_nao_e_conferido_por_existir_7_ou_1() -> None:
-    assert problemas("aprovada por 17 votos sim", votacao(7, 1, 0)) == [
-        "17 dito para 'sim', mas o registro do sistema é 7"
-    ]
-    assert problemas("aprovada por 7 votos sim", votacao(17, 1, 0)) == [
-        "7 dito para 'sim', mas o registro do sistema é 17"
-    ]
-    assert problemas("com 17 abstenções") == ["17 dito para 'abstencao', mas o registro do sistema é 1"]
-    assert problemas("em 2026 a matéria") == []
-    assert problemas("em 202 a matéria") == ["202 não consta no registro do sistema"]
-
-
-# ---------- a frase que a marca sustenta ----------
-
-
-def test_afirmacao_vai_do_fim_da_citacao_anterior_ao_paragrafo_e_inclui_o_resto_sem_citacao() -> None:
-    t = "Houve 7 votos. [[a | xxxxxxxxxxxxxxx]] e depois 9 votos sim [[b | yyyyyyyyyyyyyyy]] e mais 5 votos."
-    i = t.rindex("[[b")
-    assert afirmacao_da_marca(t, i, t.index("]]", i) + 2).split() == [
-        "e",
-        "depois",
-        "9",
-        "votos",
-        "sim",
-        "e",
-        "mais",
-        "5",
-        "votos.",
-    ]
-    a = t.index("[[a")
-    assert "Houve 7 votos." in afirmacao_da_marca(t, a, t.index("]]") + 2), "a primeira sustenta o que veio antes"
-
-
-def test_quebra_de_linha_no_meio_da_frase_nao_corta_a_afirmacao() -> None:
-    t = "A matéria foi aprovada por 10\nvotos sim [[votacao:v1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]"
-    assert "10" in afirmacao_da_marca(t, t.index("[["), len(t))
-    assert [c.status for c in conferir(t, [lida(votacao())])] == ["trecho_nao_encontrado"]
-
-
-def test_paragrafo_novo_corta_a_afirmacao() -> None:
-    t = "Sessão com 12 presentes.\n\nA matéria foi aprovada [[votacao:v1 | Placar: 9 votos sim]]"
-    assert "12" not in afirmacao_da_marca(t, t.index("[["), len(t))
+def test_a_marca_de_outra_fonte_comum_no_paragrafo_nao_atrapalha() -> None:
+    p = votacao()
+    comum = FonteLida(fonte=Fonte(id="transcricao:t1#1", rotulo="Presidente"), texto="Declaro aprovado o projeto.")
+    texto = f"{paragrafo(p)} [[transcricao:t1#1 | Declaro aprovado o projeto.]]"
+    assert [c.status for c in conferir(texto, [lida(p), comum])] == ["conferida", "conferida"]
 
 
 def test_ponto_de_abreviatura_nao_esconde_numero() -> None:
-    t = (
-        "Aprovada por 10 votos sim, conforme o Sr. Presidente. "
-        "[[votacao:v1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]"
-    )
-    assert "10" in afirmacao_da_marca(t, t.index("[["), t.index("]]") + 2)
-    assert [c.status for c in conferir(t, [lida(votacao())])] == ["trecho_nao_encontrado"]
-
-
-def test_numero_escrito_depois_da_marca_tambem_e_conferido() -> None:
-    marca = "[[votacao:v1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]"
-    assert [c.status for c in conferir(f"Foi aprovada. {marca} O placar foi de 10 votos sim.", [lida(votacao())])] == [
+    p = votacao()
+    assert status(paragrafo(p, antes="Aprovada por 10 votos, conforme o Sr. Presidente. "), p) == [
         "trecho_nao_encontrado"
     ]
-    assert [c.status for c in conferir(f"Foi aprovada. {marca} O placar foi de 9 votos sim.", [lida(votacao())])] == [
-        "conferida"
-    ]
+    assert status(paragrafo(p, antes="Conforme o Sr. Presidente, "), p) == ["conferida"]
 
 
-def test_confirmar_declarado_fica_fora_da_conferencia() -> None:
-    texto = (
-        "Foi aprovada por 9 votos sim. [[votacao:v1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]] "
-        "[confirmar: a gravação indica 10 votos sim; o sistema registra 9]"
+def test_numero_depois_da_marca_no_mesmo_paragrafo_tambem_conta() -> None:
+    p = votacao()
+    assert status(f"{paragrafo(p)} O placar foi de 10 votos.", p) == ["trecho_nao_encontrado"]
+    assert status(f"{paragrafo(p)} Nada mais.", p) == ["conferida"]
+
+
+def test_quebra_de_linha_simples_nao_separa_paragrafo() -> None:
+    p = votacao()
+    assert status(paragrafo(p, antes="foram 10\n"), p) == ["trecho_nao_encontrado"]
+
+
+def test_o_numero_do_paragrafo_vizinho_nao_conta() -> None:
+    p = votacao()
+    assert status(f"Sessão com 12 presentes.\n\n{paragrafo(p)}", p) == ["conferida"]
+
+
+# ---------- [confirmar]: exclusão exata, sem lavar o resto ----------
+
+
+def test_confirmar_declarado_fica_fora_e_o_resto_ainda_passa() -> None:
+    p = votacao()
+    com = paragrafo(p) + " [confirmar: a gravação indica 10 votos a favor; o sistema registra 9]"
+    assert status(com, p) == ["conferida"]
+
+
+def test_confirmar_nao_lava_o_resto_da_frase() -> None:
+    p = votacao()
+    assert status(paragrafo(p, depois=", com 10 votos") + " [confirmar: x]", p) == ["trecho_nao_encontrado"]
+    assert status("Foram 10 votos [confirmar: ok] " + paragrafo(p), p) == ["trecho_nao_encontrado"]
+    # sem a frase canônica, o [confirmar] sozinho não faz a votação conferir
+    assert status(f"Aprovada. [confirmar: 9 votos] [[votacao:v1 | {canonica(p)}]]", p) == ["trecho_nao_encontrado"]
+
+
+def test_confirmar_fora_do_formato_exato_nao_e_excluido() -> None:
+    p = votacao()
+    for forma in (
+        "[ confirmar: 10 votos]",
+        "[confirmar:10 votos]",
+        "[confirmar 10 votos]",
+        "[confirmar: a [b] 10 votos]",
+    ):
+        assert status(paragrafo(p) + " " + forma, p) == ["trecho_nao_encontrado"], forma
+
+
+# ---------- o que escapa de um interpretador de prosa não escapa daqui ----------
+
+
+@pytest.mark.parametrize(
+    "intruso",
+    ["três", "TRÊS", "mil", "dúzia", "metade", "dois terços", "meio", "unanimidade", "unânime", "nenhuma", "todos",
+     "ambos", "empate", "maioria", "primeiro", "segundo", "décimo", "IV", "iv", "X", "xii", "uma"],
+)  # fmt: skip
+def test_palavra_numero_da_lista_e_romano_isolado_reprovam(intruso: str) -> None:
+    p = votacao()
+    assert status(paragrafo(p, antes=f"{intruso} "), p) == ["trecho_nao_encontrado"], intruso
+
+
+@pytest.mark.parametrize(
+    "disfarce",
+    ["1\u200b0", "d\u200bez", "d\u0301ez", "d\u0435z", "t\u0440\u0435s", "1\u00ad0", "1\u2060 0", "\ufeff7"],
+    ids=[
+        "zwsp-no-numero",
+        "zwsp-na-palavra",
+        "combinante-sem-composicao",
+        "homoglifo-e",
+        "homoglifo-tres",
+        "hifen-suave",
+        "word-joiner",
+        "bom",
+    ],
+)
+def test_caractere_invisivel_combinante_ou_homoglifo_reprova(disfarce: str) -> None:
+    p = votacao()
+    assert status(paragrafo(p, antes=f"{disfarce} "), p) == ["trecho_nao_encontrado"], repr(disfarce)
+
+
+def test_sem_nenhum_numero_o_texto_comum_passa_como_antes() -> None:
+    p = votacao()
+    assert status(paragrafo(p, antes="Colocada em pauta pela Mesa, a matéria seguiu: "), p) == ["conferida"]
+
+
+def test_expressao_numerica_fora_da_lista_passa_e_e_o_limite_declarado() -> None:
+    # o conferidor não entende português: isto passa, e a revisão humana do rascunho continua obrigatória
+    p = votacao()
+    assert status(paragrafo(p, antes="Por larga margem, "), p) == ["conferida"]
+
+
+# ---------- normalização: um só ponto de entrada, igual nos dois lados ----------
+
+
+def test_normalizar_e_so_nfkc_minusculas_e_espacos() -> None:
+    assert normalizar("  \uff21\uff22\uff23\u00a0 Três\n\t\u2079  ") == "abc três 9"
+    assert normalizar("Aprovada  Por") == "aprovada por"
+
+
+def test_a_frase_canonica_escrita_com_outros_espacos_caixa_ou_largura_confere() -> None:
+    p = votacao()
+    estranha = canonica(p).replace(" ", "\u00a0\u00a0").upper().replace("9", "\uff19")
+    assert status(f"Votação nominal: pl 008/2026, {estranha}. [[votacao:v1 | {canonica(p)}]]", p) == ["conferida"]
+
+
+def test_os_dois_lados_usam_a_mesma_normalizacao() -> None:
+    # frases e identificadores do dado passam por normalizar() como o parágrafo: dado escrito "estranho" também casa
+    assert divergencias("PL 008/2026, ＡPROVADA por 9 votos", ["aprovada  por 9 votos"], ["Ｐl 008/2026"]) == []
+    assert divergencias("aprovada por 9 votos", ["Aprovada Por 9 Votos"], []) == []
+
+
+def test_sinais_numericos_por_negacao_ampla() -> None:
+    assert sinais_numericos(normalizar("aprovada, sem nada")) == []
+    assert sinais_numericos(normalizar("¹⁰ Ⅳ ½ ٩")) != []
+    assert "iv" in sinais_numericos("iv")
+    assert sinais_numericos("civil") == [], "palavra comum que só contém letras romanas não é romano"
+
+
+# ---------- as outras capacidades não mudam ----------
+
+
+def test_citacao_de_norma_com_ordinal_confere_como_antes() -> None:
+    norma = FonteLida(
+        fonte=Fonte(id="norma:lom#art7", rotulo="LOM, art. 7º"),
+        texto="Art. 7º Compete privativamente à Câmara Municipal dispor sobre seu Regimento Interno.",
     )
-    assert [c.status for c in conferir(texto, [lida(votacao())])] == ["conferida"]
-
-
-# ---------- o que isto muda na citação ----------
-
-
-def status(texto: str, fonte: FonteLida) -> list[str]:
-    return [c.status for c in conferir(texto, [fonte])]
-
-
-def test_trecho_literal_certo_com_numero_errado_na_frase_nao_confere() -> None:
-    marca = "[[votacao:v1 | Placar: 9 votos sim, 2 votos não, 1 abstenção]]"
-    assert status(f"Foi aprovada por 9 votos sim, 2 votos não e 1 abstenção. {marca}", lida(votacao())) == ["conferida"]
-    assert status(f"Foi aprovada por 10 votos sim, 2 votos não e 1 abstenção. {marca}", lida(votacao())) == [
-        "trecho_nao_encontrado"
-    ]
+    texto = "Conforme o art. 7º, 10 vereadores votam. [[norma:lom#art7 | Compete privativamente à Câmara Municipal]]"
+    assert [c.status for c in conferir(texto, [norma])] == ["conferida"]
 
 
 def test_o_trecho_errado_segue_reprovando_como_antes() -> None:
-    marca = "[[votacao:v1 | Placar: 10 votos sim, 2 votos não, 1 abstenção]]"
-    assert status(f"Foi aprovada por 9 votos sim. {marca}", lida(votacao())) == ["trecho_nao_encontrado"]
+    p = votacao()
+    assert p.fonte is not None
+    assert status(f"{canonica(p)}. [[votacao:v1 | aprovada por 10 votos a favor, 2 contra e 1 abstenção]]", p) == [
+        "trecho_nao_encontrado"
+    ]
 
 
-def test_fonte_comum_nao_ganha_a_regra_nova() -> None:
-    comum = FonteLida(
-        fonte=Fonte(id="transcricao:t1#1", rotulo="Presidente"), texto="Declaro aprovado o projeto por nove votos."
-    )
-    assert status(
-        "A Presidência declarou 12 votos. [[transcricao:t1#1 | aprovado o projeto por nove votos]]", comum
-    ) == ["conferida"]
+# ---------- propriedade: o roteiro do fake confere; qualquer número ou sinal a mais, não ----------
+
+SINAIS = ["٩", "⁹", "Ⅳ", "três", "iv", "mil", "unanimidade", "metade"]
 
 
-# ---------- 5. propriedade: o roteiro do fake confere; qualquer um dos três números trocado, não ----------
+def _favor(n: int) -> str:
+    return f"{n} {'voto' if n == 1 else 'votos'} a favor"
 
 
-def _sim(n: int) -> str:
-    return f"{n} {'voto' if n == 1 else 'votos'} sim"
-
-
-def _nao(n: int) -> str:
-    return f"{n} {'voto' if n == 1 else 'votos'} não"
-
-
-def _abs(n: int) -> str:
+def _abstencoes(n: int) -> str:
     return f"{n} {'abstenção' if n == 1 else 'abstenções'}"
 
 
-def test_propriedade_o_placar_do_roteiro_confere_e_trocar_qualquer_numero_nao() -> None:
-    certos = trocas = 0
+def test_propriedade_o_placar_do_roteiro_confere_e_qualquer_sinal_ou_numero_a_mais_nao() -> None:
+    certos = trocas = insercoes = 0
     for sim in range(31):
         for nao in range(31):
-            for abst in {0, (sim * 3 + nao) % 31}:
+            for abst in range(31):
                 p = votacao(sim, nao, abst)
                 assert p.fonte is not None
-                corpo, _, _ = _votacao(p.fonte.id, p.texto)  # a frase que o roteiro do fake escreve
                 fonte = lida(p)
+                corpo, _ = _votacao(p.fonte.id, p.texto)  # o parágrafo que o roteiro do fake escreve
                 assert [c.status for c in conferir(corpo, [fonte])] == ["conferida"], corpo
                 certos += 1
-                frase, marca = corpo.split(" [[", 1)  # só a frase: o trecho literal da marca não é tocado
-                for antigo, formato, atual in (
-                    (_sim(sim), _sim, sim),
-                    (_nao(nao), _nao, nao),
-                    (_abs(abst), _abs, abst),
+                frase, marca = corpo.split(" [[", 1)  # só a frase: a marca (o trecho citado) fica como está
+                for antigo, novo in (
+                    (_favor(sim), _favor((sim + 1) % 31)),
+                    (f"{nao} contra", f"{(nao + 7) % 31} contra"),
+                    (_abstencoes(abst), _abstencoes((abst + 13) % 31)),
                 ):
-                    assert antigo in frase, (antigo, frase)
-                    for outro in {0, 1, 17, 30, atual + 1}:
-                        if outro == atual:
-                            continue
-                        errado = f"{frase.replace(antigo, formato(outro), 1)} [[{marca}"
+                    errado = f"{frase.replace(antigo, novo, 1)} [[{marca}"
+                    assert [c.status for c in conferir(errado, [fonte])] == ["trecho_nao_encontrado"], errado
+                    trocas += 1
+                if (sim + nao + abst) % 5:
+                    continue  # as inserções em todos os placares seriam 6x mais lentas sem provar mais
+                for sinal in SINAIS:
+                    for posicao in (0, frase.index(":") + 1, len(frase)):
+                        errado = f"{frase[:posicao]} {sinal} {frase[posicao:]} [[{marca}"
                         assert [c.status for c in conferir(errado, [fonte])] == ["trecho_nao_encontrado"], errado
-                        trocas += 1
-    assert certos > 1800 and trocas > 25000
+                        insercoes += 1
+    assert certos == 31**3 and trocas == 3 * 31**3 and insercoes > 100_000

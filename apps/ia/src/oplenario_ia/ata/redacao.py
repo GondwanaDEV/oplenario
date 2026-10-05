@@ -19,10 +19,9 @@ from datetime import datetime, timedelta, timezone
 
 from oplenario_ia.armazem.porta import TranscricaoGuardada
 from oplenario_ia.confianca.citacao import MARCA
-from oplenario_ia.confianca.numeros import identificadores
 from oplenario_ia.fronteira.contrato import ContextoSessao, VotacaoContexto
 from oplenario_ia.governanca.filtro import PedidoGovernado
-from oplenario_ia.governanca.proveniencia import Fato, Fonte, Peca, Proveniencia, Sigilo
+from oplenario_ia.governanca.proveniencia import Fonte, Peca, Proveniencia, Sigilo
 
 OPERACAO = "ata.redigir"
 PROMPT_VERSAO = "ata-v2"
@@ -38,29 +37,20 @@ INSTRUCOES = (
     "Não invente nomes, números, votos, horários nem resultados. O que as fontes não disserem com clareza, escreva "
     "entre colchetes como ponto a confirmar, por exemplo: [confirmar: resultado da votação do Projeto de Lei nº 12]. "
     "Fala sem orador identificado é atribuída a 'um orador não identificado' — nunca adivinhe quem falou.\n"
-    "As fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram: o resultado e "
-    "o placar delas são os únicos válidos. Ao registrar uma votação, escreva o resultado e os totais exatamente como a "
-    "fonte traz e cite a fonte da votação logo depois, com o trecho do placar (ou do resultado, quando não há placar) "
-    "copiado literalmente. Nunca diga como cada vereador votou: a fonte não traz isso e a lista nominal fica no anexo "
-    "do sistema. Se a gravação disser outro resultado ou outro placar, vale o dado do sistema: escreva o dado do "
-    "sistema e acrescente [confirmar: a gravação indica X; o sistema registra Y]. Votação que a gravação menciona e "
-    "que não consta nas fontes do sistema fica como ponto a confirmar.\n"
+    "As fontes 'votacao:' são o REGISTRO DO SISTEMA das votações encerradas, na ordem em que ocorreram. Cada votação "
+    "ganha um parágrafo só dela (uma votação por parágrafo), com o objeto exatamente como a linha 'Matéria votada' "
+    "traz e UMA das frases das linhas 'Frase do resultado', 'Frase da unanimidade' ou 'Frase do quórum', copiada "
+    "literalmente, sem trocar nenhuma palavra; nesse parágrafo não escreva nenhum outro número, data, hora, ordinal "
+    "nem quantidade. Depois cite a fonte da votação, com a frase copiada. Nunca diga como cada vereador votou: a fonte "
+    "não traz isso e a lista nominal fica no anexo do sistema. Se a gravação disser outro resultado ou outro placar, "
+    "vale o dado do sistema: escreva a frase do sistema e acrescente [confirmar: a gravação indica X; o sistema "
+    "registra Y]. Votação que a gravação menciona e que não consta nas fontes do sistema fica como ponto a "
+    "confirmar.\n"
     "Não escreva cabeçalho de assinaturas nem comentários sobre o seu trabalho: devolva só o texto da ata."
 )
 
 PONTO_A_CONFIRMAR = re.compile(r"\[\s*confirmar\s*:\s*([^\]]+?)\s*\]", re.IGNORECASE)
 MODALIDADES = {"nominal": "nominal", "simbolica": "simbólica", "secreta": "secreta"}
-# como a prosa chama cada total (sem acento, minúsculas): é o que liga "10 votos favoráveis" ao total de sim
-NOMES_SIM = ("sim", "favor", "favoravel", "favoraveis")
-NOMES_NAO = ("nao", "contra", "contrario", "contrarios")
-NOMES_ABSTENCAO = ("abstencao", "abstencoes", "abstiveram")
-NOMES_MEMBROS = ("membro", "membros")
-NOMES_QUORUM = ("necessario", "necessarios", "exigido", "exigidos", "preciso", "precisos", "minimo", "quorum")
-# a fração do quórum qualificado também se escreve em palavras ("dois terços"): esses números se citam sem papel
-FRACAO_DO_QUORUM = {
-    "maioria_qualificada_2_3": ([2, 3], [(2, 3)]),
-    "maioria_qualificada_3_5": ([3, 5], [(3, 5)]),
-}
 TIPOS_SESSAO = {
     "ordinaria": "ordinária",
     "extraordinaria": "extraordinária",
@@ -147,38 +137,54 @@ def _placar(v: VotacaoContexto) -> str | None:
 
 
 def texto_da_votacao(v: VotacaoContexto) -> str:
-    """O registro do sistema de uma votação, em linhas `Rótulo: valor` (o redator fake lê assim; o modelo, também).
-    Sem a hora e sem ordinal de propósito: todo número deste texto é um número que a ata pode citar sem ser marcada."""
+    """O registro do sistema de uma votação, em linhas `Rótulo: valor` (o redator fake lê assim; o modelo, também). As
+    linhas `Frase …` são as frases canônicas: as únicas que a ata pode usar para o placar e o quórum."""
     placar = _placar(v) or f"sem contagem individual (votação {MODALIDADES[v.modalidade]})"
-    return "\n".join(
-        [
-            f"Matéria votada: {v.objeto}",
-            f"Modalidade: {MODALIDADES[v.modalidade]}",
-            f"Quórum exigido: {_quorum(v)}",
-            f"Placar: {placar}",
-            f"Resultado: {v.resultado}",
-        ]
-    )
+    linhas = [
+        f"Matéria votada: {v.objeto}",
+        f"Modalidade: {MODALIDADES[v.modalidade]}",
+        f"Quórum exigido: {_quorum(v)}",
+        f"Placar: {placar}",
+        f"Resultado: {v.resultado}",
+        f"Frase do resultado: {frase_do_resultado(v)}",
+    ]
+    if (u := frase_da_unanimidade(v)) is not None:
+        linhas.append(f"Frase da unanimidade: {u}")
+    if (q := frase_do_quorum(v)) is not None:
+        linhas.append(f"Frase do quórum: {q}")
+    return "\n".join(linhas)
 
 
-def fatos_da_votacao(v: VotacaoContexto) -> list[Fato]:
-    """Os papéis numéricos do registro: o placar (sim, não, abstenção), o quórum e a composição da Casa."""
-    pares = [(v.total_sim, NOMES_SIM), (v.total_nao, NOMES_NAO), (v.total_abstencao, NOMES_ABSTENCAO)]
-    fatos = [Fato(valor=valor, nomes=nomes) for valor, nomes in pares if valor is not None]
-    if v.votos_necessarios is not None:
-        fatos.append(Fato(valor=v.votos_necessarios, nomes=NOMES_QUORUM, lado="qualquer"))
-    if v.base_membros is not None:
-        fatos.append(Fato(valor=v.base_membros, nomes=NOMES_MEMBROS))
-    return fatos
+def frase_do_resultado(v: VotacaoContexto) -> str:
+    """A frase canônica do resultado e do placar. Só aqui, a partir do dado; o redator fake a copia e o conferidor
+    (`confianca/numeros.py`) a casa por substring exata."""
+    r = v.resultado
+    if v.total_sim is None or v.total_nao is None or v.total_abstencao is None:
+        return f"{r} em votação simbólica" if v.modalidade == "simbolica" else f"{r}, sem contagem de votos"
+    abstencoes = _plural(v.total_abstencao, "abstenção", "abstenções")
+    return f"{r} por {_plural(v.total_sim, 'voto', 'votos')} a favor, {v.total_nao} contra e {abstencoes}"
 
 
-def _unanime(v: VotacaoContexto) -> bool:
-    return bool(v.total_sim) and v.total_nao == 0 and v.total_abstencao == 0
+def frase_da_unanimidade(v: VotacaoContexto) -> str | None:
+    """Só existe se o dado é unânime: aprovada, ao menos um voto a favor, nenhum contra, nenhuma abstenção."""
+    if v.resultado == "aprovada" and (v.total_sim or 0) > 0 and v.total_nao == 0 and v.total_abstencao == 0:
+        return f"aprovada por unanimidade, com {_plural(v.total_sim or 0, 'voto', 'votos')} a favor"
+    return None
+
+
+def frase_do_quorum(v: VotacaoContexto) -> str | None:
+    n = v.votos_necessarios
+    if n is None:
+        return None
+    return "era necessário 1 voto" if n == 1 else f"eram necessários {n} votos"
+
+
+def frases_canonicas(v: VotacaoContexto) -> list[str]:
+    """O conjunto FECHADO de frases que a ata pode usar para esta votação — a única fonte de verdade do que confere."""
+    return [f for f in (frase_do_resultado(v), frase_da_unanimidade(v), frase_do_quorum(v)) if f is not None]
 
 
 def peca_da_votacao(v: VotacaoContexto) -> Peca:
-    ids, pares_do_objeto = identificadores(v.objeto)
-    fracao, pares_da_fracao = FRACAO_DO_QUORUM.get(v.quorum_tipo, ([], []))
     return Peca(
         texto=texto_da_votacao(v),
         # o sistema já publica o resultado e os totais de toda votação encerrada (inclusive a secreta); o voto de cada
@@ -188,10 +194,8 @@ def peca_da_votacao(v: VotacaoContexto) -> Peca:
             id=f"votacao:{v.id}",
             rotulo=f"Votação de {v.objeto}, registrada pelo sistema",
             estruturada=True,
-            fatos=fatos_da_votacao(v),
-            livres=[*ids, *fracao],
-            pares=[*pares_do_objeto, *pares_da_fracao],
-            unanime=_unanime(v),
+            canonicas=frases_canonicas(v),
+            identificadores=[v.objeto],
         ),
     )
 

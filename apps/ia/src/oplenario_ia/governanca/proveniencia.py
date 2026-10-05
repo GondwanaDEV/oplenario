@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,17 +27,6 @@ class Proveniencia(BaseModel):
     terceiro: bool = False
 
 
-class Fato(BaseModel):
-    """Um valor numérico que uma fonte ESTRUTURADA afirma (o total de votos sim de uma votação), com o PAPEL dele.
-    `nomes` é como a prosa chama o papel (`sim`, `favor`, `favoraveis`; a comparação passa pela mesma normalização do
-    resto, então acento e caixa não importam). `lado`: `depois` = o nome vem depois do número ("9 votos sim");
-    `qualquer` = pode vir antes ou depois ("eram necessários 9 votos", "9 votos necessários" — o quórum)."""
-
-    valor: int
-    nomes: tuple[str, ...]
-    lado: Literal["depois", "qualquer"] = "depois"
-
-
 class Fonte(BaseModel):
     """A peça é uma FONTE citável: um dispositivo de norma, um trecho de transcrição, uma proposição (§22.11.7).
 
@@ -49,17 +37,12 @@ class Fonte(BaseModel):
     id: str = Field(min_length=1, pattern=r"^[^|\]\s\"]+$")
     rotulo: str
     versao: str | None = None
-    # Fonte ESTRUTURADA (um fato do core, não um texto escrito por gente): a conferência vai além do trecho literal e
-    # confere os números da afirmação que a cita contra o texto da fonte e contra `fatos` (confianca/numeros.py).
+    # Fonte ESTRUTURADA (um fato do core, não um texto escrito por gente): a conferência vai além do trecho literal. O
+    # parágrafo que a cita tem de conter uma das `canonicas` (frases geradas do dado, em `ata/redacao.py`) e não pode
+    # sobrar nenhum sinal numérico depois de tiradas as canônicas e os `identificadores` (confianca/numeros.py).
     estruturada: bool = False
-    fatos: list[Fato] = []
-    livres: list[
-        int
-    ] = []  # números que identificam a coisa e se citam sem papel (o da matéria: 8 e 2026 em PL 008/2026)
-    pares: list[tuple[int, int]] = []  # referências a/b que a fonte confirma ("8/2026"): só passam como par
-    unanime: bool = (
-        False  # o registro diz que ninguém votou contra nem se absteve ("unanimidade" só confere se verdade)
-    )
+    canonicas: list[str] = []
+    identificadores: list[str] = []
 
 
 class Peca(BaseModel):
