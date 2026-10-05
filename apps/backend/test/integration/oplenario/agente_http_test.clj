@@ -328,3 +328,119 @@
            ((juxt :classe :decisao :recurso_tipo :recurso_id) desfecho)))
     (is (= (:conteudo-sha256 i) (get (json/read-value (:detalhe desfecho)) "conteudo-sha256")))
     (is (not-any? #(re-find #"(?i)situacao do PL|Merenda" (pr-str %)) linhas) "a trilha segue sem conteudo")))
+
+;; ---------- ADR-0024 fatia 2: ler o historico ----------
+
+(defn- ler [svc ente iid caminho]
+  (let [r (pt/response-for svc :get caminho
+                           :headers {"Authorization" (str "Bearer " (json/write-value-as-string
+                                                                    {:sub "u" :ente-id (str ente) :identidade-id (str iid)}))})]
+    (assoc r :json (when (= 200 (:status r)) (json/read-value (:body r) json/keyword-keys-object-mapper)))))
+
+(defn- com-trilha
+  "O servico com a trilha de verdade entre os globais (como o host monta)."
+  []
+  (let [ra (repo-auditoria/map->RepoAuditoriaPg {:datasource {:ds *ds*}})
+        auth (it/autenticacao (idp-dev/idp-dev) (repo))]
+    (-> (http/servico (config/carregar)
+                      (auditoria-http/com-tentativa
+                       (agente/rotas {:auth auth :repo-identidade (repo) :ia (ia (atom []))
+                                      :repo-integracao-ia (repo-integracao)}))
+                      (it/globais-com [(auditoria-http/interceptor ra {:ancorar! (fn [_ _])})]))
+        ph/create-server ::ph/service-fn)))
+
+(defn- leituras-sensiveis [ente]
+  (tenancy/com-tenant* *ds* ente
+    #(jdbc/execute! % ["SELECT identidade_id, recurso_tipo, recurso_id FROM auditoria.registro
+                         WHERE ente_id = ? AND classe = 'leitura_sensivel' ORDER BY seq" ente]
+                    {:builder-fn rs/as-unqualified-maps})))
+
+(deftest cada-pessoa-le-o-proprio-historico-o-mais-recente-primeiro
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        rui (pessoa! ente "vereador")
+        svc (servico (ia (atom [])))]
+    (perguntar svc ente ana {:pergunta "primeira da Ana?"})
+    (perguntar svc ente ana {:pergunta "segunda da Ana?"})
+    (perguntar svc ente rui {:pergunta "do Rui?"})
+    (let [{:keys [status json]} (ler svc ente ana "/agente/historico")]
+      (is (= 200 status))
+      (is (= ["segunda da Ana?" "primeira da Ana?"] (mapv :pergunta (:interacoes json))))
+      (is (= [1 0 "resposta"] ((juxt :n-fontes :n-propostas :desfecho) (first (:interacoes json)))))
+      (is (nil? (:nome (first (:interacoes json)))) "a propria pessoa nao precisa do nome")
+      (is (false? (:mais json))))
+    (testing "paginar pelo instante"
+      (let [p1 (:json (ler svc ente ana "/agente/historico?limite=1"))
+            p2 (:json (ler svc ente ana (str "/agente/historico?limite=1&antes=" (:antes p1))))]
+        (is (= ["segunda da Ana?"] (mapv :pergunta (:interacoes p1))))
+        (is (true? (:mais p1)))
+        (is (= ["primeira da Ana?"] (mapv :pergunta (:interacoes p2))))
+        (is (false? (:mais p2)))))
+    (testing "o vereador ve so' o dele"
+      (is (= ["do Rui?"] (mapv :pergunta (:interacoes (:json (ler svc ente rui "/agente/historico")))))))))
+
+(deftest a-conversa-guardada-volta-inteira-e-conferida
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        svc (servico (ia (atom [])))
+        conversa (get-in (last (eventos (:body (perguntar svc ente ana {:pergunta "primeira?"})))) [1 "conversa-id"])
+        _ (perguntar svc ente ana {:pergunta "segunda?" :conversa conversa})
+        {:keys [status json]} (ler svc ente ana (str "/agente/conversas/" conversa))]
+    (is (= 200 status))
+    (is (= ["primeira?" "segunda?"] (mapv :pergunta (:interacoes json))))
+    (is (= "Pessoa" (:nome json)))
+    (is (every? true? (map :integra (:interacoes json))) "cada pergunta confere com o hash gravado")
+    (is (= "conferida" (get-in json [:interacoes 0 :resposta :citacoes 0 :status])))
+    (is (= ["fake-1" "e1"] ((juxt :modelo :execucao-ia) (first (:interacoes json)))))
+    (is (re-matches #"[0-9a-f]{64}" (:conteudo-sha256 (first (:interacoes json)))))
+    (is (nil? (:ente-id (first (:interacoes json)))))))
+
+(deftest quem-nao-e-auditor-nao-le-o-historico-de-outra-pessoa
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        bia (pessoa! ente "secretario")
+        svc (servico (ia (atom [])))
+        conversa (get-in (last (eventos (:body (perguntar svc ente ana {:pergunta "da Ana?"})))) [1 "conversa-id"])]
+    (is (= 403 (:status (ler svc ente bia (str "/agente/historico?pessoa=" ana)))))
+    (is (= 403 (:status (ler svc ente bia "/agente/historico?escopo=casa"))))
+    (is (= 404 (:status (ler svc ente bia (str "/agente/conversas/" conversa)))) "nem a existencia vaza")
+    (is (= 404 (:status (ler svc ente bia (str "/agente/conversas/" (random-uuid))))))
+    (testing "outra Casa nao alcanca a conversa, nem a propria dona por la'"
+      (let [outra (random-uuid)]
+        (is (= 404 (:status (ler svc outra (pessoa! outra "auditor") (str "/agente/conversas/" conversa)))))))
+    (testing "papel sem historico: 403"
+      (is (= 403 (:status (ler svc ente (pessoa! ente "admin_ente") "/agente/historico")))))))
+
+(deftest o-auditor-le-o-historico-da-casa-e-a-leitura-vai-a-trilha
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        rui (pessoa! ente "vereador")
+        aud (pessoa! ente "auditor")
+        svc (com-trilha)
+        conversa (get-in (last (eventos (:body (perguntar svc ente ana {:pergunta "da Ana?"})))) [1 "conversa-id"])]
+    (perguntar svc ente rui {:pergunta "do Rui?"})
+    (let [casa (:json (ler svc ente aud "/agente/historico?escopo=casa"))
+          da-ana (:json (ler svc ente aud (str "/agente/historico?pessoa=" ana)))
+          conv (ler svc ente aud (str "/agente/conversas/" conversa))]
+      (is (= #{"da Ana?" "do Rui?"} (set (map :pergunta (:interacoes casa)))))
+      (is (every? #(= "Pessoa" (:nome %)) (:interacoes casa)) "o auditor ve quem perguntou")
+      (is (= ["da Ana?"] (mapv :pergunta (:interacoes da-ana))))
+      (is (= 200 (:status conv)))
+      (is (true? (get-in conv [:json :interacoes 0 :integra]))))
+    (is (= [[aud "historico_assistente" "casa"]
+            [aud "historico_assistente" (str ana)]
+            [aud "conversa_assistente" conversa]]
+           (mapv (juxt :identidade_id :recurso_tipo :recurso_id) (leituras-sensiveis ente)))
+        "cada leitura do auditor sobre o historico de outra pessoa entra na trilha")
+    (testing "a pessoa lendo o proprio historico nao e' leitura sensivel"
+      (ler svc ente ana "/agente/historico")
+      (ler svc ente ana (str "/agente/conversas/" conversa))
+      (is (= 3 (count (leituras-sensiveis ente)))))))
+
+(deftest historico-recusa-parametro-torto
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        svc (servico (ia (atom [])))]
+    (doseq [q ["?limite=0" "?limite=51" "?limite=abc" "?antes=ontem" "?pessoa=abc"]]
+      (is (= 400 (:status (ler svc ente ana (str "/agente/historico" q)))) q))
+    (is (= 400 (:status (ler svc ente ana "/agente/conversas/nao-e-uuid"))))))

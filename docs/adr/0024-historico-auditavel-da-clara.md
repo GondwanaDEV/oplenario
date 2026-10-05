@@ -38,7 +38,7 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
    Prova o que a IA viu sem duplicar dado pessoal. Amplia o audit da ADR-0010, que registrava só as chamadas que
    escrevem.
 3. **Quem lê:** a própria pessoa e o `auditor` (controle interno) da Casa. Cada leitura do auditor vai à trilha. Nem
-   o `admin_ente` nem o operador da plataforma leem. *(As rotas de leitura entram na fatia seguinte, com a tela.)*
+   o `admin_ente` nem o operador da plataforma leem.
 4. **Ligação com a trilha:** cada linha guarda `conteudo_sha256`, o SHA-256 do registro canônico (pergunta,
    desfecho, resposta, passos, propostas, modelo, execuções). A trilha continua sem conteúdo (ADR-0017): a entrada
    do `POST /agente/perguntas` aponta a interação (`recurso-tipo` + `recurso-id`) e carrega o hash em
@@ -65,4 +65,19 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
 - Fatia 1 (armazenamento): migration `integracao_ia.interacao_assistente` + `chamada_agente.resultado_sha256`;
   `kernel/catalogo.clj` registra toda chamada de agente com o hash da saída; `agente.clj` grava a interação antes de
   responder (falha fechada) e devolve `interacao-id` e `conversa-id` no evento `fim`; a trilha recebe o hash.
-- Fatia 2 (leitura e tela): rotas do histórico (pessoa e auditor), o painel da Clara no layout interno.
+- Fatia 2 (leitura e tela):
+  - `GET /agente/historico` (a mais recente primeiro, paginada por `antes`, até 50) e `GET /agente/conversas/:id` (a
+    conversa inteira, com `integra` recalculado sobre a linha lida). A pessoa lê o seu; o `auditor` lê o de outra
+    pessoa (`?pessoa=`) ou o da Casa (`?escopo=casa`), com o nome de quem perguntou, e cada leitura dessas grava
+    `leitura_sensivel` na trilha. Conversa de outra pessoa é 404 para quem não é auditor; `admin_ente` sozinho, 403.
+  - O painel da Clara em toda tela interna da secretaria e do vereador (`app/(interno)/clara/`), porte da prancha:
+    recolhido (botão, `Ctrl + /`), aberto (janela de 400 px que empurra o conteúdo, até 680 px de altura), expandido
+    (histórico ao lado); no celular, folha de 88% com véu e a página inerte. A conversa continua pelo `conversa-id`
+    do `fim`; o histórico agrupa por dia no fuso da Casa; a conversa guardada abre só para leitura, com o registro
+    (quem, quando, modelo, citações conferidas, se confere com o hash gravado, link para a trilha).
+  - Os textos de `/assistente` e a mensagem de indisponível passam a dizer "Clara".
+- Falta:
+  - a tela do auditor para ler o histórico de outra pessoa ou da Casa (as rotas existem; hoje só por API);
+  - a Clara no app do vereador (`app/(vereador)/`), que segue com a aba do assistente em tela cheia;
+  - a dica da tela ("Nesta tela: PL 042/2026") e a busca nas conversas, que estão na prancha;
+  - o link da conversa para o registro exato na trilha (a `/auditoria` não filtra por recurso).

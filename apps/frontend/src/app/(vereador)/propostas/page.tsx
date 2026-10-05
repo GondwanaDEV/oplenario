@@ -17,7 +17,7 @@ export default function PaginaPropostas() {
     <div className="propostas">
       <h1 className="propostas-titulo">Propostas do assistente</h1>
       <p className="propostas-sub">
-        O que o assistente preparou a seu pedido. Nada disso foi feito: cada uma espera você ler e decidir.
+        O que a Clara preparou a seu pedido. Nada disso foi feito: cada uma espera você ler e decidir.
       </p>
       {estado.fase === "carregando" && <p role="status">Carregando…</p>}
       {estado.fase === "erro" && <p role="alert">{estado.mensagem}</p>}
