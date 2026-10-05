@@ -489,8 +489,6 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
     `folha-sessao-v2`;
   - em modo dev, conceder acesso grava o vínculo e devolve 500 (não há realm para provisionar);
-  - instáveis conhecidos: `mesa-audiencia.test.tsx` (cronômetro, `04:50` em vez de `00:40`) e o CPF sorteado em ~25
-    arquivos de teste do backend (colisão a cada ~8 mil corridas);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de
