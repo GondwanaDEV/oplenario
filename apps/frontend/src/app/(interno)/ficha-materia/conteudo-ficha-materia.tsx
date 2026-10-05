@@ -22,6 +22,7 @@ import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import { derivarDadosMateria } from "@/lib/ficha-materia-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
+import { dicaDaMateria, useDicaDaClara } from "../clara/dica";
 import { FichaCabecalho } from "./ficha-cabecalho";
 import { FichaMateriaTabs } from "./ficha-materia-tabs";
 import { DadosMateriaCard } from "./dados-materia-card";
@@ -38,6 +39,8 @@ export function ConteudoFichaMateria({ id }: { id: string }) {
   // os atos depois da aprovação (autógrafo, sanção/veto, norma) na linha do tempo; se a leitura falhar, a
   // ficha segue só com as transições
   const { dados: posAprovacao } = usePosAprovacao(token, id);
+  // "Nesta tela: PL 42/2026" na Clara (só começa a pergunta; a Clara consulta o sistema, a ficha não é fonte)
+  useDicaDaClara(ficha ? dicaDaMateria(ficha.proposicao.tipo, ficha.proposicao.sequencial, ficha.proposicao.ano) : null);
 
   if (estado === "carregando") {
     return (

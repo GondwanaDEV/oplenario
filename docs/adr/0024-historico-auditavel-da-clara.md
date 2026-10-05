@@ -38,7 +38,9 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
    Prova o que a IA viu sem duplicar dado pessoal. Amplia o audit da ADR-0010, que registrava só as chamadas que
    escrevem.
 3. **Quem lê:** a própria pessoa e o `auditor` (controle interno) da Casa. Cada leitura do auditor vai à trilha. Nem
-   o `admin_ente` nem o operador da plataforma leem.
+   o `admin_ente` nem o operador da plataforma leem. **O auditor lê pela tela, nunca pela Clara** (decisão do Daouda,
+   05/10/2026): o histórico e a trilha não viram ferramenta do agente, porque o que a Clara consulta vai ao fornecedor
+   de IA.
 4. **Ligação com a trilha:** cada linha guarda `conteudo_sha256`, o SHA-256 do registro canônico (pergunta,
    desfecho, resposta, passos, propostas, modelo, execuções). A trilha continua sem conteúdo (ADR-0017): a entrada
    do `POST /agente/perguntas` aponta a interação (`recurso-tipo` + `recurso-id`) e carrega o hash em
@@ -76,8 +78,19 @@ de onde tirou e com que modelo precisa poder ser lido depois e provado íntegro.
     do `fim`; o histórico agrupa por dia no fuso da Casa; a conversa guardada abre só para leitura, com o registro
     (quem, quando, modelo, citações conferidas, se confere com o hash gravado, link para a trilha).
   - Os textos de `/assistente` e a mensagem de indisponível passam a dizer "Clara".
+- Fatia 3 (o auditor, o vereador e a prancha completa):
+  - `/auditoria/clara`, só do `auditor`: as perguntas da Casa por dia, com quem perguntou; filtra por pessoa e busca;
+    a conversa abre só para leitura, com o registro e o link de cada pergunta para a sua linha na trilha. A tela diz
+    que cada conversa aberta ali fica registrada na trilha.
+  - A trilha filtra por recurso (`GET /auditoria?recurso-tipo=…&recurso-id=…`, os dois juntos, também na exportação;
+    soma ao escopo do papel, nunca o alarga). `/auditoria` aceita os dois pela URL e mostra "Só os eventos de uma
+    pergunta à Clara", com volta para a trilha inteira. A pessoa vê a linha da própria pergunta; o auditor, qualquer uma.
+  - Busca no histórico (`GET /agente/historico?q=`, 2 a 100 caracteres): na pergunta e no texto da resposta, sem
+    diferença de maiúscula nem de acento (sem extensão nova no banco), com `%` e `_` literais. No painel e na tela do
+    auditor.
+  - A dica da tela: a página publica do que trata (`useDicaDaClara`) e o painel mostra "Nesta tela: PL 42/2026" com
+    "Perguntar sobre esta matéria", que só começa a pergunta no campo. Na ficha da matéria e no editor.
+  - A Clara no app do vereador, o mesmo painel, sempre com o conjunto do vereador; o botão sobe acima das abas.
 - Falta:
-  - a tela do auditor para ler o histórico de outra pessoa ou da Casa (as rotas existem; hoje só por API);
-  - a Clara no app do vereador (`app/(vereador)/`), que segue com a aba do assistente em tela cheia;
-  - a dica da tela ("Nesta tela: PL 042/2026") e a busca nas conversas, que estão na prancha;
-  - o link da conversa para o registro exato na trilha (a `/auditoria` não filtra por recurso).
+  - outras telas publicarem a dica (sessão, parecer, pauta);
+  - a aba "Assistente" do app do vereador continua como tela cheia.
