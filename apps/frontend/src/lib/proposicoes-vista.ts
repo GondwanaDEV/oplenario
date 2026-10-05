@@ -27,8 +27,9 @@ const ESPECIE_POR_TIPO: Record<TipoProposicao, string> = {
   projeto_resolucao: "Projeto de Resolução",
   projeto_decreto_legislativo: "Decreto Legislativo",
   proposta_emenda_lom: "Emenda à LOM",
-  indicacao: "Indicação",
+  // a ordem das chaves É a ordem de exibição do seletor (a mesma que o formulário sempre teve; a Trilha 3, E3, a afirma)
   requerimento: "Requerimento",
+  indicacao: "Indicação",
   mocao: "Moção",
 };
 
