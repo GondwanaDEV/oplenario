@@ -859,3 +859,145 @@
         r (pt/response-for (service-fn* #{"vereador"} repo-s repo-l)
                            :get (str "/sessoes/" sid "/votacao-aberta"))]
     (is (= 401 (:status r)))))
+
+;; ---------- GET /sessoes/:id/votacao-encerrada — o RESULTADO depois do encerramento ----------
+;; Defeito (04/10/2026, CLAUDE.md §3): `votacao-aberta` so' le votacao ABERTA; o telao/TV/cockpit que recarrega
+;; DEPOIS do encerramento nao tinha de onde recuperar o resultado — o placar sumia. Cada teste e' o cenario
+;; real: HTTP frio, nenhum evento no stream.
+
+(defn- fake-repo-legislativo-votacao-encerrada
+  "RepoLegislativo fake pra' `votacao-encerrada`: a votacao 'encerrada' da sessao (ou nil) + proposicao + votos."
+  [votacao proposicao votos-nominais votos-secretos-total]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify repo-leg/RepoLegislativo
+    (votacao-encerrada-da-sessao [_ _ente-id _sessao-id] votacao)
+    (buscar-proposicao [_ _ente-id _id] proposicao)
+    (votos-da-votacao [_ _ente-id _votacao-id] votos-nominais)
+    (contar-votos-secretos-da-votacao [_ _ente-id _votacao-id] votos-secretos-total)))
+
+(defn- votacao-encerrada-canonica [ente vid sid modalidade pid extra]
+  (merge (votacao-canonica ente vid sid modalidade)
+         {:objeto-tipo "proposicao" :objeto-id pid :estado "encerrada" :resultado "aprovada"
+          :total-sim 6 :total-nao 3 :total-abstencao 1 :base-membros 11}
+         extra))
+
+(defn- get-encerrada [papeis repo-s repo-l ente sid]
+  (pt/response-for (service-fn* papeis repo-s repo-l)
+                   :get (str "/sessoes/" sid "/votacao-encerrada")
+                   :headers (com-json (token ente (random-uuid)))))
+
+(deftest votacao-encerrada-nominal-200-devolve-resultado-e-voto-por-vereador
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid) vd1 (random-uuid) vd2 (random-uuid)
+        votacao (votacao-encerrada-canonica ente vid sid "nominal" pid {})
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-encerrada
+                votacao (proposicao-canonica pid)
+                [{:vereador-id vd1 :voto "sim"} {:vereador-id vd2 :voto "abstencao"}] nil)
+        r (get-encerrada #{"vereador"} repo-s repo-l ente sid)
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= (str vid) (:votacao-id body)))
+    (is (= "nominal" (:modalidade body)))
+    (is (= "aprovada" (:resultado body)))
+    (is (= [6 3 1 11] ((juxt :total-sim :total-nao :total-abstencao :base-membros) body)))
+    (is (= 42 (:sequencial (:proposicao body))) "a mesma resolucao de objeto da rota irma")
+    (is (= #{{:vereador-id (str vd1) :voto "sim"} {:vereador-id (str vd2) :voto "abstencao"}} (set (:votos body)))
+        "nominal: o voto por vereador, o mesmo que voto.registrado nominal levou ao vivo")
+    (is (not (contains? body :votos-registrados)))
+    (is (not (contains? (:proposicao body) :autor-id)) "nada de campo interno da proposicao")))
+
+(deftest votacao-encerrada-secreta-200-so-contador-e-agregado-nunca-vereador-id
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (votacao-encerrada-canonica ente vid sid "secreta" pid {:resultado "rejeitada" :total-sim 2
+                                                                         :total-nao 8 :total-abstencao 0})
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        ;; o fake devolve votos nominais NAO-vazios de proposito: se o handler os lesse na secreta, vazariam
+        repo-l (fake-repo-legislativo-votacao-encerrada votacao (proposicao-canonica pid)
+                                                        [{:vereador-id (random-uuid) :voto "sim"}] 10)
+        r (get-encerrada #{"vereador"} repo-s repo-l ente sid)
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "rejeitada" (:resultado body)))
+    (is (= 10 (:votos-registrados body)) "o contador anonimo, o mesmo tick que voto.registrado secreto expoe")
+    (is (= [2 8 0] ((juxt :total-sim :total-nao :total-abstencao) body))
+        "o agregado do encerramento e' publico mesmo na secreta (EncerradaPayload)")
+    (is (not (contains? body :votos)) "sigilo §22.6: a secreta NUNCA carrega a lista individual")
+    (is (not (re-find #"vereador" (:body r))) "nem a CHAVE 'vereador-id' aparece no corpo")))
+
+(deftest votacao-encerrada-simbolica-200-so-resultado
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (votacao-encerrada-canonica ente vid sid "simbolica" pid {:total-sim nil :total-nao nil
+                                                                           :total-abstencao nil :base-membros nil})
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-encerrada votacao (proposicao-canonica pid)
+                                                        [{:vereador-id (random-uuid) :voto "sim"}] 4)
+        r (get-encerrada #{"vereador"} repo-s repo-l ente sid)
+        body (ler-json r)]
+    (is (= 200 (:status r)))
+    (is (= "simbolica" (:modalidade body)))
+    (is (= "aprovada" (:resultado body)))
+    (is (not-any? #(contains? body %) [:votos :votos-registrados :total-sim :total-nao :total-abstencao :base-membros])
+        "aclamacao: so' o resultado — nenhum voto, nenhum contador, nenhum total inventado")))
+
+(deftest votacao-encerrada-sem-votacao-encerrada-404-estado-legitimo
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        r (get-encerrada #{"vereador"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil) ente sid)]
+    (is (= 404 (:status r)) "sessao sem votacao encerrada -> vazio (404), nao erro")))
+
+(deftest votacao-encerrada-sessao-inexistente-404
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] nil))
+        r (get-encerrada #{"vereador"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil) ente (random-uuid))]
+    (is (= 404 (:status r)))))
+
+(deftest votacao-encerrada-sessao-fechada-409
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-encerrada ente sid)))
+        r (get-encerrada #{"vereador"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil) ente sid)]
+    (is (= 409 (:status r)) "mesmo gate da rota irma: sessao ja fechada -> 409")))
+
+(deftest votacao-encerrada-outra-casa-403
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ id] (sessao-canonica (random-uuid) id)))
+        r (get-encerrada #{"secretario"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil) ente sid)]
+    (is (= 403 (:status r)) "sessao de ente alheio -> 403, antes de ler qualquer votacao")))
+
+(deftest votacao-encerrada-sessao-nao-publica-so-secretario-le
+  ;; O TETO da sessao secreta e' o da rota magra `/quorum` (publica OU 'secretario'): a clausula 'vereador' de
+  ;; `votacao-aberta` NAO vale aqui — ela existe pra o vereador poder VOTAR, nao pra ler o resultado nominal.
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (votacao-encerrada-canonica ente vid sid "nominal" pid {})
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-nao-publica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-encerrada votacao (proposicao-canonica pid)
+                                                        [{:vereador-id (random-uuid) :voto "sim"}] nil)]
+    (is (= 200 (:status (get-encerrada #{"secretario"} repo-s repo-l ente sid))) "o telao da Mesa le")
+    (is (= 403 (:status (get-encerrada #{"vereador"} repo-s repo-l ente sid)))
+        "vereador sem 'secretario' em sessao NAO publica -> 403 (o teto e' o da rota magra)")
+    (is (= 403 (:status (pt/response-for (service-fn* #{} "cidadao" repo-s repo-l)
+                                         :get (str "/sessoes/" sid "/votacao-encerrada")
+                                         :headers (com-json (token ente (random-uuid))))))
+        "cidadao sem papel -> 403")))
+
+(deftest votacao-encerrada-sessao-publica-aberta-a-quem-nao-tem-papel-200
+  (let [ente (random-uuid) sid (random-uuid) vid (random-uuid) pid (random-uuid)
+        votacao (votacao-encerrada-canonica ente vid sid "nominal" pid {})
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        repo-l (fake-repo-legislativo-votacao-encerrada votacao (proposicao-canonica pid) [] nil)]
+    (is (= 200 (:status (get-encerrada #{} repo-s repo-l ente sid)))
+        "transmissao publica + ator sem papel (a TV) -> 200, mesma abertura de `votacao-aberta`")))
+
+(deftest votacao-encerrada-sem-token-401
+  (let [ente (random-uuid) sid (random-uuid)
+        repo-s (fake-repo-sessoes (fn [_ _] (sessao-canonica ente sid)))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil))
+                           :get (str "/sessoes/" sid "/votacao-encerrada"))]
+    (is (= 401 (:status r)))))
+
+(deftest votacao-encerrada-id-malformado-400
+  (let [ente (random-uuid)
+        repo-s (fake-repo-sessoes (fn [e i] (sessao-canonica e i)))
+        r (pt/response-for (service-fn* #{"vereador"} repo-s (fake-repo-legislativo-votacao-encerrada nil nil nil nil))
+                           :get "/sessoes/nao-e-uuid/votacao-encerrada"
+                           :headers (com-json (token ente (random-uuid))))]
+    (is (= 400 (:status r)))))

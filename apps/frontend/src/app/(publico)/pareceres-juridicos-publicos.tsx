@@ -35,7 +35,7 @@ export function PareceresJuridicosPublicos({ ente, proposicaoId }: { ente: strin
   const itens = usePareceresJuridicosPublicos(ente, proposicaoId);
   if (itens.length === 0) return null;
   return (
-    <section className="secao pj" aria-labelledby="pj-titulo">
+    <section className="secao ficha-secao pj" aria-labelledby="pj-titulo">
       <h2 id="pj-titulo">Pareceres jurídicos</h2>
       <p className="pj-aviso">
         Parecer jurídico é opinativo: orienta a Câmara, mas não decide a matéria. Estes pareceres foram assinados por
