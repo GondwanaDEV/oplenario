@@ -20,6 +20,8 @@
             [oplenario.transparencia.adapters.out.materia :as adapters-out-materia]
             [oplenario.transparencia.adapters.out.norma :as adapters-out-norma]
             [oplenario.transparencia.adapters.out.parlamentar :as adapters-out-parlamentar]
+            [oplenario.transparencia.adapters.out.vereadores :as adapters-out-vereadores]
+            [oplenario.transparencia.adapters.out.votacao :as adapters-out-votacao]
             [oplenario.transparencia.controllers :as controllers]))
 
 (set! *warn-on-reflection* true)
@@ -158,6 +160,22 @@
            (controllers/perfil-parlamentar repo-transparencia ente-id vereador-id janelas)))
         (http/json-resposta 404 {:erro "vereador nao encontrado"})))))
 
+(defn- listar-vereadores-handler
+  "GET /portal/casa/:ente/vereadores — a LISTA publica dos vereadores EM EXERCICIO da Casa (SEM auth): o indice
+  que o perfil `.../vereadores/:vereador_id` nao tinha (so' abria por UUID). Quem esta' em exercicio vem de
+  `vereadores-em-exercicio`, INJETADO pelo host sobre o Repo de `cadastros` (inversao de dependencia §22.10,
+  mesmo padrao de `info-ente`/`ficha-e-janelas-publicas` — transparencia nunca importa cadastros); a saida
+  passa pelo gate `adapters/out/vereadores` (contrato `:closed`, so' o publico).
+
+  Casa inexistente -> 404, como a rota-pai e as irmas (nunca 200 com lista vazia de uma Casa que nao existe);
+  Casa REAL sem vereador em exercicio segue 200 com lista vazia — a distincao vem de `info-ente`."
+  [resolver-ente-publico info-ente vereadores-em-exercicio]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))]
+      (if-not (info-ente ente-id)
+        (http/json-resposta 404 {:erro "ente nao encontrado"})
+        (http/json-resposta 200 (adapters-out-vereadores/->wire (vereadores-em-exercicio ente-id)))))))
+
 (defn- seguir-handler
   "POST /portal/materias/:proposicao_id/acompanhar (cidadao, SO-auth). ente-id + seguidor do ATOR; guard de
   existencia da materia no controller (ausente -> nil -> 404). Devolve 201 {estado} (UPSERT; re-seguir 201 tb)."
@@ -211,12 +229,43 @@
         (adapters-out-dados-abertos/->download r)
         (http/json-resposta 404 {:erro "dataset nao encontrado"})))))
 
+;; ---------- Portal de VOTACOES (frente 'portal-votacoes-publicas') ----------
+
+(defn- listar-votacoes-handler
+  "GET /portal/casa/:ente/votacoes(?pagina=N) — as votacoes ENCERRADAS de sessoes PUBLICAS (nunca secreta, nunca em
+  curso), a mais recente primeiro, 20 por pagina, com o TOTAL: o cliente sabe quantas existem. `:ente` malformado ->
+  400; Casa inexistente -> 404 (a voz da rota-pai); `:pagina` invalida -> 400. `listar-votacoes` e' o seam do host (quem
+  sabe o que e' publico: sessoes; quem guarda a votacao: legislativo)."
+  [repo-transparencia resolver-ente-publico info-ente listar-votacoes]
+  (fn [req]
+    (let [ente-id (resolver-ente-publico (get-in req [:path-params :ente]))
+          pagina  (adapters-in/query-pagina (get-in req [:query-params :pagina]))]
+      (if-not (info-ente ente-id)
+        (http/json-resposta 404 {:erro "ente nao encontrado"})
+        (http/json-resposta 200 (adapters-out-votacao/lista->wire
+                                 (controllers/votacoes-publicas repo-transparencia listar-votacoes ente-id pagina)))))))
+
+(defn- votacao-publica-handler
+  "GET /portal/casa/:ente/votacoes/:votacao_id — uma votacao encerrada de sessao publica; se nominal, o voto de cada
+  vereador (pelo nome parlamentar). 404 UNICO para votacao inexistente, de outra Casa, em curso, anulada ou de sessao
+  secreta (quem pergunta nao distingue uma da outra)."
+  [repo-transparencia resolver-ente-publico info-ente buscar-votacao nomes-dos-vereadores]
+  (fn [req]
+    (let [ente-id    (resolver-ente-publico (get-in req [:path-params :ente]))
+          votacao-id (adapters-in/votacao-param->uuid (get-in req [:path-params :votacao_id]))]
+      (if-let [r (when (info-ente ente-id)
+                   (controllers/votacao-publica repo-transparencia buscar-votacao nomes-dos-vereadores ente-id votacao-id))]
+        (http/json-resposta 200 (adapters-out-votacao/detalhe->wire (:votacao r) (:nomes r)))
+        (http/json-resposta 404 {:erro "votacao nao encontrada"})))))
+
 (defn rotas
   "Fragmento de rotas do modulo transparencia (table syntax Pedestal). Recebe o `repo-transparencia`
   (Repo-Component), o `resolver-ente-publico` (seam do host, rotas publicas do Slice 1) e o interceptor
   `auth` (compartilhado, rotas autenticadas do Slice 2). `oplenario.rotas` funde este fragmento."
   [{:keys [repo-transparencia resolver-ente-publico auth objeto-store info-ente ficha-e-janelas-publicas
-           nomes-dos-vereadores pareceres-juridicos-publicos acesso-restrito-desde]}]
+           nomes-dos-vereadores vereadores-em-exercicio pareceres-juridicos-publicos acesso-restrito-desde
+           ;; portal de votacoes: seams do host sobre sessoes (o que e' publico) + legislativo (a votacao)
+           votacoes-publicas votacao-publica]}]
   #{["/portal/casa/:ente" :get
      [(info-ente-handler info-ente resolver-ente-publico acesso-restrito-desde)]
      :route-name :transparencia/info-ente]
@@ -241,6 +290,10 @@
     ["/portal/casa/:ente/legislacao/:norma_id/artefato" :get
      [(baixar-artefato-handler repo-transparencia resolver-ente-publico objeto-store)]
      :route-name :transparencia/baixar-artefato]
+    ;; ---- a LISTA publica dos vereadores em exercicio (literal pai do perfil, no nivel de `materias`) ----
+    ["/portal/casa/:ente/vereadores" :get
+     [(listar-vereadores-handler resolver-ente-publico info-ente (or vereadores-em-exercicio (fn [_] [])))]
+     :route-name :transparencia/listar-vereadores]
     ;; ---- Onda E fatia 2: perfil PUBLICO do vereador (`vereadores` e' mais um literal no MESMO nivel de
     ;;      `materias`/`legislacao` — literais entre si nao colidem no prefix-tree, so' wildcard+literal) ----
     ["/portal/casa/:ente/vereadores/:vereador_id" :get
@@ -254,6 +307,16 @@
      [(baixar-dataset-handler repo-transparencia resolver-ente-publico info-ente
                               (or nomes-dos-vereadores (fn [_] {})))]
      :route-name :transparencia/baixar-dataset]
+    ;; ---- Portal de VOTACOES: mais um literal no nivel de `materias`/`legislacao` ----
+    ["/portal/casa/:ente/votacoes" :get
+     [(listar-votacoes-handler repo-transparencia resolver-ente-publico info-ente
+                               (or votacoes-publicas (fn [_ _ _] {:votacoes [] :total 0})))]
+     :route-name :transparencia/listar-votacoes]
+    ["/portal/casa/:ente/votacoes/:votacao_id" :get
+     [(votacao-publica-handler repo-transparencia resolver-ente-publico info-ente
+                               (or votacao-publica (fn [_ _] nil))
+                               (or nomes-dos-vereadores (fn [_] {})))]
+     :route-name :transparencia/votacao-publica]
     ;; ---- Slice 2: acompanhamento do cidadao (autenticado, SO-auth sem papel) ----
     ["/portal/materias/:proposicao_id/acompanhar" :post
      [auth (seguir-handler repo-transparencia)]

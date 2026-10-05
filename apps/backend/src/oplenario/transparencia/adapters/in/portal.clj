@@ -25,6 +25,7 @@
 
 (defn proposicao-param->uuid [s] (->uuid s :proposicao-id))
 (defn norma-param->uuid [s] (->uuid s :norma-id))
+(defn votacao-param->uuid [s] (->uuid s :votacao-id))
 
 (defn vereador-param->uuid
   "Path-param :vereador_id do perfil publico (Onda E fatia 2) -> UUID. Malformado -> 400, NUNCA 404: um 404
@@ -76,3 +77,12 @@
   {:tipo   (query-especie (:tipo query-params))
    :ano    (query-inteiro (:ano query-params) :ano)
    :numero (query-inteiro (:numero query-params) :numero)})
+
+(defn query-pagina
+  "Query-param :pagina (portal de votacoes) -> inteiro >= 1; ausente = 1. Nao-inteiro, menor que 1 ou repetido ->
+  :validacao/invalido (400): nunca 'corrige' para a pagina 1 em silencio."
+  [s]
+  (let [n (query-inteiro s :pagina)]
+    (cond (nil? n) 1
+          (< n 1)  (invalido! "pagina deve ser 1 ou maior" {:campo :pagina})
+          :else    n)))

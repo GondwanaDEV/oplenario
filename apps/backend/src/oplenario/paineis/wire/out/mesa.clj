@@ -17,11 +17,13 @@
   la' manualmente ate' compliance entrar no manifesto do codegen.")
 
 (def TramitacaoResumoOut
-  "Rollup 'proposicoes por status' (§16.11): contagem por estado da maquina de tramitacao + total. `estado`
-  fica :string (nao enum fechado) — e' PROJECAO de `legislativo` (mesmo racional de wire/out/tramitacao); o
-  vocabulario e' validado na FONTE."
+  "Rollup 'proposicoes por status' (§16.11): contagem por estado da maquina de tramitacao + total (todos os
+  estados do board) + `em-tramitacao` (as que o RITO da Casa nao declara terminal — o manchete 'Proposicoes
+  em tramitacao'; aprovadas/arquivadas nao entram). `estado` fica :string (nao enum fechado) — e' PROJECAO de
+  `legislativo` (mesmo racional de wire/out/tramitacao); o vocabulario e' validado na FONTE."
   [:map {:closed true}
    [:total :int]
+   [:em-tramitacao :int]
    [:por-estado [:sequential [:map {:closed true} [:estado :string] [:n :int]]]]])
 
 (def PendenciasResumoOut

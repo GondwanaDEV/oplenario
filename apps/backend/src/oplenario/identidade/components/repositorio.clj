@@ -76,6 +76,15 @@
   (conceder-agente! [this ente-id concessao]
     "Liga o agente institucional ({:agente :classes :concedida-por}); idempotente (a ativa volta como esta').")
   (revogar-agente! [this ente-id agente revogada-por] "Desliga o agente institucional; idempotente.")
+  (revogar-acesso! [this ente-id revogacao]
+    "ADR-0005 (adendo): o `admin_ente` revoga um PAPEL concedido ({:identidade-id :papel :por :motivo}). Na MESMA tx: fecha
+    a linha do papel (quem/quando/por que; historico fica) e, se a pessoa nao tem mais papel ATIVO nenhum na Casa,
+    encerra os vinculos dela (menos o de cidadao) — sem vinculo ativo a sessao cai na proxima chamada. Depois, revoga as
+    credenciais delegadas do agente dela. Devolve {:revogado? bool :vinculos-encerrados n}; revogado? false = nao havia
+    esse papel ativo NESTA Casa (a RLS isola: o de outra Casa nem aparece).")
+  (acessos-da-casa [this ente-id papeis]
+    "Os acessos concedidos da Casa para os `papeis` dados, um por (pessoa, papel) — o mais recente, ativo ou revogado:
+    [{:identidade-id :nome :papel :concedido-em :revogado-em :revogado-por-nome :motivo}], por nome. Nunca CPF.")
   (snapshot-ator [this ente-id identidade-id]
     "Snapshot de SESSAO numa UNICA tx (vinculo ATIVO + papeis). Devolve {:vinculo-ativo :papeis} ou nil
     se nao ha vinculo ativo. Composto AQUI (§3-bis) p/ resolver-sessao nao importar db/ direto.")
@@ -131,6 +140,10 @@
           ;; sem este check o caller (handler HTTP) nao teria como saber e mandaria convite + 201 como se
           ;; tivesse reativado. Lanca AQUI, dentro da mesma tx e ANTES de adicionar papeis, pra a tx
           ;; inteira dar rollback (nao sobra papel concedido a um vinculo que continua fechado).
+          ;; ADR-0005 (adendo): `encerrado` e' o que a REVOGACAO do ultimo papel faz; o admin_ente conceder de novo e' o
+          ;; ato que reabre. `suspenso` e' outra coisa (alguem suspendeu) e continua exigindo reativacao propria.
+          (when (= "encerrado" (vinc/estado-de tx vinculo-id))
+            (vinc/mudar-estado! tx vinculo-id "ativo"))
           (when-not (= "ativo" (vinc/estado-de tx vinculo-id))
             (throw (ex-info "vinculo existente nao esta ativo — reative via mudar-estado-vinculo! antes de conceder acesso"
                             {:tipo :conflito/vinculo-nao-ativo :vinculo-id vinculo-id})))
@@ -149,6 +162,28 @@
   (concessao-agente [this ente-id agente] (transacao this ente-id #(concessao/ativa % ente-id agente)))
   (conceder-agente! [this ente-id c] (transacao this ente-id #(concessao/conceder! % (assoc c :ente-id ente-id))))
   (revogar-agente! [this ente-id agente por] (transacao this ente-id #(concessao/revogar! % ente-id agente por)))
+  (revogar-acesso! [this ente-id {:keys [identidade-id papel por motivo]}]
+    (let [r (transacao this ente-id
+              (fn [tx]
+                (if (vinc/revogar-papel! tx ente-id identidade-id papel por motivo)
+                  {:revogado? true
+                   :vinculos-encerrados (if (empty? (vinc/papeis-de tx ente-id identidade-id))
+                                          (vinc/encerrar-vinculos-da-casa! tx ente-id identidade-id)
+                                          0)}
+                  {:revogado? false :vinculos-encerrados 0})))]
+      (when (:revogado? r) (cred/revogar-da-pessoa! (:ds datasource) ente-id identidade-id))
+      r))
+  (acessos-da-casa [this ente-id papeis]
+    (let [linhas (transacao this ente-id #(vinc/acessos % ente-id papeis))
+          nomes (id/nomes-por-ids (:ds datasource) (mapcat (juxt :identidade-id :revogado-por) linhas))]
+      (->> linhas
+           (keep (fn [l]
+                   (when-let [n (get nomes (:identidade-id l))]
+                     (-> l
+                         (assoc :nome n :revogado-por-nome (get nomes (:revogado-por l)))
+                         (dissoc :revogado-por)))))
+           (sort-by (juxt #(some-> (:nome %) str/lower-case) :papel))
+           vec)))
   (snapshot-ator [this ente-id identidade-id]
     (transacao this ente-id
       (fn [tx]

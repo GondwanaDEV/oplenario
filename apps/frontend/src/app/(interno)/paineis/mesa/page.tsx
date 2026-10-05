@@ -59,7 +59,7 @@ export default function PaginaDashboardMesa() {
             <OQueVence vista={vista.oQueVence} />
             <DespachosDaMesa vista={vista.despachos} />
           </div>
-          <ProximaSessaoRail sliSessoes={sliSessoes} sliSessoesTotal={sliSessoesTotal} />
+          <ProximaSessaoRail sliSessoes={sliSessoes} sliSessoesTotal={sliSessoesTotal} token={token} />
         </div>
         <PipelineLegislativo vista={vista.pipeline} />
         <OrgulhoInstitucional vista={vista.orgulho} />

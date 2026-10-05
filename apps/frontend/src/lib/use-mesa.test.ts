@@ -4,7 +4,7 @@ import { useMesa } from "./use-mesa";
 
 const mesaFake = {
   complianceTce: { resumo: {}, emAberto: [], remessasRecentes: [] },
-  tramitacao: { total: 2, porEstado: [{ estado: "protocolada", n: 2 }] },
+  tramitacao: { total: 2, emTramitacao: 2, porEstado: [{ estado: "protocolada", n: 2 }] },
   pendencias: { abertas: 0, vencidas: 0, pendentes: 0 },
   sessoes: { emCurso: 0, naoRealizadas: 0, porSituacao: [] },
   presencaResumo: { mediaPercentual: 78, sessoesConsideradas: 10, membrosDaCasa: 43 },
@@ -153,7 +153,7 @@ describe("useMesa", () => {
   it("payload kebab-case real do backend (jsonista) -> acesso camelCase resolve (não undefined)", async () => {
     const mesaKebab = {
       "compliance-tce": { resumo: {}, "em-aberto": [], "remessas-recentes": [] },
-      tramitacao: { total: 47, "por-estado": [{ estado: "protocolada", n: 12 }] },
+      tramitacao: { total: 47, "em-tramitacao": 31, "por-estado": [{ estado: "protocolada", n: 12 }] },
       pendencias: { abertas: 8, vencidas: 1, pendentes: 7 },
       sessoes: { "em-curso": 0, "nao-realizadas": 1, "por-situacao": [] },
       "presenca-resumo": { "media-percentual": 78, "sessoes-consideradas": 10, "membros-da-casa": 43 },

@@ -15,6 +15,7 @@
             [oplenario.legislativo.components.repositorio-juridico :as repo-juridico]
             [oplenario.legislativo.components.repositorio-nota-juridica :as repo-nota-juridica]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
+            [oplenario.legislativo.components.repositorio-votacao-publica :as repo-votacao-publica]
             [oplenario.legislativo.components.serializador-publicacao :as ser-pub]
             [oplenario.legislativo.db.apensacao :as apensacao]
             [oplenario.legislativo.db.artefato-publicacao :as artefato]
@@ -44,6 +45,7 @@
             [oplenario.legislativo.db.tramitacao :as tram]
             [oplenario.legislativo.db.tramitacao-executiva :as exec]
             [oplenario.legislativo.db.votacao :as votacao]
+            [oplenario.legislativo.db.votacao-publica :as votacao-publica]
             [oplenario.legislativo.diplomat.producers :as producers]
             [oplenario.legislativo.gerador-publicacao :as ger-pub]
             [oplenario.legislativo.logic :as logic]
@@ -662,7 +664,9 @@
               ;; registrar-transicao!) — NAO o momento de projecao a jusante.
               (cond-> {:proposicao-id (:proposicao-id args) :template-id (:template-id args)
                        :de (:de r) :para (:para r) :gatilho (:gatilho args)
-                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))}
+                       :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))
+                       ;; o rito da Casa diz se o destino encerra o processo (paineis: "em tramitacao")
+                       :para-terminal (boolean (:para-terminal r))}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
@@ -1235,6 +1239,13 @@
     (if (empty? ids)
       {}
       (transacao this ente-id #(situacao-materia/situacao-de-parecer % ente-id ids))))
+
+  ;; portal-votacoes-publicas: as votacoes encerradas do portal (protocolo proprio, mesmo motivo do RepoJuridico)
+  repo-votacao-publica/RepoVotacaoPublica
+  (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento]
+    (transacao this ente-id #(votacao-publica/encerradas-das-sessoes % ente-id sessao-ids limite deslocamento)))
+  (votacao-encerrada [this ente-id votacao-id]
+    (transacao this ente-id #(votacao-publica/encerrada % ente-id votacao-id)))
 
   ;; ADR-0021 Parte B — o julgamento das contas (protocolo proprio, mesmo motivo do RepoJuridico)
   repo-contas/RepoContas

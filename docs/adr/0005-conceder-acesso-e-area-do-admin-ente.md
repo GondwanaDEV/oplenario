@@ -100,3 +100,47 @@ errada, e a mesma armadilha que já produziu teste obsoleto neste repositório.
   mais a abertura de leitura do P2.
 - `rotulo-papel.ts` já assume que `secretario` e `admin_ente` não co-ocorrem; esta ADR confirma a
   premissa e explica por quê.
+
+## Adendo — revogar acesso (04/10/2026)
+
+A área do `admin_ente` concedia acesso e não tinha como tirá-lo: quem saía da Casa (mandato encerrado, servidor
+desligado, contrato do jurídico acabado) ficava com a porta aberta até alguém mexer no banco.
+
+### Decisão
+
+- **O que se revoga:** o mesmo conjunto que a tela concede — `vereador`, `auditor`, `juridico`. `admin_ente` e
+  `secretario` ficam de fora (decisão do fundador; o administrador não tira o próprio papel por esta rota). Consequência:
+  **a Casa não perde o último administrador por aqui**, então não há guarda "último admin" a disparar; `papel` fora do
+  conjunto é 400 na validação, e há teste.
+- **Ato registrado, sem apagar:** `identidade.usuario_papel` ganha `revogado_em`, `revogado_por` e `motivo_revogacao`
+  (obrigatório, 3 a 500 caracteres; CHECK no banco). Mesmo padrão da concessão do agente institucional (mig 0096): revogar
+  FECHA a linha e conceder de novo ABRE outra. A unicidade (Casa, pessoa, papel) passa a valer só para os ATIVOS (índice
+  único parcial); a linha revogada é imutável (trigger) e o `UPDATE` do papel de domínio fica restrito às três colunas.
+- **Rotas (`admin_ente`):** `GET /identidade/acessos` (ativos e revogados da Casa do ator, com nome, nunca CPF) e
+  `POST /identidade/acessos/:identidade-id/revogacao {papel, motivo}`. 404 para quem não tem esse papel ativo NESTA Casa
+  (a RLS esconde a outra: o admin da Casa B não descobre nem revoga nada da A). Ambas ficam em `fora-do-catalogo.edn`
+  (`:so-tela`): agente não administra acesso. Escrita passa pela trilha (`com-tentativa` é global).
+- **Efeito imediato:** o ator é recalculado a cada requisição (`resolver-sessao` lê vínculo e papéis do banco), a sessão
+  não guarda papel — a próxima chamada da pessoa já vem sem o papel. Se não sobrar papel ATIVO nenhum na Casa, a mesma
+  tx encerra os vínculos dela (menos o de cidadão) e a sessão passa a dar 401. A credencial delegada do agente (ADR-0010)
+  da pessoa nesta Casa é revogada junto. O Keycloak NÃO é tocado: o usuário e o token dele seguem válidos como identidade,
+  mas sem vínculo ativo a plataforma não os resolve (fail-closed); conceder de novo reabre.
+- **Reconceder:** `POST /identidade/acessos` de sempre. Vínculo `encerrado` (o que a revogação do último papel faz) é
+  reaberto pela concessão; `suspenso` continua 409 (é outro ato, com reativação própria).
+- **Tela:** "Quem tem acesso" em `/administracao`: lista, "Revogar acesso" com motivo e confirmação, estado revogado
+  ("Revogado em … por …", com o motivo) e "Dar o acesso de novo" (vereador e controle interno; o jurídico volta pelo
+  formulário próprio, que confirma qualificação e OAB).
+
+### Rollback da migration
+
+O `.down.sql` não pode ressuscitar acesso: antes de derrubar as colunas apaga as linhas revogadas (o mecanismo anterior é
+"papel sem linha = sem papel") e recusa rodar (`RAISE EXCEPTION`) se ainda restar alguma. Há teste (up, revoga, down, a
+pessoa segue sem o papel). O histórico revogado se perde no rollback; o ato segue na trilha de auditoria.
+
+### Fora desta fatia
+
+- Suspensa, a Casa responde 423 também à revogação (a allowlist da ADR-0018 não a inclui). Revogar durante um incidente é
+  um caso a decidir, junto com o acesso de suporte.
+- A lista de vereadores do cadastro mostra "Acesso concedido" pelo vínculo do cadastro com a identidade; depois de uma
+  revogação o chip segue lá. O estado verdadeiro está em "Quem tem acesso" (o cadastro não carrega o id da identidade).
+- Revogar o acesso não encerra o mandato nem altera o cadastro do vereador.

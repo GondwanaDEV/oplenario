@@ -14,6 +14,10 @@
 
 (set! *warn-on-reflection* true)
 
+(def papeis-concediveis
+  "Os papeis que a tela concede — e, pelo adendo da ADR-0005, os que ela revoga e lista."
+  wire/papeis-concediveis)
+
 (defn- invalido! [msg info] (throw (ex-info msg (assoc info :tipo :validacao/invalido))))
 
 (defn- keywordizar
@@ -85,3 +89,16 @@
                :papeis (:papeis mm)
                :email (:email mm)}
         perfil (assoc :perfil-juridico perfil)))))
+
+(defn revogar-acesso->dominio
+  "Corpo de revogar acesso + o `identidade-id` do caminho -> dominio {:identidade-id :papel :motivo :por}. `por` e' quem
+  chama (o `ator`), nunca o corpo. Motivo em branco (so' espacos) e' recusado, e o que fica gravado e' o texto aparado.
+  Devolve nil quando o identificador do caminho nao e' UUID (o handler responde 404, como o reenvio de convite)."
+  [ator identidade-id wire-in]
+  (when-not (map? wire-in) (invalido! "corpo deve ser objeto JSON" {:campo :corpo}))
+  (let [mm (keywordizar wire-in)]
+    (validar! wire/RevogarAcesso mm "corpo de revogar acesso invalido")
+    (let [motivo (str/trim (:motivo mm))]
+      (when (< (count motivo) 3) (invalido! "motivo obrigatorio" {:campos [:motivo]}))
+      (when-let [iid (parse-uuid (str identidade-id))]
+        {:identidade-id iid :papel (:papel mm) :motivo motivo :por (:identidade-id ator)}))))

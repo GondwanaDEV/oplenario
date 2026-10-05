@@ -479,7 +479,9 @@
   sessao e adiciona o item (get-or-create do container 1:1 + insere, atomico); adapters/out projeta o recibo
   {:id :ordem}. nil (sessao inexistente) -> 404; sessao ja fechada (`:conflito/sessao-fechada`) -> 409 (ledger
   Fase 8 achado #4: sessao ENCERRADA aceitava item de pauta novo); sucesso -> 201 (cria). ADR-0021: o PDL das contas
-  ainda sem prazo de defesa vencido nem defesa juntada (`:conflito/materia-nao-pautavel`) -> 409 com o motivo."
+  ainda sem prazo de defesa vencido nem defesa juntada (`:conflito/materia-nao-pautavel`) -> 409 com o motivo.
+  Materia que ja' esta ATIVA nesta pauta (`:conflito/pauta-materia-duplicada`, indice unico parcial da mig
+  20261004000189) -> 409 'Esta matéria já está na pauta desta sessão.'; a garantia e' do banco, entao vale na corrida."
   [repo-sessoes motivo-nao-pautavel]
   (fn [req]
     (let [ator (:ator req)
@@ -492,6 +494,9 @@
           (case (:tipo (ex-data e))
             :conflito/sessao-fechada (resposta-conflito-sessao-fechada e)
             :conflito/materia-nao-pautavel (http/json-resposta 409 {:erro (ex-message e)})
+            ;; a materia ja esta ATIVA nesta pauta (indice unico parcial, mig 20261004000189): 409 com a frase
+            ;; pronta para a tela — nunca 500.
+            :conflito/pauta-materia-duplicada (http/json-resposta 409 {:erro (ex-message e)})
             (throw e)))))))
 
 (defn- reordenar-item-handler

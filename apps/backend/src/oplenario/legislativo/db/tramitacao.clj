@@ -525,8 +525,13 @@
               (proposicao/mudar-estado! tx {:id proposicao-id :ente-id ente-id
                                             :estado (:para-estado escolhida)
                                             :updated-by updated-by :lock-version lock-version})
+              ;; `:para-terminal`: o RITO diz se o estado de destino encerra o processo — o painel da Mesa
+              ;; separa "em tramitacao" de "encerrada" por este dado, nunca pelo nome do estado (texto livre
+              ;; por Casa). Estado que o rito nao declara -> false (`(:terminal nil)` e' nil).
               {:transicionou? true :de estado :para (:para-estado escolhida) :transicao-id (:id escolhida)
-               :acao (:acao escolhida) :ocorrido-em ocorrido-em}))
+               :acao (:acao escolhida) :ocorrido-em ocorrido-em
+               :para-terminal (boolean (:terminal (proposicao/estado-no-template
+                                                   tx ente-id template-id (:para-estado escolhida))))}))
 
           ;; havia ato declarado e o guard negou — o unico dos desfechos que o TEMPO pode mudar.
           (seq candidatas)

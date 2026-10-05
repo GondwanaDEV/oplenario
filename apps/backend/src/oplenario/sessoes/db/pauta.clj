@@ -116,6 +116,18 @@
                      :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id]]}))
       :prox))
 
+(def ^:private indice-materia-unica "uq_pauta_item_materia_ativa")
+
+(def ^:private mensagem-materia-ja-na-pauta "Esta matéria já está na pauta desta sessão.")
+
+(defn- materia-ativa-na-pauta?
+  [tx ente-id pauta-sessao-id proposicao-id]
+  (some? (jdbc/execute-one! tx
+           (sql/format {:select [1] :from [:sessoes.pauta_item]
+                        :where [:and [:= :ente_id ente-id] [:= :pauta_sessao_id pauta-sessao-id]
+                                [:= :proposicao_id proposicao-id] [:= :ativo true]]
+                        :limit 1}))))
+
 (defn adicionar-item!
   "Insere um item na pauta (ordem = max+1) e LOGA inclusao, atomico. Valida fase/tipo-item (fail-closed);
   a coerencia FK-por-tipo (proposicao_id XOR texto_descricao) e' barrada pelo CHECK da migration. Devolve
@@ -123,12 +135,26 @@
   [tx {:keys [id ente-id pauta-sessao-id fase tipo-item proposicao-id texto-descricao created-by]}]
   (logic/validar-fase fase)
   (logic/validar-tipo-item tipo-item)
+  ;; item ANTIGO (anterior ao corte do indice, mig 20261004000189) nao esta no indice: a checagem em codigo cobre
+  ;; "a materia ja existe num item ativo desta pauta". O indice segue decidindo a corrida entre dois INSERTs novos.
+  (when (and proposicao-id (materia-ativa-na-pauta? tx ente-id pauta-sessao-id proposicao-id))
+    (throw (ex-info mensagem-materia-ja-na-pauta
+                    {:tipo :conflito/pauta-materia-duplicada :proposicao-id proposicao-id})))
   (let [ordem (proxima-ordem tx ente-id pauta-sessao-id)]
-    (jdbc/execute-one! tx
-      (sql/format {:insert-into :sessoes.pauta_item
-                   :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :fase fase
-                             :tipo_item tipo-item :proposicao_id proposicao-id :texto_descricao texto-descricao
-                             :ordem ordem :ativo true :created_by created-by :efetivado_em [:now]}]}))
+    (try
+      (jdbc/execute-one! tx
+        (sql/format {:insert-into :sessoes.pauta_item
+                     :values [{:id id :ente_id ente-id :pauta_sessao_id pauta-sessao-id :fase fase
+                               :tipo_item tipo-item :proposicao_id proposicao-id :texto_descricao texto-descricao
+                               :ordem ordem :ativo true :created_by created-by :efetivado_em [:now]}]}))
+      (catch org.postgresql.util.PSQLException e
+        ;; mig 20261004000189: a MESMA materia nao entra duas vezes ativa na pauta. A garantia e' o indice unico
+        ;; parcial (e' ele que perde/ganha a corrida de dois INSERTs); aqui so' se traduz a violacao em conflito de
+        ;; dominio com a frase para a tela. Qualquer outra violacao segue como erro (fail-closed).
+        (if (and (= "23505" (.getSQLState e)) (str/includes? (str (.getMessage e)) indice-materia-unica))
+          (throw (ex-info mensagem-materia-ja-na-pauta
+                          {:tipo :conflito/pauta-materia-duplicada :proposicao-id proposicao-id}))
+          (throw e))))
     (registrar-alteracao! tx {:ente-id ente-id :pauta-sessao-id pauta-sessao-id :pauta-item-id id
                               :tipo "inclusao" :created-by created-by})
     {:id id :ordem ordem}))

@@ -47,7 +47,8 @@
             [oplenario.sessoes.components.serializador-folha :as serializador-folha]
             [oplenario.sessoes.diplomat.http.in :as sessoes-http]
             [oplenario.tempo-real.diplomat.sse :as tempo-real-sse]
-            [oplenario.transparencia.diplomat.http.in :as transparencia-http]))
+            [oplenario.transparencia.diplomat.http.in :as transparencia-http]
+            [oplenario.votacoes-publicas :as votacoes-publicas]))
 
 (set! *warn-on-reflection* true)
 
@@ -94,6 +95,20 @@
        (filter #(= "vigente" (:estado-mandato %)))
        (mapv (fn [l] {:id (:vereador-id l) :nome (or (not-empty (:nome-parlamentar l)) (:nome l))
                       :partido (:partido l)}))))
+
+(defn vereadores-em-exercicio
+  "ente-id + data -> as linhas do roster da Casa dos vereadores com mandato VIGENTE na data, para a LISTA publica
+  do portal (`GET /portal/casa/:ente/vereadores`) — host wiring (§22.5.3, excecao nomeada, irma de
+  `colegas-da-casa`): `transparencia` recebe esta fn ja' resolvida e nunca importa `cadastros`.
+
+  'Em exercicio' = `estado-mandato` 'vigente'. O licenciado esta' no roster (a chamada o mostra marcado) mas NAO
+  esta' exercendo o mandato, e o suplente que nunca tomou posse, o cassado e o renunciado nem chegam ao roster.
+  A mesma regra de `membros-da-casa` (quem compoe a Casa para o quorum). A linha sai CRUA do roster (tem
+  `:estado-mandato`, que o portal nao publica): quem escolhe as chaves publicas e' `transparencia/adapters/out`."
+  [repo-cadastros ente-id data]
+  (->> (repo-cadastros-comp/roster-da-casa repo-cadastros ente-id data)
+       (filter #(= "vigente" (:estado-mandato %)))
+       vec))
 
 (defn resolver-comissoes
   "comissao-ids -> {comissao-id nome} NESTA Casa — host wiring (§22.5.3, exceção nomeada, mesma forma de
@@ -336,6 +351,8 @@
     ;; nome LOCAL distinto da defn de topo `ficha-e-janelas-publicas` p/ nao sombrea-la (mesmo cuidado de
     ;; `resolver-vereador`/`resolver-vereador-fn`); a chave do mapa segue sendo :ficha-e-janelas-publicas.
     ficha-e-janelas-override :ficha-e-janelas-publicas
+    ;; a lista publica dos vereadores em exercicio (mesmo cuidado de nome: a defn de topo tem o mesmo nome)
+    vereadores-em-exercicio-override :vereadores-em-exercicio
     :as deps-de-montar}]
   (let [;; ADR-0018 (Eixos 2 e 3): a Casa SUSPENSA. O estado vem do registro (admin_sistema) por este seam, com cache
         ;; curto; o interceptor de Casa recusa com 423 a escrita fora da allowlist (`oplenario.restricao-da-casa`). A
@@ -559,6 +576,12 @@
               (ficha-e-janelas-publicas repo-cadastros ente-id vereador-id
                                         (tempo/hoje (tempo/relogio-sistema)
                                                     tempo/zona-civil-padrao))))
+        ;; a LISTA publica do portal: os vereadores com mandato vigente HOJE (mesmo `hoje` civil do perfil acima)
+        vereadores-em-exercicio-fn
+        (or vereadores-em-exercicio-override
+            (fn [ente-id]
+              (vereadores-em-exercicio repo-cadastros ente-id
+                                       (tempo/hoje (tempo/relogio-sistema) tempo/zona-civil-padrao))))
         ;; Onda D Slice 5 Task 9: guard de SERVICO — cadastros NUNCA importa identidade (§22.10) e nao ha'
         ;; FK cross-schema em cadastros.vereador.identidade_id (so' GUARD ref). O host injeta a existencia
         ;; via o Repo-Component de identidade (`identidade-existe?`, SUPRATENANT); mesma inversao de
@@ -804,6 +827,7 @@
                                          :resolver-ente-publico transparencia-http/resolver-ente-publico-uuid
                                          :objeto-store objeto-store
                                          :info-ente info-ente
+                                         :vereadores-em-exercicio vereadores-em-exercicio-fn
                                          ;; ADR-0018: a faixa do portal — so' desde quando (o motivo nao e' publico)
                                          :acesso-restrito-desde (fn [ente-id] (:desde (restricao-casa/visao (estado-da-casa ente-id) false)))
                                          ;; I-5 fatia 6: a borda passou a CONSUMIR o mapa inteiro
@@ -816,6 +840,18 @@
                                          (fn [ente-id proposicao-id]
                                            (legislativo-http/pareceres-juridicos-publicos-wire
                                              repo-legislativo ente-id proposicao-id))
+                                         ;; portal de votacoes: o host cruza sessoes (quais sessoes sao publicas) e
+                                         ;; legislativo (a votacao e os votos); sem um dos dois montado (testes de outras
+                                         ;; verticais) o portal mostra lista vazia e nenhuma votacao.
+                                         :votacoes-publicas
+                                         (fn [ente-id limite deslocamento]
+                                           (if (and repo-sessoes repo-legislativo)
+                                             (votacoes-publicas/listar repo-sessoes repo-legislativo ente-id limite deslocamento)
+                                             {:votacoes [] :total 0}))
+                                         :votacao-publica
+                                         (fn [ente-id votacao-id]
+                                           (when (and repo-sessoes repo-legislativo)
+                                             (votacoes-publicas/buscar repo-sessoes repo-legislativo ente-id votacao-id)))
                                          ;; Onda E (dados abertos): o NOME de cada vereador no CSV de votos nominais —
                                          ;; o mesmo nome publico do perfil (parlamentar, ou o civil quando nao ha'),
                                          ;; mesma inversao de dependencia sobre cadastros (§22.10).

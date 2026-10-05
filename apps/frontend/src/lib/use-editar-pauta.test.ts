@@ -65,6 +65,16 @@ describe("useEditarPauta", () => {
     expect(r2).toEqual({ ok: false, conflito: true, erro: MSG_CONFLITO_PAUTA });
   });
 
+  it("incluir matéria que já está na pauta: a frase do servidor vai à tela, sem virar \"a pauta mudou\"", async () => {
+    mockFetch(resposta(409, { erro: "Esta matéria já está na pauta desta sessão." }));
+    const { result } = renderHook(() => useEditarPauta("s1", "tok"));
+    let r;
+    await act(async () => {
+      r = await result.current.incluir({ fase: "ordem_do_dia", tipoItem: "proposicao", proposicaoId: "p9" });
+    });
+    expect(r).toEqual({ ok: false, conflito: true, erro: "Esta matéria já está na pauta desta sessão." });
+  });
+
   it("incluir texto vazio: recusa sem chamar a API", async () => {
     const fn = mockFetch();
     const { result } = renderHook(() => useEditarPauta("s1", "tok"));

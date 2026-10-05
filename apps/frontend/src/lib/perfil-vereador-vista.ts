@@ -261,7 +261,7 @@ export function textosDePresenca(v: PresencaVista): string[] {
 
 /** Iniciais do NOME EXIBIDO (nunca do vereadorId — um UUID no avatar é identificação de fallback, e o §7
  *  do brief proíbe): 1ª letra da primeira e da última palavra, no máximo 2 chars. */
-function derivarIniciais(nome: string): string {
+export function derivarIniciais(nome: string): string {
   const palavras = nome.trim().split(/\s+/).filter(Boolean);
   if (palavras.length === 0) return "";
   const primeira = palavras[0][0] ?? "";
