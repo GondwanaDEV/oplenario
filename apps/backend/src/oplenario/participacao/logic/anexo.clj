@@ -186,3 +186,22 @@
   "Com `usados` bytes ja' enviados nas ultimas 24 horas, mais `novo`, passa do teto? (Chegar ao teto, sem passar, cabe.)"
   [usados novo]
   (> (+ (long usados) (long novo)) (long cota-do-requerente-bytes)))
+
+;; ---------- SUBSTITUIR um anexo da Casa (ADR-0022, "Substituir um anexo") ----------
+;; Trocar o arquivo errado pelo certo num so' ato. So' o anexo da CASA e ainda vigente; vale a qualquer tempo (nao depende da
+;; janela de 10 minutos: a retirada tambem nao depende). O que o requerente anexou nao se substitui — so' se retira.
+
+(defn motivo-de-nao-substituir
+  "Por que este anexo NAO pode ser substituido: `:anexo-do-requerente` (so' a Casa substitui o que e' dela), `:ja-substituido`
+  (alguem ja' o trocou: `:substituido-por`) ou `:ja-retirado` (a retirada o encerrou). nil = pode. Ordem: o substituido tambem
+  esta retirado, mas a mensagem certa e' a da substituicao."
+  [{:keys [origem retirado-em substituido-por]}]
+  (cond
+    (not= "casa" origem) :anexo-do-requerente
+    substituido-por :ja-substituido
+    retirado-em :ja-retirado))
+
+(defn pode-substituir?
+  "A secretaria pode substituir este anexo? E' o que a tela le para oferecer 'Substituir' ao lado de 'Retirar'."
+  [anexo]
+  (nil? (motivo-de-nao-substituir anexo)))

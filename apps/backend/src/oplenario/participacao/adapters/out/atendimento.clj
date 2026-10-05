@@ -28,7 +28,8 @@
             (cond-> {:id (->str (:id a)) :nome (:nome a) :tipo-midia (:tipo-midia a) :bytes (:bytes a) :origem (:origem a)
                      :enviado-em (->str (:enviado-em a))}
               (:retirado-em a) (assoc :retirado-em (->str (:retirado-em a)))
-              (:motivo-da-retirada a) (assoc :motivo-da-retirada (:motivo-da-retirada a)))
+              (:motivo-da-retirada a) (assoc :motivo-da-retirada (:motivo-da-retirada a))
+              (:substituido-por a) (assoc :substituido-por (->str (:substituido-por a))))
             "AnexoOut"))
 
 (defn complemento->wire

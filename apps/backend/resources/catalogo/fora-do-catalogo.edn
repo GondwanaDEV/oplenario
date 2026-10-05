@@ -147,6 +147,12 @@
                                         :motivo "a secretaria retira um anexo do protocolo (manifestacao de ouvidoria) por incidente de conteudo, na tela do balcao, com motivo e confirmacao; e' contencao, nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
  :participacao/retirar-anexo-lgpd {:categoria :so-tela
                                    :motivo "a secretaria retira um anexo do protocolo (solicitacao do titular) por incidente de conteudo, na tela do balcao, com motivo e confirmacao; e' contencao, nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
+ :participacao/substituir-anexo-esic {:categoria :so-tela
+                                     :motivo "a secretaria troca um anexo da resposta do protocolo (pedido de e-SIC) pelo arquivo certo, na tela do balcao, com motivo e confirmacao; e' correcao de documento (retirar e anexar num ato), nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
+ :participacao/substituir-anexo-ouvidoria {:categoria :so-tela
+                                          :motivo "a secretaria troca um anexo da resposta do protocolo (manifestacao de ouvidoria) pelo arquivo certo, na tela do balcao, com motivo e confirmacao; e' correcao de documento (retirar e anexar num ato), nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
+ :participacao/substituir-anexo-lgpd {:categoria :so-tela
+                                     :motivo "a secretaria troca um anexo da resposta do protocolo (solicitacao do titular) pelo arquivo certo, na tela do balcao, com motivo e confirmacao; e' correcao de documento (retirar e anexar num ato), nao acao de agente (e o anexo e' arquivo de um cidadao: dado pessoal)"}
  ;; ---------- ADR-0016: o console do operador (supratenant) ----------
  :admin-sistema/descoberta {:categoria :supratenant
                             :motivo "descoberta publica do realm do operador para o login do console"}

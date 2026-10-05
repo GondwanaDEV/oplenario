@@ -108,10 +108,10 @@
 
 (defn- anexos-do-detalhe
   "Os anexos como a OUTRA parte (o requerente) os ve: id, nome, tipo, tamanho, quem anexou (casa|requerente), quando e, se foi
-  RETIRADO, quando. Nunca a chave no object storage, o sha256, quem enviou (identidade de servidor) nem o MOTIVO da
+  RETIRADO, quando; se foi TROCADO pela Casa, o id do novo (`:substituido-por`). Nunca a chave no object storage, o sha256, quem enviou (identidade de servidor) nem o MOTIVO da
   retirada (so' o balcao o le: `anexos-do-balcao`)."
   [anexos]
-  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em]) anexos))
+  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em :substituido-por]) anexos))
 
 (defn- complementos-do-detalhe
   "Os complementos da resposta como o REQUERENTE os ve: id, texto e quando. Nunca quem escreveu (identidade de servidor)."
@@ -121,7 +121,7 @@
 (defn- anexos-do-balcao
   "Os anexos como a SECRETARIA os ve: os do requerente mais, se retirado, o motivo da retirada (que o requerente nao le)."
   [anexos]
-  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em :motivo-da-retirada]) anexos))
+  (mapv #(select-keys % [:id :nome :tipo-midia :bytes :origem :enviado-em :retirado-em :motivo-da-retirada :substituido-por]) anexos))
 
 (defn meus-protocolos
   "GET /portal/meus-protocolos — o que o `ator` protocolou NESTA Casa (a da sessao), cada item com vence-em
@@ -701,7 +701,8 @@
   a violacao de integridade do banco (SQLState 23xxx: o statement falhou e a tx voltou). Qualquer outra (conexao que cai,
   timeout) deixa o resultado DESCONHECIDO: o commit pode ter passado."
   [e]
-  (or (contains? #{:conflito/anexos-demais :conflito/cota-de-anexos} (:tipo (ex-data e)))
+  (or (contains? #{:conflito/anexos-demais :conflito/cota-de-anexos :conflito/anexo-nao-substituivel :conflito/anexo-igual}
+                 (:tipo (ex-data e)))
       (and (instance? java.sql.SQLException e)
            (let [^String estado (.getSQLState ^java.sql.SQLException e)]
              (boolean (and estado (.startsWith estado "23")))))))
@@ -798,6 +799,65 @@
     ;; sem `catch`: se o object storage falhar, o erro sobe (500) e a retirada JA' esta registrada — tentar de novo conclui
     (store/remover! objeto-store (:chave-objeto a))
     a))
+
+;; ---------- SUBSTITUIR um anexo da Casa (ADR-0022, "Substituir um anexo") ----------
+;; A ORDEM e' a do envio e a da retirada: o blob NOVO sobe primeiro (a linha nova so' existe apontando para um blob que
+;; existe); a tx grava a retirada do antigo e a linha nova JUNTAS; o blob ANTIGO so' sai DEPOIS do commit. Cada ponto de falha
+;; deixa pelo menos um dos dois arquivos de pe', nunca nenhum:
+;;   - o upload do novo falha -> nada mudou (500), o antigo segue la';
+;;   - a tx e' recusada com certeza (409, violacao de integridade) -> o blob novo sai, o antigo segue la';
+;;   - o resultado da tx e' desconhecido (a conexao cai) -> NENHUM blob sai: se passou, o novo existe e o antigo (ja' retirado,
+;;     download 404) fica ate' alguem retirar de novo; se nao passou, sobra um blob novo sem linha (lixo inofensivo);
+;;   - o blob antigo nao sai depois do commit -> a substituicao esta' feita (201) e o antigo fica orfao, com download 404;
+;;     `retirar` sobre ele conclui a remocao (idempotente).
+
+(defn- achar-anexo [anexos anexo-id] (first (filter #(= anexo-id (:id %)) anexos)))
+
+(defn- conferir-substituivel! [antigo]
+  (when-let [por-que (anexo/motivo-de-nao-substituir antigo)]
+    (conflito-de-anexo! :conflito/anexo-nao-substituivel "o anexo nao pode ser substituido" {:motivo por-que})))
+
+(defn pre-conferir-substituir-anexo
+  "Antes de aceitar o corpo do upload da SUBSTITUICAO: o protocolo existe nesta Casa e tem esse anexo? Ele pode ser substituido
+  (da Casa, vigente, nunca trocado — SEM janela de tempo)? nil = protocolo ou anexo inexistente (404). Pode: {:instante ...}.
+  Nao pode: lanca o 409. Nao le o corpo (nem tem como). E' economia: `substituir-anexo!` confere tudo de novo e o Repo, na tx."
+  [repo-participacao relogio ator especie id anexo-id]
+  (when-let [{:keys [anexos]} (protocolo-para-anexar repo-participacao (:ente-id ator) especie id)]
+    (when-let [antigo (achar-anexo anexos anexo-id)]
+      (conferir-substituivel! antigo)
+      {:instante (tempo/agora relogio)})))
+
+(defn substituir-anexo!
+  "SERVIDOR (papel exigido na rota) SUBSTITUI o anexo `anexo-id` do protocolo `id` da `especie` por UM arquivo novo, num so'
+  ato: o antigo e' retirado (com o `motivo`, o blob sai do object storage, o download vira 404) e o novo ocupa a vaga dele. A
+  qualquer tempo. Ordem das recusas: nil = protocolo ou anexo inexistente/de outra Casa (404); do requerente, ja' substituido
+  ou ja' retirado -> :conflito/anexo-nao-substituivel (409, com `:motivo`); tipo fora da lista -> :conflito/tipo-de-anexo
+  (415); conteudo que nao bate com a extensao -> :conflito/conteudo-do-anexo (415); o mesmo arquivo (sha256) ja' vigente no
+  protocolo -> :conflito/anexo-igual (409). `retirado-por`/`enviado-por` INJETADOS do ator. Devolve {:novo (kebab, com
+  `:protocolo`) :antigo (kebab, com a retirada e `:substituido-por`)}."
+  [repo-participacao objeto-store relogio ator especie id anexo-id motivo {:keys [nome tipo-midia ^bytes conteudo]}]
+  (let [ente-id (:ente-id ator)]
+    (when-let [{:keys [protocolo anexos]} (protocolo-para-anexar repo-participacao ente-id especie id)]
+      (when-let [antigo (achar-anexo anexos anexo-id)]
+        (conferir-substituivel! antigo)
+        (let [tipo (tipo-do-anexo! nome tipo-midia conteudo)
+              novo-id (ids/novo-id)
+              chave (anexo/chave-do-anexo ente-id id novo-id)
+              sha (hex (.digest (MessageDigest/getInstance "SHA-256") conteudo))]
+          (store/guardar! objeto-store chave conteudo tipo)
+          (let [r (try
+                    (repo/substituir-anexo! repo-participacao ente-id
+                      {:objeto-tipo (anexo/objeto-tipo-da-especie especie) :objeto-id id :anexo-id anexo-id
+                       :motivo motivo :retirado-por (:identidade-id ator) :em (tempo/agora relogio)
+                       :novo {:id novo-id :nome nome :tipo-midia tipo :bytes (alength conteudo) :sha256 sha
+                              :chave-objeto chave :enviado-por (:identidade-id ator)}})
+                    (catch Exception e
+                      (when (recusa-comprovada? e) (remover-blob! objeto-store chave))
+                      (throw e)))]
+            (if-not r
+              (do (remover-blob! objeto-store chave) nil)   ; o anexo sumiu entre a conferencia e a tx: nada foi gravado
+              (do (remover-blob! objeto-store (:chave-objeto antigo))   ; DEPOIS do commit; falhar aqui nao desfaz a troca
+                  (update r :novo assoc :protocolo protocolo)))))))))
 
 (defn- dono-do-protocolo?
   "O ator e' o REQUERENTE deste protocolo? e-SIC: o solicitante; LGPD: o titular; ouvidoria: o manifestante — e a

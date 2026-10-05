@@ -13,18 +13,23 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private cols-base
-  [:id :objeto_tipo :objeto_id :origem :nome :tipo_midia :bytes :sha256 :chave_objeto :enviado_em :enviado_por])
+  [:id :objeto_tipo :objeto_id :origem :nome :tipo_midia :bytes :sha256 :chave_objeto :enviado_em :enviado_por
+   :substitui_anexo_id])
 
 (def ^:private cols
   "As colunas do anexo + a RETIRADA (LEFT JOIN `anexo_retirada`): `retirado-em`, `retirado-por` e `motivo-da-retirada` sao nil
-  enquanto o anexo esta vigente. O que sai para a tela e' filtrado no adapters/out (o motivo so' vai ao balcao)."
+  enquanto o anexo esta vigente. + a SUBSTITUICAO: `substitui-anexo-id` (este anexo e' a troca de qual) e `substituido-por`
+  (qual anexo o trocou: a relacao inversa, `s`). O que sai para a tela e' filtrado no adapters/out (o motivo so' vai ao balcao)."
   [:a.id :a.objeto_tipo :a.objeto_id :a.origem :a.nome :a.tipo_midia :a.bytes :a.sha256 :a.chave_objeto :a.enviado_em
-   :a.enviado_por
-   [:r.retirado_em :retirado_em] [:r.retirado_por :retirado_por] [:r.motivo :motivo_da_retirada]])
+   :a.enviado_por :a.substitui_anexo_id
+   [:r.retirado_em :retirado_em] [:r.retirado_por :retirado_por] [:r.motivo :motivo_da_retirada]
+   [:s.id :substituido_por]])
 
 (def ^:private de-anexo-com-retirada
+  ;; `s` = o anexo que SUBSTITUI este (no maximo um: indice unico parcial), sem duplicar linha
   {:from [[:participacao.anexo :a]]
-   :left-join [[:participacao.anexo_retirada :r] [:and [:= :r.ente_id :a.ente_id] [:= :r.anexo_id :a.id]]]})
+   :left-join [[:participacao.anexo_retirada :r] [:and [:= :r.ente_id :a.ente_id] [:= :r.anexo_id :a.id]]
+               [:participacao.anexo :s] [:and [:= :s.ente_id :a.ente_id] [:= :s.substitui_anexo_id :a.id]]]})
 
 (defn travar!
   "Serializa os anexos do MESMO protocolo nesta tx (trava consultiva de transacao — a tabela e' INSERT-only, sem GRANT de
@@ -35,8 +40,10 @@
 
 (defn inserir!
   "Registra um anexo (append-only). Devolve o mapa kebab (RETURNING). `enviado-em` (opcional) e' o instante do RELOGIO da
-  aplicacao: a cota de 24 h e a janela falam o mesmo relogio; sem ele, o default do banco (`now()`)."
-  [tx {:keys [id ente-id objeto-tipo objeto-id origem nome tipo-midia bytes sha256 chave-objeto enviado-por enviado-em]}]
+  aplicacao: a cota de 24 h e a janela falam o mesmo relogio; sem ele, o default do banco (`now()`). `substitui-anexo-id`
+  (opcional) = este anexo e' a TROCA de outro do mesmo protocolo (a retirada do antigo e' gravada pelo chamador, na mesma tx)."
+  [tx {:keys [id ente-id objeto-tipo objeto-id origem nome tipo-midia bytes sha256 chave-objeto enviado-por enviado-em
+              substitui-anexo-id]}]
   {:pre [(some? ente-id) (some? id) (some? objeto-id) (some? objeto-tipo) (some? origem) (some? nome)
          (some? tipo-midia) (some? bytes) (some? sha256) (some? chave-objeto) (some? enviado-por)]}
   (comum/linha->kebab
@@ -45,7 +52,8 @@
                   :values [(cond-> {:id id :ente_id ente-id :objeto_tipo objeto-tipo :objeto_id objeto-id :origem origem
                                     :nome nome :tipo_midia tipo-midia :bytes bytes :sha256 sha256 :chave_objeto chave-objeto
                                     :enviado_por enviado-por}
-                             enviado-em (assoc :enviado_em enviado-em))]
+                             enviado-em (assoc :enviado_em enviado-em)
+                             substitui-anexo-id (assoc :substitui_anexo_id substitui-anexo-id))]
                   :returning cols-base}))))
 
 (defn listar-do-objeto
