@@ -167,6 +167,88 @@ describe("inscritos — fila ordenada", () => {
   });
 });
 
+// A fila é de quem AINDA vai falar (docs/16, retriagem do exploratório): a inscrição se cumpre quando a fala ligada
+// a ela ENCERRA — a leitura HTTP (`GET /tribuna`) já a tira; aqui o telão a tira ao vivo, sem esperar a re-busca.
+describe("inscritos — quem já falou sai da fila", () => {
+  const insc = (seq: number, id: string, vereador: string, ordem: number): EventoPlenario => ({
+    tipo: "inscricao.registrada",
+    seq,
+    dados: { "inscricao-id": id, "sessao-id": "s1", "vereador-id": vereador, "origem-inscricao": "manual", fase: "ordem_do_dia", ordem },
+  });
+  const iniciar = (seq: number, falaId: string, oradorId: string, extra: Record<string, unknown> = {}): EventoPlenario =>
+    ({
+      tipo: "fala.iniciada",
+      seq,
+      dados: { "fala-id": falaId, "sessao-id": "s1", "orador-id": oradorId, "tipo-fala": "principal", fase: "ordem_do_dia", "iniciou-em": "2026-05-21T22:10:00Z", ...extra },
+    }) as EventoPlenario;
+  const encerrar = (seq: number, falaId: string): EventoPlenario => ({
+    tipo: "fala.encerrada",
+    seq,
+    dados: { "fala-id": falaId, "sessao-id": "s1", "tempo-segundos": 120, "encerrou-em": "2026-05-21T22:12:00Z" },
+  });
+
+  it("a fala encerrada tira da fila a inscrição que ela cumpriu; as outras ficam", () => {
+    const e = reduzir(sessao(), [
+      insc(1, "i1", "v1", 1),
+      insc(2, "i2", "v2", 2),
+      iniciar(3, "f1", "v1", { "inscricao-id": "i1" }),
+      encerrar(4, "f1"),
+    ]);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i2"]);
+  });
+
+  it("enquanto a fala está em curso a inscrição segue na fila (o cockpit marca quem está falando)", () => {
+    const e = reduzir(sessao(), [insc(1, "i1", "v1", 1), insc(2, "i2", "v2", 2), iniciar(3, "f1", "v1", { "inscricao-id": "i1" })]);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1", "i2"]);
+    expect(e.oradorAtual?.inscricaoId).toBe("i1");
+  });
+
+  it("fala sem inscrição ligada (ex.: questão de ordem) não tira ninguém da fila", () => {
+    const e = reduzir(sessao(), [insc(1, "i1", "v1", 1), iniciar(2, "f1", "v1"), encerrar(3, "f1")]);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1"]);
+  });
+
+  it("aparte não consome a inscrição (a semântica do aparte segue em aberto)", () => {
+    const e = reduzir(sessao(), [
+      insc(1, "i1", "v1", 1),
+      iniciar(2, "f1", "v1", { "tipo-fala": "aparte", "inscricao-id": "i1" }),
+      encerrar(3, "f1"),
+    ]);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1"]);
+  });
+
+  it("fala encerrada pede a re-busca da tribuna (o servidor é quem confirma a fila)", () => {
+    const e = reduzir(sessao(), [iniciar(1, "f1", "v1"), encerrar(2, "f1")]);
+    expect(e.precisaRehidratar).toBe(true);
+  });
+
+  it("encerrar uma fala que não é a corrente (o aparte a substituiu) não adivinha a fila: pede a re-busca", () => {
+    const e = reduzir(sessao(), [
+      insc(1, "i1", "v1", 1),
+      iniciar(2, "f1", "v1", { "inscricao-id": "i1" }),
+      iniciar(3, "f2", "v2", { "tipo-fala": "aparte" }),
+      encerrar(4, "f1"),
+    ]);
+    expect(e.inscritos.map((i) => i.inscricaoId)).toEqual(["i1"]);
+    expect(e.precisaRehidratar).toBe(true);
+  });
+
+  it("o snapshot de GET /tribuna traz a inscrição da fala em curso e o reducer a guarda", () => {
+    const e = hidratarTribuna(
+      estadoInicial(sessao({ estado: "aberta" })),
+      {
+        sessaoId: "s1",
+        oradorAtual: { falaId: "f9", oradorId: "v1", tipoFala: "principal", fase: "ordem_do_dia", iniciouEm: "2026-05-21T22:10:00Z", inscricaoId: "i1", tempoConcedidoSegundos: null, lockVersion: 0 },
+        marcosCronometro: [],
+        inscritos: [{ inscricaoId: "i1", vereadorId: "v1", origemInscricao: "pre_sessao_app", fase: "ordem_do_dia", ordem: 1, lockVersion: 0 }],
+      },
+      { fala: 0, inscricao: 0 },
+    );
+    const depois = aplicarEvento(e, encerrar(5, "f9"));
+    expect(depois.inscritos).toEqual([]);
+  });
+});
+
 describe("ultimoSeq — rastreia o maior seq visto (Last-Event-ID do resume)", () => {
   it("guarda o maior seq mesmo que um evento fora de ordem chegue depois", () => {
     const e = reduzir(sessao(), [
