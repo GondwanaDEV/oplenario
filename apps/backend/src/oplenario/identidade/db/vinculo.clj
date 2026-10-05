@@ -61,19 +61,61 @@
                         :returning [:id]}))))
 
 ;; ---- usuario_papel (RBAC estatico) ----
-(defn adicionar-papel! [tx {:keys [id ente-id identidade-id papel]}]
+;; ADR-0005 (adendo "Revogar acesso"): a linha do papel pode estar REVOGADA (`revogado_em`); so' a ATIVA vale. A unicidade
+;; (Casa, pessoa, papel) e' do indice parcial dos ativos — por isso o conflito abaixo cita o predicado.
+(defn adicionar-papel!
+  "Concede o papel. Idempotente para o ATIVO (conceder de novo o que ja' vale nao faz nada); se o anterior foi revogado,
+  abre OUTRA linha — o historico da revogacao fica."
+  [tx {:keys [id ente-id identidade-id papel]}]
   (jdbc/execute-one! tx
-    (sql/format {:insert-into :identidade.usuario_papel
-                 :values [{:id id :ente_id ente-id :identidade_id identidade-id :papel papel}]
-                 :on-conflict [:ente_id :identidade_id :papel] :do-nothing true})))
+    ["INSERT INTO identidade.usuario_papel (id, ente_id, identidade_id, papel) VALUES (?, ?, ?, ?)
+      ON CONFLICT (ente_id, identidade_id, papel) WHERE revogado_em IS NULL DO NOTHING"
+     id ente-id identidade-id papel]))
 
 (defn papeis-de
-  "Conjunto de papeis estaticos da identidade neste ente (o snapshot do token, §22.5.2 eixo D)."
+  "Conjunto de papeis ATIVOS da identidade neste ente (o snapshot do token, §22.5.2 eixo D). Papel revogado nao conta."
   [tx ente-id identidade-id]
   (set (map :usuario_papel/papel
             (jdbc/execute! tx
               (sql/format {:select [:papel] :from [:identidade.usuario_papel]
-                           :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]]})))))
+                           :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]
+                                   [:= :revogado_em nil]]})))))
+
+(defn revogar-papel!
+  "Fecha o papel ATIVO da identidade neste ente: quem (`por`), quando (agora) e por que (`motivo`). A linha fica
+  (historico); conceder de novo abre outra. true = revogou agora; false = nao havia papel ativo."
+  [tx ente-id identidade-id papel por motivo]
+  (pos? (:next.jdbc/update-count
+         (jdbc/execute-one! tx
+           (sql/format {:update :identidade.usuario_papel
+                        :set {:revogado_em [:now] :revogado_por por :motivo_revogacao motivo}
+                        :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id] [:= :papel papel]
+                                [:= :revogado_em nil]]})))))
+
+(defn encerrar-vinculos-da-casa!
+  "Encerra os vinculos ATIVOS da identidade neste ente que NAO sao de cidadao (quem so' participa como cidadao nao
+  perde nada). Devolve quantos encerrou. Sem vinculo ativo `resolver-sessao` nao resolve ator: a sessao cai na proxima
+  chamada."
+  [tx ente-id identidade-id]
+  (:next.jdbc/update-count
+   (jdbc/execute-one! tx
+     (sql/format {:update :identidade.vinculo :set {:estado "encerrado"}
+                  :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id]
+                          [:= :estado "ativo"] [:<> :tipo "cidadao"]]}))))
+
+(defn acessos
+  "Os acessos concedidos da Casa (ADR-0005, adendo): para cada (pessoa, papel) dos `papeis` dados, a linha MAIS RECENTE —
+  ativa, ou a ultima revogada. [{:identidade-id :papel :concedido-em :revogado-em :revogado-por :motivo}], sem ordem
+  de exibicao (quem chama ordena). Os nomes ficam com o chamador (identidade e' supratenant)."
+  [tx ente-id papeis]
+  (comum/linhas->kebab
+    (jdbc/execute! tx
+      (sql/format {:select-distinct-on [[:identidade_id :papel]
+                                        :identidade_id :papel [:criado_em :concedido_em] :revogado_em :revogado_por
+                                        [:motivo_revogacao :motivo]]
+                   :from [:identidade.usuario_papel]
+                   :where [:and [:= :ente_id ente-id] [:in :papel (vec papeis)]]
+                   :order-by [:identidade_id :papel [:criado_em :desc] [:id :desc]]}))))
 
 (defn casa-tem-papel-ativo?
   "Existe alguem na Casa com o `papel` E um vinculo ATIVO de pessoa da Casa (nao o de cidadao)? E' a leitura de 'a Casa
@@ -84,7 +126,7 @@
                         :from [[:identidade.usuario_papel :up]]
                         :join [[:identidade.vinculo :v] [:and [:= :v.ente_id :up.ente_id]
                                                           [:= :v.identidade_id :up.identidade_id]]]
-                        :where [:and [:= :up.ente_id ente-id] [:= :up.papel papel]
+                        :where [:and [:= :up.ente_id ente-id] [:= :up.papel papel] [:= :up.revogado_em nil]
                                 [:= :v.estado "ativo"] [:<> :v.tipo "cidadao"]]
                         :limit 1}))))
 
@@ -108,7 +150,7 @@
         ps (when (seq ids)
              (jdbc/execute! tx
                (sql/format {:select [:identidade_id :papel] :from [:identidade.usuario_papel]
-                            :where [:and [:= :ente_id ente-id] [:in :identidade_id ids]]})))
+                            :where [:and [:= :ente_id ente-id] [:in :identidade_id ids] [:= :revogado_em nil]]})))
         papeis (reduce (fn [m r] (update m (:usuario_papel/identidade_id r) (fnil conj #{}) (:usuario_papel/papel r)))
                        {} ps)
         tipos (reduce (fn [m r] (update m (:vinculo/identidade_id r) (fnil conj #{}) (:vinculo/tipo r))) {} vs)]

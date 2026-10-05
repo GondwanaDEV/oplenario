@@ -30,6 +30,10 @@
                                           :motivo "fronteira de servico: o satelite pede a credencial de uma execucao do agente institucional (B.8)"}
  :integracao-ia/revogar-credencial-institucional {:categoria :servico
                                                   :motivo "fronteira de servico: o satelite encerra a credencial da execucao do agente institucional"}
+ :identidade/listar-acessos {:categoria :so-tela
+                             :motivo "a lista de acessos que o admin da Casa concede e revoga na tela (ADR-0005, adendo); agente nao administra acesso"}
+ :identidade/revogar-acesso {:categoria :so-tela
+                             :motivo "revogar acesso e' ato do admin_ente, na tela, com motivo (ADR-0005, adendo); o agente nunca tira nem da' acesso a ninguem"}
  :identidade/agentes-institucionais {:categoria :so-tela
                                      :motivo "o painel do admin da Casa com os agentes institucionais; agente nao administra agente"}
  :identidade/ligar-agente-institucional {:categoria :so-tela
