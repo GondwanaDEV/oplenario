@@ -11,6 +11,7 @@
             [oplenario.admin-sistema.controllers :as admin-sistema]
             [oplenario.config :as config]
             [oplenario.comunicacao.components.repositorio :as repo-comunicacao]
+            [oplenario.ia-orcamento :as ia-orcamento]
             [oplenario.ia-republicar :as ia-republicar]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
             [oplenario.kernel.components.datasource :as datasource]
@@ -44,18 +45,21 @@
                       "proposicao(oes) publicada(s) no feed da IA")
              (finally (component/stop ds))))
 
-      ;; Track IA B.9 (ADR-0014): o OPERADOR define o orcamento de IA da Casa conforme o plano (valores comerciais)
+      ;; Track IA B.9 (ADR-0014): o OPERADOR define o orcamento de IA da Casa conforme o plano (valores comerciais).
+      ;; ADR-0016/0017: o ato fica na atuacao da Operacao (tentativa antes, desfecho depois) — ver `oplenario.ia-orcamento`.
       (= "ia-orcamento" (first args))
       (let [[_ ente mensal teto moeda] args
             uso "uso: ia-orcamento <ente-id> <mensal> <teto-duro> [moeda=USD]  (na moeda da tabela de precos da IA)"
             ente (or (parse-uuid (str ente)) (throw (ex-info uso {})))
             valor #(try (bigdec %) (catch Exception _ (throw (ex-info uso {}))))
             ds (component/start (datasource/datasource cfg))]
-        (try (let [d (repo-ia/definir-orcamento! (repo-ia/map->RepoIntegracaoIAPg {:datasource ds})
-                                                 {:ente-id ente :mensal (valor mensal) :teto-duro (valor teto)
-                                                  :moeda (or moeda "USD") :definido-por "operador (linha de comando)"})]
+        (try (let [d (ia-orcamento/definir!
+                      {:repo-ia (repo-ia/map->RepoIntegracaoIAPg {:datasource ds})
+                       :repo-op (assoc (repo-admin/repositorio) :datasource ds)}
+                      {:ente-id ente :mensal (valor mensal) :teto-duro (valor teto)
+                       :moeda (or moeda "USD") :definido-por "operador (linha de comando)"})]
                (println "[oplenario] orcamento de IA definido:" (str (:mensal d)) "/ teto" (str (:teto-duro d))
-                        (:moeda d) "— a IA recebe pelo feed"))
+                        (:moeda d) "— a IA recebe pelo feed; registrado na atuacao da Operacao"))
              (finally (component/stop ds))))
 
       ;; ADR-0022/ADR-0020: compara os anexos do banco com os blobs do object storage (relata; --apagar-orfaos so' tira do

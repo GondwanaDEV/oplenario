@@ -54,7 +54,9 @@
     :motivo "o mint da Casa: grava a TENTATIVA DA ENTRADA (`logic/acoes-de-entrada`) logo antes de criar a sessao"}
    "admin_sistema/diplomat/http/in.clj"
    {:corrente :operacao
-    :motivo "o mint do OPERADOR: a entrada dele fica na atuacao da Operacao (ADR-0016), nunca na trilha da Casa"}})
+    :motivo (str "o mint do OPERADOR: a entrada dele fica na atuacao da Operacao (ADR-0016), nunca na trilha da Casa; "
+                 "grava a tentativa (`entrada-no-console-iniciada`) logo antes de criar a sessao e o desfecho depois, e o "
+                 "registro fora do ar nunca tranca o login (ADR-0017, adendo de 05/10/2026)")}})
 
 (deftest toda-sessao-nasce-num-mint-conhecido
   (let [achados (arquivos-com chamada-de-criar-sessao (fontes))]
@@ -118,7 +120,8 @@
    "ia-orcamento"
    {:classe :comando-do-operador
     :motivo (str "o operador define o orcamento de IA da Casa: ato do OPERADOR (corrente da Operacao, ADR-0016, nao a da "
-                 "Casa); o efeito fica no `orcamento` append-only com `definido-por`")}
+                 "Casa); grava o PAR na atuacao (tentativa antes, desfecho depois: `oplenario.ia-orcamento`) e o efeito "
+                 "fica no `orcamento` append-only com `definido-por`")}
    "reconciliar-anexos"
    {:classe :comando-do-operador
     :motivo "relata; com --apagar-orfaos tira do STORAGE so' o blob sem linha com mais de 24 h (nao e' dado de Casa)"}
@@ -134,6 +137,14 @@
         (concat (map second (re-seq #"\(= \"([a-z][a-z\-]*)\" \(first args\)\)" texto))
                 (mapcat #(map second (re-seq #"\"([a-z][a-z\-]*)\"" (second %)))
                         (re-seq #"\(#\{([^}]*)\}\s*\(first args\)\)" texto)))))
+
+(deftest ia-orcamento-nao-define-o-orcamento-sem-passar-pelo-par-da-atuacao
+  ;; o comando de operador sobre uma Casa que deixa de passar por `oplenario.ia-orcamento` volta a ser a lacuna que a
+  ;; ADR-0017 (adendo de 05/10/2026) achou: o orcamento muda e a atuacao da Operacao nao sabe
+  (let [texto (slurp "src/oplenario/main.clj")]
+    (is (re-find #"ia-orcamento/definir!" texto) "main.clj define o orcamento por `ia-orcamento/definir!`")
+    (is (not (re-find #"\(repo-ia/definir-orcamento!" texto))
+        "main.clj nao chama `repo-ia/definir-orcamento!` direto: isso define o orcamento sem registro na atuacao")))
 
 (deftest todo-comando-de-main-esta-classificado
   (let [texto (slurp "src/oplenario/main.clj")
