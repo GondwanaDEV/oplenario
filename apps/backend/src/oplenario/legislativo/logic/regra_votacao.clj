@@ -3,8 +3,9 @@
 
   A regra e' DADO (Inv.4): a guarda, os turnos e o intersticio moram na tabela. Aqui so' mora a ESCOLHA da linha pela
   materia — a classe de materia e' vocabulario do produto (a especie da proposicao, o tipo da prestacao de contas), nao
-  da Casa — e a frase que a Mesa le quando a abertura e' recusada."
-  (:require [oplenario.legislativo.logic.contas :as contas]))
+  da Casa — e a frase que a Mesa le quando a abertura e' recusada (pela guarda ou pelo turno, `recusa-do-turno`)."
+  (:require [oplenario.legislativo.logic.contas :as contas])
+  (:import (java.time.format DateTimeFormatter)))
 
 (set! *warn-on-reflection* true)
 
@@ -41,3 +42,22 @@
   "A frase quando a linha da regra nao existe (fail-closed: a votacao nao abre sem a regra)."
   [chave]
   (str "A regra de votação " (get nome-da-regra chave (str "\"" chave "\"")) " não está configurada."))
+
+(def ^:private a-materia
+  {chave-emenda-lom {:esta "Esta emenda à Lei Orgânica" :desta "desta emenda à Lei Orgânica"}})
+
+(def ^:private data-br (DateTimeFormatter/ofPattern "dd/MM/yyyy"))
+
+(defn- quantos-turnos [n] (if (= 2 n) "dois" (str n)))
+
+(defn recusa-do-turno
+  "A frase da recusa quando a votacao de turno nao abre (`logic/turnos/para-abrir` devolveu `:recusa`). A rejeicao
+  nao cita a regra: a CF fala dos turnos e do intersticio, nao do destino da materia rejeitada."
+  [{:keys [chave referencia turnos intersticio-dias]} {:keys [recusa turno anterior a-partir-de]}]
+  (let [{:keys [esta desta]} (get a-materia chave {:esta "Esta matéria" :desta "desta matéria"})]
+    (case recusa
+      :intersticio (str "O " turno "º turno " desta " só pode ser votado a partir de "
+                        (.format ^DateTimeFormatter data-br ^java.time.LocalDate a-partir-de)
+                        ": são " intersticio-dias " dias depois do " anterior "º turno (" referencia ").")
+      :concluida (str esta " já foi aprovada nos " (quantos-turnos turnos) " turnos (" referencia ").")
+      :rejeitada (str esta " foi rejeitada no " turno "º turno: não há outro turno a votar."))))

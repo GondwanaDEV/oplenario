@@ -3,7 +3,9 @@
 //
 // O selo só muda a partir do AUTÓGRAFO: a votação em plenário fica na frase "Última votação em plenário: …" da ficha
 // (#157), e o selo continua no rito — numa matéria de dois turnos, "Aguardando pauta" depois do 1º turno é verdade.
-// Depois do autógrafo não há ambiguidade: a matéria saiu do plenário e foi ao Executivo.
+// Depois do autógrafo não há ambiguidade: a matéria saiu do plenário e foi ao Executivo. Na emenda à Lei Orgânica
+// (dois turnos, CF art. 29) o desfecho "aprovada" do 1º turno também não decide nada aqui: a linha do tempo diz
+// "Aprovada em 1º turno" (rótulo do backend) e a frase da última votação diz o turno (`atoDaVotacao`).
 //
 // Vocabulário FECHADO (o rito do Executivo é enum no backend, não texto livre por Casa); os mesmos atos entram na
 // linha do tempo pública com os rótulos de `transparencia/logic/desfecho.clj`.

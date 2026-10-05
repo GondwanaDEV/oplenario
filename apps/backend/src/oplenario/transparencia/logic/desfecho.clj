@@ -14,11 +14,16 @@
 
 (defn rotulo
   "O ato `{:ato ...}` em palavras, ou nil para ato desconhecido (evento de uma versao futura: a linha nao e' projetada
-  sem rotulo, em vez de inventar um)."
-  [{:keys [ato redacao-final numero ano] :as a}]
+  sem rotulo, em vez de inventar um). A votacao de TURNO (`turno`, a emenda a Lei Organica em dois turnos) diz o
+  turno: 'Aprovada em 1º turno' nao e' 'Aprovada em plenario' — a materia so' esta' aprovada no ultimo."
+  [{:keys [ato redacao-final turno numero ano] :as a}]
   (case ato
-    "aprovada" (if redacao-final "Redação final aprovada em plenário" "Aprovada em plenário")
-    "rejeitada" (if redacao-final "Redação final rejeitada em plenário" "Rejeitada em plenário")
+    "aprovada" (cond redacao-final "Redação final aprovada em plenário"
+                     turno (str "Aprovada em " turno "º turno")
+                     :else "Aprovada em plenário")
+    "rejeitada" (cond redacao-final "Redação final rejeitada em plenário"
+                      turno (str "Rejeitada em " turno "º turno")
+                      :else "Rejeitada em plenário")
     "autografo_enviado" (if (and numero ano)
                           (str "Autógrafo nº " numero "/" ano " enviado ao Executivo")
                           "Autógrafo enviado ao Executivo")
@@ -33,7 +38,7 @@
 
 (defn chave
   "A chave de idempotencia da linha do tempo para o ato (nunca vai a tela). Prefixo `ato:` para nunca colidir com uma
-  etapa do rito da Casa (texto livre)."
-  [{:keys [ato redacao-final]}]
+  etapa do rito da Casa (texto livre). Os dois turnos sao duas linhas: o turno entra na chave."
+  [{:keys [ato redacao-final turno]}]
   (when-not (str/blank? ato)
-    (str "ato:" ato (when redacao-final ":redacao_final"))))
+    (str "ato:" ato (when redacao-final ":redacao_final") (when turno (str ":turno_" turno)))))

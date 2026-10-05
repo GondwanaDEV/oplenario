@@ -159,12 +159,15 @@
 (def DesfechoRegistradoPayload
   "Payload de `proposicao.desfecho-registrado`. `ocorrido-em` e' o instante REAL do ato (string ISO, mesma disciplina
   dos demais payloads). `redacao-final` marca a aprovacao/rejeicao da REDACAO FINAL (nao do texto em turno).
-  `numero`/`ano` acompanham o autografo; `tipo-norma`/`numero`/`ano`, a promulgacao."
+  `numero`/`ano` acompanham o autografo; `tipo-norma`/`numero`/`ano`, a promulgacao. `turno` marca a votacao de TURNO
+  da materia que a regra de votacao manda votar em mais de um (a emenda a Lei Organica, CF art. 29): 'aprovada' no
+  turno 1 NAO e' a materia aprovada. Ausente = materia de um turno (o significado de sempre)."
   [:map {:closed true}
    [:proposicao-id :uuid]
    [:ato (into [:enum] (sort atos-de-desfecho))]
    [:ocorrido-em :string]
    [:redacao-final {:optional true} :boolean]
+   [:turno {:optional true} [:int {:min 1 :max 9}]]
    [:tipo-norma {:optional true} :string]
    [:numero {:optional true} :int]
    [:ano {:optional true} :int]])
