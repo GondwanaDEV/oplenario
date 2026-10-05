@@ -30,7 +30,10 @@
     `legislativo.votos.voto` ∈ sim·nao·abstencao (migration `20260620000021-legislativo-votacao.up.sql`,
     CHECKs em linha). `quorum_tipo` ∈ maioria_simples·maioria_absoluta·maioria_qualificada_2_3·
     maioria_qualificada_3_5 (mesma migration) — usamos 'maioria_simples' (`sim > nao`,
-    `oplenario.legislativo.logic/resultado-votacao`).
+    `oplenario.legislativo.logic/resultado-votacao`), menos na emenda a Lei Organica, que a regra `emenda_lom` so'
+    deixa abrir com 'maioria_qualificada_2_3' (CF art. 29; `quorum-da-materia`). A emenda que a ENCERRADA vota fica
+    aprovada SO' no 1o turno: o 2o so' abre 10 dias depois do encerramento do 1o, e a semente roda tudo no mesmo
+    instante — semear um 2o turno pediria um relogio no futuro, o que a demo nao finge.
   - `sessoes.pauta_item.tipo_item` ∈ proposicao·leitura·comunicado·homenagem
     (`oplenario.sessoes.logic/tipos-item-pauta`); `.fase` ∈ expediente·grande_expediente·ordem_do_dia·
     explicacoes_pessoais·tribuna_livre_cidadao (`logic/fases-pauta`).
@@ -64,6 +67,8 @@
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.legislativo.components.repositorio :as repo-leg]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao]
+            [oplenario.legislativo.db.desfecho :as desfecho]
+            [oplenario.legislativo.logic.regra-votacao :as regra-votacao]
             [oplenario.sessoes.components.repositorio :as repo-sessoes]
             [oplenario.sessoes.components.repositorio-publicacao :as repo-pub]
             [oplenario.sessoes.db.tribuna :as db-tribuna]
@@ -176,12 +181,35 @@
       (repo-sessoes/encerrar-fala! repo-s ente-id
         {:id fala-id :encerrou-em (.plusSeconds inicio 180) :lock-version 0 :updated-by ator}))))
 
-(defn- votar-e-apurar! [repo-l ente-id sessao-id materia-id eleitores base-membros]
+(defn- quorum-da-materia
+  "O quorum com que a Mesa da demo abre a votacao da materia. A emenda a Lei Organica so' abre com 2/3 dos membros
+  (CF art. 29: a regra `emenda_lom` recusa outro quorum com 422); o resto, maioria simples."
+  [repo-l ente-id materia-id]
+  (if (= regra-votacao/especie-emenda-lom (:tipo (repo-leg/buscar-proposicao repo-l ente-id materia-id)))
+    "maioria_qualificada_2_3"
+    "maioria_simples"))
+
+(defn- eleitores-e-votos
+  "Quem vota e como, pelo quorum. Maioria simples: 10 dos presentes, 7 a 2 com 1 abstencao (o placar de sempre). 2/3:
+  todos os presentes, com um voto a favor alem dos 2/3 dos membros (a emenda a LOM da demo passa no 1o turno) — falha
+  ALTO se o plenario nao chega aos 2/3, em vez de semear uma rejeicao que ninguem pediu."
+  [quorum presentes base-membros]
+  (if (= "maioria_qualificada_2_3" quorum)
+    (let [necessarios (quot (+ (* 2 base-membros) 2) 3)
+          sim (min (count presentes) (inc necessarios))]
+      (when (< sim necessarios)
+        (throw (ex-info "sessoes/semear!: presentes insuficientes para os 2/3 da emenda a LOM"
+                        {:presentes (count presentes) :base-membros base-membros :necessarios necessarios})))
+      [presentes (concat (repeat sim "sim") (cycle ["nao" "abstencao"]))])
+    [(take 10 presentes) (cycle ["sim" "sim" "sim" "sim" "sim" "sim" "sim" "nao" "nao" "abstencao"])]))
+
+(defn- votar-e-apurar! [repo-l ente-id sessao-id materia-id presentes base-membros]
   (let [vid (random-uuid)
-        votos (cycle ["sim" "sim" "sim" "sim" "sim" "sim" "sim" "nao" "nao" "abstencao"])]
+        quorum (quorum-da-materia repo-l ente-id materia-id)
+        [eleitores votos] (eleitores-e-votos quorum presentes base-membros)]
     (repo-leg/abrir-votacao! repo-l ente-id
       {:id vid :objeto-tipo "proposicao" :objeto-id materia-id :modalidade "nominal"
-       :quorum-tipo "maioria_simples" :sessao-id sessao-id :created-by nil})
+       :quorum-tipo quorum :sessao-id sessao-id :created-by nil})
     (doseq [[v voto] (map vector eleitores votos)]
       (repo-leg/registrar-voto! repo-l ente-id
         {:id (random-uuid) :votacao-id vid :vereador-id (:vereador-id v) :voto voto :created-by nil}))
@@ -204,7 +232,7 @@
        :ocorrido-em (Instant/now) :agora (Instant/now) :created-by (random-uuid)})
     (let [base (membros-da-casa-agora repo-s ente-id id-encerrada roster)]
       (doseq [materia-id (take 2 materias-votadas)]
-        (votar-e-apurar! repo-l ente-id id-encerrada materia-id (take 10 presentes) base)))
+        (votar-e-apurar! repo-l ente-id id-encerrada materia-id presentes base)))
     (semear-tribuna! repo-s ente-id id-encerrada (:vereador-id (first presentes)) true))
   (repo-sessoes/transicionar-sessao! repo-s ente-id {:id id-encerrada :para "encerrada" :updated-by nil :lock-version 1}))
 
@@ -234,7 +262,7 @@
     ;; a votacao FICA aberta — e' o que a jornada J4 exige (o vereador vota ao vivo)
     (repo-leg/abrir-votacao! repo-l ente-id
       {:id (random-uuid) :objeto-tipo "proposicao" :objeto-id materia-votando :modalidade "nominal"
-       :quorum-tipo "maioria_simples" :sessao-id id-aberta :created-by nil})
+       :quorum-tipo (quorum-da-materia repo-l ente-id materia-votando) :sessao-id id-aberta :created-by nil})
     ;; 1 orador na tribuna com a fala INICIADA — cronometro correndo, sem encerrar
     (semear-tribuna! repo-s ente-id id-aberta (:vereador-id (first presentes)) false)))
 
@@ -290,7 +318,7 @@
   [tx ente-id sessao-id]
   (comum/linhas->kebab
    (jdbc/execute! tx
-     (sql/format {:select [:v.id :v.resultado :p.tipo :p.sequencial :p.ano :p.ementa]
+     (sql/format {:select [:v.id :v.objeto_id :v.resultado :p.tipo :p.sequencial :p.ano :p.ementa]
                   :from [[:legislativo.votacoes :v]]
                   :join [[:legislativo.proposicoes :p] [:and [:= :p.ente_id :v.ente_id] [:= :p.id :v.objeto_id]]]
                   :where [:and [:= :v.ente_id ente-id] [:= :v.sessao_id sessao-id] [:= :v.estado "encerrada"]]
@@ -305,19 +333,25 @@
 
 (def ^:private rotulo-tipo {"projeto_lei" "Projeto de Lei" "projeto_resolucao" "Projeto de Resolução"
                             "projeto_decreto_legislativo" "Projeto de Decreto Legislativo" "requerimento" "Requerimento"
-                            "indicacao" "Indicação" "mocao" "Moção"})
+                            "indicacao" "Indicação" "mocao" "Moção"
+                            "proposta_emenda_lom" "Proposta de Emenda à Lei Orgânica"})
+
+(def ^:private especies-femininas #{"indicacao" "mocao" "proposta_emenda_lom"})
 
 (def ^:private data-por-extenso
   (DateTimeFormatter/ofPattern "d 'de' MMMM 'de' yyyy" (Locale/forLanguageTag "pt-BR")))
 
 (defn texto-da-ata
   "O texto da ata da ENCERRADA, montado dos registros REAIS dela (presentes na chamada, votacoes apuradas com a
-  contagem, uso da tribuna) — nada inventado alem da forma. PURA sobre os dados lidos, para o teste."
+  contagem, uso da tribuna) — nada inventado alem da forma. PURA sobre os dados lidos, para o teste. A votacao de
+  TURNO (`:turno`, a emenda a Lei Organica em dois turnos) diz o turno: 'aprovada em 1º turno', nunca so' 'aprovada'."
   [{:keys [numero data presentes votacoes]}]
-  (let [votacao (fn [{:keys [tipo sequencial ano ementa resultado sim nao abstencao]}]
-                  (str "Em votação nominal, o " (get rotulo-tipo tipo tipo) " nº " sequencial "/" ano
-                       " — \"" ementa "\" — obteve " sim " voto(s) favorável(is), " nao " contrário(s) e "
-                       abstencao " abstenção(ões), sendo " (if (= "aprovada" resultado) "aprovado" "rejeitado") "."))]
+  (let [votacao (fn [{:keys [tipo sequencial ano ementa resultado sim nao abstencao turno]}]
+                  (let [f? (contains? especies-femininas tipo)]
+                    (str "Em votação nominal, " (if f? "a " "o ") (get rotulo-tipo tipo tipo) " nº " sequencial "/" ano
+                         " — \"" ementa "\" — obteve " sim " voto(s) favorável(is), " nao " contrário(s) e "
+                         abstencao " abstenção(ões), sendo " (if (= "aprovada" resultado) "aprovad" "rejeitad") (if f? "a" "o")
+                         (when turno (str " em " turno "º turno")) ".")))]
     (str/join "\n\n"
               (concat
                [(str "Aos " (.format data-por-extenso data) ", reuniu-se em sessão ordinária a Câmara Municipal, "
@@ -353,9 +387,11 @@
           presentes (count (distinct (map :vereador-id (repo-sessoes/listar-presenca repo-s ente-id id-encerrada))))
           votacoes (tenancy/com-tenant* ds ente-id
                      (fn [tx]
-                       (mapv (fn [v] (let [c (contagem-de-votos* tx ente-id (:id v))]
-                                       (assoc v :sim (get c "sim" 0) :nao (get c "nao" 0)
-                                                :abstencao (get c "abstencao" 0))))
+                       (mapv (fn [v] (let [c (contagem-de-votos* tx ente-id (:id v))
+                                           turno (get (desfecho/turno-por-votacao tx ente-id (:objeto-id v)) (:id v))]
+                                       (cond-> (assoc v :sim (get c "sim" 0) :nao (get c "nao" 0)
+                                                        :abstencao (get c "abstencao" 0))
+                                         turno (assoc :turno turno))))
                              (votacoes-da-sessao* tx ente-id id-encerrada))))
           texto (texto-da-ata {:numero (:numero-sequencial s) :presentes presentes :votacoes votacoes
                                :data (.toLocalDate (.atZone (->instant (:aberta-em s)) (ZoneId/of "America/Fortaleza")))})]

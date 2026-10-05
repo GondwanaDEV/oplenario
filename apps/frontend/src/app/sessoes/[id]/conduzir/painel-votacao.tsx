@@ -16,6 +16,9 @@
 // de contas, quórum (2/3 dos membros) e modalidade (nominal) ficam TRAVADOS, e a Mesa vê a pergunta votada — "Rejeitar
 // o parecer prévio do TCE?" (Sim = rejeitar) — e quantos votos a rejeição precisa. Encerrada, o painel refaz o GET da
 // prestação e diz o resultado em palavras ("O parecer prevalece: 12 votos pela rejeição, eram precisos 14.").
+//
+// EMENDA À LEI ORGÂNICA (CF art. 29): quando a pauta traz a espécie da matéria escolhida e ela é PELOM, o quórum fica
+// travado em 2/3 dos membros (a modalidade segue com a Mesa). O backend recusa outro quórum com 422 de qualquer jeito.
 
 import { useState } from "react";
 import { fraseDoResultado } from "@/lib/contas-vista";
@@ -29,6 +32,7 @@ import {
   rotuloObjetoTipo,
   rotuloQuorum,
   regraDaVotacaoDeContas,
+  regraDaVotacaoPelaEspecie,
   MODALIDADES,
   QUORUNS,
 } from "@/lib/votacao-mesa-vista";
@@ -71,8 +75,10 @@ export function PainelVotacao({
 
   const contas = useContasDaProposicao(token, painel.tipo === "em-curso" ? painel.votacao.objetoId : objetoId || null);
   const regraContas = contas.fase === "contas" ? regraDaVotacaoDeContas(contas.prestacao.quorum) : null;
+  const especieDe = (id: string) => itens.find((i) => i.proposicaoId === id)?.proposicao?.tipo;
+  const regraEspecie = regraContas ? null : regraDaVotacaoPelaEspecie(objetoId ? especieDe(objetoId) : null);
   const modalidadeEfetiva = regraContas ? regraContas.modalidade : modalidade;
-  const quorumEfetivo = regraContas ? regraContas.quorumTipo : quorumTipo;
+  const quorumEfetivo = regraContas?.quorumTipo ?? regraEspecie?.quorumTipo ?? quorumTipo;
 
   async function onAbrir() {
     if (!objetoId) {
@@ -94,7 +100,7 @@ export function PainelVotacao({
       objetoTipo: "proposicao",
       objetoId,
       modalidade: regra ? regra.modalidade : modalidade,
-      quorumTipo: regra ? regra.quorumTipo : quorumTipo,
+      quorumTipo: regra?.quorumTipo ?? regraDaVotacaoPelaEspecie(especieDe(objetoId))?.quorumTipo ?? quorumTipo,
       pautaItemId: alvo ? itens.find((i) => i.proposicaoId === objetoId)?.id ?? null : null,
     });
     setEnviando(false);
@@ -244,6 +250,11 @@ export function PainelVotacao({
                 </div>
 
                 {regraContas && <BlocoContas regra={regraContas} />}
+                {regraEspecie && (
+                  <p className="nota-mesa" role="note">
+                    <span>{regraEspecie.nota}</span>
+                  </p>
+                )}
 
                 <fieldset className="campo-radio">
                   <legend>Modalidade</legend>
@@ -267,7 +278,7 @@ export function PainelVotacao({
                   <select
                     id="quorum"
                     value={quorumEfetivo}
-                    disabled={!!regraContas}
+                    disabled={!!regraContas || !!regraEspecie}
                     onChange={(e) => setQuorumTipo(e.target.value as QuorumTipo)}
                   >
                     {QUORUNS.map((q) => (

@@ -143,6 +143,17 @@
            (is (empty? (set/difference votantes id-roster)) "voto fantasma: o placar nominal mostraria UUID sem nome")
            (is (contains? presentes persona) "o vereador precisa estar presente para votar ao vivo (meu-voto)")
            (is (>= (sessoes/quorum s ente sessao) 9) "sem quorum o telao mostra a sessao sem condicoes de votar")))
+       (testing "a emenda a Lei Organica da demo vota com 2/3 (CF art. 29) e nao passa por aprovada com um turno so'"
+         (let [pelom (:id (first (consultar s ente {:select [:id] :from [:legislativo.proposicoes]
+                                                    :where [:and [:= :ente_id ente] [:= :tipo "proposta_emenda_lom"]]})))
+               vs-pelom (consultar s ente {:select [:quorum_tipo :estado :resultado] :from [:legislativo.votacoes]
+                                           :where [:and [:= :ente_id ente] [:= :objeto_id pelom]]})]
+           (is (some? pelom) "o acervo tem a PELOM")
+           (is (seq vs-pelom) "a PELOM vai a votos numa das sessoes da demo")
+           (is (every? #(= "maioria_qualificada_2_3" (:quorum-tipo %)) vs-pelom))
+           (is (every? #(not= "rejeitada" (:resultado %)) vs-pelom) "a demo nao semeia rejeicao da emenda")
+           (is (false? (repo-leg/proposicao-aprovada-em-votacao? repo-l ente pelom))
+               "um turno so': a semente nao finge o 2o turno 10 dias depois")))
        (testing "o que `sessoes` semeou nao mudou: a aberta da J4 segue com a votacao aberta e zero voto"
          (is (= vizinhas-antes (votos-de-sessoes)))
          (is (some? (sessoes/votacao-aberta s ente aberta)))

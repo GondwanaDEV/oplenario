@@ -9,6 +9,7 @@ import {
   MODALIDADES,
   QUORUNS,
   regraDaVotacaoDeContas,
+  regraDaVotacaoPelaEspecie,
 } from "./votacao-mesa-vista";
 import type { VotacaoAbertaResumo } from "./use-votacao-mesa";
 
@@ -108,5 +109,19 @@ describe("regraDaVotacaoDeContas (ADR-0021 B2)", () => {
     expect(r.legendaSim).toBe("Sim = rejeitar o parecer");
     expect(r.precisos).toBe("São precisos 14 votos pela rejeição (2/3 dos 21 membros).");
     expect(rotuloQuorum(r.quorumTipo)).toBe("Qualificada (2/3)");
+  });
+});
+
+describe("regraDaVotacaoPelaEspecie (CF art. 29)", () => {
+  it("a emenda à Lei Orgânica trava o quórum em 2/3 e diz a regra", () => {
+    const r = regraDaVotacaoPelaEspecie("proposta_emenda_lom");
+    expect(r?.quorumTipo).toBe("maioria_qualificada_2_3");
+    expect(r?.nota).toContain("2/3 dos membros");
+    expect(r?.nota).toContain("dois turnos");
+  });
+  it("as outras espécies (e a falta do resumo) seguem com o quórum da Mesa", () => {
+    expect(regraDaVotacaoPelaEspecie("projeto_lei")).toBeNull();
+    expect(regraDaVotacaoPelaEspecie(null)).toBeNull();
+    expect(regraDaVotacaoPelaEspecie(undefined)).toBeNull();
   });
 });

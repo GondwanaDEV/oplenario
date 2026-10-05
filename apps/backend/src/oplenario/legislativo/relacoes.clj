@@ -54,7 +54,8 @@
   INVOLUCRO FINO, de proposito: toda a semantica (o que conta como aprovacao, o que fica de fora, quais
   `objeto_tipo` carregam a materia) mora em `db/votacao/aprovada-em-votacao?` e os LIMITES declarados na
   docstring de la' valem INTEGRALMENTE aqui — em especial: 'houve UMA aprovacao' nao e' 'o rito se
-  completou' (dois turnos e redacao final passam com um turno so'), e votacao 'simbolica' tem o resultado
+  completou' (a redacao final passa com um turno so'; os dois turnos tambem, salvo na materia cuja regra de votacao
+  os pede — a emenda a Lei Organica, CF art. 29, so' conta aprovada no 2o turno), e votacao 'simbolica' tem o resultado
   vindo do corpo do request. Este fato eleva a barra de NADA para 'existe o ato'; nao a eleva ate' 'o rito
   inteiro se cumpriu'. Quem quiser exigir mais (2 turnos, parecer de comissao) precisa de fatos NOVOS aqui
   — e o guard do rito os compoe com `e`, sem tocar em codigo.

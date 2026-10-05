@@ -208,6 +208,7 @@ export interface VotacaoPublicaOut {
   modalidade: "nominal" | "simbolica" | "secreta";
   quorumTipo: string;
   resultado: "aprovada" | "rejeitada";
+  turno?: number | null;
   placar?: PlacarOut | null;
 }
 
@@ -233,6 +234,7 @@ export interface VotacaoDetalheOut {
   modalidade: "nominal" | "simbolica" | "secreta";
   quorumTipo: string;
   resultado: "aprovada" | "rejeitada";
+  turno?: number | null;
   placar?: PlacarOut | null;
   votos: VotoNominalOut[];
 }

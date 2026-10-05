@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import type { VotacaoPublicaOut, VotacoesPublicasOut } from "@/lib/contrato-portal.gen";
 import { formatarData } from "@/lib/formatar-data";
 import { buscarPublicoComConsulta } from "@/lib/portal-api";
+import { atoDaVotacao } from "@/lib/votacoes-publicas-vista";
 import "./votacoes-da-materia.css";
 
 export type VotacoesDaMateriaDados = {
@@ -48,15 +49,14 @@ export function useVotacoesDaMateria(ente: string, proposicaoId: string): Votaco
 // O ATO do plenário no topo da ficha (achado 18 da retriagem): o `estado` da matéria é o do rito da Casa, e encerrar
 // a votação não o move — a ficha dizia só "Aguardando pauta" de um projeto que o plenário já aprovou. Aqui vai o que
 // aconteceu, com a data e o link para a votação; o selo de estado fica como está (numa matéria de dois turnos,
-// "Aguardando pauta" depois do 1º turno é verdade). Sem votação pública encerrada, nada aparece.
+// "Aguardando pauta" depois do 1º turno é verdade — e a frase diz o turno: "a matéria foi aprovada em 1º turno", nunca
+// só "aprovada", que diria que ela já passou). Sem votação pública encerrada, nada aparece.
 export function UltimaVotacaoEmPlenario({ ente, ultima }: { ente: string; ultima: VotacaoPublicaOut | null }) {
   if (!ultima) return null;
-  const objeto = ultima.objetoTipo === "redacao_final" ? "a redação final foi" : "a matéria foi";
-  const resultado = ultima.resultado === "aprovada" ? "aprovada" : "rejeitada";
   return (
     <p className="ultima-votacao" role="status">
       <span>
-        <b>Última votação em plenário:</b> {objeto} {resultado} em {formatarData(ultima.encerradaEm)}.{" "}
+        <b>Última votação em plenário:</b> {atoDaVotacao(ultima)} em {formatarData(ultima.encerradaEm)}.{" "}
         <a href={`/portal/casa/${encodeURIComponent(ente)}/votacoes/${encodeURIComponent(ultima.votacaoId)}`}>
           Ver a votação
         </a>

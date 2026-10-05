@@ -283,7 +283,7 @@
    "projeto_lei_complementar"    "PLC"
    "projeto_resolucao"           "PR"
    "projeto_decreto_legislativo" "PDL"
-   "proposta_emenda_lom"         "PELO"
+   "proposta_emenda_lom"         "PELOM"
    "indicacao"                   "IND"
    "requerimento"                "REQ"
    "mocao"                       "MOC"})

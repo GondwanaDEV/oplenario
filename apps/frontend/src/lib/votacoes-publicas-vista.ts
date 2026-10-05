@@ -37,8 +37,21 @@ export function nomeModalidade(m: VotacaoPublicaOut["modalidade"]): string {
   return MODALIDADE[m] ?? m;
 }
 
-export function nomeResultado(r: VotacaoPublicaOut["resultado"]): string {
-  return r === "aprovada" ? "Aprovada" : "Rejeitada";
+// A emenda à Lei Orgânica vota em dois turnos (CF art. 29): a votação de turno chega com `turno`, e "Aprovada" sem o
+// turno diria que a matéria foi aprovada quando só passou o 1º. Votação que não é turno chega sem o campo.
+function noTurno(turno: number | null | undefined): string {
+  return typeof turno === "number" && turno > 0 ? ` em ${turno}º turno` : "";
+}
+
+export function nomeResultado(r: VotacaoPublicaOut["resultado"], turno?: number | null): string {
+  return (r === "aprovada" ? "Aprovada" : "Rejeitada") + noTurno(turno);
+}
+
+/** O ato do plenário no meio da frase da ficha pública: "a matéria foi aprovada em 1º turno", "a redação final foi
+ * rejeitada". */
+export function atoDaVotacao(v: Pick<VotacaoPublicaOut, "objetoTipo" | "resultado" | "turno">): string {
+  const objeto = v.objetoTipo === "redacao_final" ? "a redação final foi" : "a matéria foi";
+  return `${objeto} ${v.resultado === "aprovada" ? "aprovada" : "rejeitada"}${noTurno(v.turno)}`;
 }
 
 export function nomeVoto(v: "sim" | "nao" | "abstencao"): string {
@@ -59,8 +72,10 @@ export function placarEmPalavras(p: PlacarOut): string {
 }
 
 /** O resultado em uma frase: "Aprovada: 2 votos a favor, …" — na simbólica (sem contagem), só o resultado. */
-export function resultadoEmPalavras(v: Pick<VotacaoPublicaOut, "resultado" | "placar" | "modalidade">): string {
-  const r = nomeResultado(v.resultado);
+export function resultadoEmPalavras(
+  v: Pick<VotacaoPublicaOut, "resultado" | "placar" | "modalidade" | "turno">,
+): string {
+  const r = nomeResultado(v.resultado, v.turno);
   if (v.placar) return `${r}: ${placarEmPalavras(v.placar)}`;
   return v.modalidade === "simbolica" ? `${r} por votação simbólica, sem contagem de votos` : r;
 }
