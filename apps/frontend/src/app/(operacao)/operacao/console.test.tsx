@@ -20,6 +20,17 @@ function json(corpo: unknown, status = 200) {
   return new Response(JSON.stringify(corpo), { status, headers: { "content-type": "application/json" } });
 }
 
+/** Sem atos sem desfecho: o bloco novo não aparece. */
+const SEM_ATOS = { "tolerancia-segundos": 120, limite: 50, total: 0, truncado: false, atos: [] };
+
+/**
+ * A página faz duas leituras (as Câmaras e os atos sem desfecho). Cada chamada leva a SUA resposta: um `Response` só
+ * deixa ler o corpo uma vez, e `mockResolvedValue` entregaria o mesmo às duas.
+ */
+function paginaDasCamaras(camaras: unknown, atos: unknown = SEM_ATOS) {
+  return vi.fn(async (url: string) => (String(url).endsWith("/atos-sem-desfecho") ? json(atos) : json(camaras)));
+}
+
 const CASA = {
   "ente-id": "e1", nome: "Câmara Municipal de Baturité", "nome-curto": null, uf: "CE",
   municipio: { ibge: "2302008", nome: "Baturité" }, estado: "provisionar",
@@ -35,11 +46,11 @@ afterEach(() => {
 
 describe("Câmaras na plataforma", () => {
   it("lista as Casas com estado e atividade, e as métricas do registro", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+    vi.stubGlobal("fetch", paginaDasCamaras({
       casas: [CASA, { ...CASA, "ente-id": "e2", nome: "Câmara Municipal de Sobral", municipio: { ibge: "2312908", nome: "Sobral" },
         estado: "ativo", "ativada-em": "2026-09-26T10:00:00Z" }],
       resumo: { total: 2, ativas: 1, "aguardando-admin": 1 },
-    })));
+    }));
     render(<CamarasNaPlataforma />);
     const linha = (await screen.findByText("Câmara Municipal de Baturité")).closest("tr")!;
     expect(within(linha).getByText("Aguardando 1º admin")).toBeTruthy();
@@ -50,11 +61,11 @@ describe("Câmaras na plataforma", () => {
   });
 
   it("filtra por estado e pela busca", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+    vi.stubGlobal("fetch", paginaDasCamaras({
       casas: [CASA, { ...CASA, "ente-id": "e2", nome: "Câmara Municipal de Sobral", municipio: { ibge: "2312908", nome: "Sobral" },
         estado: "ativo" }],
       resumo: { total: 2, ativas: 1, "aguardando-admin": 1 },
-    })));
+    }));
     render(<CamarasNaPlataforma />);
     await screen.findByText("Câmara Municipal de Sobral");
     fireEvent.change(screen.getByLabelText("Status"), { target: { value: "ativo" } });
@@ -65,11 +76,11 @@ describe("Câmaras na plataforma", () => {
   });
 
   it("registro vazio convida a provisionar a primeira; sessão vencida manda entrar", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ casas: [], resumo: { total: 0, ativas: 0, "aguardando-admin": 0 } })));
+    vi.stubGlobal("fetch", paginaDasCamaras({ casas: [], resumo: { total: 0, ativas: 0, "aguardando-admin": 0 } }));
     render(<CamarasNaPlataforma />);
     expect(await screen.findByText(/provisione a primeira/i)).toBeTruthy();
     cleanup();
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({}, 401)));
+    vi.stubGlobal("fetch", vi.fn(async () => json({}, 401)));
     render(<CamarasNaPlataforma />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/sessão do console expirou/i);
   });
@@ -155,11 +166,11 @@ describe("Acesso da câmara (ADR-0018)", () => {
   }
 
   it("a lista mostra a fila do 2º operador e as câmaras com acesso restrito", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
+    vi.stubGlobal("fetch", paginaDasCamaras({
       casas: [{ ...ATIVA, estado: "suspenso", restricao: { motivo: "inadimplencia", desde: "2026-09-29T10:00:00Z" } }],
       resumo: { total: 1, ativas: 0, "aguardando-admin": 0, suspensas: 1 },
       pendentes: [PEDIDO],
-    })));
+    }));
     render(<CamarasNaPlataforma />);
     const fila = await screen.findByRole("region", { name: "Aguardando o 2º operador" });
     expect(fila.textContent).toMatch(/Suspensão · Inadimplência · pedido por Ana Operação/);

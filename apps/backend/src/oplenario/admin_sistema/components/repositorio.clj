@@ -26,6 +26,8 @@
   (tentativas-sem-desfecho [this antes-de]
     "ADR-0017 (adendo de 05/10/2026): as tentativas da Operacao (entrada no console, comando sobre uma Casa) mais
     antigas que `antes-de` (Instant) que nenhum desfecho aponta. Conferencia, nao tela.")
+  (conferir-sem-desfecho [this antes-de limite]
+    "O mesmo, para o console: {:total n :registros [as `limite` mais antigas]}. `total` > count = truncado.")
   ;; registro de Casas (12.1)
   (registrar-casa! [this casa ator]
     "Registra a Casa em 'provisionar' e sela a atuacao 'casa-provisionada', numa tx. Devolve a Casa.")
@@ -401,6 +403,7 @@
   (registrar-atuacao! [this r] (transacao this #(atuacao/registrar! % r)))
   (atuacao-do-ente [_ ente-id limite] (atuacao/do-ente (:ds datasource) ente-id limite))
   (tentativas-sem-desfecho [_ antes-de] (atuacao/tentativas-sem-desfecho (:ds datasource) antes-de))
+  (conferir-sem-desfecho [_ antes-de limite] (atuacao/conferir-sem-desfecho (:ds datasource) antes-de limite))
   (registrar-casa! [this casa {:keys [operador-id]}]
     (transacao this
       (fn [tx]
