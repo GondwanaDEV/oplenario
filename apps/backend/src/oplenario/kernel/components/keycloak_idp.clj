@@ -323,11 +323,30 @@
                               :passwordPolicy politica-de-senha}
                              defesa-forca-bruta)
                 (not (str/blank? nome)) (assoc :displayName nome)
-                (not (str/blank? tema-login)) (assoc :loginTheme tema-login))
+                ;; o mesmo nome serve o login (temas/oplenario/login) e o e-mail do convite (temas/oplenario/email)
+                (not (str/blank? tema-login)) (assoc :loginTheme tema-login :emailTheme tema-login))
         {:keys [status corpo]} (admin-req! http-client token :put (str "/admin/realms/" realm) corpo base-url)]
     (when-not (= 204 status)
       (throw (ex-info "keycloak-idp: falha ao configurar a aparencia e a defesa do realm (infra)"
                       {:status status :corpo corpo})))))
+
+(declare exigir!)
+
+(defn- senha-antes-do-codigo!
+  "ADR-0024: o Keycloak executa as acoes obrigatorias pela prioridade, e o padrao pede o codigo (CONFIGURE_TOTP, 10)
+  antes da senha (UPDATE_PASSWORD, 30). No primeiro acesso o natural e' criar a senha e depois o codigo: a senha
+  passa para logo antes do codigo. Idempotente (so' mexe quando a ordem esta' errada). Erro de infra LANCA."
+  [http-client token base-url realm]
+  (let [raiz (str "/admin/realms/" realm "/authentication/required-actions/")
+        ler (fn [alias] (let [{:keys [status corpo]} (admin-req! http-client token :get (str raiz alias) nil base-url)]
+                          (exigir! status #{200} "falha ao ler a acao obrigatoria" {:alias alias})
+                          corpo))
+        senha (ler "UPDATE_PASSWORD")
+        codigo (ler "CONFIGURE_TOTP")]
+    (when (>= (:priority senha) (:priority codigo))
+      (let [{:keys [status corpo]} (admin-req! http-client token :put (str raiz "UPDATE_PASSWORD")
+                                               (assoc senha :priority (dec (:priority codigo))) base-url)]
+        (exigir! status #{204} "falha ao ordenar a senha antes do codigo" {:corpo corpo})))))
 
 (defn configurar-smtp!
   "Aponta o realm p/ o relay. Quem envia o convite e' o Keycloak — p/ nos e' config, nao codigo (nao
@@ -514,6 +533,7 @@
     (habilitar-passkey! http-client token base-url realm)
     (configurar-smtp! http-client token base-url realm smtp)
     (configurar-aparencia-e-defesa! http-client token base-url realm {:nome nome :tema-login tema-login})
+    (senha-antes-do-codigo! http-client token base-url realm)
     (when govbr-cfg
       (garantir-fluxo-primeiro-login! http-client token base-url realm)
       (garantir-idp-govbr! http-client token base-url realm govbr-cfg))

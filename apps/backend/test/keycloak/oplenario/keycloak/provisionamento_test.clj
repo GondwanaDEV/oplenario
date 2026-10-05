@@ -243,6 +243,7 @@
       (is (= ["pt-BR"] (:supportedLocales r)))
       (is (= "pt-BR" (:defaultLocale r)))
       (is (= "oplenario" (:loginTheme r)) "o tema do O Plenario")
+      (is (= "oplenario" (:emailTheme r)) "o convite sai com o texto do O Plenario")
       (is (true? (:bruteForceProtected r)) "senha errada demais trava a conta por um tempo")
       (is (= 10 (:failureFactor r)))
       (is (false? (:permanentLockout r)) "trava temporaria: quem sabe o CPF de alguem nao o tranca para sempre")
@@ -263,6 +264,7 @@
     (try
       (idp/provisionar-realm! idp ente {:nome "Câmara Municipal de Teste"})
       (is (nil? (:loginTheme (realm-representation idp ente))) "sem tema configurado, o Keycloak usa o padrao")
+      (is (nil? (:emailTheme (realm-representation idp ente))))
       (finally (component/stop idp)))))
 
 (deftest o-client-web-aponta-para-a-entrada-do-o-plenario
@@ -294,3 +296,11 @@
             "sem o fator, o proximo login pede o cadastro do codigo — senao a pessoa entraria so' com a senha")
         (is (= (str iid) (first (get-in depois [:attributes :identidade-id])))
             "o PUT do usuario inteiro preserva o identidade-id (o login depende dele)")))))
+
+(deftest o-primeiro-acesso-cria-a-senha-antes-do-codigo
+  (let [ente (random-uuid)]
+    (idp/provisionar-realm! *idp* ente)
+    (let [prioridade (fn [alias] (->> (:requiredActions (realm-representation *idp* ente))
+                                      (filter #(= alias (:alias %))) first :priority))]
+      (is (< (prioridade "UPDATE_PASSWORD") (prioridade "CONFIGURE_TOTP"))
+          "o Keycloak executa as acoes por prioridade: sem o ajuste, o convite pedia o codigo antes de a pessoa ter senha"))))

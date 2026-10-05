@@ -220,11 +220,14 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
   background: var(--surface-2); border: 1px solid var(--linha); border-radius: var(--raio-sm);
   font-size: var(--t-12); color: var(--texto-2); line-height: 1.45;
 }
-.op-nota a, .op-trocar a, #kc-content a { color: var(--marca); text-underline-offset: 3px; }
+.op-nota a, .op-trocar a, #kc-content a:not(.op-btn) { color: var(--marca); text-underline-offset: 3px; }
 .op-trocar { margin: 1rem 0 0; text-align: center; font-size: var(--t-13); }
 
 /* conteúdo corrido das páginas herdadas (info, erro, configurar o código) */
 .instruction, #kc-info-message p, #kc-error-message p { color: var(--texto); font-size: var(--t-16); margin: 0 0 0.8rem; }
+.op-passos { margin: 0 0 1.2rem; padding-left: 1.3rem; font-size: var(--t-16); color: var(--texto); }
+.op-passos li { margin-bottom: 0.35rem; font-weight: 600; }
+#kc-info-message .op-btn { margin-top: 0.4rem; }
 #kc-totp-settings { padding-left: 1.2rem; margin: 0 0 1rem; font-size: var(--t-13); color: var(--texto); }
 #kc-totp-settings li { margin-bottom: 0.7rem; }
 #kc-totp-settings p { margin: 0 0 0.4rem; }
