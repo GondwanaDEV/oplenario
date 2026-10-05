@@ -52,6 +52,9 @@ function fetchMock(opts: { lista500?: boolean; identidadeVinculada409?: boolean 
     if (method === "GET" && url === "/api/meu/comunicados/destinos") {
       return { ok: true, status: 200, json: async () => destinosFake } as Response;
     }
+    if (method === "GET" && url === "/api/identidade/acessos") {
+      return { ok: true, status: 200, json: async () => ({ acessos: [] }) } as Response;
+    }
     if (method === "GET" && url === "/api/meu/identidade") {
       return { ok: true, status: 200, json: async () => ({ nome: "Ana Moreira", papeis: ["admin_ente"] }) } as Response;
     }
@@ -148,7 +151,7 @@ describe("Área do administrador da Casa (/administracao)", () => {
     preencherESubmeter(form);
 
     await waitFor(() => expect(screen.getByText(/identidade ja vinculada a outro vereador/i)).toBeTruthy());
-    expect(f.mock.calls.some(([url]) => url === "/api/identidade/acessos")).toBe(false);
+    expect(f.mock.calls.some(([url, init]) => url === "/api/identidade/acessos" && (init as RequestInit | undefined)?.method === "POST")).toBe(false);
     expect(screen.getByRole("form", { name: /^conceder acesso$/i })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
   });
@@ -233,7 +236,8 @@ describe("Área do administrador da Casa (/administracao)", () => {
     fireEvent.submit(form);
     expect(await within(form).findByText("Escolha a qualificação.")).toBeTruthy();
     expect(within(form).getByText(/OAB no formato UF e número/)).toBeTruthy();
-    expect(f.mock.calls.some(([url]) => url === "/api/identidade/identidades" || url === "/api/identidade/acessos")).toBe(false);
+    // a leitura da lista de acessos (GET) é da tela; o que não pode haver é ESCRITA
+    expect(f.mock.calls.some(([url, init]) => (init as RequestInit | undefined)?.method === "POST" && (url === "/api/identidade/identidades" || url === "/api/identidade/acessos"))).toBe(false);
   });
 
   it("jurídico: 400 do backend no acesso aparece como alerta e o form segue aberto", async () => {

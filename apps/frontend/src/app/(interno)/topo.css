@@ -54,3 +54,66 @@
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
 }
+
+/* Os grupos da barra (Matérias · Sessões · Cidadão · Casa): o botão tem a mesma letra dos links e, quando o grupo contém a
+   página atual, o mesmo sublinhado do link ativo; a lista abre por baixo, como um cartão. */
+.nav-grupo { position: relative; }
+.nav-grupo-btn {
+  position: relative; display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.3rem 0; margin: 0; border: 0; border-bottom: 2px solid transparent;
+  background: none; cursor: pointer; white-space: nowrap;
+  font-family: var(--mono); font-size: var(--t-13); font-weight: 500; letter-spacing: .02em; color: var(--texto-2);
+}
+.nav-grupo-btn:hover, .nav-grupo-btn[aria-expanded="true"] { color: var(--texto); }
+.nav-grupo-btn[data-atual] { color: var(--marca); border-bottom-color: var(--marca); font-weight: 600; }
+.nav-grupo-btn svg { flex: 0 0 auto; transition: transform .15s ease; }
+.nav-grupo-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
+.nav-grupo-lista {
+  position: absolute; top: calc(100% + 0.55rem); left: -0.75rem; z-index: 40; min-width: 13.5rem;
+  display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0.4rem; list-style: none;
+  /* opaca: a lista abre por cima do conteúdo, e o vidro (--surface) deixava o texto da página aparecer através dela */
+  background: var(--surface-solida); border: 1px solid var(--linha); border-radius: var(--raio-sm); box-shadow: var(--sombra);
+}
+.nav-grupo-lista[hidden] { display: none; }
+/* o último grupo fica junto à borda direita: a lista dele abre para a esquerda, para não sair da tela */
+.nav-grupo:last-child .nav-grupo-lista { left: auto; right: -0.75rem; }
+.nav-interna .nav-grupo-lista a { display: flex; align-items: center; padding: 0.55rem 0.7rem; border-bottom: 0; border-radius: 8px; }
+.nav-interna .nav-grupo-lista a:hover { background: color-mix(in srgb, var(--marca) 7%, transparent); }
+.nav-interna .nav-grupo-lista a[aria-current="page"] { background: color-mix(in srgb, var(--marca) 10%, transparent); }
+
+/* O texto só para leitor de tela (", 3 por ler", ", contém a página atual") é absolute: sem um referencial dentro da
+   faixa rolável do celular ele se ancorava no topo, escapava do overflow e fazia a página rolar na horizontal. */
+.nav-interna a { position: relative; }
+
+/* Desktop: com a barra agrupada, marca + menu + tema/quem cabem numa linha. Abaixo de 1400 px o rótulo da área sai da
+   vista (o título da página e o grupo sublinhado já dizem onde se está); abaixo de 1180 px, o nome também (as iniciais
+   ficam no avatar) e o tema vira um círculo. Os dois continuam para o leitor de tela. */
+@media (min-width: 721px) and (max-width: 1400px) {
+  .topo-interno .topo-sep { display: none; }
+  .topo-interno .area-tag {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+}
+@media (min-width: 721px) and (max-width: 1180px) {
+  .topo-interno .nav-interna { margin-left: 0; }
+  .topo-interno .tema-btn { width: 44px; padding: 0; justify-content: center; }
+  .topo-interno .tema-btn .tema-rotulo { display: none; }
+  .topo-interno .quem-mesa .quem {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+}
+
+/* Tablet (721–1023 px): o menu agrupado não cabe na mesma linha da marca; vai inteiro para a segunda linha, com
+   marca e tema/avatar em cima — sem isso a quebra do flex espalhava o topo em três linhas (161 px). */
+@media (min-width: 721px) and (max-width: 1023px) {
+  .topo-interno .nav-interna { order: 3; flex: 1 1 100%; }
+}
+
+/* Na faixa rolável do celular a lista não pode morar dentro dela (o overflow a cortaria): o grupo deixa de ser o
+   referencial e a lista se ancora no próprio topo (sticky), ocupando a largura da tela logo abaixo da barra. */
+@media (max-width: 720px) {
+  .nav-grupo { position: static; }
+  .nav-interna .nav-grupo .nav-grupo-lista {
+    top: 100%; left: clamp(1rem, 3vw, 2rem); right: clamp(1rem, 3vw, 2rem); min-width: 0; margin-top: 0.3rem;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -45,3 +45,13 @@
     (sql/format {:update :identidade.credencial_agente :set {:revogada_em [:now]}
                  :where [:and [:= :execucao_id execucao-id] [:= :revogada_em nil]]}))
   nil)
+
+(defn revogar-da-pessoa!
+  "Revoga TODA credencial ainda viva da pessoa nesta Casa (ADR-0005, adendo: revogar o acesso derruba o que um agente
+  fazia por ela). Idempotente; devolve quantas fechou. Vida de 15 min: e' a rede que fecha a janela, nao a unica
+  barreira — `resolver-agente` ja' recalcula a pessoa a cada chamada."
+  [conn ente-id identidade-id]
+  (:next.jdbc/update-count
+   (jdbc/execute-one! conn
+     (sql/format {:update :identidade.credencial_agente :set {:revogada_em [:now]}
+                  :where [:and [:= :ente_id ente-id] [:= :identidade_id identidade-id] [:= :revogada_em nil]]}))))

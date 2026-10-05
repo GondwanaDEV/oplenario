@@ -11,7 +11,8 @@
 // (`comAcesso`: a identidade já está ligada ao cadastro) aparece marcado e sem o botão — conceder de novo só daria
 // conflito (409) no passo 2. Aqui também fica o
 // interruptor da conferência automática (o agente institucional, B.8), que só o admin_ente liga, e a exportação
-// completa dos dados da Casa (ADR-0018 fatia 2, 9.6). E os SETORES da Casa (ADR-0020): os endereços internos dos
+// completa dos dados da Casa (ADR-0018 fatia 2, 9.6). "Quem tem acesso" lista o que foi concedido e REVOGA, com motivo
+// (ADR-0005, adendo): quem sai da Casa não fica com a porta aberta. E os SETORES da Casa (ADR-0020): os endereços internos dos
 // comunicados, com quem é de cada um.
 
 import { useState } from "react";
@@ -25,6 +26,7 @@ import { TopoInterno } from "../topo";
 import { ConcederAcessoForm } from "../cadastros/vereadores/conceder-acesso-form";
 import { ConcederAuditorForm } from "./conceder-auditor-form";
 import { ConcederJuridicoForm } from "./conceder-juridico-form";
+import { AcessosConcedidos } from "./acessos-concedidos";
 import { ParecerNoPortal } from "./parecer-no-portal";
 import { RegrasDaPauta } from "./regras-da-pauta";
 import { PrazosDasContas } from "./prazos-das-contas";
@@ -135,6 +137,8 @@ function Conteudo() {
             })}
           </ul>
         )}
+
+        <AcessosConcedidos token={token} />
 
         <PainelAgente token={token} agentes={agentes} />
 
