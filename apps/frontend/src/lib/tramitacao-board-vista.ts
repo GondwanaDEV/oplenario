@@ -23,6 +23,7 @@ import {
   formatarNumeroProposicao,
 } from "./proposicoes-vista";
 import { rotularEstado } from "./tramitacao-vista";
+import { colunaDoDesfecho, situacaoDoDesfecho } from "./desfecho-vista";
 import type { ItemBoardOut, TotalPorEstadoOut } from "./contrato-mesa.gen";
 
 export type AzulejoCor = "jade" | "cobalto" | "amarelo" | "telha" | "verde" | "neutro";
@@ -77,8 +78,16 @@ function paraItemDoBoard(item: ItemBoardOut): ItemDoBoard {
     ementa: item.ementa,
     autor: item.autorTexto ?? "—",
     estado: item.estado,
-    situacao: rotularEstado(item.estado),
+    // a partir do autógrafo o desfecho diz a situação (docs/16 linha 18); antes, o rito
+    situacao: situacaoDoDesfecho(item.desfecho)?.rotuloSituacao ?? rotularEstado(item.estado),
   };
+}
+
+// A coluna de uma matéria (ou de um total): a do desfecho quando ele decide, senão a do estado do rito; -1 = "Outros".
+function indiceDaColuna(estado: string, desfecho: string | null | undefined): number {
+  const peloDesfecho = colunaDoDesfecho(desfecho);
+  if (peloDesfecho) return COLUNAS_FIXAS.findIndex((c) => c.chave === peloDesfecho);
+  return COLUNAS_FIXAS.findIndex((c) => c.pertence(estado));
 }
 
 // `totaisPorEstado` OMITIDO (undefined) -> compat com chamador antigo: cada coluna cai pra `itens.length`
@@ -98,7 +107,7 @@ export function derivarBoard(itens: ItemBoardOut[], totaisPorEstado?: TotalPorEs
   // agrupa preservando a ordem de chegada (o backend já entrega estado asc/transicionouEm asc dentro do
   // grupo — não reordenar aqui).
   for (const item of itens) {
-    const alvo = COLUNAS_FIXAS.findIndex((c) => c.pertence(item.estado));
+    const alvo = indiceDaColuna(item.estado, item.desfecho);
     if (alvo === -1) {
       outros.itens.push(paraItemDoBoard(item));
     } else {
@@ -112,8 +121,8 @@ export function derivarBoard(itens: ItemBoardOut[], totaisPorEstado?: TotalPorEs
   } else {
     // soma o total AUTORITATIVO de cada estado cru na coluna a que ele pertence — uma coluna pode fundir
     // vários estados (ex.: "Concluídas" = aprovados + arquivados), entao o total da coluna e' a SOMA.
-    for (const { estado, total } of totaisPorEstado) {
-      const alvo = COLUNAS_FIXAS.findIndex((c) => c.pertence(estado));
+    for (const { estado, desfecho, total } of totaisPorEstado) {
+      const alvo = indiceDaColuna(estado, desfecho);
       if (alvo === -1) outros.total += total;
       else colunas[alvo].total += total;
     }

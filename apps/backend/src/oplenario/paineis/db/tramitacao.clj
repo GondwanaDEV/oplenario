@@ -15,7 +15,7 @@
 
 (def ^:private cols
   [:ente_id :proposicao_id :tipo :ano :sequencial :urn_lex :ementa :autor_tipo :autor_texto :estado
-   :projetado_em :transicionou_em])
+   :projetado_em :transicionou_em :desfecho])
 
 (def ^:private teto-por-estado-absoluto
   "Ceiling absoluto do teto POR GRUPO de estado (defesa-em-profundidade — `listar-board` recebe `limite` do
@@ -88,6 +88,38 @@
     (when-not (zero? (:next.jdbc/update-count r 0))
       {:proposicao-id proposicao-id :estado estado})))
 
+(def atos-do-quadro
+  "Os atos que mudam a coluna da materia no quadro: so' a partir do AUTOGRAFO (docs/16 linha 18). A votacao em plenario
+  sozinha nao decide — em dois turnos, 'Aguardando pauta' depois do 1o e' verdade."
+  #{"autografo_enviado" "sancionado" "sancao_tacita" "vetado" "veto_mantido" "veto_derrubado" "promulgada"
+    "publicada"})
+
+(defn atualizar-desfecho!
+  "Projeta o ultimo ato da materia a partir do autografo. So' AVANCA (reentrega fora de ordem nao volta atras) e e'
+  TOLERANTE como atualizar-estado! (materia ausente ou ato superado = nil, nunca lanca: o relay e' compartilhado)."
+  [tx {:keys [ente-id proposicao-id desfecho desfecho-em]}]
+  {:pre [(some? ente-id) (some? proposicao-id) (contains? atos-do-quadro desfecho) (some? desfecho-em)]}
+  (let [r (jdbc/execute-one! tx
+            (sql/format {:update :paineis.tramitacao
+                         :set {:desfecho desfecho :desfecho_em desfecho-em}
+                         :where [:and [:= :ente_id ente-id] [:= :proposicao_id proposicao-id]
+                                 [:or [:= :desfecho_em nil] [:<= :desfecho_em desfecho-em]]]}))]
+    (when-not (zero? (:next.jdbc/update-count r 0))
+      {:proposicao-id proposicao-id :desfecho desfecho})))
+
+(defn resumo-do-board
+  "Os totais do QUADRO: por estado do rito E desfecho (a materia que saiu do plenario muda de coluna pelo desfecho).
+  Mesma forma de `resumo` mais `:desfecho`; o dashboard da Mesa segue com `resumo` (so' o estado)."
+  [tx ente-id]
+  {:pre [(some? ente-id)]}
+  (comum/linhas->kebab
+   (jdbc/execute! tx
+     (sql/format {:select [:estado :desfecho [[:count :*] :n]]
+                  :from [:paineis.tramitacao]
+                  :where [:= :ente_id ente-id]
+                  :group-by [:estado :desfecho]
+                  :order-by [[:estado :asc] [:desfecho :asc]]}))))
+
 (defn resumo
   "Rollup 'proposicoes por status' (F7 dashboard da Mesa, §16.11): contagem por estado do tenant. GROUP BY
   estado -> [{:estado :n}], mais numeroso primeiro (`estado` ASC como desempate deterministico). Sem teto (a
@@ -134,11 +166,13 @@
        (sql/format {:select cols
                     :from [[{:select (conj (vec cols)
                                            [[:over [[:row_number]
-                                                    {:partition-by [:estado]
+                                                    ;; o desfecho (a partir do autografo) e' outro grupo: a
+                                                    ;; materia que virou lei nao disputa o teto da etapa do rito
+                                                    {:partition-by [:estado :desfecho]
                                                      :order-by [[:transicionou_em :asc] [:proposicao_id :asc]]}]]
                                             :rn])
                              :from [:paineis.tramitacao]
                              :where [:= :ente_id ente-id]}
                             :pagina]]
                     :where [:<= :rn teto]
-                    :order-by [[:estado :asc] [:transicionou_em :asc] [:proposicao_id :asc]]})))))
+                    :order-by [[:estado :asc] [:desfecho :asc] [:transicionou_em :asc] [:proposicao_id :asc]]})))))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { situacaoDoDesfecho } from "./desfecho-vista";
+import { categoriaDoDesfecho, colunaDoDesfecho, situacaoDoDesfecho } from "./desfecho-vista";
 import { derivarTramitacao } from "./tramitacao-vista";
 
 // docs/16, retriagem linha 18: o selo do portal depois do plenário
@@ -25,5 +25,18 @@ describe("situacaoDoDesfecho", () => {
   it("sem desfecho ou desfecho desconhecido, a situação vem do rito", () => {
     expect(situacaoDoDesfecho(null)).toBeNull();
     expect(derivarTramitacao("em_comissoes", "ato_de_uma_versao_futura").rotuloSituacao).toBe("Em comissões");
+  });
+});
+
+describe("categoriaDoDesfecho e colunaDoDesfecho", () => {
+  it("lei = aprovada e Concluídas; veto por apreciar = em tramitação e Em Plenário; votação não decide", () => {
+    expect(categoriaDoDesfecho("publicada")).toBe("aprovada");
+    expect(colunaDoDesfecho("publicada")).toBe("concluidas");
+    expect(categoriaDoDesfecho("veto_mantido")).toBe("arquivada");
+    expect(categoriaDoDesfecho("vetado")).toBe("tram");
+    expect(colunaDoDesfecho("vetado")).toBe("em-plenario");
+    expect(categoriaDoDesfecho("aprovada")).toBeNull();
+    expect(colunaDoDesfecho("aprovada")).toBeNull();
+    expect(colunaDoDesfecho(null)).toBeNull();
   });
 });

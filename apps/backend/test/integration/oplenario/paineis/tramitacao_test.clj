@@ -235,8 +235,8 @@
     (let [board (repo/tramitacao-board *repo* ente)]
       (is (= [{:estado "protocolada" :proposicao-id pid}]
              (map #(select-keys % [:estado :proposicao-id]) (:itens board))))
-      (is (= [{:estado "protocolada" :n 1}] (:totais-por-estado board))
-          "totais-por-estado reusa a MESMA forma de db-tramitacao/resumo (chave :n), sem redigitar"))))
+      (is (= [{:estado "protocolada" :desfecho nil :n 1}] (:totais-por-estado board))
+          "totais-por-estado: a forma de db-tramitacao/resumo (chave :n) mais o desfecho (docs/16 linha 18), sem redigitar"))))
 
 (deftest tramitacao-board-nao-deriva-o-total-da-lista-ja-cortada
   ;; Achado da revisao adversarial (IMPORTANTE): o teste acima (`tramitacao-board-devolve-o-par-...`) usa
