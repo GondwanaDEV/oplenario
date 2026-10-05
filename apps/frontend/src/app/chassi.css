@@ -38,6 +38,11 @@ body {
    O título mais largo quebra antes no celular; balance divide as linhas por igual em vez de
    deixar uma palavra sozinha na última. */
 h1    { font-stretch: var(--largura-titulo); text-wrap: balance; }
+/* Título que carrega texto longo (a ementa na ficha, no editor, na nota técnica): a largura extra
+   e o balance são para título curto. Numa ementa de 120 caracteres eles somavam uma linha e o balance
+   estreitava o bloco em três linhas curtas; aqui fica a largura normal e o pretty, que só evita a
+   palavra sozinha na última linha. */
+.titulo-longo { font-stretch: 100%; text-wrap: pretty; }
 table { font-stretch: var(--largura-densa); }
 
 /* superfície PÚBLICA (portal do cidadão): mais ar, medida mais estreita */
