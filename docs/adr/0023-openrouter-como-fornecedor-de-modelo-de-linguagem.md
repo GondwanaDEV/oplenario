@@ -123,7 +123,7 @@ política de dado desta ADR (`zdr` e `data_collection: deny` em toda requisiçã
   `OPLENARIO_IA_MODELOS_RESERVA` dá a ordem de troca: em 429, 503, 408, 5xx, falha de rede ou 404, a chamada vai ao
   próximo modelo; nunca em 400, 401, 402 ou 403. O modelo e o provedor que de fato atenderam continuam vindo da
   resposta e vão ao registro.
-- **Os três escolhidos (triagem ao vivo de 05/10/2026):** `nvidia/nemotron-3-super-120b-a12b:free` (principal),
+- **Os três, em ordem PROVISÓRIA (triagem ao vivo de 05/10/2026, uma pergunta só; a ordem entre eles não está medida):** `nvidia/nemotron-3-super-120b-a12b:free` (principal),
   `qwen/qwen3.8-27b:free` e `nvidia/nemotron-3-ultra-550b-a55b:free` (reservas, nessa ordem).
 - **A triagem:** 19 modelos gratuitos chamam ferramentas. Cada candidato recebeu "Qual o quórum para derrubar um
   veto?" com a busca nas normas e respondeu com o dispositivo devolvido.
@@ -139,9 +139,11 @@ política de dado desta ADR (`zdr` e `data_collection: deny` em toda requisiçã
   | gemma-4-31b-it, gemma-4-26b-a4b-it | Google | não | 429 do provedor gratuito, sem vaga | — | — |
   | inkling | Thinking Machines | não | 403 | — | — |
 
-  O nemotron-3-super ficou à frente por ser o maior entre os rápidos e responder com precisão; o qwen3.8-27b, por
-  ser o único já avaliado nos conjuntos e ter provedor com ZDR; o nemotron-3-ultra, por tamanho, com a ressalva do
-  acréscimo que não estava na fonte. Os dois menores (ling, apodex) ficam como próxima troca se um dos três cair.
+  Cinco empataram nessa pergunta; o desempate foi critério, não medida: o nemotron-3-super por ser o maior entre os
+  rápidos e não acrescentar nada à fonte; o qwen3.8-27b por ser o único já avaliado nos conjuntos e ter provedor com
+  ZDR; o nemotron-3-ultra por tamanho, com a ressalva do acréscimo que não estava na fonte. Essa pergunta usou a
+  chamada nativa de ferramentas, que a Clara não usa (o laço planeja em JSON): a próxima triagem passa pelo laço real
+  (`oplenario-ia-avaliar` com 4 casos de `clara-papeis`) e reordena a lista. Os dois menores (ling, apodex) ficam como próxima troca se um dos três cair.
   **A avaliação completa (5 conjuntos, 42 casos) não rodou:** a conta bateu o limite diário no meio da segunda rodada.
 - **O que se aceita com a exceção:**
   - o provedor gratuito pode guardar e usar para treino o que recebe; com dado real, isso é tratamento sem contrato e
