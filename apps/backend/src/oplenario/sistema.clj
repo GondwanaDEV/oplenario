@@ -201,10 +201,14 @@
   O caso AUSENTE so' e' de fato coberto desde que o `:env` do config.edn deixou de ter default \"dev\":
   enquanto tinha, este predicado nunca via a ausencia — via \"dev\", e ligava o idp-dev num deploy que
   simplesmente esquecesse de setar APP_ENV. O whitelist aqui e' metade do fail-safe; a outra metade e'
-  o config nao inventar um valor. Modo dev = opt-in explicito, nos dois lados."
+  o config nao inventar um valor. Modo dev = opt-in explicito, nos dois lados.
+
+  Em dev/test o provisionamento no Keycloak (realm, usuario, convite) e' PULADO de forma explicita
+  (`idp-dev/idp-do-modo-dev`): conceder acesso em /administracao devolve o mesmo 201 de producao, sem criar conta nem
+  senha. Fora de dev/test, o KeycloakIdp — e Keycloak fora do ar segue 500."
   [config]
   (if (#{"dev" "test"} (:env config))
-    (idp-dev/idp-dev)
+    (idp-dev/idp-do-modo-dev)
     (keycloak-idp/keycloak-idp (:keycloak config))))
 
 (defn- idp-operacao-para

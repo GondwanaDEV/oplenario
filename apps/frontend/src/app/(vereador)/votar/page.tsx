@@ -19,6 +19,7 @@ import { useMinhaSessaoAtual, type SessaoViva } from "@/lib/use-minha-sessao-atu
 import { useMeuPainel } from "@/lib/use-meu-painel";
 import { usePlenario } from "@/lib/use-plenario";
 import { derivarPlacar, type VistaPlacar } from "@/lib/placar-vista";
+import { QuantosVotaram } from "@/lib/quantos-votaram";
 import { useConfirmarPresenca } from "@/lib/use-confirmar-presenca";
 import { useMeuVoto, type VotoNominalIn } from "@/lib/use-meu-voto";
 import { derivarMeuVoto } from "@/lib/meu-voto-vista";
@@ -292,9 +293,15 @@ export function PlacarMini({ placar }: { placar: VistaPlacar }) {
           <div
             className="barra"
             role="img"
-            aria-label={`Parcial: ${placar.sim} sim, ${placar.nao} não${
-              placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
-            }`}
+            aria-label={
+              placar.encerrada
+                ? `Resultado: ${placar.sim} sim, ${placar.nao} não${
+                    placar.faltam !== null && placar.faltam > 0 ? `, ${placar.faltam} não votaram` : ""
+                  }`
+                : `Parcial: ${placar.sim} sim, ${placar.nao} não${
+                    placar.faltam !== null ? `, ${placar.faltam} ainda não votaram` : ""
+                  }`
+            }
           >
             <span className="seg-sim" style={{ width: `${pctSim}%` }} />
             <span className="seg-nao" style={{ width: `${pctNao}%` }} />
@@ -308,7 +315,14 @@ export function PlacarMini({ placar }: { placar: VistaPlacar }) {
             </span>
             {placar.faltam !== null && (
               <span className="parcial">
-                faltam <b>{placar.faltam}</b> {placar.encerrada ? "" : "· parcial"}
+                {/* encerrada: a mesma frase do telão da Mesa ("não votaram N de M"); aberta segue "faltam N" */}
+                {placar.encerrada ? (
+                  <QuantosVotaram faltam={placar.faltam} baseMembros={placar.baseMembros} encerrada />
+                ) : (
+                  <>
+                    faltam <b>{placar.faltam}</b> · parcial
+                  </>
+                )}
               </span>
             )}
           </div>
