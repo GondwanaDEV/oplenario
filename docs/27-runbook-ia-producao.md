@@ -200,15 +200,18 @@ login funciona, só não está escondido.
    mexe em `apps/keycloak/**` (e por `workflow_dispatch`). Ele:
    - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<sha>`), a 26.0.0 com o diretório
      `/opt/keycloak/themes/oplenario`;
-   - acha no Dokploy o app com o domínio `keycloak.calvetec.com.br` (o Keycloak do operador é outro e não é tocado);
-     sem exatamente um, para sem mexer em nada;
-   - troca a imagem do app pela do sha e reimplanta. Mesmo banco, mesmas variáveis, mesmo comando;
-   - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, **volta à imagem
+   - acha no Dokploy o **compose** do Keycloak das Casas pelo nome do container que a API usa (o host de
+     `KEYCLOAK_BASE_URL` da API, `<appName do compose>-keycloak-1`). O Keycloak do operador é outro e não é tocado. Sem
+     exatamente um compose, sem o compose guardado no Dokploy (`raw`) ou sem exatamente uma linha
+     `image: quay.io/keycloak/keycloak:…`, para sem mexer em nada;
+   - troca só essa linha pela imagem do sha e reimplanta o compose. Mesmo banco, mesmas variáveis, mesmo comando. O
+     servidor puxa do GHCR com o login que já usa para as imagens da API;
+   - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, **volta o compose
      anterior**, reimplanta e falha.
 
-   **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No Dokploy, a imagem do serviço Keycloak das Casas
-   passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest`, com o acesso ao GHCR. Reimplante e espere o
-   healthcheck.
+   **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No compose do Keycloak das Casas no Dokploy, a
+   imagem passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest` (o servidor precisa de login no GHCR).
+   Reimplante e espere o healthcheck.
 2. **Backend:**
    - `KEYCLOAK_TEMA_LOGIN` pode ficar ausente (padrão `oplenario`);
    - `KEYCLOAK_TEMA_LOGIN=""` desliga o tema: o login de cada Câmara volta ao padrão do Keycloak quando se reaplica a
@@ -221,8 +224,10 @@ login funciona, só não está escondido.
    `reaplicar-login`, `ente` vazio = todas). Ele:
    - roda o comando `reaplicar-login` da imagem da API (antes confere que a imagem já tem o comando);
    - usa o **ambiente da API lido do Dokploy**: o provisionamento grava também o SMTP e o gov.br do realm a partir da
-     configuração de quem roda. Só o banco troca para a porta externa. Se o Keycloak da API não responde do runner,
-     para sem tocar em nada;
+     configuração de quem roda. Só o banco troca para a porta externa;
+   - a API fala com o Keycloak pela rede interna do Dokploy, fora do alcance do runner: o job usa então a URL pública
+     (`KEYCLOAK_BASE_URL_PUBLICO`) e **não reconverge o gov.br do realm** (as URLs do broker saem da base interna; o que
+     a API gravou fica). Se nenhuma das duas responde, para sem tocar em nada;
    - grava no realm o nome da Câmara, o pt-BR, o tema (login e e-mail), a política de senha, a trava contra força
      bruta, a ordem senha → código no primeiro acesso e o "voltar" do convite para `/entrar`;
    - é idempotente e pula Câmara encerrada ou com apagamento iniciado (reaplicar recriaria o realm apagado);
