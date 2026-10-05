@@ -54,7 +54,7 @@ export type FichaVista = {
 export type ResumoVista = { paragrafos: string[]; geradoComIa: boolean; publicadoEm: string };
 
 export function derivarFicha(ficha: FichaOut, comentarios: ComentarioOut[] | null): FichaVista {
-  const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado);
+  const { estagios, rotuloSituacao } = derivarTramitacao(ficha.estado, ficha.desfecho);
   return {
     ref: derivarRef(ficha),
     titulo: ficha.ementa,

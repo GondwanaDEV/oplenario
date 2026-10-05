@@ -22,7 +22,9 @@
 (defn- campos-comuns [m]
   {:proposicao-id (->str (:proposicao-id m)) :tipo (:tipo m) :ano (:ano m) :sequencial (:sequencial m)
    :urn-lex (:urn-lex m) :ementa (:ementa m) :autor-tipo (:autor-tipo m) :autor-texto (:autor-texto m)
-   :estado (:estado m)})
+   :estado (:estado m)
+   ;; o ultimo ato depois do plenario (nil = ainda nao foi a votos): quando existe, e' ele que da' a situacao
+   :desfecho (:desfecho m)})
 
 (defn- norma-embutida [n]
   (when n

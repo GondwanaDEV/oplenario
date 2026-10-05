@@ -84,4 +84,51 @@ describe("ConteudoFichaMateria", () => {
     const railTitulo = screen.getByText("Dados e ações da matéria");
     expect(railTitulo.tagName).toBe("H2");
   });
+
+  // ledger docs/16, linha 30: o autógrafo e a sanção entram na linha do tempo; a leitura do pós-aprovação é à parte
+  function fetchPorRota(posAprovacao: { ok: boolean; corpo?: unknown }) {
+    return vi.fn(async (url: RequestInfo | URL) =>
+      String(url).includes("/pos-aprovacao")
+        ? ({ ok: posAprovacao.ok, status: posAprovacao.ok ? 200 : 500, json: async () => posAprovacao.corpo }) as Response
+        : ({ ok: true, json: async () => respostaFake }) as Response,
+    ) as unknown as typeof fetch;
+  }
+
+  it("linha 30: autógrafo e sanção aparecem na aba Tramitação, junto das transições", async () => {
+    global.fetch = fetchPorRota({
+      ok: true,
+      corpo: {
+        autografo: {
+          id: "a1", "proposicao-id": "1", numero: 7, ano: 2026, "destinatario-texto": "Prefeito Municipal",
+          "enviado-em": "2026-06-01T12:00:00Z",
+        },
+        "tramitacao-executiva": {
+          id: "t1", "autografo-id": "a1", estado: "sancionado", "respondido-em": "2026-06-10T12:00:00Z", "lock-version": 1,
+        },
+        norma: null,
+      },
+    });
+    renderComProviders("tok-de-teste");
+    const painel = await waitFor(() => {
+      const p = document.getElementById("p-tram");
+      if (!p || !within(p).queryByText("Sancionada pelo Executivo")) throw new Error("ainda sem o ato");
+      return p;
+    });
+    const eventos = within(painel).getAllByText((_, el) => el?.classList.contains("evt") ?? false).map((e) => e.textContent);
+    expect(eventos).toEqual([
+      "Sancionada pelo Executivo",
+      "Autógrafo nº 007/2026 enviado ao Executivo",
+      "Protocolado → Em comissões",
+    ]);
+    expect(screen.getByRole("tab", { name: /tramitação/i }).textContent).toContain("3");
+  });
+
+  it("linha 30: se a leitura do pós-aprovação falha, a ficha segue só com as transições", async () => {
+    global.fetch = fetchPorRota({ ok: false });
+    renderComProviders("tok-de-teste");
+    await waitFor(() => expect(screen.getAllByText("PL 42/2026").length).toBe(2));
+    const painel = document.getElementById("p-tram")!;
+    expect(within(painel).getByText("Protocolado → Em comissões")).toBeTruthy();
+    expect(within(painel).queryByText(/Autógrafo/)).toBeNull();
+  });
 });

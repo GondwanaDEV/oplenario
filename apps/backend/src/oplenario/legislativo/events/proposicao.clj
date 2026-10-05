@@ -142,3 +142,35 @@
     (throw (ex-info "payload de proposicao.recebida invalido (contrato do evento)"
                     {:erro :payload-invalido :explain (m/explain RecebidaPayload payload)})))
   (eventos/evento recebida-tipo ente-id payload))
+
+(def desfecho-registrado-tipo
+  "Nome do evento emitido a cada ATO depois do plenario que muda o desfecho da materia: a votacao que a aprova ou
+  rejeita, o autografo enviado ao Executivo, a sancao ou o veto, a apreciacao do veto e a promulgacao. A publicacao
+  da norma ja' tem evento proprio (`norma.publicada`). Nenhum desses atos move o `estado` do rito (encerrar a votacao
+  nao transiciona a proposicao), entao sem este evento o portal mostrava 'Aguardando pauta' para materia aprovada
+  e virada lei (docs/16, retriagem linhas 18 e 30)."
+  "proposicao.desfecho-registrado")
+
+(def atos-de-desfecho
+  "O vocabulario FECHADO dos atos (o rito do Executivo e da votacao e' enum, nao texto livre por Casa)."
+  #{"aprovada" "rejeitada" "autografo_enviado" "sancionado" "sancao_tacita" "vetado" "veto_mantido"
+    "veto_derrubado" "promulgada"})
+
+(def DesfechoRegistradoPayload
+  "Payload de `proposicao.desfecho-registrado`. `ocorrido-em` e' o instante REAL do ato (string ISO, mesma disciplina
+  dos demais payloads). `redacao-final` marca a aprovacao/rejeicao da REDACAO FINAL (nao do texto em turno).
+  `numero`/`ano` acompanham o autografo; `tipo-norma`/`numero`/`ano`, a promulgacao."
+  [:map {:closed true}
+   [:proposicao-id :uuid]
+   [:ato (into [:enum] (sort atos-de-desfecho))]
+   [:ocorrido-em :string]
+   [:redacao-final {:optional true} :boolean]
+   [:tipo-norma {:optional true} :string]
+   [:numero {:optional true} :int]
+   [:ano {:optional true} :int]])
+
+(defn desfecho-registrado [ente-id payload]
+  (when-not (m/validate DesfechoRegistradoPayload payload)
+    (throw (ex-info "payload de proposicao.desfecho-registrado invalido (contrato do evento)"
+                    {:erro :payload-invalido :explain (m/explain DesfechoRegistradoPayload payload)})))
+  (eventos/evento desfecho-registrado-tipo ente-id payload))

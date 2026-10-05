@@ -18,6 +18,7 @@ function ficha(parcial: Partial<FichaOut>): FichaOut {
     autorTipo: "vereador",
     autorTexto: "Ver.ª Helena Matos",
     estado: "em_comissoes",
+    desfecho: null,
     ...parcial,
   };
 }
@@ -47,6 +48,12 @@ describe("derivarFicha", () => {
       { rotulo: "2º turno", situacao: "pendente" },
       { rotulo: "Sanção", situacao: "pendente" },
     ]);
+  });
+
+  it("matéria que já foi ao Executivo deixa de dizer 'Aguardando pauta' (docs/16 linha 18)", () => {
+    expect(derivarFicha(ficha({ estado: "aguardando_pauta" }), null).situacao).toBe("Aguardando pauta");
+    expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "sancionado" }), null).situacao).toBe("Sancionada");
+    expect(derivarFicha(ficha({ estado: "aguardando_pauta", desfecho: "publicada" }), null).situacao).toBe("Virou lei");
   });
 
   it("autorTexto ausente -> null honesto, nunca undefined/inventado", () => {
