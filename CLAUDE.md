@@ -490,12 +490,22 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
     resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes,
     exigindo 200.
-  - **`next dev` sem as rotas mais fundas (05/10/2026):** em 4 de 60 subidas a frio no CI, o `next dev` (16.2.9) montou
-    a tabela de rotas com a leitura do disco incompleta e respondeu 404 a rodada inteira em `[ente]/materias/[id]`,
-    `leis/[id]`, `vereadores/[id]` e `audiencias/[id]`, sem erro no log. O contêiner agora sobe por
-    `apps/frontend/scripts/dev.mjs`, que compara as páginas do disco com `.next/dev/types/routes.d.ts` e refaz a
-    leitura até bater (só muda a data de modificação do arquivo). Procurar `[dev]` no log do frontend. 404 numa página
-    que não chama `notFound()` é isso, e não "não encontrado" da aplicação.
+  - **`next dev` sem as rotas mais fundas (05/10/2026, PRs #211 e #223):** na subida, o `next dev` às vezes monta a
+    tabela de rotas com a leitura do disco incompleta e responde 404 a sessão inteira nas páginas mais fundas
+    (`[ente]/materias/[id]`, `leis/[id]`, `vereadores/[id]`, `audiencias/[id]`; na stack local chegou a sobrar só
+    `/`), sem erro no log. Qualquer mudança de arquivo em `app/` cura.
+    - **Contorno:** o contêiner sobe por `apps/frontend/scripts/dev.mjs`, que apaga a tabela da subida anterior
+      (o volume `.next` persiste), compara as páginas do disco com `.next/dev/types/routes.d.ts` e muda a data de
+      modificação das que faltam, enquanto o servidor estiver de pé. Procurar `[dev]` no log do frontend.
+    - **Medido no CI, subidas a frio sob disputa de CPU, sem o contorno:** 16.2.9, 9 de 50; 16.3.8, 7 de 200;
+      16.4.0-canary.60, 0 de 50. Com o contorno (16.2.9, versão do #211): 0 de 60, com a leitura refeita em 18.
+      Subir a versão do Next não resolve; o `dev.mjs` fica.
+    - **É defeito do Next, já reportado:** [vercel/next.js#97897](https://github.com/vercel/next.js/issues/97897)
+      (mesma assinatura) e [#96139](https://github.com/vercel/next.js/issues/96139) (a causa: o primeiro `aggregated`
+      do watcher em `setup-dev-bundler` vê a leitura parcial). Nossas medições estão comentadas nas duas. Tirar o
+      `dev.mjs` só depois de uma versão estável passar na mesma sonda.
+    - 404 numa página que não chama `notFound()` é isso, e não "não encontrado" da aplicação; o aquecimento da E11
+      exige 200 por essa razão.
   - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
     `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
     de varredura afirma o volume varrido.
