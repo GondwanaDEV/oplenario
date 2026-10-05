@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { categorizarSituacao, derivarProposicoesVista, ESTADOS_AGUARDANDO_PAUTA, ESTADOS_EM_PAUTA } from "./proposicoes-vista";
+import {
+  categorizarSituacao,
+  derivarProposicoesVista,
+  ESPECIES_PROPOSICAO,
+  ESTADOS_AGUARDANDO_PAUTA,
+  ESTADOS_EM_PAUTA,
+  formatarNumeroProposicao,
+} from "./proposicoes-vista";
+
+// Item 4 do lote 05/10: o filtro "Espécie" da lista omitia Lei Complementar e Emenda à LOM porque cada tela
+// mantinha a SUA lista. Esta é a lista do backend (apps/backend/src/oplenario/legislativo/logic.clj `tipos`,
+// "vocabulario fechado da V1; cresce por adicao") — escrita aqui de propósito: espécie nova no backend sem
+// rótulo no frontend reprova este teste (e o `Record<…["tipo"], string>` de proposicoes-vista.ts reprova o
+// tsc quando o contrato gerado ganhar a espécie).
+const TIPOS_DO_BACKEND = [
+  "projeto_lei", "projeto_lei_complementar", "projeto_resolucao", "projeto_decreto_legislativo",
+  "proposta_emenda_lom", "indicacao", "requerimento", "mocao",
+];
+
+describe("ESPECIES_PROPOSICAO (única lista de espécies)", () => {
+  it("cobre TODAS as espécies do backend, sem sobra", () => {
+    expect(ESPECIES_PROPOSICAO.map((e) => e.valor).sort()).toEqual([...TIPOS_DO_BACKEND].sort());
+  });
+
+  it("toda espécie tem rótulo em palavras e sigla, nunca a chave crua", () => {
+    for (const { valor, rotulo } of ESPECIES_PROPOSICAO) {
+      expect(rotulo).not.toMatch(/_/);
+      expect(rotulo).not.toBe(valor);
+      expect(formatarNumeroProposicao(valor, 1, 2026)).not.toContain(valor);
+    }
+  });
+
+  it("inclui Lei Complementar e Emenda à LOM (as duas que o filtro omitia)", () => {
+    const rotulos = ESPECIES_PROPOSICAO.map((e) => e.rotulo);
+    expect(rotulos).toContain("Projeto de Lei Complementar");
+    expect(rotulos).toContain("Emenda à LOM");
+  });
+});
 import type { ProposicaoResumoOut } from "./contrato-legislativo.gen";
 
 const base: ProposicaoResumoOut = {

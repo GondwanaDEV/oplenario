@@ -8,18 +8,11 @@
 // existe "Salvar rascunho" batendo no backend (spec §2: criar = protocolar! imediato).
 
 import { useEffect, useRef, useState } from "react";
+import { ESPECIES_PROPOSICAO } from "@/lib/proposicoes-vista";
 import "./formulario-proposicao.css";
 
-const ESPECIES = [
-  { valor: "projeto_lei", rotulo: "Projeto de Lei" },
-  { valor: "projeto_lei_complementar", rotulo: "Projeto de Lei Complementar" },
-  { valor: "projeto_resolucao", rotulo: "Projeto de Resolução" },
-  { valor: "projeto_decreto_legislativo", rotulo: "Decreto Legislativo" },
-  { valor: "proposta_emenda_lom", rotulo: "Emenda à LOM" },
-  { valor: "requerimento", rotulo: "Requerimento" },
-  { valor: "indicacao", rotulo: "Indicação" },
-  { valor: "mocao", rotulo: "Moção" },
-];
+// A lista de espécies é a MESMA do filtro da lista de proposições e do quadro (uma fonte só).
+const ESPECIES = ESPECIES_PROPOSICAO;
 
 const AUTOR_TIPOS = [
   { valor: "vereador", rotulo: "Vereador" },
