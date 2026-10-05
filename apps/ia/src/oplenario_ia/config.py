@@ -1,8 +1,9 @@
 """Configuração do satélite — sempre do ambiente (deploy-config, §22.9 Eixo 10: fornecedor é config, não código).
 
 O padrão é o fornecedor `fake`: nada sai do cluster até alguém configurar, de propósito, um fornecedor real com DPA de
-não-treino (`[GAP]` jurídico, LGPD art. 33). Credenciais do fornecedor não passam por aqui — o SDK oficial as lê do
-ambiente (ex.: ANTHROPIC_API_KEY), vindas do cofre (Eixo 11f).
+não-treino (`[GAP]` jurídico, LGPD art. 33). O fornecedor real da plataforma é o OpenRouter (ADR-0023). Credenciais do
+fornecedor não ficam na `Config` — vêm do ambiente (OPENROUTER_API_KEY, ou ANTHROPIC_API_KEY lida pelo SDK), do cofre
+(Eixo 11f).
 """
 
 from __future__ import annotations
@@ -11,9 +12,9 @@ import os
 from collections.abc import Mapping
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-Vendor = Literal["fake", "anthropic"]
+Vendor = Literal["fake", "openrouter", "anthropic"]
 Asr = Literal["fake", "sherpa"]
 Embeddings = Literal["fake", "fastembed"]
 
@@ -22,6 +23,10 @@ class Config(BaseModel):
     vendor: Vendor = "fake"
     modelo: str = "claude-opus-5"
     timeout_s: float = Field(default=60.0, gt=0)
+    # OpenRouter (ADR-0023): o modelo é o slug do catálogo dele (`anthropic/claude-opus-5`); `openrouter_provedores`
+    # restringe quem pode atender (`provider.only`) — vazio = qualquer provedor que cumpra ZDR e não colete dado.
+    openrouter_url: str = "https://openrouter.ai/api/v1"
+    openrouter_provedores: list[str] = Field(default_factory=list)
     registro_jsonl: str | None = None  # caminho do registro append-only; None = em memória
     # Fronteira com o core (ADR-0008) e o trabalho da Faixa A.
     core_url: str | None = None
@@ -36,6 +41,16 @@ class Config(BaseModel):
     embeddings: Embeddings = "fake"
     modelo_embeddings: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+    @model_validator(mode="after")
+    def _modelo_do_openrouter(self) -> Config:
+        # no OpenRouter o modelo leva o prefixo do fabricante; sem modelo explícito, o padrão vira o slug dele
+        if self.vendor == "openrouter" and "modelo" not in self.model_fields_set:
+            self.modelo = MODELO_OPENROUTER_PADRAO
+        return self
+
+
+MODELO_OPENROUTER_PADRAO = "anthropic/claude-opus-5"
+
 
 def carregar(env: Mapping[str, str] | None = None) -> Config:
     e = os.environ if env is None else env
@@ -48,6 +63,10 @@ def carregar(env: Mapping[str, str] | None = None) -> Config:
         dados["timeout_s"] = float(v)
     if v := e.get("OPLENARIO_IA_REGISTRO_JSONL"):
         dados["registro_jsonl"] = v
+    if v := e.get("OPLENARIO_IA_OPENROUTER_URL"):
+        dados["openrouter_url"] = v
+    if v := e.get("OPLENARIO_IA_OPENROUTER_PROVEDORES"):
+        dados["openrouter_provedores"] = [p.strip() for p in v.split(",") if p.strip()]
     for var, campo in (
         ("OPLENARIO_CORE_URL", "core_url"),
         ("OPLENARIO_IA_SEGREDO", "segredo"),

@@ -20,8 +20,12 @@ Tudo no Dokploy (`vps.calvetec.com.br`), projeto **`oplenario`**, ambiente **`pr
 - **O banco PRECISA de pgvector.** A migração 4 do satélite roda `CREATE EXTENSION vector` (o índice de busca). Com a
   imagem `postgres` comum a transação inteira falha, o schema `ia` nem nasce e a busca cai em `sem-ia`. Foi o que
   travou a primeira subida.
-- **Fornecedor:** o fake (padrão). Nada sai do cluster. O fornecedor real espera o `[GAP]` jurídico (DPA de
-  não-treino, LGPD art. 33) — trocar é `OPLENARIO_IA_VENDOR` + a chave, nos dois apps de IA.
+- **Fornecedor:** o fake (padrão). Nada sai do cluster. O fornecedor real é o **OpenRouter**
+  ([ADR-0023](adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)) e espera o `[GAP]` jurídico (DPA de
+  não-treino com o OpenRouter, LGPD art. 33). Ligar, nos dois apps de IA: `OPLENARIO_IA_VENDOR=openrouter`,
+  `OPENROUTER_API_KEY` (do cofre) e, se a lista de provedores aprovados estiver fechada,
+  `OPLENARIO_IA_OPENROUTER_PROVEDORES` (ex.: `anthropic,amazon-bedrock`). Antes, rodar
+  `oplenario-ia-avaliar avaliacoes --vendor openrouter` com a chave e conferir o custo e o provedor no registro.
 
 ## 2. Variáveis (aba Environment de cada app)
 
