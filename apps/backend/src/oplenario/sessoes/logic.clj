@@ -7,7 +7,8 @@
   sessao, e dia civil nao existe sem fuso). Continua PURO — `zona-civil-padrao` e' uma constante, nao um
   relogio; nenhum instante e' LIDO aqui."
   (:require [clojure.string :as str]
-            [oplenario.kernel.tempo :as tempo])
+            [oplenario.kernel.tempo :as tempo]
+            [oplenario.sessoes.logic.rotulos :as rotulos])
   (:import (java.time Duration Instant LocalDate ZoneId)
            (java.time.temporal ChronoUnit)))
 
@@ -1798,9 +1799,8 @@
 ;; ---------- ADR-0020 fatia 2: o aviso automatico da pauta publicada ----------
 
 (def rotulo-do-tipo
-  "O nome legivel de cada tipo de sessao (o que a pessoa le: 'sessão ordinária nº 3', 'audiência pública nº 1')."
-  {"ordinaria" "ordinária" "extraordinaria" "extraordinária" "solene" "solene" "secreta" "secreta" "especial" "especial"
-   "audiencia_publica" "audiência pública"})
+  "O nome legivel de cada tipo de sessao. A tabela mora em `logic.rotulos` (a folha de presenca tambem a usa)."
+  rotulos/rotulo-do-tipo)
 
 (defn avisos-de-pauta-publicada
   "PURO: os payloads de `notificacao.requisitada` (canal `in_app`, a caixa do sistema) para cada vereador quando a pauta
@@ -1808,9 +1808,7 @@
   ato nunca avisa duas vezes, e cada republicacao avisa de novo (a pauta mudou). O texto so' diz o que a pauta publicada
   ja' torna publico: a sessao, a data e a versao."
   [sessao versao identidade-ids]
-  (let [nome (str (when-not (= "audiencia_publica" (:tipo-sessao sessao)) "sessão ")
-                  (get rotulo-do-tipo (:tipo-sessao sessao) (:tipo-sessao sessao))
-                  (when-let [n (:numero-sequencial sessao)] (str " nº " n)))
+  (let [nome (rotulos/nome-da-sessao sessao)
         quando (when-let [^Instant t (:agendada-para sessao)]
                  (str " de " (.format (.toLocalDate (.atZone t ^ZoneId tempo/zona-civil-padrao))
                                       (java.time.format.DateTimeFormatter/ofPattern "dd/MM/yyyy"))))

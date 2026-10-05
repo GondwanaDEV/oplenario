@@ -141,7 +141,9 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
 - **em produção (05/10/2026):** a entrada pelo CPF está no ar e a configuração de login foi reaplicada nas Câmaras pelo
   workflow `reaplicar-login-prd` (nome, pt-BR, política de senha, força bruta, senha → código). **Falta o tema:** o
   Keycloak das Casas é um compose no Dokploy e o servidor não tem login no GHCR (o pacote
-  `oplenario-keycloak-prd` é privado); a 1ª troca derrubou o Keycloak por ~14 min até a volta automática. Antes de
+  `oplenario-keycloak-prd` é privado), e a imagem da 1ª troca partia da 26.0.0 contra a **26.3.5 de produção** (o Keycloak
+  não sobe contra banco mais novo): o login caiu ~14 min até a volta automática. A imagem agora parte da versão do
+  compose; o tema foi conferido de ponta a ponta numa 26.3.5 local (login, senha errada, convite, código). Antes de
   rodar `build-keycloak-prd` de novo: tornar o pacote público ou cadastrar o `ghcr.io` em Settings → Registry do
   Dokploy (`docs/27`, seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o
   segundo fator.
@@ -484,8 +486,14 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     indeferida e estado desconhecido ficam no chip neutro. **Subscrição:** estado desconhecido sai em palavras.
   - **Fumaça de produção** (`fumaca-hml.yaml`) com 5 casos novos, só leitura: leis, vereadores, votações, ficha
     pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
-    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes
-    (o `next dev` do CI respondeu 404 na primeira visita a uma rota dinâmica).
+    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes,
+    exigindo 200.
+  - **`next dev` sem as rotas mais fundas (05/10/2026):** em 4 de 60 subidas a frio no CI, o `next dev` (16.2.9) montou
+    a tabela de rotas com a leitura do disco incompleta e respondeu 404 a rodada inteira em `[ente]/materias/[id]`,
+    `leis/[id]`, `vereadores/[id]` e `audiencias/[id]`, sem erro no log. O contêiner agora sobe por
+    `apps/frontend/scripts/dev.mjs`, que compara as páginas do disco com `.next/dev/types/routes.d.ts` e refaz a
+    leitura até bater (só muda a data de modificação do arquivo). Procurar `[dev]` no log do frontend. 404 numa página
+    que não chama `notFound()` é isso, e não "não encontrado" da aplicação.
   - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
     `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
     de varredura afirma o volume varrido.
@@ -528,10 +536,7 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     nome da etapa: pede coluna nova, projeção do rótulo que `proposicao.protocolada`/`transicionou` já carregam e
     reconstrução das linhas antigas; a linha do tempo interna (aba Tramitação) também usa o rótulo fixo; a faixa do
     portal ainda é o mapa fixo (a projeção pública não carrega o rito), então ali o chip e a faixa podem divergir;
-    `template_estado.ordem` não tem validação nem significado documentado;
-  - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
-    cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
-    `folha-sessao-v2`;
+    `template_estado.ordem` tem significado documentado (mig 0261) e unicidade conferida no save, sem índice (PR #210);
   - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
     anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
     prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de
