@@ -62,6 +62,27 @@
    [:voto-relator {:optional true} [:maybe :string]]
    [:estado :string]])
 
+(def EtapaDoRitoOut
+  "Uma etapa do rito DA CASA, como a Casa a declarou: `chave` (texto livre de template, Inv.4 — nunca enum) e `rotulo`
+  (o `nome` que ela deu). `terminal` = encerra o processo. A `ordem` da coluna NAO e' contrato: a ordem e' a da lista."
+  [:map {:closed true}
+   [:chave :string]
+   [:rotulo :string]
+   [:terminal :boolean]])
+
+(def RitoDaMateriaOut
+  "O rito da materia para a faixa 'Onde esta' a materia' (`logic.rito`). `ordem-unica` true = `etapas` e' a linha do
+  rito em ordem (fecha na etapa atual quando ela e' terminal); false = o rito nao da ordem unica verificavel e `etapas`
+  vem vazio — a faixa mostra so' o entorno (`anteriores` · `atual` · `proximas`), nunca uma linha reta inventada.
+  `atual` nil = o rito nao declara o estado da materia (materia anterior ao rito, ou rito trocado). `anteriores` nil =
+  nao se sabe por onde passou (linha existe, ou o historico foi cortado pelo teto)."
+  [:map {:closed true}
+   [:ordem-unica :boolean]
+   [:etapas [:sequential EtapaDoRitoOut]]
+   [:atual [:maybe EtapaDoRitoOut]]
+   [:anteriores [:maybe [:sequential EtapaDoRitoOut]]]
+   [:proximas [:sequential EtapaDoRitoOut]]])
+
 (def FichaMateriaOut
   "GET /legislativo/proposicoes/:id/ficha — o envelope agregado (Onda B Slice 3). `:proposicao` reusa
   ProposicaoDetalheOut (o controller ja' gateia nil -> 404 na borda antes de chegar aqui; a wire/out so'
@@ -86,4 +107,7 @@
    [:emendas-truncado :boolean]
    [:pareceres [:sequential ParecerResumoOut]]
    [:pareceres-truncado :boolean]
-   [:coautores [:sequential CoautorOut]]])
+   [:coautores [:sequential CoautorOut]]
+   ;; ACRESCENTADO (faixa 'Onde esta' a materia'): opcional, para o produtor/cliente antigo seguir valido. nil = a
+   ;; materia nao tem rito. Quem le' e' a faixa da ficha; sem ele o front cai no comportamento anterior.
+   [:rito {:optional true} [:maybe RitoDaMateriaOut]]])

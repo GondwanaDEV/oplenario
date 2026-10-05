@@ -23,7 +23,7 @@ function ConteudoAssistente() {
   const { token } = useAuth();
   return (
     <>
-      <TopoInterno area="Assistente" />
+      <TopoInterno area="Clara" />
       <PainelAssistente token={token} />
     </>
   );

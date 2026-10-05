@@ -88,6 +88,54 @@
       (is (= 1 (count (:pareceres f))))
       (is (= "aguardando_designacao" (:estado (first (:pareceres f))))))))
 
+(deftest ficha-completa-traz-o-rito-da-materia-para-a-faixa
+  ;; "Onde esta' a materia": a ordem das etapas vem do RITO da Casa (estados + transicoes do template da materia),
+  ;; nunca de uma lista de nomes no front. Vocabulario de uma Casa fora da demo, de proposito.
+  (let [ente (random-uuid)
+        tid (random-uuid)
+        _ (repo/criar-template! *repo* ente {:id tid :chave "rito_da_faixa" :versao 1
+                                             :nome "Rito da faixa [FIXTURE]" :estado-inicial "entrada"})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "entrada" :nome "Entrada"
+                                           :terminal false :ordem 1})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "instrucao" :nome "Instrução"
+                                           :terminal false :ordem 2})
+        _ (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave "promulgada" :nome "Promulgada"
+                                           :terminal true :ordem 3})
+        _ (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "entrada"
+                                              :para-estado "instrucao" :gatilho "instruir" :ordem 1})
+        _ (repo/criar-transicao! *repo* ente {:id (random-uuid) :template-id tid :de-estado "instrucao"
+                                              :para-estado "promulgada" :gatilho "promulgar" :ordem 1})
+        pid (protocolar! ente)
+        rito (:rito-do-template (repo/ficha-completa-da-proposicao *repo* ente pid))]
+    (is (= "entrada" (:estado-inicial rito)))
+    (is (= [["entrada" "Entrada" false 1] ["instrucao" "Instrução" false 2] ["promulgada" "Promulgada" true 3]]
+           (mapv (juxt :chave :nome :terminal :ordem) (:estados rito)))
+        "os estados como o rito os declara, na ordem declarada")
+    (is (= [["entrada" "instrucao"] ["instrucao" "promulgada"]]
+           (mapv (juxt :de-estado :para-estado) (:transicoes rito))))))
+
+(deftest ficha-completa-do-rito-nao-vaza-rito-de-outra-casa
+  ;; a RLS esconde o template do vizinho: a materia da Casa B, com rito proprio, nunca le' estados da Casa A
+  (let [ente-a (random-uuid) ente-b (random-uuid)
+        tid-a (random-uuid) tid-b (random-uuid)
+        mk (fn [ente tid chave nome]
+             (repo/criar-template! *repo* ente {:id tid :chave (str "rito_" chave) :versao 1 :nome "R [FIXTURE]"
+                                                :estado-inicial chave})
+             (repo/criar-estado! *repo* ente {:id (random-uuid) :template-id tid :chave chave :nome nome
+                                              :terminal false :ordem 1}))
+        _ (mk ente-a tid-a "so_da_casa_a" "Só da Casa A")
+        _ (mk ente-b tid-b "so_da_casa_b" "Só da Casa B")
+        pid-b (protocolar! ente-b)
+        rito (:rito-do-template (repo/ficha-completa-da-proposicao *repo* ente-b pid-b))]
+    (is (= ["so_da_casa_b"] (mapv :chave (:estados rito))))))
+
+(deftest ficha-completa-sem-rito-nao-traz-rito
+  ;; materia que nasce sem rito (a Casa nao cadastrou nenhum para a especie) nao tem o que desenhar
+  (let [ente (random-uuid)
+        pid (protocolar! ente)
+        f (repo/ficha-completa-da-proposicao *repo* ente pid)]
+    (is (nil? (:rito-do-template f)))))
+
 ;; ---------- fatia 'truncamento-familia': as 4 listas param de fingir completude ----------
 
 (deftest ficha-completa-sem-corte-nao-sinaliza-truncamento

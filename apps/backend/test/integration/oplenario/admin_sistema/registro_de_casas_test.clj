@@ -41,6 +41,7 @@
   (reify idp/IdentityProvider
     (verificar-token [_ t] (get @tokens t))
     (provisionar-realm! [_ ente] (swap! chamadas conj [:realm ente]) {:realm (str "ente-" ente)})
+    (provisionar-realm! [_ ente opcoes] (swap! chamadas conj [:realm ente opcoes]) {:realm (str "ente-" ente)})
     (criar-usuario! [_ ente u] (swap! chamadas conj [:usuario ente (select-keys u [:identidade-id :email])]) {})
     (convidar! [_ ente iid]
       (when @falhar-convite (throw (ex-info "keycloak fora do ar" {})))
@@ -97,10 +98,11 @@
       (let [iid (:id (id/por-cpf *ds* cpf))
             ator (repo-id/snapshot-ator (assoc (repo-id/repositorio) :datasource {:ds *ds*}) ente iid)]
         (is (contains? (set (:papeis ator)) "admin_ente"))
-        (is (= [[:realm ente] [:usuario ente {:identidade-id iid :email "renata.costa@camara.baturite.ce.gov.br"}]
+        (is (= [[:realm ente {:nome "Câmara Municipal de Baturité"}]
+                [:usuario ente {:identidade-id iid :email "renata.costa@camara.baturite.ce.gov.br"}]
                 [:convite ente iid]]
                @chamadas)
-            "realm, usuario (e-mail em minusculas) e convite, nesta ordem")))
+            "realm (com o nome da Casa no titulo do login, ADR-0025), usuario (e-mail em minusculas) e convite, nesta ordem")))
     (testing "a lista e a ficha do console"
       (let [lista (ler (pt/response-for svc :get "/operacao/casas" :headers (como o)))
             ficha (ler (pt/response-for svc :get (str "/operacao/casas/" ente) :headers (como o)))]
@@ -156,7 +158,8 @@
         ente (get-in (ler (provisionar! svc o (cpf-valido))) [:casa :ente-id])]
     (reset! chamadas [])
     (is (= 200 (:status (pt/response-for svc :post (str "/operacao/casas/" ente "/realm") :headers (como o)))))
-    (is (= [[:realm (parse-uuid ente)]] @chamadas))
+    (is (= [[:realm (parse-uuid ente) {:nome "Câmara Municipal de Baturité"}]] @chamadas)
+        "reprovisionar converge tambem o nome da Casa no realm (ADR-0025)")
     (is (= "realm-reprovisionado" (first (atuacoes svc o ente))))))
 
 (deftest entrada-invalida-e-casa-inexistente

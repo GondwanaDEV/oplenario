@@ -120,9 +120,11 @@
   (ficha-completa-da-proposicao [this ente-id id]
     "Onda B Slice 3 (ficha-materia, leitura interna): {:proposicao :texto
      :tramitacao :tramitacao-truncado :apensadas :apensadas-truncado :emendas :emendas-truncado
-     :pareceres :pareceres-truncado} NUMA UNICA tx (mesma disciplina de
+     :pareceres :pareceres-truncado :rito-do-template} NUMA UNICA tx (mesma disciplina de
      buscar-proposicao-detalhe/listar-e-contar-proposicoes).
      `:proposicao` carrega `:aprovada` (Fatia 2), mesma disciplina de buscar-proposicao-detalhe.
+     `:rito-do-template` = `{:estado-inicial :estados :transicoes}` do rito da materia (nil sem rito): o dado
+     bruto de que a faixa 'Onde esta' a materia' tira a ORDEM das etapas (`logic.rito`), nunca do nome do estado.
      Sem short-circuit no nil da proposicao (mesmo estilo de buscar-proposicao-detalhe): as demais leituras
      rodam do mesmo jeito e vem naturalmente vazias. Tetos (review MAJOR fe-9-ficha-materia — o `take`
      em memoria anterior truncava preservando os MAIS ANTIGOS): 100 p/ tramitacao, 50 p/
@@ -660,9 +662,13 @@
                                 teto-emendas-ficha)
               [pareceres pareceres-truncado]
               (lista-com-sonda (parecer/listar-por-objeto tx ente-id "proposicao" id (inc teto-pareceres-ficha))
-                                teto-pareceres-ficha)]
-          {:proposicao (proposicao-com-aprovada tx ente-id id)
+                                teto-pareceres-ficha)
+              proposicao (proposicao-com-aprovada tx ente-id id)]
+          {:proposicao proposicao
            :texto (texto/vigente tx ente-id id)
+           ;; o RITO da materia (estados + transicoes do template dela), bruto, para a faixa "Onde esta' a materia":
+           ;; o controller o compoe com a etapa atual e o historico (`logic.rito`). Materia sem rito = nil.
+           :rito-do-template (when-let [tid (:template-id proposicao)] (tram/rito-do-template tx ente-id tid))
            :tramitacao tramitacao :tramitacao-truncado tramitacao-truncado
            :apensadas apensadas :apensadas-truncado apensadas-truncado
            :emendas emendas :emendas-truncado emendas-truncado

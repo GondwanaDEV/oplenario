@@ -99,6 +99,7 @@
       (is (= 2 (:total t)) "o despacho e a negacao; a leitura comum e o anonimo nao entram")
       (is (= ["legislativo/despachar" "escrita" "permitido" "Maria Secretária" "PL 7/2026" ["relator"] "189.45.x.x"]
              ((juxt :acao :classe :decisao (comp :nome :ator) (comp :rotulo :recurso) :campos :ip) despacho)))
+      (is (false? (get-in despacho [:recurso :do-ato])) "rotulo dado pelo handler e' nome de OBJETO, nao resumo da acao")
       (is (= ["legislativo/so-secretaria" "negacao" "negado" "Rui Vereador"]
              ((juxt :acao :classe :decisao (comp :nome :ator)) negado)))
       (is (= (:selo despacho) (:selo-anterior negado)) "encadeado: cada selo sela o anterior")
@@ -114,6 +115,21 @@
       (is (thrown? Exception (tenancy/com-tenant* *ds* ente #(jdbc/execute-one! % ["DELETE FROM auditoria.registro WHERE seq = 1"]))))
       (is (true? (:integra (ler (pt/response-for svc :get "/auditoria/integridade" :headers (como ente ana)))))
           "anular o IP nao quebra a corrente"))))
+
+(deftest o-ato-sem-rotulo-do-handler-sai-com-o-resumo-da-acao-na-tela-e-no-csv
+  ;; ADR-0017 1-C: `/identidade/acessos` (a acao `identidade/conceder-acesso`) nao tem marca de handler nesta rota de
+  ;; teste, como as ~110 escritas que nunca tiveram: o rotulo vem de `auditoria.resumos`, gravado e selado no registro
+  (let [ente (random-uuid) svc (servico ente (atom []))]
+    (is (= 201 (:status (pt/response-for svc :post "/identidade/acessos" :body "{}" :headers (como ente beto)))))
+    (let [[r] (:registros (trilha svc ente ana))]
+      (is (= ["identidade/conceder-acesso" "escrita" "permitido" "Concedeu um acesso à Casa"]
+             ((juxt :acao :classe :decisao (comp :rotulo :recurso)) r)))
+      (is (true? (get-in r [:recurso :do-ato]))
+          "a leitura diz que este rotulo e' o resumo da acao: a tela decide por isso, nunca pelo texto"))
+    (is (true? (:integra (ler (pt/response-for svc :get "/auditoria/integridade" :headers (como ente ana)))))
+        "o rotulo gravado entra no selo e a corrente confere")
+    (let [csv (:body (pt/response-for svc :get "/auditoria/exportar.csv" :headers (como ente ana)))]
+      (is (str/includes? csv "Concedeu um acesso à Casa") "o CSV traz o mesmo rotulo na coluna `rotulo`"))))
 
 (deftest cada-papel-ve-o-seu-escopo
   (let [ente (random-uuid) svc (servico ente (atom []))]

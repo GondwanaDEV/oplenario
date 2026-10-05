@@ -344,13 +344,14 @@ function Tally({ sim, nao, abstencao }: { sim: number; nao: number; abstencao: n
   );
 }
 
-function PlacarMeta({ faltam, baseMembros }: { faltam: number | null; baseMembros: number | null }) {
+/** Votação aberta: quantos ainda podem votar. ENCERRADA ninguém mais vai votar — o que cabe é dizer quantos não votaram. */
+function PlacarMeta({ faltam, baseMembros, encerrada }: { faltam: number | null; baseMembros: number | null; encerrada: boolean }) {
   if (faltam === null || baseMembros === null) return null;
   return (
     <p className="placar-meta">
       {faltam > 0 ? (
         <>
-          faltam votar <b>{faltam}</b> de <b>{baseMembros}</b>
+          {encerrada ? "não votaram" : "faltam votar"} <b>{faltam}</b> de <b>{baseMembros}</b>
         </>
       ) : (
         <>
@@ -365,7 +366,7 @@ function PlacarNominal({ v, estado }: { v: VistaNominal; estado: EstadoPlenario 
   return (
     <>
       <Tally sim={v.sim} nao={v.nao} abstencao={v.abstencao} />
-      <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} />
+      <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} encerrada={v.encerrada} />
       {v.votosParciais && (
         <p className="placar-parcial">Lista nominal parcial (após reconexão) — a contagem acima é a oficial do servidor.</p>
       )}
@@ -402,7 +403,7 @@ function PlacarSecreta({ v }: { v: VistaSecreta }) {
       {v.encerrada && v.totais ? (
         <>
           <Tally sim={v.totais.sim} nao={v.totais.nao} abstencao={v.totais.abstencao} />
-          <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} />
+          <PlacarMeta faltam={v.faltam} baseMembros={v.baseMembros} encerrada={v.encerrada} />
         </>
       ) : (
         <div className="placar-contador" aria-live="polite" aria-atomic="true">

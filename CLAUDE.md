@@ -48,7 +48,7 @@ não frente de trabalho:
 as 8 fases F0–F7 estão mergeadas em `main`** — F0 plataforma base · F1 cadastros+identidade ·
 F2 resolvedor de fatos (o KEYSTONE) · F3 legislativo (8 eixos) · F4 sessões+tempo real (HERO) ·
 F5 compliance/remessa · F6 transparência/participação · F7 painéis/observabilidade. Ao fim da F7 eram 13
-módulos e 61 migrations; em 04/10/2026 são 121 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
+módulos e 61 migrations; em 05/10/2026 são 133 migrations. **A track de frontend (`docs/13-plano-track-fe.md`) fechou as Ondas A–D**, com os
 marcos MFE-1 a MFE-4 cumpridos.
 
 **Marcos de valor demonstrável:** M1 (a Casa existe), M2 (compliance vivo), M3 (coração
@@ -77,7 +77,11 @@ artefato legal do core com retificação, rascunho pelo núcleo com citação co
 medida de volta na IA — PRs #43–#47 — e **leitura da ata anterior (A.7)** como ato da sessão (voz sintetizada,
 presencial ou dispensada; a voz é a do navegador da Mesa, provisória até a decisão do fornecedor de voz). **Tudo roda
 com o fornecedor fake** (conferência real, texto de roteiro). **Índice único e busca intra-câmara (A.4/A.5)** entregues — PR #49 e o seguinte: a IA devolve ids, o core decide o que se vê; IA fora cai na busca pela ementa. **Resumo cidadão (A.8)** entregue: a IA redige a cada versão do texto, a secretaria revisa e publica, o portal mostra com o selo de revisão humana — **a Faixa A está completa em código**; a A.1 (qualidade medida) espera o áudio de
-Baturité com 15 min anotados. A **Faixa B** (agente, consulta LOM/RI, copiloto) começou pelo **catálogo de ações (B.1, [ADR-0009](docs/adr/0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md))**: uma ferramenta por ação de domínio, declarada em `diplomat/catalogo.clj` de cada módulo; **rota nova sem entrada no catálogo (ou motivo em `resources/catalogo/fora-do-catalogo.edn`) quebra o CI**. A **identidade delegada (B.2, [ADR-0010](docs/adr/0010-identidade-delegada-do-agente.md))** está feita: o core emite uma credencial opaca por execução do agente (o Keycloak 26.0 não delega), a permissão é recalculada a cada chamada e `ato` por agente só vira proposta (B.6). O **assistente da Casa (B.3)** está no ar em `/assistente`: pergunta em palavras, o agente consulta o core pelo servidor MCP como a pessoa e responde citando o que consultou. As **normas da Casa (B.4, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram por texto, quebradas por dispositivo, conferidas pela secretaria em `/normas` e indexadas na IA ao publicar; na **B.5** o assistente lê a LOM e o Regimento pelo artigo (`buscar_dispositivos`, `ler_dispositivo`) e cita o dispositivo com a data até quando o texto foi conferido. Na **B.6 ([ADR-0012](docs/adr/0012-proposta-de-ato.md))** o agente passa a PROPOR atos: nada executa sozinho — a pessoa lê e confirma em `/propostas/:id` (o vereador já pede o requerimento em palavras em `/vereador/assistente`); voto, presença e condução da sessão nem são propostos. Na **B.7** o copiloto entra no "Novo requerimento": o vereador descreve em palavras e o formulário volta preenchido, com a justificativa citando a norma da Casa — ele revisa e assina pelo fluxo de sempre. Na **B.8 ([ADR-0013](docs/adr/0013-agente-institucional-e-conferencia.md))** estreia o agente institucional da Casa (sem pessoa, ligado pelo `admin_ente`): a cada proposição protocolada ele lê a matéria e a LOM/RI e deixa uma nota técnica em rascunho, com citações, na fila `/conferencias` da secretaria, que aproveita ou descarta. Na **B.9 ([ADR-0014](docs/adr/0014-orcamento-de-ia-e-painel-da-casa.md))** entra a cota de IA por Casa (orçamento do plano definido pelo operador; aviso a 80%, segundo plano pausa primeiro, teto duro → "cota da Casa") e o painel `/paineis/ia` do administrador; **a Faixa B está completa em código** — faltam os valores comerciais do orçamento e o fornecedor real. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
+Baturité com 15 min anotados. A **Faixa B** (agente, consulta LOM/RI, copiloto) começou pelo **catálogo de ações (B.1, [ADR-0009](docs/adr/0009-catalogo-de-acoes-e-adaptador-mcp-no-core.md))**: uma ferramenta por ação de domínio, declarada em `diplomat/catalogo.clj` de cada módulo; **rota nova sem entrada no catálogo (ou motivo em `resources/catalogo/fora-do-catalogo.edn`) quebra o CI**. A **identidade delegada (B.2, [ADR-0010](docs/adr/0010-identidade-delegada-do-agente.md))** está feita: o core emite uma credencial opaca por execução do agente (o Keycloak 26.0 não delega), a permissão é recalculada a cada chamada e `ato` por agente só vira proposta (B.6). O **assistente da Casa (B.3)** está no ar em `/assistente`: pergunta em palavras, o agente consulta o core pelo servidor MCP como a pessoa e responde citando o que consultou. As **normas da Casa (B.4, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram por texto, quebradas por dispositivo, conferidas pela secretaria em `/normas` e indexadas na IA ao publicar; na **B.5** o assistente lê a LOM e o Regimento pelo artigo (`buscar_dispositivos`, `ler_dispositivo`) e cita o dispositivo com a data até quando o texto foi conferido. Na **B.6 ([ADR-0012](docs/adr/0012-proposta-de-ato.md))** o agente passa a PROPOR atos: nada executa sozinho — a pessoa lê e confirma em `/propostas/:id` (o vereador já pede o requerimento em palavras em `/vereador/assistente`); voto, presença e condução da sessão nem são propostos. Na **B.7** o copiloto entra no "Novo requerimento": o vereador descreve em palavras e o formulário volta preenchido, com a justificativa citando a norma da Casa — ele revisa e assina pelo fluxo de sempre. Na **B.8 ([ADR-0013](docs/adr/0013-agente-institucional-e-conferencia.md))** estreia o agente institucional da Casa (sem pessoa, ligado pelo `admin_ente`): a cada proposição protocolada ele lê a matéria e a LOM/RI e deixa uma nota técnica em rascunho, com citações, na fila `/conferencias` da secretaria, que aproveita ou descarta. Na **B.9 ([ADR-0014](docs/adr/0014-orcamento-de-ia-e-painel-da-casa.md))** entra a cota de IA por Casa (orçamento do plano definido pelo operador; aviso a 80%, segundo plano pausa primeiro, teto duro → "cota da Casa") e o painel `/paineis/ia` do administrador; **a Faixa B está completa em código** — faltam os valores comerciais do orçamento e o fornecedor real. **A Clara
+(05/10/2026, [ADR-0024](docs/adr/0024-historico-auditavel-da-clara.md)):** o assistente da Casa ganhou nome e um painel
+retrátil em toda tela de `app/(interno)/`, para a secretaria e o vereador (`app/(interno)/clara/`); cada pergunta fica guardada no core
+(só inserção, resposta que não grava não sai, hash ancorado na trilha) e a pessoa relê o seu histórico; o `auditor` lê o
+da Casa pela API (`GET /agente/historico?escopo=casa`), e cada leitura vai à trilha. Prazo de guarda é `[GAP]` jurídico. As **normas de referência (B.4a, [ADR-0011](docs/adr/0011-normas-de-referencia-por-dispositivo.md))** entram em `/normas`: a secretaria importa o texto, o parser separa em dispositivos com endereço estável e só vale depois de uma pessoa conferir. **Falta receber a LOM e o RI reais de Baturité e Fortaleza.** M4 fecha em código com a
 A.6; a qualidade real depende da A.1 e do fornecedor real. Uso real de fornecedor segue travado no `[GAP]` jurídico (DPA de
 não-treino, LGPD art. 33) — o fake não espera. **O OpenRouter é o fornecedor de modelo de linguagem da plataforma
 (05/10/2026, [ADR-0023](docs/adr/0023-openrouter-como-fornecedor-de-modelo-de-linguagem.md)),** contra a recomendação
@@ -119,6 +123,19 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
+**Entrada pelo CPF e o Keycloak escondido ENTREGUES (05/10/2026, [ADR-0025](docs/adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
+- servidor e vereador digitam o CPF em `/entrar` (ou no link `/entrar/<uuid>` da Câmara); `POST /auth/localizar` diz em
+  quais Câmaras há vínculo institucional ativo (função estreita `identidade.casas_com_acesso_institucional`; o vínculo
+  segue sob RLS) e o BFF vai direto à senha da Câmara com `login_hint` = identidade-id. Mais de uma Câmara →
+  `/entrar/escolher`. CPF só no corpo, limite de 30 por IP a cada 5 min (`oplenario.limite-de-taxa`, o primeiro do backend);
+- a tela de senha é o tema `oplenario` do Keycloak (`apps/keycloak/`, FreeMarker, o arquétipo `login.html`), em pt-BR,
+  com o nome da Câmara; os ids `username`/`password`/`kc-login` não mudaram (workflows de homolog);
+- o realm ganha nome, pt-BR, tema de login e de e-mail, política de senha e trava temporária de força bruta;
+- **o convite pede senha + código do aplicativo** (antes só passkey, e o login pedia senha: o convidado real ficava sem
+  como entrar). A passkey volta quando o domínio definitivo existir — adia o passwordless-first da §22.5 (confirmar);
+- **falta em produção:** a imagem do Keycloak com o tema e "Reaplicar configuração de login" em cada Câmara (`docs/27`,
+  seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
+
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:
   - dois operadores para suspender; o incidente começa com um e volta sozinho se o 2º não confirmar em 24 h;
@@ -277,9 +294,19 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   tranca o login, nem com `AUDITORIA_EXIGIR_TENTATIVA=true`. Jobs e consumidores do outbox foram inventariados e não
   têm ato que peça o par (não há agendador em produção; 7 de 9 consumidores só projetam); um teste de inventário
   (`atos_fora_do_http_test`) reprova job, comando ou consumidor novo sem classificação;
-- **falta:** o resumo legível por ação ainda é incremental; a ADR diz que o login do cidadão não entra na trilha, mas
-  o código o registra (agora com duas linhas por entrada): decidir se corrige o texto ou tira o registro; na Operação,
-  `ia-orcamento` não grava na atuação e a entrada do operador não tem tentativa.
+- **resumo em palavras para toda escrita (05/10/2026):** `auditoria/resumos.clj` dá uma frase a cada rota de escrita
+  ("Publicou a pauta da sessão"); das 169, 149 têm rótulo e 20 têm motivo escrito (operador, satélite de IA, duas do
+  assistente). O rótulo só entra quando o ato aconteceu e o handler não deu o nome do objeto; é gravado e entra no
+  selo, então registro anterior segue sem ele. `resumo_de_toda_escrita_test` reprova escrita nova sem rótulo nem
+  motivo. A leitura devolve `recurso.do-ato` e a tela decide a etiqueta só por esse campo, nunca pelo texto do rótulo;
+- **na Operação (05/10/2026):** `ia-orcamento` e a entrada do operador gravam na atuação da Operação o par
+  tentativa/desfecho, sem mudar o selo. `ia-orcamento` sem a tentativa não roda; o login do operador nunca é trancado
+  pelo registro. A linha de comando não tem pessoa: `operador_id` nulo e `origem: linha-de-comando`. A conferência
+  `tentativas-sem-desfecho` existe como função de repositório, sem tela;
+- **falta:** a ADR diz que o login do cidadão não entra na trilha, mas o código o registra (agora com duas linhas por
+  entrada): decidir se corrige o texto ou tira o registro; dar rótulo a `agente/perguntar` e
+  `agente/reportar-erro-ia`; definir o orçamento de IA de uma Casa suspensa sobrescreve o zero da suspensão (a cota
+  reabre e a reativação não restaura): decidir a regra.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
@@ -329,7 +356,7 @@ como o **kaocha randomiza a ordem**, quando um deles rodava antes de um seeder o
 estourava. Consertado: os dois passam a semear `2304400` (idempotente), sem afrouxar asserção. Detalhe e
 procedência em `docs/16`, seção "Progressão do CI". Já existe um PR ([#1](https://github.com/GondwanaDEV/oplenario/pull/1)) com os consertos de
 infra + a re-verificação; abrir/mergear é decisão do Daouda. Um plano de teste completo de toda a
-plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 9
+plataforma está em **`docs/20`** (4 métodos, ~8 personas reais, ondas T0–T6), e a Trilha 3 (`e2e/t3/`, 11
 specs de browser autenticadas) cobre boa parte da Onda T1 e **é gate do CI desde 02/10/2026** (`t3-e2e` sem
 `continue-on-error`; voto e presença ao vivo fora da quarentena SSE porque o placar hidrata por snapshot; só as
 3 sondas de cockpit seguem opt-in em `E2E_T3_SSE`). A presença do próprio vereador, que não hidratava por
@@ -437,13 +464,37 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
     nominal aberta, uma encerrada e uma matéria aprovada sem autógrafo. Não rodar a Trilha 3 no mesmo banco depois dele.
   - **Testes instáveis consertados:** "nunca CPF" do revogar acesso (procurava 11 dígitos seguidos) e o CPF sorteado
     do encerramento.
+- **Quarta rodada de 05/10 (PRs #177 a #186):**
+  - **Faixa "Onde está a matéria" pelo rito da Casa:** `GET /legislativo/proposicoes/:id/ficha` devolve `rito`
+    (calculado em `legislativo/logic/rito.clj`) e a ficha interna desenha as etapas na ordem do rito, com o nome que a
+    Casa deu. Sem ordem única verificável (ramificação ou salto), mostra só anteriores, atual e próximas possíveis.
+    `derivarTramitacao` segue como faixa do portal e como reserva.
+  - **Índice por vereador** em `legislativo.votos` (mig `20261005000230`), para `GET /meu/votos`. O `CREATE INDEX`
+    bloqueia o registro de voto enquanto constrói: não promover no meio de sessão.
+  - **Telão:** votação encerrada diz "não votaram N de M". **Meus protocolos:** só "respondido" fica verde; arquivada,
+    indeferida e estado desconhecido ficam no chip neutro. **Subscrição:** estado desconhecido sai em palavras.
+  - **Fumaça de produção** (`fumaca-hml.yaml`) com 5 casos novos, só leitura: leis, vereadores, votações, ficha
+    pública da matéria e a raiz. **Trilha 3** com a spec E11: revogar acesso, portal sem login, prazo do Executivo e
+    resultado do telão depois de recarregar; ela cria a própria sessão, matéria e pessoas e aquece as rotas antes
+    (o `next dev` do CI respondeu 404 na primeira visita a uma rota dinâmica).
+  - **Testes do backend que passavam sem provar** (8): asserção sobre o HTML inteiro, lint que varria zero arquivos,
+    `sleep` no lugar de esperar a trava. Convenção: quem afirma "esperou a trava" consulta `pg_stat_activity`; lint
+    de varredura afirma o volume varrido.
 - **Falta:**
-  - a faixa "Onde está a matéria" ainda depende do nome do estado (nenhuma rota devolve a ordem das etapas do rito);
-  - `legislativo.votos` não tem índice por vereador: `GET /meu/votos` varre os votos da Casa;
-  - o bloco de votação encerrada do telão ainda diz "faltam votar N";
-  - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e a folha em PDF com
-    nome. Vistos em 05/10 com a semente ao vivo: telão com os nomes, TV, formulário do prazo do Executivo, resultado
-    depois de recarregar e "Minha atuação";
+  - a faixa do portal ainda é o mapa fixo (a projeção pública não carrega o rito); o chip da ficha usa o rótulo fixo e
+    a faixa o nome da Casa ("Em Plenário" e "Em Pauta" na mesma tela, na demo); `template_estado.ordem` não tem
+    validação nem significado documentado;
+  - o cockpit do vereador ainda diz "faltam N" em votação encerrada;
+  - a folha de presença (vista em 05/10, HTML e PDF, com os nomes) escreve "Sessão 10000000" (prefixo do UUID) no
+    cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`, `vice`); consertar pede decidir se o formato vira
+    `folha-sessao-v2`;
+  - em modo dev, conceder acesso grava o vínculo e devolve 500 (não há realm para provisionar);
+  - instáveis conhecidos: `mesa-audiencia.test.tsx` (cronômetro, `04:50` em vez de `00:40`) e o CPF sorteado em ~25
+    arquivos de teste do backend (colisão a cada ~8 mil corridas);
+  - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e o ato de substituir
+    anexo (precisa de envio de arquivo). Vistos em 05/10: telão com os nomes e com "não votaram", TV, formulário do
+    prazo do Executivo, resultado depois de recarregar, "Minha atuação", a faixa da ficha pelo rito e a trilha de
+    auditoria com os rótulos;
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
     acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
     (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,

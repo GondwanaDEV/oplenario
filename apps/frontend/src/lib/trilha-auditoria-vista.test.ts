@@ -41,6 +41,38 @@ describe("trilha de auditoria — a lógica pura", () => {
     expect(objeto({ ...base, decisao: "negado" }).detalhe).toMatch(/barrado pela política/);
   });
 
+  it("o resumo da ação que o servidor grava (ADR-0017 1-C) é o título, sem mudança de tela: o rótulo vem pronto, em palavras", () => {
+    // o handler não deu rótulo do objeto; o servidor gravou o rótulo do ato ("Concedeu um acesso à Casa")
+    const concedeu: RegistroTrilha = { ...base, acao: "identidade/conceder-acesso", recurso: { tipo: null, id: null, rotulo: "Concedeu um acesso à Casa" } };
+    expect(objeto(concedeu).titulo).toBe("Concedeu um acesso à Casa");
+    // o registro antigo, sem rótulo e sem recurso, segue legível como sempre (a corrente não se reescreve)
+    expect(objeto({ ...concedeu, recurso: null }).titulo).toBe("conceder acesso · Acessos e identidade");
+  });
+
+  it("a frase do ato não ganha um segundo verbo na etiqueta, e o detalhe só situa o módulo", () => {
+    const ato: RegistroTrilha = { ...base, acao: "sessoes/definir-tempos-regimentais",
+      recurso: { tipo: null, id: null, rotulo: "Definiu os tempos regimentais da tribuna", doAto: true } };
+    expect(verbo(ato).rotulo).toBe("Ato");
+    expect(objeto(ato)).toEqual({ titulo: "Definiu os tempos regimentais da tribuna", detalhe: "Sessões e atas" });
+    // a cor segue a natureza da ação
+    expect(verbo({ ...ato, acao: "identidade/revogar-acesso", recurso: { tipo: null, id: null, rotulo: "Revogou um acesso à Casa", doAto: true } }))
+      .toEqual({ rotulo: "Ato", tom: "removeu" });
+    // nome de pessoa que parece verbo ("Abreu Lima") é OBJETO: a ação continua no detalhe e a etiqueta é o verbo da rota
+    const pessoa: RegistroTrilha = { ...base, acao: "cadastros/editar-vereador", recurso: { tipo: "vereador", id: "v1", rotulo: "Abreu Lima", doAto: false } };
+    expect(verbo(pessoa).rotulo).toBe("Editou");
+    expect(objeto(pessoa)).toEqual({ titulo: "Abreu Lima", detalhe: "editar vereador · Cadastros" });
+    // rótulo de objeto continua com o verbo da ação
+    expect(verbo(base).rotulo).toBe("Aprovou");
+    // negação e falha seguem com a etiqueta própria
+    expect(verbo({ ...ato, decisao: "falhou" }).rotulo).toBe("Não concluiu");
+  });
+
+  it("tipo de recurso que a tela não conhece não vira título com pedaço de UUID", () => {
+    const antigo: RegistroTrilha = { ...base, acao: "sessoes/transicionar", recurso: { tipo: "id", id: "17d4218b-cfa8-4c29", rotulo: null } };
+    expect(objeto(antigo).titulo).toBe("transicionar · Sessões e atas");
+    expect(objeto(antigo).titulo).not.toMatch(/17d4218b/);
+  });
+
   it("quem: pessoa pelo papel; cidadão pseudonimizado; agente com 'via'", () => {
     expect(quem(base.ator)).toEqual({ nome: "Maria Secretária", papel: "Secretaria", iniciais: "MS" });
     expect(quem({ tipo: "cidadao", nome: "Cidadão #a1b2c3", papeis: [], via: null })).toMatchObject({

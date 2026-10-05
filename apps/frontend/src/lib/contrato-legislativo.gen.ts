@@ -88,6 +88,20 @@ export interface CoautorOut {
   assinadoEm: string;
 }
 
+export interface EtapaDoRitoOut {
+  chave: string;
+  rotulo: string;
+  terminal: boolean;
+}
+
+export interface RitoDaMateriaOut {
+  ordemUnica: boolean;
+  etapas: EtapaDoRitoOut[];
+  atual: EtapaDoRitoOut | null;
+  anteriores: EtapaDoRitoOut[] | null;
+  proximas: EtapaDoRitoOut[];
+}
+
 export interface FichaMateriaOut {
   proposicao: ProposicaoDetalheOut;
   tramitacao: HistoricoTramitacaoItemOut[];
@@ -99,6 +113,7 @@ export interface FichaMateriaOut {
   pareceres: ParecerResumoOut[];
   pareceresTruncado: boolean;
   coautores: CoautorOut[];
+  rito?: RitoDaMateriaOut | null;
 }
 
 export interface ObjetoResumoOut {

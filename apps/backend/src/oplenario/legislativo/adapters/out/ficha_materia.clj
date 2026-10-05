@@ -50,6 +50,18 @@
    :comissao-nome (:comissao-nome linha)
    :relator-id (->str (:relator-id linha)) :relator-nome (:relator-nome linha) :voto-relator (:voto-relator linha) :estado (:estado linha)})
 
+(defn- etapa->wire [e] {:chave (:chave e) :rotulo (:rotulo e) :terminal (boolean (:terminal e))})
+
+(defn- rito->wire
+  "O rito ja' COMPOSTO pelo controller (`logic.rito`), campo a campo — nunca o mapa de dominio cru. nil = sem rito."
+  [rito]
+  (when rito
+    {:ordem-unica (boolean (:ordem-unica rito))
+     :etapas (mapv etapa->wire (:etapas rito))
+     :atual (some-> (:atual rito) etapa->wire)
+     :anteriores (some->> (:anteriores rito) (mapv etapa->wire))
+     :proximas (mapv etapa->wire (:proximas rito))}))
+
 (defn ficha->wire
   "`proposicao-out` = ProposicaoDetalheOut JA PROJETADO (o diplomat chamou `adapters.out.proposicao/
   detalhe->wire` antes — reuso, nao duplicacao); `ficha` = {:tramitacao :tramitacao-truncado :apensadas
@@ -66,7 +78,7 @@
   CRITICO da revisao adversarial desta fatia: `(boolean nil)` = `false` anulava a UNICA trava que existe
   pra' pegar exatamente esse produtor incompleto)."
   [proposicao-out {:keys [tramitacao tramitacao-truncado apensadas apensadas-truncado
-                          emendas emendas-truncado pareceres pareceres-truncado coautores]}]
+                          emendas emendas-truncado pareceres pareceres-truncado coautores rito]}]
   (validado wire/FichaMateriaOut
             {:proposicao proposicao-out
              :tramitacao (mapv tramitacao-item->wire tramitacao)
@@ -79,5 +91,6 @@
              :pareceres-truncado pareceres-truncado
              ;; fatia 2c: so' materia de requerimento coletivo tem coautores; as demais saem com []
              :coautores (mapv (fn [c] {:nome (:vereador-nome c) :assinado-em (->str (:assinado-em c))})
-                              coautores)}
+                              coautores)
+             :rito (rito->wire rito)}
             "ficha da materia"))

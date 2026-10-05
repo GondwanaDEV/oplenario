@@ -61,6 +61,28 @@
                                          :where [:= :a.ente_id ente-id]
                                          :order-by [[:a.seq :desc]] :limit limite}))))
 
+(def acoes-de-tentativa
+  "As acoes que ABREM um par (ADR-0017, adendo de 05/10/2026): a tentativa vai antes do efeito e o desfecho depois,
+  apontando-a em `detalhe.tentativa`. O que abre par aqui e' ato do operador que o registro de efeito unico nao cobre:
+  a ENTRADA no console (a sessao nasce entre os dois registros) e comando de linha de comando sobre uma Casa."
+  #{"entrada-no-console-iniciada" "ia-orcamento-iniciado"})
+
+(defn tentativas-sem-desfecho
+  "As tentativas anteriores a `antes-de` (Instant) que nenhum registro aponta como desfecho: o ato comecou e a corrente
+  nao sabe como terminou (processo caiu, ou o desfecho nao gravou). `antes-de` existe para nao acusar o que ainda esta'
+  em curso. Mais antiga primeiro."
+  [conn ^java.time.Instant antes-de]
+  (mapv ->registro
+        (jdbc/execute! conn (sql/format {:select [:a.seq :a.id :a.em :a.operador_id :a.ente_id :a.acao :a.detalhe :a.selo]
+                                         :from [[:admin_sistema.atuacao :a]]
+                                         :where [:and
+                                                 [:in :a.acao (vec acoes-de-tentativa)]
+                                                 [:< :a.em (java.sql.Timestamp/from antes-de)]
+                                                 [:not [:exists {:select [1] :from [[:admin_sistema.atuacao :d]]
+                                                                 :where [:= [:raw "d.detalhe ->> 'tentativa'"]
+                                                                         [:cast :a.id :text]]}]]]
+                                         :order-by [[:a.seq :asc]]}))))
+
 (defn verificar-corrente
   "Recalcula a corrente inteira. {:integra? true} ou {:integra? false :quebra-em <id do 1o registro que nao confere>}."
   [conn]

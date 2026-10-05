@@ -47,3 +47,26 @@
                                             :where [:and [:= :ente_id ente-id] [:= :conversa_id conversa-id]
                                                     [:= :identidade_id identidade-id]]
                                             :limit 1}))))
+
+(defn listar
+  "As interacoes da Casa, a mais recente primeiro: de uma pessoa (`identidade-id`) ou de todas (nil, so' para o
+  auditor). `antes` (Instant, opcional) pagina pelo instante. Resumo, sem a resposta: o que a lista mostra."
+  [tx ente-id identidade-id antes limite]
+  (mapv (fn [r] (-> (comum/linha->kebab r) (update :ocorrido-em instante)))
+        (jdbc/execute! tx
+          (sql/format {:select [:id :conversa_id :identidade_id :pergunta :desfecho :ocorrido_em
+                                [[:raw "coalesce(jsonb_array_length(resposta -> 'citacoes'), 0)"] :n_fontes]
+                                [[:jsonb_array_length :propostas] :n_propostas]]
+                       :from [:integracao_ia.interacao_assistente]
+                       :where (cond-> [:and [:= :ente_id ente-id]]
+                                identidade-id (conj [:= :identidade_id identidade-id])
+                                antes (conj [:< :ocorrido_em (Timestamp/from ^Instant antes)]))
+                       :order-by [[:ocorrido_em :desc] [:id :desc]]
+                       :limit limite}))))
+
+(defn da-conversa
+  "As interacoes de uma conversa da Casa, em ordem."
+  [tx ente-id conversa-id]
+  (mapv linha (jdbc/execute! tx (sql/format {:select [:*] :from [:integracao_ia.interacao_assistente]
+                                             :where [:and [:= :ente_id ente-id] [:= :conversa_id conversa-id]]
+                                             :order-by [[:ocorrido_em :asc] [:id :asc]]}))))

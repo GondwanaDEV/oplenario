@@ -81,6 +81,12 @@ Para definir (valores comerciais do plano, na moeda da tabela de preços da IA):
 java -jar oplenario.jar ia-orcamento <ente-id> <mensal> <teto-duro> [moeda=USD]
 ```
 
+O comando deixa dois registros na atuação da Operação da Casa (aparecem na ficha dela no console): `ia-orcamento-iniciado`
+(antes de mexer, com o que valia e o que se pretende) e `ia-orcamento-definido` (depois, apontando o primeiro). A linha de
+comando não tem pessoa: o registro diz `origem: linha-de-comando`. Se a atuação estiver fora, o comando **não roda**; se só
+o registro final falhar, o comando termina com erro dizendo que o orçamento **foi** definido e a tentativa fica sem
+desfecho (a conferência `tentativas-sem-desfecho` a acusa). Rodar de novo é seguro: define de novo e registra outro par.
+
 ### Observabilidade da plataforma (Onda E)
 
 O operador vê a saúde da IA de todas as Casas em `/operacao/ia` (console, 24 h ou 7 dias): execuções, tempo de
@@ -180,3 +186,49 @@ java -jar oplenario.jar reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]
 - **Casa:** sem `--ente`, todas as do registro; `--ente` precisa estar no registro (senão sai com 2: confira o `DATABASE_URL`). Casa `encerrado` ou
   com o apagamento em curso (ADR-0018) não é tocada.
 - **Código de saída:** `0` íntegro (ou só o que o `--apagar-orfaos` limpou) · `1` sobrou divergência · `2` uso ou Casa fora do registro.
+
+## 9. Login das Câmaras: o tema do O Plenário no Keycloak e a entrada pelo CPF
+
+[ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md). Servidor e vereador entram em `/entrar` com o CPF; a
+senha (e o código do aplicativo) é pedida pelo Keycloak da Câmara, numa tela com a cara do O Plenário. Até o passo 1
+abaixo, o Keycloak de produção mostra a própria tela (em português e com o nome da Câmara, mas no visual padrão dele): o
+login funciona, só não está escondido.
+
+### Ligar (uma vez, depois de promover)
+
+1. **Imagem do Keycloak com o tema.** No Dokploy, o serviço Keycloak das Casas passa de `quay.io/keycloak/keycloak:26.0.0`
+   para o build de `apps/keycloak/Dockerfile` (contexto `apps/keycloak`). Mesma versão, mesmo banco, mesmas variáveis:
+   só entra o diretório `/opt/keycloak/themes/oplenario`. Reimplante e espere o healthcheck.
+2. **Backend:** `KEYCLOAK_TEMA_LOGIN` pode ficar ausente (padrão `oplenario`). `KEYCLOAK_TEMA_LOGIN=""` desliga o tema:
+   o login de cada Câmara volta ao padrão do Keycloak quando se reaplica a configuração dela (passo 3). O limite da
+   entrada pelo CPF é `ENTRADA_LIMITE_POR_IP` (padrão 30) por `ENTRADA_JANELA_MIN` (padrão 5) minutos.
+   **O limite conta o IP que o Traefik acrescenta ao `X-Forwarded-For`** (o último item, lido pelo frontend). Se algum
+   dia houver outro proxy ou CDN na frente do Traefik, o último item passa a ser o dele e todo mundo cai no mesmo
+   balde — rever `ipDoCliente` (`apps/frontend/src/lib/entrada-cpf.ts`) antes.
+3. **Reaplicar o login de cada Câmara** no console do operador (ficha da Câmara → "Reaplicar configuração de login",
+   `POST /operacao/casas/:ente/realm`). É o que
+   grava no realm: o nome da Câmara, o pt-BR, o tema (login e e-mail), a política de senha, a trava contra força bruta,
+   a ordem senha → código no primeiro acesso e o "voltar" do convite para `/entrar`. Idempotente; fica na atuação
+   selada.
+4. **Conferir:** abrir `https://<app>/entrar`, digitar um CPF de quem tem acesso → a tela de senha deve mostrar o nome da
+   Câmara, o cartão do O Plenário e **nenhum** campo de usuário. O título da aba é "Entrar · <nome da Câmara>".
+
+### Quem já tinha usuário antes desta mudança
+
+- **Personas da demo e quem já entrava com senha:** nada muda; continuam entrando (agora pelo CPF). Quem não tem código
+  cadastrado entra só com a senha — o código é pedido de quem o tem. Ainda não há tela para exigir o código de quem já
+  entra (o `idp/resetar-mfa!` faz isso, mas nenhuma rota o chama): um novo convite resolve, porque pede a senha e o
+  código de novo.
+- **Quem recebeu o convite antigo (só passkey) e ficou sem senha:** novo convite. Em `/administracao`, o `admin_ente`
+  concede o acesso de novo à pessoa (o convite sai outra vez); para o 1º administrador da Câmara, o operador usa
+  "Reenviar convite" no console.
+
+### Quando a pessoa diz que não consegue entrar
+
+| O que ela vê | O que é | O que fazer |
+|---|---|---|
+| "Não encontramos acesso de servidor ou vereador para este CPF" | O CPF não tem vínculo institucional **ativo** em nenhuma Câmara | Conferir em `/administracao` da Câmara se o acesso foi concedido (e não revogado) |
+| "Este CPF não tem acesso a esta Câmara" | Entrou pelo link de outra Câmara | Entrar por `/entrar` (sem o link) |
+| "Muitas tentativas a partir desta rede" | Passou de 30 consultas de CPF em 5 min no mesmo IP | Esperar; se for a rede da Câmara inteira, subir `ENTRADA_LIMITE_POR_IP` |
+| "Muitas tentativas erradas. A conta fica bloqueada por alguns minutos" | Trava do Keycloak (10 senhas erradas) | Esperar (1 a 15 min); o Keycloak destrava sozinho |
+| "Senha incorreta" e a pessoa esqueceu a senha | — | Novo convite (ver acima). O "esqueci a senha" do Keycloak fica desligado: depende do SMTP de produção |

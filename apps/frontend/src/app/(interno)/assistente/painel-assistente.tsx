@@ -30,7 +30,7 @@ export const SUGESTOES_VEREADOR = [
 const CONFIANCA_CONSULTA = "Só consulta: não protocola, não assina, não altera nada. Confira as fontes antes de usar a resposta.";
 
 export const CONFIANCA_PROPOE =
-  "Não protocola nem assina por você: quando você pede um ato, ele prepara uma proposta e você lê e decide aqui, na " +
+  "Não protocola nem assina por você: quando você pede um ato, ela prepara uma proposta e você lê e decide aqui, na " +
   "plataforma. Confira as fontes antes de usar a resposta.";
 
 function Resposta({ conversa, token }: { conversa: Conversa; token: string | null }) {
@@ -41,7 +41,7 @@ function Resposta({ conversa, token }: { conversa: Conversa; token: string | nul
   return (
     <div className="assistente-resposta">
       {passos.length > 0 && (
-        <ul className="assistente-passos" aria-label="O que o assistente consultou">
+        <ul className="assistente-passos" aria-label="O que a Clara consultou">
           {passos.map((p, i) => (
             <li key={i} className={p.ok ? undefined : "assistente-passo-falha"}>{rotuloDoPasso(p)}</li>
           ))}
@@ -129,8 +129,8 @@ export function PainelAssistente({
         <div className="assistente-marca">
           <span className="assistente-glifo" aria-hidden="true">IA</span>
           <div>
-            <h1>Assistente da Casa</h1>
-            <p className="assistente-sub">Pergunte em palavras. Ele consulta o sistema com as suas permissões e responde citando o que encontrou.</p>
+            <h1>Clara</h1>
+            <p className="assistente-sub">A assistente da Casa. Pergunte em palavras: ela consulta o sistema com as suas permissões e responde citando o que encontrou.</p>
           </div>
         </div>
         <p className="assistente-confianca">{confianca}</p>

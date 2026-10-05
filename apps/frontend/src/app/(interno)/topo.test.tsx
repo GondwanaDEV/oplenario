@@ -255,7 +255,7 @@ describe("arrumarNav — os grupos da barra", () => {
 
   it("a secretaria: as quatro portas soltas e o resto em Matérias · Sessões · Cidadão · Casa", () => {
     expect(forma(["secretario"])).toEqual([
-      "Central", "Caixa", "Busca", "Assistente",
+      "Central", "Caixa", "Busca", "Clara",
       "Matérias[Proposições,Tramitação,Recebimentos,Conferências,Jurídico,Contas,Normas]",
       "Sessões[Painéis da Mesa,Agendar sessão,Pauta,Tempos da tribuna,Gravações,Atas,Calendário]",
       "Cidadão[Atendimento,Moderação]",

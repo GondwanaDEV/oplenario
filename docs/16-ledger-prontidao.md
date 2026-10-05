@@ -2729,6 +2729,45 @@ sem causa confirmada: `caixa.test.tsx`, `notificacoes/page.test.tsx` (2 casos), 
 (`vitest.atraso.config.ts` + `vitest.atraso.setup.ts`; `ATRASO_MS`=40, `ATRASO_MOCK`=1, `ATRASO_PINTURA`=1). Os três
 falsos vermelhos conhecidos estão no cabeçalho do setup. Rodar antes de mergear teste novo de tela assíncrona.
 
+**Adendo (05/10/2026): o que o detector não vê, e a desmontagem que faltava.** Dois testes instáveis no CI não caíam
+no `test:atraso`. Os dois eram de arquivo com timers falsos, e o detector não mede esse caso (falso vermelho 2 do
+cabeçalho).
+- `mesa-audiencia.test.tsx`, "o cronômetro regride" (`expected '04:50' to be '00:40'`, CI do PR #182): o relógio
+  aparece na pintura, mas o `setInterval` que o faz andar nasce num efeito que o React roda depois. Sob carga o teste
+  chegava ao `advanceTimersByTime` antes. Reproduzido sempre ao atrasar em 40 ms o `setImmediate` que o Scheduler
+  guarda ao carregar; conserto: esperar o intervalo existir (`vi.waitFor(() => vi.getTimerCount() > 0)`).
+- `use-chamada.test.ts` (estava acima entre os "sem causa confirmada"): o arquivo não desmontava o hook entre os
+  testes. O do caso "falha na carga inicial" seguia vivo com o intervalo real e re-buscava pelo `fetch` do teste
+  seguinte, que contava 3 GET em vez de 2. Reproduzido sempre com o mesmo atraso.
+- A causa do segundo era geral: a suíte não liga `globals`, então o Testing Library não desmonta sozinho, e 74 dos 228
+  arquivos que renderizam não chamavam `cleanup` (o `rotulos-mesa` do PR #169 era outro). O `vitest.setup.ts` passa a
+  chamar `cleanup` depois de cada teste. A suíte inteira seguiu verde.
+
+## Quarta rodada de 05/10/2026 (PRs #177 a #186) — o que entrou e o que a conferência em browser achou
+
+| PR | O que fez | Como foi verificado |
+|---|---|---|
+| #177 | índice `(ente_id, vereador_id, registrado_em, votacao_id)` em `legislativo.votos` | plano da query real com Postgres e RLS; buffers 225→129 em 6.300 votos |
+| #178 | telão "não votaram N de M"; chip neutro em meus protocolos; subscrição desconhecida em palavras | testes; telão visto em browser |
+| #179 | fumaça de produção: leis, vereadores, votações, ficha pública, raiz | rodada contra a produção a partir da branch: 20 de 20 |
+| #180 | resumo em palavras para 149 das 169 escritas da trilha; teste estrutural | teste com dentes; visto em browser |
+| #181 | Trilha 3, spec E11 | `t3-e2e` verde duas vezes; uma reprovação por 404 do `next dev` a frio, consertada com aquecimento |
+| #182 | `ia-orcamento` e a entrada do operador na atuação da Operação | comando real em container; corrente íntegra |
+| #183 | 8 testes do backend que passavam sem provar | mutação plantada em 4 |
+| #184 | faixa da ficha pelo rito da Casa | visto em browser com dado real |
+| #185, #186 | linha da trilha sem verbo duplicado; etiqueta por campo do servidor | visto em browser |
+
+**Achados da conferência em browser, ainda abertos:**
+- a folha de presença escreve "Sessão 10000000" no cabeçalho e a chave do cargo na coluna Mesa (`1_secretario`);
+- o chip da ficha e a faixa usam rótulos de fontes diferentes ("Em Plenário" e "Em Pauta" para a mesma etapa);
+- `POST /identidade/acessos` devolve 500 em modo dev depois de gravar o vínculo.
+
+**Lição de processo:** o #185 foi mergeado pelo script de merge automático enquanto a revisão de segurança do commit
+ainda não tinha voltado; a correção virou o #186. O merge automático só se arma depois da última verificação.
+
+**Trilha 3:** passou a ter 11 specs (E1 a E8, E9 de autorização de leitura, E10 do balcão, E11 das entregas de 05/10).
+A E11 é a única que cria sessão e matéria próprias e as encerra no fim.
+
 ## Retriagem do exploratório de 12/09 (04/10/2026, fechada em 05/10/2026) — o que segue aberto no código de hoje
 
 Leitura do código da `main` (`8278d3bc`); um único achado foi também executado (o crítico da remessa, abaixo). "Fechado"
