@@ -32,6 +32,7 @@ import { diaLocal, horaLocal } from "@/lib/calendario-vista";
 import { lerConversaGuardada, lerHistorico, useAssistente } from "@/lib/use-assistente";
 import { comToken } from "@/lib/nav";
 import { ReportarErroIa } from "@/lib/reportar-erro-ia";
+import { useDicaAtual } from "./dica";
 import "./clara.css";
 
 export type Tamanho = "recolhido" | "aberto" | "expandido";
@@ -172,10 +173,17 @@ type EstadoHistorico = {
   itens: ItemHistorico[];
   mais: boolean;
   antes: string | null;
+  /** A busca em curso (nil = todas as conversas). */
+  q: string | null;
   mensagem?: string;
 };
 
-const HISTORICO_FECHADO: EstadoHistorico = { fase: "fechado", itens: [], mais: false, antes: null };
+const HISTORICO_FECHADO: EstadoHistorico = { fase: "fechado", itens: [], mais: false, antes: null, q: null };
+
+/** A linha desta pergunta na trilha de auditoria (cada pergunta à Clara tem a sua: `interacao_assistente` + o id). */
+export function linkDaTrilha(interacaoId: string, token: string | null): string {
+  return comToken(`/auditoria?recurso-tipo=interacao_assistente&recurso-id=${encodeURIComponent(interacaoId)}`, token);
+}
 
 function ListaDoHistorico({
   estado,
@@ -184,6 +192,7 @@ function ListaDoHistorico({
   aoAbrir,
   aoNova,
   aoMais,
+  aoBuscar,
 }: {
   estado: EstadoHistorico;
   atual: string | null;
@@ -191,15 +200,46 @@ function ListaDoHistorico({
   aoAbrir: (conversaId: string) => void;
   aoNova: () => void;
   aoMais: () => void;
+  /** Busca na pergunta e na resposta; nil limpa a busca. */
+  aoBuscar: (q: string | null) => void;
 }) {
   const itens = estado.itens;
   const grupos = agruparPorDia(itens);
+  const [termo, setTermo] = useState(estado.q ?? "");
+  const curto = termo.trim().length > 0 && termo.trim().length < 2;
   return (
     <div className="ast-hist">
-      <button className="btn btn-contorno" type="button" onClick={aoNova}>Nova conversa</button>
+      <form
+        className="busca"
+        role="search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const t = termo.trim();
+          if (t.length >= 2) aoBuscar(t);
+          else if (t.length === 0) aoBuscar(null);
+        }}
+      >
+        <label htmlFor={`${idBase}-busca`}>Buscar nas suas conversas</label>
+        <div className="linha-busca">
+          <input id={`${idBase}-busca`} type="search" value={termo} maxLength={100} onChange={(e) => setTermo(e.target.value)}
+            aria-describedby={curto ? `${idBase}-busca-dica` : undefined} />
+          <button className="btn btn-contorno btn-mini" type="submit">Buscar</button>
+        </div>
+        {curto && <p className="ast-nota" id={`${idBase}-busca-dica`}>Escreva pelo menos 2 letras.</p>}
+      </form>
+      {estado.q ? (
+        <p className="ast-nota ast-busca-ativa">
+          <span>Conversas com “{estado.q}”</span>
+          <button className="ast-limpar" type="button" onClick={() => { setTermo(""); aoBuscar(null); }}>Limpar busca</button>
+        </p>
+      ) : (
+        <button className="btn btn-contorno" type="button" onClick={aoNova}>Nova conversa</button>
+      )}
       {estado.fase === "carregando" && itens.length === 0 && <p className="ast-nota" role="status">Abrindo o histórico…</p>}
       {estado.fase === "pronto" && itens.length === 0 && (
-        <p className="ast-nota">Nenhuma conversa ainda. As suas perguntas à Clara aparecem aqui.</p>
+        <p className="ast-nota" role="status">
+          {estado.q ? `Nenhuma conversa com “${estado.q}”.` : "Nenhuma conversa ainda. As suas perguntas à Clara aparecem aqui."}
+        </p>
       )}
       {grupos.map((g, gi) => (
         <div key={`${g.rotulo}-${gi}`}>
@@ -243,7 +283,7 @@ function quando(c: ConversaGuardada): string {
 }
 
 /** O bloco "Registro desta conversa": o que o histórico guardou e se confere com o hash gravado. */
-function RegistroDaConversa({ conversa, token }: { conversa: ConversaGuardada; token: string | null }) {
+export function RegistroDaConversa({ conversa, token }: { conversa: ConversaGuardada; token: string | null }) {
   const modelos = [...new Set(conversa.interacoes.map((i) => i.modelo).filter(Boolean))];
   const citacoes = conversa.interacoes.flatMap((i) => i.resposta?.citacoes ?? []);
   const conferidas = citacoes.filter((c) => c.status === "conferida").length;
@@ -272,7 +312,11 @@ function RegistroDaConversa({ conversa, token }: { conversa: ConversaGuardada; t
         </dd>
         <dt>Trilha</dt>
         <dd>
-          <Link href={comToken("/auditoria", token)}>Ver na trilha de auditoria</Link>
+          {perguntas === 1 ? (
+            <Link href={linkDaTrilha(conversa.interacoes[0].id, token)}>Ver na trilha de auditoria</Link>
+          ) : (
+            "Uma linha por pergunta: o link fica em cada uma"
+          )}
         </dd>
       </dl>
     </div>
@@ -294,6 +338,7 @@ export function Clara({
   tamanhoInicial?: Tamanho;
 }) {
   const ids = useId();
+  const dica = useDicaAtual();
   const [tamanho, setTamanho] = useState<Tamanho>(tamanhoInicial);
   const [vista, setVista] = useState<Vista>("conversa");
   const [pergunta, setPergunta] = useState("");
@@ -327,12 +372,16 @@ export function Clara({
     let quadro = 0;
     const medir = () => {
       quadro = 0;
-      const topo = document.querySelector<HTMLElement>(".topo");
-      const comando = document.querySelector<HTMLElement>(".comando");
+      // o cabeçalho das telas internas (.topo) ou do app do vereador (.app-topo)
+      const topo = document.querySelector<HTMLElement>(".topo, .app-topo");
       raiz.style.setProperty("--topo-altura", `${topo?.offsetHeight ?? 0}px`);
-      // do topo da barra até o fim da janela (não o offsetHeight: a barra pode não encostar no rodapé)
-      const r = comando?.getBoundingClientRect();
-      const altura = r && r.height > 0 ? Math.max(0, Math.round(window.innerHeight - r.top)) : 0;
+      // as barras fixas no rodapé: a de comando das telas internas (.comando) e as abas do app do vereador (.tabbar);
+      // do topo da mais alta até o fim da janela (não o offsetHeight: a barra pode não encostar no rodapé)
+      let altura = 0;
+      for (const barra of document.querySelectorAll<HTMLElement>(".comando, .tabbar")) {
+        const r = barra.getBoundingClientRect();
+        if (r.height > 0) altura = Math.max(altura, Math.round(window.innerHeight - r.top));
+      }
       raiz.style.setProperty("--comando-altura", `${altura}px`);
     };
     const agendar = () => {
@@ -388,14 +437,15 @@ export function Clara({
     return () => document.removeEventListener("keydown", tecla);
   }, [tamanho, celular, mudarTamanho]);
 
-  // `continuar`: a próxima página (depois do último item carregado); sem ele, do começo.
+  // `continuar`: a próxima página (depois do último item carregado); sem ele, do começo. `q`: a busca (undefined =
+  // mantém a atual; nil = todas).
   const carregarHistorico = useCallback(
-    async (continuar = false) => {
-      const base = continuar ? historico : HISTORICO_FECHADO;
+    async (continuar = false, q?: string | null) => {
+      const base: EstadoHistorico = continuar ? historico : { ...HISTORICO_FECHADO, q: q === undefined ? historico.q : q };
       setHistorico({ ...base, fase: "carregando" });
-      const r = await lerHistorico(token, base.antes);
+      const r = await lerHistorico(token, { antes: base.antes, q: base.q });
       if (typeof r === "string") setHistorico({ ...base, fase: "erro", mensagem: r });
-      else setHistorico({ fase: "pronto", itens: [...base.itens, ...r.interacoes], mais: r.mais, antes: r.antes });
+      else setHistorico({ fase: "pronto", itens: [...base.itens, ...r.interacoes], mais: r.mais, antes: r.antes, q: base.q });
     },
     [token, historico],
   );
@@ -443,6 +493,19 @@ export function Clara({
     campo.current?.focus();
   }
 
+  /** Põe o começo da pergunta no campo e o cursor no fim; a pessoa termina e envia. */
+  function comecarPergunta(inicio: string) {
+    setGuardada(null);
+    setVista("conversa");
+    setPergunta(inicio);
+    requestAnimationFrame(() => {
+      const c = campo.current;
+      if (!c) return;
+      c.focus();
+      c.setSelectionRange(inicio.length, inicio.length);
+    });
+  }
+
   function alternarHistorico() {
     const v = vista === "historico" ? "conversa" : "historico";
     setVista(v);
@@ -463,6 +526,7 @@ export function Clara({
       aoAbrir={(id) => void abrirGuardada(id)}
       aoNova={comecarNova}
       aoMais={() => void carregarHistorico(true)}
+      aoBuscar={(q) => void carregarHistorico(false, q)}
     />
   );
 
@@ -529,6 +593,18 @@ export function Clara({
           <p className="ast-sub">Assistente da Casa. Consulta o sistema com o seu acesso e não faz nada por você.</p>
         </div>
 
+        {/* a dica da tela: só começa a pergunta — a Clara consulta o sistema, a tela nunca é fonte */}
+        {dica && !lateral && (
+          <div className="ast-contexto">
+            <span>
+              Nesta tela: <b>{dica.rotulo}</b>
+            </span>
+            <button className="btn btn-contorno btn-mini" type="button" onClick={() => comecarPergunta(dica.inicio)}>
+              {dica.acao}
+            </button>
+          </div>
+        )}
+
         {lateral && (
           <nav className="ast-lateral" aria-label="Suas conversas">
             {lista}
@@ -560,6 +636,9 @@ export function Clara({
                         {i.pergunta}
                       </div>
                       <RespostaClara conversa={conversaDaInteracao(i)} token={token} guardada />
+                      {guardada.conversa.interacoes.length > 1 && (
+                        <Link className="ast-na-trilha" href={linkDaTrilha(i.id, token)}>Ver esta pergunta na trilha</Link>
+                      )}
                     </div>
                   ))}
                 </>

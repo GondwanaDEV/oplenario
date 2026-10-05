@@ -90,8 +90,8 @@ jobs:
             if (!ok) rec('login', 'ERRO', 'login da persona apresentacao falhou (id do seed atual?)');
 
             // ---------- telas ----------
-            await tela(ctx, '/assistente', '1-assistente', /Assistente da Casa/);
-            await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /Assistente da Casa/);
+            await tela(ctx, '/assistente', '1-assistente', /A assistente da Casa\. Pergunte em palavras/);
+            await tela(ctx, '/vereador/assistente', '2-vereador-assistente', /A assistente da Casa\. Pergunte em palavras/);
             await tela(ctx, '/normas', '3-normas', /Normas da Casa/);
             await tela(ctx, '/propostas', '4-propostas', /Propostas do assistente/);
             await tela(ctx, '/conferencias', '5-conferencias', /Confer[eê]ncia das proposi[cç][oõ]es/);

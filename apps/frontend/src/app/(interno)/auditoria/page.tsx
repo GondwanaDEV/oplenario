@@ -5,13 +5,19 @@
 // próprios; qualquer pessoa = a própria trilha) e a tela só diz qual recorte é. O lacre de integridade e a exportação
 // são do auditor — aparecem só quando o escopo é a Casa inteira (o servidor também os nega aos outros).
 //
+// Um registro só: `?recurso-tipo=…&recurso-id=…` (o link "Ver esta pergunta na trilha" da Clara, ADR-0024) recorta a
+// trilha aos eventos daquele registro, desde o início — o período não vale; a exportação segue o mesmo recorte.
+//
 // Desvios do design e por quê: lib/trilha-auditoria-vista.ts.
 
 import { useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { comToken } from "@/lib/nav";
 import {
   ATORES, CLASSES, FILTRO_INICIAL, OBJETOS, PERIODOS, canal, decisaoEmPalavras, explicacaoDoEscopo, lacre, numero, objeto, quando, quem,
-  rotuloDoEscopo, seloCurto, verbo, type Filtro, type RegistroTrilha,
+  recursoDaUrl, rotuloDoEscopo, rotuloDoRecursoFiltrado, seloCurto, verbo, type Filtro, type RegistroTrilha,
 } from "@/lib/trilha-auditoria-vista";
 import { exportarTrilha, useIntegridade, useTrilhaAuditoria } from "@/lib/use-trilha-auditoria";
 import { TopoInterno } from "../topo";
@@ -86,14 +92,18 @@ function Evento({ r }: { r: RegistroTrilha }) {
 
 export default function PaginaAuditoria() {
   const { token } = useAuth();
+  const params = useSearchParams();
   const [agora] = useState(() => new Date());
-  const [filtro, setFiltro] = useState<Filtro>(FILTRO_INICIAL);
+  const [escolhido, setFiltro] = useState<Filtro>(FILTRO_INICIAL);
   const [exportando, setExportando] = useState<"ocioso" | "enviando" | "erro">("ocioso");
+  // o recorte por registro vem da URL a cada render (nunca copiado para o estado): "Ver toda a trilha" só troca a URL
+  const recurso = params ? recursoDaUrl((k) => params.get(k)) : null;
+  const filtro: Filtro = { ...escolhido, recurso };
   const { trilha, estado, carregarMais, maisEstado } = useTrilhaAuditoria(filtro, token, agora);
   const daCasa = trilha?.escopo === "casa";
   const integridade = useIntegridade(daCasa, token);
   const l = lacre(integridade.dados, integridade.estado);
-  const periodo = PERIODOS.find((p) => p.valor === filtro.periodo)!.rotulo;
+  const periodo = recurso ? "todo o histórico" : PERIODOS.find((p) => p.valor === filtro.periodo)!.rotulo;
 
   function mudar<K extends keyof Filtro>(k: K, v: Filtro[K]) {
     setFiltro((f) => ({ ...f, [k]: v }));
@@ -132,15 +142,36 @@ export default function PaginaAuditoria() {
             </div>
           </div>
         )}
+        {daCasa && (
+          <div className="aud-atalho">
+            <Link className="btn btn-contorno btn-mini" href={comToken("/auditoria/clara", token)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4z" />
+              </svg>
+              Conversas com a Clara
+            </Link>
+            <span>Cada pergunta feita à assistente da Casa, com a resposta e as fontes.</span>
+          </div>
+        )}
         {trilha && explicacaoDoEscopo(trilha.escopo) && <p className="aud-escopo">{explicacaoDoEscopo(trilha.escopo)}</p>}
 
-        <form className="filtros" aria-label="Filtrar a trilha" onSubmit={(e) => e.preventDefault()}>
-          <div className="campo">
-            <label htmlFor="f-per">Período</label>
-            <select id="f-per" value={filtro.periodo} onChange={(e) => mudar("periodo", e.target.value as Filtro["periodo"])}>
-              {PERIODOS.map((p) => <option key={p.valor} value={p.valor}>{p.rotulo}</option>)}
-            </select>
+        {recurso && (
+          <div className="aud-recorte">
+            <span className="chip chip-info">{rotuloDoRecursoFiltrado(recurso)}</span>
+            <span className="aud-recorte-txt">Desde o início, sem o filtro de período.</span>
+            <Link className="btn btn-contorno btn-mini" href={comToken("/auditoria", token)}>Ver toda a trilha</Link>
           </div>
+        )}
+
+        <form className="filtros" aria-label="Filtrar a trilha" onSubmit={(e) => e.preventDefault()}>
+          {!recurso && (
+            <div className="campo">
+              <label htmlFor="f-per">Período</label>
+              <select id="f-per" value={filtro.periodo} onChange={(e) => mudar("periodo", e.target.value as Filtro["periodo"])}>
+                {PERIODOS.map((p) => <option key={p.valor} value={p.valor}>{p.rotulo}</option>)}
+              </select>
+            </div>
+          )}
           <div className="campo">
             <label htmlFor="f-ator">Ator</label>
             <select id="f-ator" value={filtro.ator} onChange={(e) => mudar("ator", e.target.value)}>

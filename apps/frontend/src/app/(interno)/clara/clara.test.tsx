@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { AVISO_DE_REGISTRO, Clara } from "./clara";
+import { ProvedorDaDica, dicaDaMateria, useDicaDaClara } from "./dica";
 
 const SSE = (conversa: string, interacao = "i-1") =>
   [
@@ -174,7 +175,13 @@ describe("Clara — o painel retrátil", () => {
     expect(within(registro).getByText("openai/gpt-oss-120b")).toBeTruthy();
     expect(within(registro).getByText("1 de 1 citações conferidas")).toBeTruthy();
     expect(within(registro).getByText("Confere com o que foi gravado")).toBeTruthy();
-    expect(within(registro).getByRole("link", { name: "Ver na trilha de auditoria" }).getAttribute("href")).toMatch(/^\/auditoria/);
+    // duas perguntas: cada uma tem a sua linha na trilha, e o link fica embaixo de cada uma
+    expect(within(registro).getByText("Uma linha por pergunta: o link fica em cada uma")).toBeTruthy();
+    const links = screen.getAllByRole("link", { name: "Ver esta pergunta na trilha" }).map((l) => l.getAttribute("href"));
+    expect(links).toEqual([
+      "/auditoria?recurso-tipo=interacao_assistente&recurso-id=i-1&token=tok",
+      "/auditoria?recurso-tipo=interacao_assistente&recurso-id=i-2&token=tok",
+    ]);
     expect(screen.getByText("E o relator?")).toBeTruthy();
     expect(screen.getByText(/Ficou sem resposta: a Clara estava indisponível/)).toBeTruthy();
     expect(screen.queryByLabelText("Sua pergunta")).toBeNull();
@@ -265,5 +272,58 @@ describe("Clara — o painel retrátil", () => {
     } finally {
       HTMLElement.prototype.getBoundingClientRect = original;
     }
+  });
+
+  it("busca nas conversas: vai ao core com q, diz quando não achou e limpa", async () => {
+    const fetchMock = mockar({
+      "/api/agente/historico": [{ json: HISTORICO() }, { json: { interacoes: [], mais: false, antes: null } }, { json: HISTORICO() }],
+    });
+    render(<Clara token="tok" />);
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Histórico de conversas" }));
+    await screen.findByText("Hoje");
+    const busca = screen.getByLabelText("Buscar nas suas conversas");
+    fireEvent.change(busca, { target: { value: "v" } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(screen.getByText("Escreva pelo menos 2 letras.")).toBeTruthy();
+    fireEvent.change(busca, { target: { value: " veto " } });
+    fireEvent.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByText("Nenhuma conversa com “veto”.")).toBeTruthy();
+    expect(fetchMock.mock.calls.map(([u]) => u)).toContain("/api/agente/historico?q=veto");
+    expect(screen.queryByRole("button", { name: "Nova conversa" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Limpar busca" }));
+    expect(await screen.findByText("Hoje")).toBeTruthy();
+    expect(fetchMock.mock.calls.filter(([u]) => u === "/api/agente/historico")).toHaveLength(2);
+  });
+
+  it("a dica da tela: 'Nesta tela: PL 42/2026' começa a pergunta no campo, sem enviar nada", async () => {
+    const fetchMock = mockar({});
+    function Ficha() {
+      useDicaDaClara(dicaDaMateria("projeto_lei", 42, 2026));
+      return <p>a ficha</p>;
+    }
+    render(
+      <ProvedorDaDica>
+        <Ficha />
+        <Clara token="tok" />
+      </ProvedorDaDica>,
+    );
+    abrir();
+    expect(screen.getByText("PL 42/2026")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar sobre esta matéria" }));
+    const campo = screen.getByLabelText("Sua pergunta") as HTMLTextAreaElement;
+    expect(campo.value).toBe("Sobre o PL 42/2026, ");
+    await vi.waitFor(() => expect(document.activeElement).toBe(campo));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sem dica (a tela não diz do que trata), a faixa não aparece", () => {
+    render(
+      <ProvedorDaDica>
+        <Clara token="tok" />
+      </ProvedorDaDica>,
+    );
+    abrir();
+    expect(screen.queryByText(/Nesta tela/)).toBeNull();
   });
 });

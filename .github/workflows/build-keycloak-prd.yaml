@@ -1,17 +1,18 @@
 name: Build/Deploy Keycloak das Casas (prd)
 
 # ADR-0025, docs/27 secao 9, passo 1: o Keycloak das Casas passa a rodar a imagem de `apps/keycloak/Dockerfile` (a mesma
-# 26.0.0 + o diretorio do tema `oplenario`). Mesma versao, mesmo banco, mesmas variaveis e o mesmo comando do app no
-# Dokploy: so' a imagem muda.
+# 26.0.0 + o diretorio do tema `oplenario`). Mesma versao, mesmo banco, mesmas variaveis e o mesmo comando: so' a imagem
+# muda.
 #
 # 1. publica a imagem no GHCR (`:latest` e `:<sha>`; o Dokploy recebe a do sha, que nao muda por baixo dele);
-# 2. acha o app do Keycloak das Casas no Dokploy PELO DOMINIO (o do operador e' outro Keycloak, ADR-0016, e nao e'
-#    tocado). Sem exatamente um app com esse dominio, para sem mexer em nada e lista o que viu;
-# 3. guarda a imagem e o acesso ao registro que o app tinha, troca para a nova e reimplanta;
-# 4. confere pelo Keycloak (serverinfo do admin) que o tema `oplenario` esta' carregado. Se nao aparecer, VOLTA a imagem
-#    anterior, reimplanta e falha.
+# 2. acha no Dokploy o COMPOSE do Keycloak das Casas pelo nome do container que a API usa (KEYCLOAK_BASE_URL da API); o
+#    Keycloak do operador e' outro (ADR-0016) e nao e' tocado. Sem exatamente um, para sem mexer em nada;
+# 3. guarda o compose como estava, troca so' a linha `image:` do Keycloak e reimplanta;
+# 4. confere pelo Keycloak (serverinfo do admin) que o tema `oplenario` esta' carregado. Se nao aparecer em 12 min,
+#    VOLTA o compose anterior, reimplanta e falha.
 #
-# Depois disto, os realms das Camaras usam o tema quando a configuracao de login e' reaplicada (reaplicar-login-prd).
+# Os realms usam o tema pelo `loginTheme` que o reaplicar-login-prd grava (antes do tema chegar, o Keycloak cai no
+# padrao, com um erro no log dele).
 
 on:
   push:
@@ -22,7 +23,6 @@ on:
   workflow_dispatch:
 
 env:
-  DOMINIO_KC: keycloak.calvetec.com.br
   KC: https://keycloak.calvetec.com.br
   REPO_IMAGEM: ghcr.io/gondwanadev/oplenario-keycloak-prd
 
@@ -61,71 +61,75 @@ jobs:
             ${{ env.REPO_IMAGEM }}:${{ github.sha }}
           platforms: linux/amd64
 
+      # O Keycloak das Casas e' um COMPOSE no Dokploy (servico `keycloak`), e a API fala com ele pelo nome do container
+      # (`<appName do compose>-<servico>-<n>`, na KEYCLOAK_BASE_URL da API). E' por esse nome que ele e' achado: o
+      # Keycloak do operador e' outro e nao casa. Sem exatamente um compose, sem o compose guardado no proprio Dokploy
+      # (sourceType raw) ou sem exatamente uma linha `image: quay.io/keycloak/keycloak:...`, para sem mexer em nada.
       - name: Achar o Keycloak das Casas no Dokploy
         id: app
         run: |
           set -euo pipefail
           umask 077
           get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
-          ids=$(get project.all | jq -r '[.. | objects | select(has("applicationId")) | .applicationId] | unique | .[]')
+          kc_url=$(get "application.one?applicationId=$APP_CORE" | jq -r '.env // ""' \
+                   | sed -n 's/^[[:space:]]*KEYCLOAK_BASE_URL=["'"'"']\{0,1\}\([^"'"'"']*\).*/\1/p' | head -1)
+          host=$(sed -E 's#^[a-z]+://##; s#[:/].*$##' <<< "$kc_url")
+          [ -n "$host" ] || { echo "::error::a API nao tem KEYCLOAK_BASE_URL no Dokploy: nada foi trocado"; exit 1; }
+          echo "a API fala com o Keycloak em: $host"
+          ids=$(get project.all | jq -r '[.. | objects | select(has("composeId")) | .composeId] | unique | .[]')
           achados=()
           for id in $ids; do
-            get "application.one?applicationId=$id" > "$RUNNER_TEMP/app.json"
-            # so' o que parece Keycloak vai ao log (o Dokploy tem apps de outros projetos)
-            jq -r 'select((.appName // "") + (.name // "") + (.dockerImage // "") | test("keycloak"; "i"))
-                   | "app: \(.appName)\t\(.sourceType // "?")\t\(.dockerImage // "-")\t\([.domains[]?.host] | join(","))"' \
-              "$RUNNER_TEMP/app.json"
-            if jq -e --arg d "$DOMINIO_KC" '[.domains[]?.host] | index($d)' "$RUNNER_TEMP/app.json" > /dev/null; then
+            get "compose.one?composeId=$id" > "$RUNNER_TEMP/compose.json"
+            an=$(jq -r '.appName // ""' "$RUNNER_TEMP/compose.json")
+            if [ -n "$an" ] && [[ "$host" == "$an"-* ]]; then
+              echo "compose: $an ($(jq -r '.sourceType // "?"' "$RUNNER_TEMP/compose.json"))"
               achados+=("$id")
-              cp "$RUNNER_TEMP/app.json" "$RUNNER_TEMP/keycloak.json"
+              cp "$RUNNER_TEMP/compose.json" "$RUNNER_TEMP/keycloak.json"
             fi
           done
-          rm -f "$RUNNER_TEMP/app.json"
+          rm -f "$RUNNER_TEMP/compose.json"
           if [ "${#achados[@]}" -ne 1 ]; then
-            echo "::error::esperava 1 app com o dominio $DOMINIO_KC no Dokploy, achei ${#achados[@]}: nada foi trocado"
+            echo "::error::esperava 1 compose do container $host no Dokploy, achei ${#achados[@]}: nada foi trocado"
             exit 1
           fi
           tipo=$(jq -r '.sourceType // ""' "$RUNNER_TEMP/keycloak.json")
-          if [ "$tipo" != "docker" ]; then
-            echo "::error::o app do Keycloak nao usa imagem Docker (sourceType=$tipo): nada foi trocado"
+          if [ "$tipo" != "raw" ]; then
+            echo "::error::o compose do Keycloak nao fica no Dokploy (sourceType=$tipo): nada foi trocado"
             exit 1
           fi
+          jq -r '.composeFile // ""' "$RUNNER_TEMP/keycloak.json" > "$RUNNER_TEMP/compose-anterior.yml"
+          n=$(grep -cE '^[[:space:]]*image:[[:space:]]*["'"'"']?quay\.io/keycloak/keycloak:' "$RUNNER_TEMP/compose-anterior.yml" || true)
+          if [ "$n" != "1" ]; then
+            echo "::error::esperava 1 linha 'image: quay.io/keycloak/keycloak:...' no compose, achei $n: nada foi trocado"
+            exit 1
+          fi
+          echo "imagem atual: $(grep -E '^[[:space:]]*image:[[:space:]]*["'"'"']?quay\.io/keycloak/keycloak:' "$RUNNER_TEMP/compose-anterior.yml" | sed 's/^[[:space:]]*//')"
           id="${achados[0]}"
           echo "::add-mask::$id"
-          senha=$(jq -r '.password // ""' "$RUNNER_TEMP/keycloak.json")
-          [ -n "$senha" ] && echo "::add-mask::$senha"
-          # o que o app tinha, para voltar atras (o acesso ao registro como estava; nulo vira texto vazio, que o Dokploy
-          # le como "sem login", igual ao nulo)
-          jq --arg id "$id" '{applicationId: $id, dockerImage, username: (.username // ""), password: (.password // ""),
-                              registryUrl: (.registryUrl // "")}' \
-            "$RUNNER_TEMP/keycloak.json" > "$RUNNER_TEMP/anterior.json"
-          echo "imagem atual: $(jq -r '.dockerImage' "$RUNNER_TEMP/anterior.json")"
+          jq -n --arg id "$id" --rawfile f "$RUNNER_TEMP/compose-anterior.yml" '{composeId: $id, composeFile: $f}' \
+            > "$RUNNER_TEMP/anterior.json"
           echo "id=$id" >> "$GITHUB_OUTPUT"
           rm -f "$RUNNER_TEMP/keycloak.json"
 
-      # O acesso ao GHCR: o mesmo que a API ja' usa no Dokploy, se ela o guarda no app; senao, o token do GHCR daqui.
+      # So' a linha da imagem muda (a indentacao e o resto do compose ficam). O servidor do Dokploy puxa do GHCR com o
+      # login que ja' usa para as imagens da API; sem ele o deploy falha, o Keycloak antigo segue no ar e o passo
+      # seguinte volta o compose.
       - name: Trocar a imagem e reimplantar
         env:
           ID: ${{ steps.app.outputs.id }}
-          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
-          ATOR: ${{ github.actor }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           umask 077
-          get() { curl --fail-with-body -sS -H "x-api-key: $DK_KEY" -H 'accept: application/json' "$DK/$1"; }
           post() { curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' -d @- "$DK/$1" > /dev/null; }
-          get "application.one?applicationId=$APP_CORE" | jq '{username, password, registryUrl}' > "$RUNNER_TEMP/acesso.json"
-          if [ -n "$(jq -r '.username // ""' "$RUNNER_TEMP/acesso.json")" ]; then
-            echo "acesso ao registro: o da API"
-          else
-            echo "acesso ao registro: o token do GHCR"
-            jq -n --arg u "$ATOR" --arg p "$GHCR_TOKEN" '{username: $u, password: $p, registryUrl: "ghcr.io"}' > "$RUNNER_TEMP/acesso.json"
-          fi
-          jq --arg id "$ID" --arg img "$REPO_IMAGEM:$SHA" '. + {applicationId: $id, dockerImage: $img}' \
-            "$RUNNER_TEMP/acesso.json" | post application.saveDockerProvider
-          rm -f "$RUNNER_TEMP/acesso.json"
-          jq -n --arg id "$ID" '{applicationId: $id}' | post application.deploy
+          sed -E "s#^([[:space:]]*image:[[:space:]]*)[\"']?quay\.io/keycloak/keycloak:[^\"'[:space:]]*[\"']?#\1$REPO_IMAGEM:$SHA#" \
+            "$RUNNER_TEMP/compose-anterior.yml" > "$RUNNER_TEMP/compose-novo.yml"
+          diff "$RUNNER_TEMP/compose-anterior.yml" "$RUNNER_TEMP/compose-novo.yml" | grep -E '^[<>]' | sed 's/^/  /' || true
+          [ "$(diff "$RUNNER_TEMP/compose-anterior.yml" "$RUNNER_TEMP/compose-novo.yml" | grep -c '^>')" = "1" ] \
+            || { echo "::error::a troca nao mudou exatamente uma linha: nada foi gravado"; exit 1; }
+          jq -n --arg id "$ID" --rawfile f "$RUNNER_TEMP/compose-novo.yml" '{composeId: $id, composeFile: $f}' \
+            | post compose.update
+          jq -n --arg id "$ID" '{composeId: $id}' | post compose.deploy
           echo "deploy disparado: $REPO_IMAGEM:$SHA"
 
       - name: Conferir o tema no Keycloak (ou voltar atras)
@@ -146,27 +150,27 @@ jobs:
             if tem_tema; then echo "tema oplenario carregado no Keycloak (tentativa $i)"; exit 0; fi
             sleep 15
           done
-          echo "::error::o tema nao apareceu em 12 min: voltando a imagem anterior"
+          echo "::error::o tema nao apareceu em 12 min: voltando o compose anterior"
           if ! curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" -H 'Content-Type: application/json' \
-                 -d @"$RUNNER_TEMP/anterior.json" "$DK/application.saveDockerProvider" > /dev/null; then
-            echo "::error::o Dokploy recusou a volta da imagem: trocar a mao para $(jq -r '.dockerImage' "$RUNNER_TEMP/anterior.json")"
+                 -d @"$RUNNER_TEMP/anterior.json" "$DK/compose.update" > /dev/null; then
+            echo "::error::o Dokploy recusou a volta do compose: no compose do Keycloak, voltar a imagem para quay.io/keycloak/keycloak:26.0.0"
             exit 1
           fi
-          if ! jq -n --arg id "$ID" '{applicationId: $id}' | curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" \
-                 -H 'Content-Type: application/json' -d @- "$DK/application.deploy" > /dev/null; then
-            echo "::error::a imagem anterior foi gravada, mas o deploy nao foi disparado: reimplantar no Dokploy"
+          if ! jq -n --arg id "$ID" '{composeId: $id}' | curl --fail-with-body -sS -X POST -H "x-api-key: $DK_KEY" \
+                 -H 'Content-Type: application/json' -d @- "$DK/compose.deploy" > /dev/null; then
+            echo "::error::o compose anterior foi gravado, mas o deploy nao foi disparado: reimplantar no Dokploy"
             exit 1
           fi
           for i in $(seq 1 40); do
             if curl -sf -o /dev/null --max-time 15 "$KC/realms/master"; then
-              echo "Keycloak de volta com a imagem anterior ($(jq -r '.dockerImage' "$RUNNER_TEMP/anterior.json"))"
+              echo "Keycloak de volta com o compose anterior"
               exit 1
             fi
             sleep 15
           done
-          echo "::error::o Keycloak nao voltou em 10 min depois da troca de volta: conferir no Dokploy AGORA"
+          echo "::error::o Keycloak nao voltou em 10 min depois da volta do compose: conferir no Dokploy AGORA"
           exit 1
 
       - name: Limpar
         if: always()
-        run: rm -f "$RUNNER_TEMP/anterior.json" "$RUNNER_TEMP/acesso.json" "$RUNNER_TEMP/keycloak.json" "$RUNNER_TEMP/app.json"
+        run: rm -f "$RUNNER_TEMP"/anterior.json "$RUNNER_TEMP"/keycloak.json "$RUNNER_TEMP"/compose*.yml "$RUNNER_TEMP"/compose.json

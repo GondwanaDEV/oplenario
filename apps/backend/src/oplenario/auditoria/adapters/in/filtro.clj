@@ -30,10 +30,36 @@
 (defn- do-vocabulario [campo vocab s]
   (when-not (str/blank? s) (if (vocab s) s (invalido! campo))))
 
+(def ^:private recurso-tipo-re #"^[a-z_-]{1,40}$")
+(def ^:private recurso-id-re #"^[A-Za-z0-9._:-]{1,80}$")
+
+(defn- recurso
+  "O par `recurso-tipo` + `recurso-id` (\"o que aconteceu com ESTE objeto\"): os dois juntos ou nenhum. So' um deles,
+  ou um valor fora do formato, e' 400 — o filtro pela metade devolveria a trilha de todos os objetos do tipo."
+  [tipo id]
+  (let [texto (fn [campo v] (cond (nil? v) nil
+                                  (not (string? v)) (invalido! campo)   ; o parametro repetido chega como colecao
+                                  (str/blank? v) nil
+                                  :else v))
+        tipo (texto :recurso-tipo tipo)
+        id   (texto :recurso-id id)]
+    (cond
+      (and (nil? tipo) (nil? id)) nil
+      (nil? tipo) (invalido! :recurso-tipo)
+      (nil? id) (invalido! :recurso-id)
+      (not (re-matches recurso-tipo-re tipo)) (invalido! :recurso-tipo)
+      (not (re-matches recurso-id-re id)) (invalido! :recurso-id)
+      :else {:recurso-tipo tipo :recurso-id id})))
+
 (defn query->filtro
-  "{\"desde\" \"ate\" \"ator\" \"classe\" \"objeto\" \"antes-de\"} (datas AAAA-MM-DD, dia civil da Casa; `ate` inclusivo)."
+  "{\"desde\" \"ate\" \"ator\" \"classe\" \"objeto\" \"recurso-tipo\" \"recurso-id\" \"antes-de\"} (datas AAAA-MM-DD,
+  dia civil da Casa; `ate` inclusivo). `recurso-tipo` (`[a-z_-]{1,40}`: vem do nome do parametro de caminho, que
+  pode ter hifen, como `vinculo-ativo`) e `recurso-id` (`[A-Za-z0-9._:-]{1,80}`) vem JUNTOS — o registro do objeto
+  (ex.: `proposicao` + o uuid): so' um deles, ou fora do formato, e' 400. Vale tambem para a exportacao (o mesmo
+  filtro) e soma ao escopo do papel, nunca o alarga."
   [q]
   (let [g #(get q % (get q (name %)))
+        rec   (recurso (g :recurso-tipo) (g :recurso-id))
         desde (dia :desde (g :desde))
         ate   (dia :ate (g :ate))
         antes (when-let [s (not-empty (g :antes-de))]
@@ -46,4 +72,5 @@
       (= sem-desfecho (g :classe)) (assoc :sem-desfecho true)
       (and (g :classe) (not= sem-desfecho (g :classe))) (assoc :classe (do-vocabulario :classe classes (g :classe)))
       (g :objeto) (assoc :objeto (do-vocabulario :objeto objetos (g :objeto)))
+      rec   (merge rec)
       antes (assoc :antes-de antes))))

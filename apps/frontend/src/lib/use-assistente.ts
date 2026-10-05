@@ -91,10 +91,24 @@ export type PaginaDoHistorico = { interacoes: ItemHistorico[]; mais: boolean; an
 export const ERRO_HISTORICO = "Não foi possível abrir o histórico agora. Tente de novo em instantes.";
 export const ERRO_CONVERSA_GUARDADA = "Não foi possível abrir esta conversa agora. Tente de novo em instantes.";
 
-export async function lerHistorico(token: string | null, antes?: string | null): Promise<PaginaDoHistorico | string> {
+/** O recorte do histórico: `antes` pagina; `q` busca na pergunta e na resposta (2 a 100 caracteres); `pessoa` e
+ *  `escopo: "casa"` são só do auditor (o core nega a quem não é — e grava a leitura na trilha). */
+export type RecorteDoHistorico = { antes?: string | null; q?: string | null; pessoa?: string | null; escopo?: "casa" | null };
+
+export function queryDoHistorico(r: RecorteDoHistorico = {}): string {
+  const p = new URLSearchParams();
+  if (r.escopo) p.set("escopo", r.escopo);
+  if (r.pessoa) p.set("pessoa", r.pessoa);
+  const q = r.q?.trim();
+  if (q && q.length >= 2) p.set("q", q.slice(0, 100));
+  if (r.antes) p.set("antes", r.antes);
+  const s = p.toString();
+  return s ? `?${s}` : "";
+}
+
+export async function lerHistorico(token: string | null, recorte: RecorteDoHistorico = {}): Promise<PaginaDoHistorico | string> {
   try {
-    const q = antes ? `?antes=${encodeURIComponent(antes)}` : "";
-    const r = await apiFetch(`/api/agente/historico${q}`, { token: token ?? undefined, cache: "no-store" });
+    const r = await apiFetch(`/api/agente/historico${queryDoHistorico(recorte)}`, { token: token ?? undefined, cache: "no-store" });
     if (!r.ok) return ERRO_HISTORICO;
     const p = camelizarChaves(await r.json()) as PaginaDoHistorico;
     return { interacoes: p.interacoes ?? [], mais: Boolean(p.mais), antes: p.antes ?? null };

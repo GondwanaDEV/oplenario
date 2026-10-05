@@ -117,6 +117,29 @@
     (is (= :validacao/invalido (try (filtro/query->filtro q) nil (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e)))))
         (pr-str q))))
 
+(deftest filtro-pelo-recurso-vem-em-par
+  (let [id "30000000-0000-0000-0000-000000000003"]
+    (is (= {:recurso-tipo "proposicao" :recurso-id id}
+           (select-keys (filtro/query->filtro {:recurso-tipo "proposicao" :recurso-id id}) [:recurso-tipo :recurso-id])))
+    (is (= {:recurso-tipo "historico_assistente" :recurso-id "casa"}
+           (filtro/query->filtro {"recurso-tipo" "historico_assistente" "recurso-id" "casa"}))
+        "as chaves em texto (a query string crua) tambem valem")
+    (is (= {} (filtro/query->filtro {:recurso-tipo "" :recurso-id ""})) "os dois em branco = sem filtro")
+    (doseq [q [{:recurso-tipo "proposicao"} {:recurso-id id} {:recurso-tipo "proposicao" :recurso-id ""}
+               {:recurso-tipo "" :recurso-id id}
+               {:recurso-tipo "Proposicao" :recurso-id id} {:recurso-tipo "proposicao x" :recurso-id id}
+               {:recurso-tipo (apply str (repeat 41 "a")) :recurso-id id}
+               {:recurso-tipo "proposicao" :recurso-id "a b"} {:recurso-tipo "proposicao" :recurso-id "x%"}
+               {:recurso-tipo "proposicao" :recurso-id (apply str (repeat 81 "a"))}
+               {:recurso-tipo ["proposicao" "sessao"] :recurso-id id}]]
+      (is (= :validacao/invalido (try (filtro/query->filtro q) nil (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e)))))
+          (pr-str q)))
+    (is (= {:recurso-tipo "vinculo-ativo" :recurso-id id}
+           (filtro/query->filtro {:recurso-tipo "vinculo-ativo" :recurso-id id}))
+        "o tipo vem do nome do parametro de caminho, que pode ter hifen (:vinculo-ativo-id)")
+    (is (= {:recurso-tipo "a" :recurso-id "A.b_c:d-9"}
+           (filtro/query->filtro {:recurso-tipo "a" :recurso-id "A.b_c:d-9"})) "os limites do formato")))
+
 (deftest o-csv-tem-cabecalho-e-escapa
   (let [csv (out/->csv [{:seq 1 :ocorrido-em (Instant/parse "2026-09-29T12:00:00Z") :ator-tipo "pessoa"
                          :ator-nome "Maria, a secretária" :papeis ["secretario"] :acao "x/y" :classe "escrita"

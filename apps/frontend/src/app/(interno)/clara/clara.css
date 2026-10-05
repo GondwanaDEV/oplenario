@@ -44,7 +44,7 @@ html[data-clara="expandido"] .ast-lancador { display: none; }
   position: fixed; right: var(--ast-margem); bottom: var(--ast-margem); z-index: 41;
   width: var(--ast-largura); max-width: calc(100vw - 2 * var(--ast-margem));
   height: min(680px, calc(100vh - var(--topo-altura) - 2 * var(--ast-margem)));
-  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
   background: var(--surface-solida); color: var(--texto);
   border: 1px solid var(--linha); border-top: 3px solid var(--cobalto);
   border-radius: var(--raio); overflow: hidden; box-shadow: var(--sombra-alta);
@@ -59,6 +59,13 @@ html[data-clara="expandido"] .ast-lancador { display: none; }
 .ast-icone:hover { background: var(--realce); color: var(--texto); }
 .ast-icone[aria-pressed="true"] { background: var(--texto); color: var(--surface-solida); }
 
+/* linhas fixas: cabeçalho, dica da tela (opcional, some sem ocupar), corpo, campo */
+.ast-cabe { grid-row: 1; }
+.ast-contexto { grid-row: 2; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .6rem 1rem; border-bottom: 1px solid var(--linha); font-size: var(--t-12); color: var(--texto-2); }
+.ast-contexto b { color: var(--texto); font-family: var(--mono); font-weight: 500; }
+.ast-contexto .btn { margin-left: auto; }
+.ast-corpo { grid-row: 3; }
+.ast-campo { grid-row: 4; }
 .ast-corpo { overflow-y: auto; padding: 1rem; display: grid; align-content: start; gap: 1rem; overscroll-behavior: contain; }
 .ast-turno { display: grid; gap: .6rem; }
 .ast-nota { margin: 0; font-size: var(--t-13); color: var(--texto-2); display: grid; gap: .5rem; justify-items: start; }
@@ -134,10 +141,10 @@ html[data-clara="expandido"] .ast-lancador { display: none; }
 html[data-clara="expandido"] .ast {
   width: auto; max-width: none; height: auto; left: 0; right: 0; bottom: 0; top: var(--topo-altura);
   border-radius: 0; border-right: 0; border-bottom: 0; border-left: 0;
-  grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 html[data-clara="expandido"] .ast-cabe { grid-column: 1 / -1; }
-.ast-lateral { grid-row: 2 / 4; grid-column: 1; border-right: 1px solid var(--linha); overflow-y: auto; padding: 1rem; }
+.ast-lateral { grid-row: 2 / 5; grid-column: 1; border-right: 1px solid var(--linha); overflow-y: auto; padding: 1rem; }
 html[data-clara="expandido"] .ast-corpo,
 html[data-clara="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width: 760px; justify-self: center; box-sizing: border-box; }
 
@@ -161,7 +168,7 @@ html[data-clara="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width
   }
   html[data-clara="expandido"] .ast {
     width: 100vw; top: 0; left: 0; right: 0; bottom: 0; border: 0; border-top: 3px solid var(--cobalto);
-    grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-columns: 1fr; grid-template-rows: auto auto minmax(0, 1fr) auto;
   }
   html[data-clara="expandido"] .ast-corpo, html[data-clara="expandido"] .ast-campo { grid-column: 1; max-width: none; }
   .ast-lancador .rotulo-longo, .ast-lancador kbd { display: none; }
@@ -171,3 +178,12 @@ html[data-clara="expandido"] .ast-campo { grid-column: 2; width: 100%; max-width
 
 @media (prefers-reduced-motion: reduce) { .clara-moldura { transition: none; } }
 @media print { .ast-lancador, .ast, .ast-veu { display: none !important; } }
+
+/* busca no histórico e o link de cada pergunta para a sua linha na trilha */
+.ast-hist .busca label { display: block; font-size: var(--t-12); font-weight: 600; margin-bottom: .3rem; color: var(--texto); }
+.ast-hist .linha-busca { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .45rem; align-items: center; }
+.ast-hist .busca input { width: 100%; box-sizing: border-box; min-height: 44px; padding: .5rem .7rem; border: 1px solid var(--campo-borda); border-radius: var(--raio-sm); background: var(--surface-2); color: var(--texto); font: 400 var(--t-13) var(--corpo); }
+.ast-busca-ativa { display: flex; flex-wrap: wrap; gap: .3rem .8rem; align-items: center; }
+.ast-limpar { background: none; border: 0; padding: 0; min-height: 44px; font: 500 var(--t-12)/1 var(--corpo); color: var(--texto); text-decoration: underline; cursor: pointer; }
+.ast-na-trilha { justify-self: start; font-size: var(--t-12); color: var(--texto); }
+@media (max-width: 760px) { .ast-hist .busca input { font-size: 16px; } }

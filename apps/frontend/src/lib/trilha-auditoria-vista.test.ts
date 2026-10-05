@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  CLASSES, FILTRO_INICIAL, decisaoEmPalavras, lacre, objeto, queryDoFiltro, quem, seloCurto, verbo, type RegistroTrilha,
+  CLASSES, FILTRO_INICIAL, decisaoEmPalavras, lacre, objeto, queryDoFiltro, quem, recursoDaUrl, rotuloDoRecursoFiltrado, seloCurto,
+  verbo, type RegistroTrilha,
 } from "./trilha-auditoria-vista";
 
 const base: RegistroTrilha = {
@@ -19,6 +20,31 @@ describe("trilha de auditoria — a lógica pura", () => {
       "desde=2026-09-22&ator=cidadao&classe=negacao&objeto=sessoes&antes-de=120");
     expect(queryDoFiltro({ ...FILTRO_INICIAL, periodo: "ano" }, agora)).toBe("desde=2026-01-01");
     expect(queryDoFiltro({ ...FILTRO_INICIAL, periodo: "tudo" }, agora)).toBe("");
+  });
+
+  it("o filtro por um registro (uma pergunta à Clara) manda o par recurso-tipo + recurso-id e nenhum `desde`", () => {
+    const agora = new Date("2026-09-29T01:00:00Z");
+    const recurso = { tipo: "interacao_assistente", id: "9f1c0000-0000-0000-0000-000000000001" };
+    expect(queryDoFiltro({ ...FILTRO_INICIAL, recurso }, agora)).toBe(
+      "recurso-tipo=interacao_assistente&recurso-id=9f1c0000-0000-0000-0000-000000000001");
+    // o período escolhido não vale com o recurso; os outros filtros e a página seguem
+    expect(queryDoFiltro({ periodo: "7", ator: "pessoa", classe: "", objeto: "", recurso }, agora, 40)).toBe(
+      "recurso-tipo=interacao_assistente&recurso-id=9f1c0000-0000-0000-0000-000000000001&ator=pessoa&antes-de=40");
+    expect(queryDoFiltro({ ...FILTRO_INICIAL, recurso: null }, agora)).toBe("desde=2026-08-30");
+  });
+
+  it("o recurso da URL só vale com os dois parâmetros; a frase diz de que registro se trata", () => {
+    const url = (q: string) => recursoDaUrl((k) => new URLSearchParams(q).get(k));
+    expect(url("recurso-tipo=interacao_assistente&recurso-id=abc")).toEqual({ tipo: "interacao_assistente", id: "abc" });
+    expect(url("recurso-tipo=interacao_assistente")).toBeNull();
+    expect(url("recurso-id=abc")).toBeNull();
+    expect(url("recurso-tipo=%20&recurso-id=abc")).toBeNull();
+    expect(url("")).toBeNull();
+    expect(rotuloDoRecursoFiltrado({ tipo: "interacao_assistente", id: "abc" })).toBe("Só os eventos de uma pergunta à Clara");
+    expect(rotuloDoRecursoFiltrado({ tipo: "proposicao", id: "p1" })).toBe("Só os eventos deste registro");
+    // a linha da pergunta na trilha diz o que é, não o nome cru da ação
+    expect(objeto({ ...base, acao: "agente/perguntar", recurso: { tipo: "interacao_assistente", id: "9f1c0000-0000", rotulo: null } }).titulo)
+      .toBe("Pergunta à Clara 9f1c0000");
   });
 
   it("o verbo sai da classe e do nome da ação — e o que não se classifica é 'Registrou', nunca um chute", () => {

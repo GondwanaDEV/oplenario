@@ -11,6 +11,8 @@ vi.mock("next/navigation", () => ({ usePathname: () => estado.caminho }));
 
 import { MolduraDaClara } from "./moldura-da-clara";
 
+const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => "", json: async () => ({}) }) as Response);
+
 function montar() {
   render(
     <MolduraDaClara>
@@ -52,6 +54,32 @@ describe("MolduraDaClara", () => {
     cleanup();
     Object.assign(estado, { papeis: ["secretario"], fase: "pronto", caminho: "/assistente" });
     montar();
+    expect(screen.queryByRole("button", { name: /Pergunte à Clara/ })).toBeNull();
+  });
+
+  it("no app do vereador: pergunta com o conjunto do vereador mesmo para quem também é secretaria; fora da tela cheia", async () => {
+    global.fetch = fetchMock as unknown as typeof fetch;
+    Object.assign(estado, { papeis: ["secretario", "vereador"], fase: "pronto", caminho: "/vereador" });
+    render(
+      <MolduraDaClara publico="vereador">
+        <main>o app</main>
+      </MolduraDaClara>,
+    );
+    screen.getByRole("button", { name: /Pergunte à Clara/ }).click();
+    const campo = await screen.findByLabelText("Sua pergunta");
+    const { fireEvent } = await import("@testing-library/react");
+    fireEvent.change(campo, { target: { value: "oi, tudo bem?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Perguntar" }));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ pergunta: "oi, tudo bem?", publico: "vereador" });
+    cleanup();
+    Object.assign(estado, { caminho: "/vereador/assistente" });
+    render(
+      <MolduraDaClara publico="vereador">
+        <main>o app</main>
+      </MolduraDaClara>,
+    );
     expect(screen.queryByRole("button", { name: /Pergunte à Clara/ })).toBeNull();
   });
 });

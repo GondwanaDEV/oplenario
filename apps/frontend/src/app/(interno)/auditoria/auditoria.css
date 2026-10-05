@@ -1,6 +1,7 @@
 /* Trilha de auditoria (ADR-0017) — porte de produto/design-system/o-plenario/telas/trilha-auditoria.html
    (arquétipo lista/tabela). Escopado em .aud. */
 .aud .pg-cab { padding: 1.5rem 0 0; }
+.aud .rotulo-secao { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .1em; text-transform: uppercase; color: var(--texto-2); }
 .aud .pg-cab h1 { font-family: var(--display); font-weight: 800; font-size: var(--t-28); letter-spacing: -0.02em; color: var(--texto); margin: 0.3rem 0 0; }
 .aud .sub { font-size: var(--t-16); color: var(--texto-2); margin: 0.5rem 0 0; max-width: 66ch; line-height: 1.5; }
 
@@ -89,3 +90,12 @@
   .aud .ev .mais { order: 6; position: absolute; top: 0.85rem; right: 1.2rem; }
   .aud .ev .ev-det { order: 7; }
 }
+
+/* atalho do auditor para as conversas com a Clara (ADR-0024) */
+.aud-atalho { display: flex; align-items: center; gap: 0.5rem 0.9rem; flex-wrap: wrap; margin: 1rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
+.aud-atalho .btn svg { color: var(--cobalto-texto); }
+
+/* recorte por um registro (vem de um link): diz o recorte e devolve a trilha inteira */
+.aud-recorte { display: flex; align-items: center; gap: 0.5rem 0.8rem; flex-wrap: wrap; margin: 1.1rem 0 0; }
+.aud-recorte .chip { font-size: var(--t-13); }
+.aud-recorte-txt { font-size: var(--t-13); color: var(--texto-2); }
