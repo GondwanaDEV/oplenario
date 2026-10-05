@@ -17,8 +17,11 @@
 // + `id` — disclosure pattern padrão. Esc fecha; o botão só aparece <1000px (CSS).
 //
 // Links ABSOLUTOS ao ente (review final A2, "Important"): os anchors `#sessoes`/`#transparencia`/
-// `#ouvidoria` nunca existiram como seção própria (viraram cards <EmBreve> dentro de `#civico`, via
-// NavegacaoCivica) e `href="#"` no Início não ia a lugar nenhum. Pior: como esta barra também
+// `#ouvidoria` nunca existiram como seção própria e `href="#"` no Início não ia a lugar nenhum. Depois
+// que as páginas existiram, Sessões/Transparência/Ouvidoria deixaram de apontar para `#civico` (os três
+// iam ao mesmo lugar) e passaram a abrir a própria página: Sessões -> pautas (o que vem a seguir; atas e
+// votações estão a um clique, no cartão da home), Transparência -> dados abertos (o que existe de
+// transparência por ora; a fiscal espera o conector), Ouvidoria -> o formulário. Pior: como esta barra também
 // renderiza na ficha (materias/[proposicaoId]/page.tsx), TODO link virava âncora-morta lá (a ficha
 // não tem essas seções na própria página). Corrigido apontando cada item para a home do `ente`
 // (`/portal/casa/${ente}#secao`) — funciona de qualquer página, inclusive a própria home (mesma URL,
@@ -88,16 +91,16 @@ export function BarraInstitucional({
                 <a href={`/portal/casa/${ente}#destaque`}>Proposições</a>
               </li>
               <li>
-                <a href={`/portal/casa/${ente}#civico`}>Sessões</a>
+                <a href={`/portal/casa/${ente}/pautas`}>Sessões</a>
               </li>
               <li>
-                <a href={`/portal/casa/${ente}#civico`}>Transparência</a>
+                <a href={`/portal/casa/${ente}/dados-abertos`}>Transparência</a>
               </li>
               <li>
                 <a href={`/portal/casa/${ente}#balcoes`}>Acesso à informação</a>
               </li>
               <li>
-                <a href={`/portal/casa/${ente}#civico`}>Ouvidoria</a>
+                <a href={`/portal/casa/${ente}/ouvidoria`}>Ouvidoria</a>
               </li>
             </ul>
           </nav>

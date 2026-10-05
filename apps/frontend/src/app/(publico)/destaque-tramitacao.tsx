@@ -57,7 +57,9 @@ export function DestaqueTramitacao({ destaque, ente }: { destaque: MateriaVista;
                 strokeLinecap="round"
               />
             </svg>
-            {destaque.permalink}
+            <span>
+              <span className="permalink-rotulo">Identificador oficial:</span> <span>{destaque.permalink}</span>
+            </span>
           </p>
         </div>
 

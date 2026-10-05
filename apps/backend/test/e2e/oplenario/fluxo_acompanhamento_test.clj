@@ -101,6 +101,7 @@
     (is (= 200 (:status r)))
     (is (= 1 (count (:acompanhamentos body))))
     (is (= 1 (:acompanhamentos-total body)))
+    (is (= (str ente) (:ente-id body)) "a lista diz a Casa de onde vem (o ente do ator), para a tela linkar a ficha")
     (is (= "Dispoe sobre X" (:ementa (first (:acompanhamentos body)))))))
 
 (deftest meus-acompanhamentos-total-diverge-de-proposito-da-count-da-lista-200

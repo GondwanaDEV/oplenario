@@ -46,7 +46,7 @@
 
 (defn- protocolar-materia! [ente pid]
   (emitir! ente "proposicao.protocolada"
-           {:proposicao-id (str pid) :tipo "pl" :ano 2026 :sequencial 12 :urn-lex "urn:lex:br;..."
+           {:proposicao-id (str pid) :tipo "projeto_lei" :ano 2026 :sequencial 12 :urn-lex "urn:lex:br;..."
             :ementa "Dispoe sobre a arborizacao urbana." :autor-tipo "vereador" :autor-texto "Ver. Fulano"
             :estado "protocolada"})
   (drenar!))
@@ -82,7 +82,7 @@
       (is (every? #(= "pendente" (:notificacao_entrega/estado %)) linhas) "intent nasce 'pendente'")
       (is (every? #(= "email" (:notificacao_entrega/canal %)) linhas))
       (is (every? #(= "acompanhamento" (:notificacao_entrega/consent_base %)) linhas) "consent = o ato de seguir")
-      (is (every? #(str/includes? (:notificacao_entrega/corpo %) "em_pauta") linhas) "corpo tem a nova fase")
+      (is (every? #(str/includes? (:notificacao_entrega/corpo %) "Nova fase: Em pauta") linhas) "corpo tem a nova fase, pelo rótulo (nunca a chave em_pauta)")
       (is (every? #(str/includes? (:notificacao_entrega/assunto %) "PL 12/2026") linhas) "assunto identifica a materia")
       (is (every? #(= "proposicao" (:notificacao_entrega/objeto_tipo %)) linhas) "rastreabilidade opaca"))))
 
