@@ -7,12 +7,13 @@
 > Este runbook é focado no **deploy atual** — para o runbook do stack local (docker/localhost) veja
 > `docs/19`, que **não** se aplica aqui.
 >
-> **Atualizado em 22/09/2026.** Os dados vivos da §2 foram colhidos em 21/09, logando de verdade em
-> produção (ver §6). Se a Casa for re-semeada, recolha-os antes da demo — a §2 diz como.
+> **Atualizado em 22/09/2026; entrada revista em 05/10/2026.** Os dados vivos da §2 foram colhidos em
+> 21/09, logando de verdade em produção (ver §6). Se a Casa for re-semeada, recolha-os antes da demo — a
+> §2 diz como.
 >
-> **O que este runbook descreve é o que está NO AR hoje.** Há correções prontas na branch que ainda
-> **não** foram deployadas (a cota do GitHub Actions está esgotada) — elas mudam a entrada pós-login.
-> A §1 tem a checagem de 5 segundos que diz em qual dos dois mundos você está.
+> **A entrada mudou em 05/10/2026 ([ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):** não se
+> digita mais o UUID da persona numa tela em inglês do Keycloak. Digita-se o **CPF** na tela do O Plenário e
+> depois a **senha** numa tela com o nome da Câmara. A §1 tem o passo a passo.
 
 ---
 
@@ -21,10 +22,9 @@
 | | |
 |---|---|
 | **Onde** | https://oplenario.calvetec.com.br/ — sem instalar nada, num navegador |
-| **Entrada** | `/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` → **Entrar** → cai direto no acervo. **Esta URL vale antes e depois do deploy pendente** — um destino pedido explicitamente sempre vence |
-| **Antes de apresentar** | Abra `…/inicio`. **404** = o deploy não subiu, siga este runbook como está. **Tela "Início"** = subiu, veja o box 🟡 da §1 |
+| **Entrada** | `https://oplenario.calvetec.com.br/` → tela **"Entre com o seu CPF"** → CPF da persona → **senha** → cai no `/inicio` da persona |
 | **Senha de todas as personas** | `Plenario@2026` |
-| **Usuário** | é o **UUID** da persona (ver §1). Faça login ANTES do cliente entrar |
+| **CPF** | o da persona (§1). Faça login ANTES do cliente entrar |
 | **O roteiro** | 4 atos: servidora · **condução da sessão ao vivo** · pós-aprovação · cidadão |
 | **O que há de novo** | agendar/abrir/suspender/encerrar sessão, votação, tribuna com cronômetro e apreciação de veto **agora têm tela** (§3 Atos 2 e 3) |
 | **O que NÃO abrir** | §4 — a lista curta do que ainda não tem porta |
@@ -36,57 +36,34 @@
 
 **Casa da demo:** Câmara Municipal de Fortaleza · `ente-id` **`10000000-0000-0000-0000-000000000001`**.
 
-**Entrada (as 4 personas nomeadas usam a mesma URL):**
+**Entrada (todas as personas nomeadas, pela mesma tela):**
 
-```
-https://oplenario.calvetec.com.br/entrar/10000000-0000-0000-0000-000000000001
-```
+1. Abra `https://oplenario.calvetec.com.br/` (ou qualquer tela interna). Sem sessão, tudo leva à tela
+   **"Entre com o seu CPF"** (`/entrar`). O link da Câmara, `…/entrar/10000000-0000-0000-0000-000000000001`,
+   mostra a mesma tela com a Câmara fixa.
+2. Digite o **CPF** da persona (só os dígitos ou com pontuação) → **Continuar**.
+3. A tela seguinte já é da Câmara ("Câmara Municipal de Fortaleza"), em português, e pede só a **senha**.
+   O usuário fica escondido; "Não é você? Entrar com outro CPF" volta ao passo 2.
+4. Cai no `/inicio` (o hub com a sessão do dia e os atalhos) — o vereador sem outro papel cai em `/vereador`.
 
-Clique **Entrar** → cai no Keycloak → informe **usuário + senha** → o app roteia pelo papel do token.
-
-> ### ⚠️ Leia isto — o passo que falta na maioria das demos
-> **Hoje, depois do login padrão você cai na CAPA (`/`)** — a página "Onde a câmara acontece / Front-end
-> em construção", com os botões *Entrar na sua Câmara* / *Status*. **Essa capa NÃO é o menu do sistema** e
-> não leva a lugar nenhum útil: o front interno ainda não tem um "home" com botões; você entra nas telas
-> pela **URL direta**. A barra de navegação interna (Proposições, Tramitação, Agendar sessão…) só aparece
-> *dentro* de uma tela interna.
->
-> **Duas formas de não cair no beco da capa:**
-> 1. **(Recomendado) Entre já com `?redirect=`** — o login cai direto na primeira tela. Validado em
->    produção: entrar por
->    `…/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` **cai direto no acervo**, com
->    a barra de navegação. Troque `/proposicoes` pelo caminho que quiser abrir primeiro.
->    **Este caminho continua valendo depois do deploy pendente** — veja o box abaixo.
-> 2. Se caiu na capa, **cole a primeira URL interna** na barra de endereço (ex.: `…/proposicoes`). A
->    partir daí a barra de navegação carrega você pelo resto.
-
-> ### 🟡 O que muda quando o próximo deploy subir — e ele ainda NÃO subiu
-> A correção do beco da capa está **pronta e commitada, mas não está no ar**: o build de produção está
-> parado por esgotamento da cota do GitHub Actions. Verificado em 22/09/2026 — `…/inicio` responde **404**
-> em produção.
->
-> **Checagem de 5 segundos, na véspera e no dia:** abra `https://oplenario.calvetec.com.br/inicio`.
->
-> - **Deu 404** → o deploy não subiu. **Siga este runbook exatamente como está.**
-> - **Abriu a tela "Início"** → subiu. Tudo neste runbook continua valendo, e além disso:
->   - o login **sem** `?redirect=` deixa de cair na capa e passa a rotear **pela persona**: secretária →
->     `/inicio`, vereador → `/vereador`, cidadã → `/acompanhamentos`;
->   - **`/inicio` é o hub que faltava**: mostra o estado da sessão (acontecendo agora / próxima marcada) e
->     dá atalho para as telas que hoje só se alcança colando URL — **inclusive o Comando da Mesa, a
->     chamada e o telão** da sessão ao vivo;
->   - **Início** passa a ser o primeiro item da barra de navegação interna;
->   - o ícone gigante na ficha de matéria (Ato 1, passo 2) volta ao tamanho normal.
->
-> **A URL de entrada da §0 não muda nos dois mundos.** Um `?redirect=` pedido explicitamente vence a
-> escolha por persona — foi desenhado assim justamente para um roteiro não depender do que mudou.
+- **Destino direto:** abrir uma tela interna sem sessão (ex.: `…/proposicoes`) leva ao CPF com
+  `?redirect=`, e depois da senha você cai nessa tela. `…/entrar/<ente>?redirect=/proposicoes` faz o mesmo.
+- **Código do aplicativo:** só é pedido de quem cadastrou um (todo convite novo cadastra: senha + código
+  do aplicativo autenticador). As personas da demo não têm código: CPF e senha bastam.
+- **CPF com acesso a mais de uma Câmara** passa por `/entrar/escolher`; cada Câmara tem a sua senha. As
+  personas da demo só têm a Casa de Fortaleza.
+- **Mensagens da tela do CPF:** "nenhuma Câmara" = esse CPF não tem acesso de servidor ou vereador ativo
+  (a cidadã cai aqui: ela entra pelo portal, com o gov.br); "muitas tentativas" = 30 consultas por IP em
+  5 min, espere alguns minutos. Senha errada 10 vezes trava a conta por 1 minuto (dobrando até 15).
+- **Sair:** menu do avatar no topo → **Sair**. O Keycloak pergunta "Você realmente deseja sair?" — confirme.
 
 **Índice de URLs do roteiro** (cole na barra; `…` = `https://oplenario.calvetec.com.br`). As telas de
 sessão e a de pós-aprovação **não** estão na barra de navegação — chegue nelas por estas URLs:
 
 | Ato | Tela | URL |
 |---|---|---|
-| entrada | Login já no acervo | `…/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` |
-| entrada | **Início** (o hub) — *só existe depois do deploy pendente; hoje dá 404* | `…/inicio` |
+| entrada | Tela do CPF (cai no acervo depois da senha) | `…/entrar/10000000-0000-0000-0000-000000000001?redirect=/proposicoes` |
+| entrada | **Início** (o hub) | `…/inicio` |
 | 1 | Acervo de proposições | `…/proposicoes` |
 | 1 | Expediente (gerar documento) | `…/expediente` |
 | 1 | Agendar sessão | `…/agendar-sessao` |
@@ -104,21 +81,20 @@ sessão e a de pós-aprovação **não** estão na barra de navegação — cheg
 
 ### As personas
 
-| Persona | Papel | Usuário (login Keycloak) | Serve para |
-|---|---|---|---|
-| **Secretária da Mesa** (Marina Alencar Freire) | `secretario` | `585e6532-e754-4d45-ad82-1667fdfb220e` | **Atos 1, 2 e 3.** É a persona com mais superfície |
-| **Vereador(a)** | `vereador` | `222dc995-c188-45f4-a9ce-01bef661c05d` | A home do vereador (`/vereador`) e o cockpit de voto (`/votar`) no Ato 2 |
-| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente` (empilhados no MESMO vínculo) | ver o cartão "Ids da demo" da rodada mais recente do `semear-hml` | **1 login só** — soma tudo que Secretária + Vereador(a) alcançam, sem trocar de sessão (ver caixa abaixo) |
-| **Cidadão** | — (sem login) | — | Ato 4: o portal público é anônimo |
+| Persona | Papel | Serve para |
+|---|---|---|
+| **Secretária da Mesa** (Marina Alencar Freire) | `secretario` | **Atos 1, 2 e 3.** É a persona com mais superfície |
+| **Vereadora** (Fernanda Rocha Pinto) | `vereador` | A home do vereador (`/vereador`) e o cockpit de voto (`/votar`) no Ato 2 |
+| **Presidente da Mesa** (Antônio Carlos Ferreira) | `vereador`+`admin_ente` | `/administracao` (conceder e revogar acesso) e o app do vereador |
+| **Apresentação (acesso total)** (Patrícia Nogueira Santos) | `vereador`+`secretario`+`admin_ente` (empilhados no MESMO vínculo) | **1 login só** — soma tudo que Secretária + Vereadora + Presidente alcançam, sem trocar de sessão (ver caixa abaixo) |
+| **Cidadão** | — (sem login) | Ato 4: o portal público é anônimo |
 
 - **Senha de todas:** `Plenario@2026` (fixture pública de demonstração — não é segredo de produção).
-- **A tela do Keycloak aparece em inglês e mostra o UUID cru** (`Sign in to ente-10000000-…`). **Faça
-  o login antes de o cliente estar olhando** — é a primeira tela depois de clicar Entrar.
-- ⚠️ **Os usuários (UUIDs) mudam se a Casa for re-semeada.** O UUID da secretária acima foi confirmado
-  logando em produção em 21/09/2026. Se o login falhar, a Casa foi re-semeada: pegue os UUIDs novos no
-  cartão **"Ids da demo"** da rodada mais recente do workflow **`semear-hml`** (Actions) e atualize aqui.
-  O usuário do vereador vem do smoke `fumaca-hml`; se `/votar` não reconhecer a persona, troque pelo
-  UUID novo do mesmo cartão.
+- **CPF de cada persona:** fixo, na semente `apps/backend/demo/personas.clj`. Não muda quando a Casa é
+  re-semeada, então não há mais UUID de persona para recolher antes da demo.
+- **"Acesso total" não inclui** os papéis `juridico` e `auditor` (fila `/juridico`, `/auditoria` da Casa
+  inteira, `/auditoria/clara`) nem o console do operador (`/operacao`, entrada própria com chave física).
+  Para mostrá-los, conceda o papel em `/administracao` a uma pessoa convidada.
 
 > **Prepare 2 janelas/perfis antes:** uma logada como **secretária** (Atos 1–3), outra como **vereador**
 > (o `/votar` do Ato 2), e uma **janela anônima** para o Ato 4. Trocar de persona ao vivo custa ~40s de
@@ -144,7 +120,8 @@ re-semeada.** Note a distinção de estabilidade:
 
 - **IDs estáveis** (o padrão `10000000-…`): o ente, a sessão legislativa e as **3 sessões**. Pode
   confiar nestes literais entre re-semeaduras.
-- **IDs voláteis** (UUIDs aleatórios): **proposições** e **personas** — regenerados a cada re-semeadura.
+- **IDs voláteis** (UUIDs aleatórios): **proposições** — regeneradas a cada re-semeadura. As personas
+  entram pelo CPF, que é fixo.
   Onde puder, navegue pela **lista** (`/proposicoes`) em vez de colar UUID.
 
 ### Sessões (3) — IDs estáveis
@@ -311,7 +288,9 @@ O que **continua** sem porta de cliente — não abra, não clique, não prometa
 | "Acesso restrito" logo após o login | O papel do token não bate com a tela. Confirme que está na persona certa (secretária para o interno/Mesa) |
 | Telão sem a animação dos eventos passados | O replay do canal SSE retém ~5 min; quórum e tribuna re-hidratam do banco, a *animação* dos eventos antigos não. Reabra o telão; se precisar, conduza um evento novo pelo Comando da Mesa |
 | A sessão da demo saiu do estado esperado (alguém conduziu antes) | Recolha o estado atual (§6) e ajuste o roteiro; ou agende/abra uma sessão nova pelo próprio Comando da Mesa |
-| Login falha para todas as personas | A Casa foi re-semeada e os UUIDs mudaram — pegue os novos no cartão "Ids da demo" do `semear-hml` (§1) |
+| "Nenhuma Câmara" na tela do CPF | CPF digitado errado (confira na `personas.clj`) ou CPF de quem não é servidor nem vereador nesta Casa |
+| "Muitas tentativas" na tela do CPF | Limite de 30 consultas por IP em 5 min. Espere alguns minutos |
+| Senha recusada várias vezes, depois "conta bloqueada" | Trava temporária: 10 erros = 1 min, dobrando até 15. Espere; não é permanente |
 | A plataforma está fora | Confira `https://oplenario.calvetec.com.br/status` |
 
 **Nunca** rode carga de teste ou reset contra este ambiente durante/antes de uma demo com cliente.
@@ -320,7 +299,8 @@ O que **continua** sem porta de cliente — não abra, não clique, não prometa
 
 ## §6 · Como atualizar este runbook (dados vivos)
 
-Os dados da §2 saem de um coletor **só-leitura** que loga em produção como a secretária e imprime um
+Os dados da §2 saem de um coletor **só-leitura** que loga em produção como a secretária (direto na tela de
+senha do Keycloak, com o identidade-id dela no campo `username`, sem passar pelo CPF) e imprime um
 snapshot (sessões + estados, sessão legislativa, proposições por estado, matérias com autógrafo). Rode-o
 na véspera da demo:
 
@@ -350,7 +330,9 @@ nesse dia:
   (backend)**, não uma página de navegador (digitá-la dá 404; é esperado, não é a tela). Idem
   notificações do vereador: a rota é `/notificacoes`, não `/vereador/notificacoes`.
 
-### Verificação de 22/09/2026 — o estado do deploy
+### Verificação de 22/09/2026 — o estado do deploy (histórico)
+
+> Superada: `/inicio` existe em produção e a raiz `/` leva à tela do CPF (05/10/2026). Fica como registro.
 
 Checagem só-leitura direta contra `https://oplenario.calvetec.com.br`:
 
@@ -372,5 +354,5 @@ subiu e o comportamento pós-login passa a ser o da persona.
   produção pelo smoke `fumaca-conducao` (a sessão `…0211` está aberta, então os painéis aparecem).
 - **Card "Apreciação do veto"**: a rota que o hospeda carrega viva; o card em si não foi exercitado ao
   vivo (não há matéria vetada no seed) — sua lógica está coberta por testes de unidade. Ver Ato 3.
-- **IDs das personas** são voláteis por re-semeadura; o UUID da secretária foi validado em 21/09. O do
-  vereador vem do smoke `fumaca-hml` — reconfirme antes de uma demo importante.
+- **Entrada pelo CPF** (05/10/2026): CPF → senha no tema da Câmara → `/inicio`, conferido em produção
+  (CLAUDE.md §3, item 2). Antes disso a entrada era o UUID da persona na tela do Keycloak.
