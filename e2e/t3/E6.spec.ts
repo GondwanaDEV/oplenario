@@ -135,7 +135,27 @@ test.describe.serial("E6 — Votar (vereador)", () => {
 
     // a) a tela diz que gravou — mensagem fixa (NOME_VOTO["sim"] = "Sim") + os 3 botões somem (ciclo
     // 'pode-votar' -> 'ja-votou').
-    await expect(page.getByText(/Você votou\s*Sim/)).toBeVisible({ timeout: 15_000 });
+    try {
+      await expect(page.getByText(/Você votou\s*Sim/)).toBeVisible({ timeout: 15_000 });
+    } catch (falha) {
+      // Falha vista no CI (run 37318636905, 05/10/2026): o POST deu 201 e a frase não apareceu em 15 s, e o log do
+      // job não guarda o que o servidor e a tela diziam naquele instante — o relógio acabou, a causa não ficou
+      // registrada. Este bloco NÃO afrouxa nada (a falha segue sendo a mesma e é relançada): só anexa o que separa
+      // "votou numa votação e a tela mostra outra" de "a votação é a mesma e a tela perdeu o voto".
+      const lido = await fetch(`${BACKEND}/sessoes/${SESSAO_ID}/votacao-aberta`, {
+        headers: { Authorization: `Bearer ${TOKEN_PRESIDENTE}` },
+      })
+        .then(async (r) => `HTTP ${r.status} ${(await r.text()).slice(0, 700)}`)
+        .catch((e) => `não consegui ler: ${String(e)}`);
+      const naTela = (await page.locator("body").innerText().catch(() => "(página fechada)")).replace(/\s+/g, " ").slice(0, 700);
+      throw new Error(
+        `"Você votou Sim" não apareceu em 15 s depois do 201.\n` +
+          `  votou na votação: ${votacaoId}\n` +
+          `  o servidor diz que a votação aberta da sessão é: ${lido}\n` +
+          `  a tela diz: ${naTela}`,
+        { cause: falha },
+      );
+    }
     await expect(grupoVoto).toBeHidden();
 
     // c) F5 — o mesmo estado sobrevive a reload (prova que NÃO é estado só-de-cliente; o servidor é quem

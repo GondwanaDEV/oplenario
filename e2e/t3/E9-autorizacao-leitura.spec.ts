@@ -94,7 +94,14 @@ test("E9 tela /proposicoes do vereador renderiza sem 'Nao foi possivel carregar'
     waitUntil: "domcontentloaded",
     timeout: 90_000,
   });
-  await page.waitForTimeout(2_000);
+  // Espera a tela TERMINAR de carregar antes de afirmar uma AUSÊNCIA: com um relógio fixo de 2 s, a página ainda em
+  // "Carregando…" passava nos dois `not.toContain` sem ter mostrado nem o dado nem o erro (asserção que não podia
+  // reprovar). O contador "N de M matérias" só existe quando a lista chegou (estado "pronto"); com erro ou gate,
+  // ele nunca aparece e o teste reprova nomeando isso.
+  await expect(
+    page.getByText(/\d+ de \d+ matérias/),
+    "a lista de proposições carregou (o vereador tem leitura): sem o contador, a tela caiu em erro ou em gate",
+  ).toBeVisible({ timeout: 30_000 });
   const txt = (await page.locator("body").innerText()).replace(/\s+/g, " ");
   expect(txt, "a tela do vereador nao pode mostrar o erro generico de fetch").not.toContain(
     "Não foi possível carregar",
