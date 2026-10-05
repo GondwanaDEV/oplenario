@@ -96,3 +96,32 @@
                [:votos [:sequential VotoNominalDetalheOut]]]]
    ["secreta" SemApuracaoIndividualVotacaoAbertaOut]
    ["simbolica" SemApuracaoIndividualVotacaoAbertaOut]])
+
+(def ^:private campos-votacao-encerrada
+  "O que TODA votacao encerrada devolve — o MESMO agregado que `votacao.encerrada` ja' leva ao vivo (publico
+  mesmo na secreta: `EncerradaPayload`), mais o objeto resolvido. Totais ausentes na 'simbolica'
+  (aclamacao, sem apuracao individual)."
+  [[:votacao-id :string]
+   [:objeto-tipo (km/enum-de logic/objetos-votacao)]
+   [:objeto-id :string]
+   [:proposicao [:maybe ProposicaoResumoObjetoVotacaoOut]]
+   [:resultado [:enum "aprovada" "rejeitada"]]
+   [:total-sim {:optional true} [:maybe :int]]
+   [:total-nao {:optional true} [:maybe :int]]
+   [:total-abstencao {:optional true} [:maybe :int]]
+   [:base-membros {:optional true} [:maybe :int]]])
+
+(def VotacaoEncerradaOut
+  "Recibo de GET .../votacao-encerrada (200): o RESULTADO da ultima votacao encerrada da sessao, pra
+  RECUPERACAO de estado (o telao/TV/cockpit que recarrega DEPOIS do encerramento — `votacao-aberta` so' le
+  votacao aberta, entao o placar sumia). Mesmo SIGILO do evento ao vivo e mesma UNIAO DISCRIMINADA por
+  `:modalidade` de `VotacaoAbertaOut`: so' o ramo 'nominal' admite `:votos` (voto por vereador, o que
+  `voto.registrado` nominal levou ao vivo); 'secreta' leva so' o contador anonimo; 'simbolica' so' o
+  resultado. Mapa fechado por ramo: um `merge` descuidado que pusesse `:votos` na secreta reprova a
+  validacao (500), nunca vaza em silencio."
+  [:multi {:dispatch :modalidade}
+   ["nominal" (into [:map {:closed true} [:modalidade [:= "nominal"]]]
+                    (conj campos-votacao-encerrada [:votos [:sequential VotoNominalDetalheOut]]))]
+   ["secreta" (into [:map {:closed true} [:modalidade [:= "secreta"]]]
+                    (conj campos-votacao-encerrada [:votos-registrados :int]))]
+   ["simbolica" (into [:map {:closed true} [:modalidade [:= "simbolica"]]] campos-votacao-encerrada)]])

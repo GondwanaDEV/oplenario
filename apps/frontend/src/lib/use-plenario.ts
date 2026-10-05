@@ -11,7 +11,7 @@ import type { EventoPlenario, SessaoOut } from "./contrato";
 import { TIPOS_PLENARIO } from "./contrato";
 import type { ComposicaoSessaoOut, MinhaPresencaOut, QuorumSessaoOut, TribunaOut } from "./contrato-sessoes.gen";
 import { semCredencial } from "./modo";
-import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot } from "./plenario-reducer";
+import { aplicarEvento, estadoInicial, falharComposicao, falharQuorum, falharTribuna, falharVotacao, hidratarComposicao, hidratarMinhaPresenca, hidratarQuorum, hidratarSessao, hidratarTribuna, hidratarVotacao, hidratarVotacaoEncerrada, type EstadoPlenario, type TribunaEventoSeqNoDisparo, type VotacaoAbertaSnapshot, type VotacaoEncerradaSnapshot } from "./plenario-reducer";
 import { consumirSse } from "./sse";
 
 export type EstadoConexao = "carregando" | "ao-vivo" | "reconectando" | "erro";
@@ -166,6 +166,8 @@ export function usePlenario(
     let quorumEmVoo = false;
     let tribunaEmVoo = false;
     let votacaoEmVoo = false;
+    // 403 de `votacao-encerrada` (sessão secreta, leitor que não é a Mesa) não muda enquanto a tela vive.
+    let semAcessoAoResultado = false;
     let minhaPresencaEmVoo = false;
     let sessaoEmVoo = false;
 
@@ -284,6 +286,10 @@ export function usePlenario(
         if (!vivo) return;
         if (resp.status === 404) {
           setEstado((prev) => (prev ? hidratarVotacao(prev, null, seqNoDisparo) : prev));
+          // Nenhuma aberta: o que existe de votação para mostrar é o RESULTADO da última encerrada (o
+          // telão/TV/cockpit que recarrega depois do encerramento). Mesmo `seqNoDisparo`: qualquer evento
+          // de votação ao vivo durante as duas leituras descarta as duas.
+          await buscarVotacaoEncerrada(seqNoDisparo);
           return;
         }
         if (!resp.ok) {
@@ -299,6 +305,41 @@ export function usePlenario(
       } finally {
         limpar();
         votacaoEmVoo = false;
+      }
+    };
+
+    /** Busca `GET /sessoes/:id/votacao-encerrada` — o RESULTADO da última votação encerrada, chamada só
+     * depois de `votacao-aberta` dizer 404 (dentro da MESMA guarda `votacaoEmVoo`). 404 é o estado
+     * legítimo "nenhuma votação encerrada ainda". 403 (sessão secreta e quem lê não é a Mesa — o teto é o da
+     * rota magra `/quorum`) é permanente para esta tela: marca e para de perguntar, em vez de gerar uma
+     * negação a cada 30 s. Qualquer outra falha degrada SEM MENTIR (mantém o que o SSE mostrou). */
+    const buscarVotacaoEncerrada = async (seqNoDisparo: number) => {
+      if (semAcessoAoResultado) return;
+      const { signal, limpar } = sinalComTimeout(controller.signal, TIMEOUT_REBUSCA_MS);
+      try {
+        const resp = await apiFetch(`/api/sessoes/${sessaoId}/votacao-encerrada`, {
+          token: token ?? undefined,
+          signal,
+          cache: "no-store",
+        });
+        if (!vivo) return;
+        if (resp.status === 404) return;
+        if (resp.status === 403) {
+          semAcessoAoResultado = true;
+          return;
+        }
+        if (!resp.ok) {
+          setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+          return;
+        }
+        const v = camelizarChaves(await resp.json()) as VotacaoEncerradaSnapshot;
+        if (!vivo) return;
+        setEstado((prev) => (prev ? hidratarVotacaoEncerrada(prev, v, seqNoDisparo) : prev));
+      } catch {
+        if (!vivo) return;
+        setEstado((prev) => (prev ? falharVotacao(prev) : prev));
+      } finally {
+        limpar();
       }
     };
 
