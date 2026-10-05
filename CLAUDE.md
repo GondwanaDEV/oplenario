@@ -141,14 +141,13 @@ o administrador concede acesso aos vereadores; quem só tem esse papel pousa nel
 - **o convite pede senha + código do aplicativo** (antes só passkey, e o login pedia senha: o convidado real ficava sem
   como entrar). A passkey volta quando o domínio definitivo existir — adia o passwordless-first da §22.5 (confirmar);
 - **em produção (05/10/2026):** a entrada pelo CPF está no ar e a configuração de login foi reaplicada nas Câmaras pelo
-  workflow `reaplicar-login-prd` (nome, pt-BR, política de senha, força bruta, senha → código). **Falta o tema:** o
-  Keycloak das Casas é um compose no Dokploy e o servidor não tem login no GHCR (o pacote
-  `oplenario-keycloak-prd` é privado), e a imagem da 1ª troca partia da 26.0.0 contra a **26.3.5 de produção** (o Keycloak
-  não sobe contra banco mais novo): o login caiu ~14 min até a volta automática. A imagem agora parte da versão do
-  compose; o tema foi conferido de ponta a ponta numa 26.3.5 local (login, senha errada, convite, código). Antes de
-  rodar `build-keycloak-prd` de novo: tornar o pacote público ou cadastrar o `ghcr.io` em Settings → Registry do
-  Dokploy (`docs/27`, seção 9). Fora: tema da página "Minha conta", domínio próprio do Keycloak, tela para resetar o
-  segundo fator.
+  workflow `reaplicar-login-prd` (nome, pt-BR, política de senha, força bruta, senha → código). **O tema também está no
+  ar** (14:35 UTC): o `registrar-ghcr-dokploy` cadastrou o `ghcr.io` no Dokploy com o login que a API já usa (o pacote
+  `oplenario-keycloak-prd` segue privado; o Keycloak das Casas é um compose e baixa com o login do servidor) e o
+  `build-keycloak-prd` trocou a imagem, ~55 s de reinício, sem volta. Conferido em produção: CPF → senha no tema →
+  `/inicio`. A 1ª troca (mesma manhã) partia da 26.0.0 contra a **26.3.5 de produção** (o Keycloak não sobe contra banco
+  mais novo) e o login caiu ~14 min até a volta automática; a imagem agora parte da versão do compose. Fora: tema da
+  página "Minha conta", domínio próprio do Keycloak, tela para resetar o segundo fator.
 
 **Suspender/reativar Casa ENTREGUE (30/09/2026, [ADR-0018](docs/adr/0018-suspender-e-encerrar-casa.md) fatia 1).**
 - O que existe:
