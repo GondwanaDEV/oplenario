@@ -27,6 +27,7 @@ import { formatarTipoSessao } from "@/lib/pauta-convocacao-vista";
 import { derivarTramitacao } from "@/lib/tramitacao-vista";
 import { comToken } from "@/lib/nav";
 import { PublicarPauta } from "@/app/publicar-pauta";
+import { useAbrirClara } from "../../(interno)/clara/moldura-da-clara";
 import type {
   CienciaPendenteOut,
   ParecerResumoMeuPainelOut,
@@ -44,6 +45,7 @@ export default function PaginaHomeVereador() {
   const { convites, propostas } = useSubscricoesHome(token);
   // B.6: o que o assistente preparou e espera a decisão do vereador (ADR-0012)
   const doAssistente = usePropostas(token);
+  const clara = useAbrirClara();
   const propostasDoAssistente = doAssistente.fase === "pronto" ? doAssistente.dado : [];
 
   if (estado === "erro") {
@@ -210,9 +212,13 @@ export default function PaginaHomeVereador() {
         <h2 className="secao-tit">Suas proposições</h2>
         {/* fatia 2a: o requerimento nasce aqui, no login do vereador (modelo da Casa + assinatura) */}
         <span className="secao-acoes">
-          <Link className="btn btn-contorno btn-mini" href={comToken("/vereador/assistente", token)}>
-            Pedir à Clara
-          </Link>
+          {/* a Clara expandida, no app mesmo: o requerimento pedido em palavras vira proposta (B.6) que ele revisa */}
+          {clara.disponivel && (
+            <button className="btn btn-contorno btn-mini" type="button" aria-controls={clara.painelId} aria-expanded={clara.aberta}
+              onClick={(e) => clara.abrir("expandido", e.currentTarget)}>
+              Pedir à Clara
+            </button>
+          )}
           <Link className="btn btn-primaria btn-mini" href={comToken("/requerimento/novo", token)}>
             Novo requerimento
           </Link>

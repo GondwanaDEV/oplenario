@@ -10,6 +10,7 @@
             [oplenario.admin-sistema.components.repositorio :as repo-admin]
             [oplenario.admin-sistema.controllers :as admin-sistema]
             [oplenario.config :as config]
+            [oplenario.gatilho-compliance :as gatilho-compliance]
             [oplenario.comunicacao.components.repositorio :as repo-comunicacao]
             [oplenario.ia-orcamento :as ia-orcamento]
             [oplenario.ia-republicar :as ia-republicar]
@@ -19,15 +20,18 @@
             [oplenario.kernel.components.objeto-store :as objeto-store]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.migracao :as migracao]
+            [oplenario.motor.components.repositorio :as repo-motor]
             [oplenario.participacao.components.repositorio :as repo-participacao]
             [oplenario.reconciliar-anexos :as reconciliar-anexos]
             [oplenario.sistema :as sistema]))
 
 (defn- migrar!
-  "Aplica as migrations num datasource efemero e o fecha (passo de init)."
+  "Aplica as migrations num datasource efemero e o fecha (passo de init). Garante tambem o catalogo das regras do
+  gatilho de compliance: o passo roda como o dono do banco, e o role de runtime so' le o catalogo do motor."
   [cfg]
   (let [ds (component/start (datasource/datasource cfg))]
     (try (migracao/migrar! (:ds ds))
+         (gatilho-compliance/garantir-catalogo! (repo-motor/->RepoMotorPg ds))
          (finally (component/stop ds)))))
 
 (defn -main [& args]

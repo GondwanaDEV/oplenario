@@ -61,6 +61,11 @@
    :identidade/reenviar-convite                 "Reenviou o convite de acesso"
    :identidade/revogar-acesso                   "Revogou um acesso à Casa"
 
+   ;; ---- a Clara (o assistente da Casa) e o erro reportado numa resposta de IA ----
+   ;; o handler da pergunta aponta a interacao guardada (recurso + hash, ADR-0024) e nao da' rotulo: este e' o do ato
+   :agente/perguntar                            "Perguntou à Clara"
+   :agente/reportar-erro-ia                     "Reportou erro numa resposta da IA"
+
    ;; ---- agente de IA no servidor de ferramentas ----
    :integracao-ia/mcp                           "Um agente de IA usou uma ferramenta do sistema"
 
@@ -207,9 +212,6 @@
 (def ^:private motivo-segredo-do-satelite
   "Chamada do satélite de IA autenticada pelo segredo compartilhado, sem ator da Casa: não entra na trilha")
 
-(def ^:private motivo-assistente
-  "Trilha do assistente em obra na frente da Clara (ADR-0024, PR #176): o handler dele é dono do registro; rotular depois do merge")
-
 (def ^:private motivo-antes-da-entrada
   "Porta pública da entrada pelo CPF (ADR-0025), antes de haver sessão: sem ator e sem Casa, nada entra na trilha")
 
@@ -232,9 +234,7 @@
    :admin-sistema/retomar-apagamento            motivo-operacao
    :integracao-ia/credencial-institucional      motivo-segredo-do-satelite
    :integracao-ia/receber                       motivo-segredo-do-satelite
-   :integracao-ia/revogar-credencial-institucional motivo-segredo-do-satelite
-   :agente/perguntar                            motivo-assistente
-   :agente/reportar-erro-ia                     motivo-assistente})
+   :integracao-ia/revogar-credencial-institucional motivo-segredo-do-satelite})
 
 (defn rotulo-da-acao
   "O rotulo default da acao (`:modulo/nome`, keyword), ou nil."

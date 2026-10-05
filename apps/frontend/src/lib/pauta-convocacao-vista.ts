@@ -63,7 +63,7 @@ export function formatarTipoSessao(tipoSessao: string): string {
   return TIPO_SESSAO_ROTULO[tipoSessao] ?? tipoSessao.charAt(0).toUpperCase() + tipoSessao.slice(1);
 }
 
-export function formatarTituloSessao(sessao: SessaoOut): string {
+export function formatarTituloSessao(sessao: { numeroSequencial: number; tipoSessao: string }): string {
   return `${sessao.numeroSequencial}ª Sessão ${formatarTipoSessao(sessao.tipoSessao)}`;
 }
 

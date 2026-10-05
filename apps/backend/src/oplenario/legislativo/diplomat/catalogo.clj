@@ -51,7 +51,8 @@
                      "ementa, autoria, em que pe' esta (estado da tramitacao) e o texto vigente. Use quando alguem "
                      "perguntar sobre uma materia especifica, como 'qual a situacao do PL 12/2026?'.")
      :classe :leitura
-     :papeis #{"secretario" "vereador" authz/papel-agente-institucional}
+     ;; os papeis de `GET /legislativo/proposicoes/:id` (papel-leitura) e o agente institucional
+     :papeis #{"secretario" "vereador" "juridico" authz/papel-agente-institucional}
      :entrada IdentificacaoMateria
      :saida wire/ProposicaoDetalheOut
      :rotas #{:legislativo/detalhe-proposicao}
@@ -66,7 +67,8 @@
                      "quando e quem recebeu) e os proximos atos que o rito da Casa permite a partir do estado atual. "
                      "Use para 'por onde passou o PL 12/2026?' ou 'o que falta para o requerimento 5/2026 andar?'.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     ;; os papeis de `GET /legislativo/proposicoes/:id/tramitacao` (papel-leitura)
+     :papeis #{"secretario" "vereador" "juridico"}
      :entrada IdentificacaoMateria
      :saida wire/TramitacaoOut
      :rotas #{:legislativo/tramitacao-proposicao}
@@ -255,7 +257,8 @@
                      "o vereador-id de quem sera relator antes de propor designar_relator ou encaminhar_as_comissoes "
                      "(ex.: 'a vereadora Ana Prado'). Nao traz CPF nem contato.")
      :classe :leitura
-     :papeis #{"secretario" "vereador"}
+     ;; fatia 4 da Clara: quem esta' em exercicio e' publico (portal /vereadores); quem consulta tambem le
+     :papeis #{"secretario" "vereador" "juridico" "auditor" "admin_ente"}
      :entrada [:map {:closed true}]
      :saida wire-jur/VereadoresDaCasaOut
      :rotas #{}

@@ -19,10 +19,18 @@
 (set! *warn-on-reflection* true)
 
 (def ^:private papeis-da-casa
-  "Os papeis dos dois publicos de agente que oferecem estas ferramentas (secretaria e vereador). Na TELA, toda pessoa da
-  Casa usa a caixa (a regra mora no controller); pelo agente, so' quem tem um destes papeis — o agente nunca tem mais
-  que a pessoa (Eixo 3.2), e o administrador/juridico/auditor sem um destes papeis nao delega comunicado a agente."
+  "Os papeis dos dois publicos de agente que PROPOEM estas acoes (secretaria e vereador). Na TELA, toda pessoa da Casa
+  usa a caixa (a regra mora no controller); pelo agente, enviar e dar ciencia so' quem tem um destes papeis — o agente
+  nunca tem mais que a pessoa (Eixo 3.2), e o administrador/juridico/auditor sem um destes papeis nao delega comunicado
+  a agente."
   #{"secretario" "vereador"})
+
+(def ^:private papeis-de-leitura
+  "Quem LE a caixa, o comunicado e o painel de leitura pelo agente: os dois publicos acima e o de consulta (juridico,
+  auditor, admin_ente; fatia 4 da Clara). As rotas da tela (`/meu/comunicados`, `/comunicados/:id`,
+  `/comunicados/:id/leitura`) so' autenticam e o controller atende toda pessoa da Casa, decidindo por linha (destinatario,
+  quem enviou, secretaria e admin): o agente nunca le mais que a tela."
+  (into papeis-da-casa #{"juridico" "auditor" "admin_ente"}))
 
 (defn- d [deps] (or (:comunicacao deps) (throw (ex-info "catalogo sem as deps de comunicacao" {}))))
 
@@ -97,7 +105,7 @@
                      "pede ciencia e ate' quando. Use para 'tenho algum comunicado?', 'o que falta eu dar ciencia?'. "
                      "Ler pelo agente nao marca nada como recebido ou lido.")
      :classe :leitura
-     :papeis papeis-da-casa
+     :papeis papeis-de-leitura
      :entrada [:map {:closed true}]
      :saida wire/CaixaOut
      :rotas #{:comunicacao/caixa}
@@ -108,7 +116,7 @@
                      "sessao/proposicao/protocolo, se pede ciencia e se foi substituido por outro. So' destinatario, quem "
                      "enviou, a secretaria e o administrador da Casa veem. Ler pelo agente nao marca como lido.")
      :classe :leitura
-     :papeis papeis-da-casa
+     :papeis papeis-de-leitura
      :entrada EntradaComunicado
      :saida wire/ComunicadoOut
      :rotas #{:comunicacao/ler}
@@ -119,7 +127,7 @@
                      "pessoa com o caminho e a hora de cada marca (e se a ciencia venceu). So' quem enviou, a secretaria e "
                      "o administrador da Casa. Use para 'quem ainda nao leu o COM-2026-000123?'.")
      :classe :leitura
-     :papeis papeis-da-casa
+     :papeis papeis-de-leitura
      :entrada EntradaComunicado
      :saida wire/LeituraOut
      :rotas #{:comunicacao/leitura}
