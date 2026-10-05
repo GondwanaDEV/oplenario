@@ -78,7 +78,7 @@ export function DestaqueTramitacao({ destaque, ente }: { destaque: MateriaVista;
             <p>
               <b>O resumo em linguagem simples está indisponível agora.</b> Ele é escrito com ajuda de
               IA — volta a aparecer aqui assim que o serviço reconectar. Enquanto isso, o{" "}
-              <b>texto oficial</b> da proposição continua disponível abaixo, com toda a tramitação.
+              <b>texto oficial</b> da proposição e por onde ela já passou continuam disponíveis na página da matéria.
             </p>
           </div>
           <div className="resumo-rodape">

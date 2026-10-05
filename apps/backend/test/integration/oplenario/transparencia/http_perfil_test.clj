@@ -32,7 +32,8 @@
             [oplenario.rotas :as rotas]
             [oplenario.transparencia.components.repositorio :as transparencia-repo]
             [oplenario.transparencia.diplomat.consumers :as consumers]
-            [oplenario.transparencia.suporte-presenca :as sp])
+            [oplenario.transparencia.suporte-presenca :as sp]
+            [oplenario.transparencia.suporte-voto-publico :as voto-publico])
   (:import (java.time LocalDate)))
 
 (def ^:dynamic *ds* nil)
@@ -95,7 +96,10 @@
                      (rotas/montar {:idp (idp-dev/idp-dev)
                                     :repo-identidade nil
                                     :repo-transparencia repo
-                                    :ficha-e-janelas-publicas ficha-e-janelas-publicas})
+                                    :ficha-e-janelas-publicas ficha-e-janelas-publicas
+                                    ;; o que a regra de sessao publica faz tem teste proprio
+                                    ;; (`voto_de_sessao_secreta_test`); aqui toda votacao projetada e' publica
+                                    :votacoes-com-voto-publico (voto-publico/tudo-publico *ds*)})
                      it/globais)
        ph/create-server ::ph/service-fn)))
 
@@ -264,7 +268,7 @@
   (testing "vereador inexistente -> 404, NUNCA 200 com perfil vazio, e o read-model nem e' consultado"
     (let [repo-que-explode #_{:clj-kondo/ignore [:missing-protocol-method]}
                            (reify transparencia-repo/RepoTransparencia
-                             (perfil-parlamentar [_ _ _ _]
+                             (perfil-parlamentar [_ _ _ _ _]
                                (throw (ex-info "o perfil NAO pode ser lido antes do guard de 404" {}))))
           r (pt/response-for (service-fn (seam-escopado {}) repo-que-explode) :get
                              (str "/portal/casa/" (random-uuid) "/vereadores/" (random-uuid)))]

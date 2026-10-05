@@ -64,3 +64,11 @@
   ;; nenhum id/ente-id interno (a rota e' publica e anonima).
   (let [out (gerar-portal/gerar-tudo)]
     (is (str/includes? out "export interface EncarregadoOut {\n  nome: string;\n  rotulo: string;\n  email: string;\n}\n"))))
+
+(deftest movimentacoes-out-publica-so-data-etapa-e-os-sinais-de-completude
+  ;; "Por onde a materia passou": a tela le data + etapa por movimentacao, o total (par do teto) e se o historico
+  ;; esta' completo — nenhum campo de quem despachou chega tipado ao front.
+  (let [out (gerar-portal/gerar-tudo)]
+    (is (str/includes? out "export interface MovimentacaoOut {\n  ocorridoEm: string;\n  etapa: string | null;\n  abertura: boolean;\n}\n"))
+    (is (str/includes? out "export interface MovimentacoesOut {\n  movimentacoes: MovimentacaoOut[];\n  movimentacoesTotal: number;\n  historicoCompleto: boolean;\n  historicoDesde: string | null;\n}\n")
+        "referencia nomeada, e o total/o sinal de historico que comeca no meio sao obrigatorios")))

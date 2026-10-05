@@ -24,6 +24,27 @@
     (http/json-resposta 200 (adapters-out-painel/painel->wire
                              (controllers/painel repo-compliance (:ator req))))))
 
+(def ^:private situacao-da-remessa
+  "O estado ATUAL da remessa, dito a quem opera (o enum cru nao vai para a tela)."
+  {"rascunho" "ainda é um rascunho" "validada" "já foi validada" "submetida" "já foi enviada ao TCE"
+   "aceita" "já foi aceita" "rejeitada" "já foi rejeitada"})
+
+(def ^:private exigencia-da-transicao
+  "O que a transicao exige, pelo estado ESPERADO: qual remessa pode receber o ato, e o ato."
+  {"rascunho" "uma remessa em rascunho pode ser validada"
+   "validada" "uma remessa validada pode ser enviada"
+   "submetida" "uma remessa enviada pode receber resposta"})
+
+(defn mensagem-do-conflito
+  "O 409 do ciclo da remessa em portugues: o estado atual e o que a transicao esperava (o `ex-data` do conflito
+  carrega `:estado-atual` e `:esperado`). Estado fora do que se conhece cai na frase generica."
+  [{:keys [estado-atual esperado]}]
+  (let [situacao (get situacao-da-remessa estado-atual)
+        exigencia (get exigencia-da-transicao esperado)]
+    (if (and situacao exigencia)
+      (str "Esta remessa " situacao "; só " exigencia ".")
+      "Esta remessa está em um estado que não permite este passo.")))
+
 (defn- responder-transicao
   "Resposta comum das transicoes do ciclo da remessa: a remessa transicionada -> 200 (adapters/out projeta+
   filtra); nil (inexistente no tenant) -> 404; ExceptionInfo :conflito/remessa (estado incompativel / CAS
@@ -36,7 +57,7 @@
       (http/json-resposta 404 {:erro "remessa nao encontrada"}))
     (catch clojure.lang.ExceptionInfo e
       (if (= :conflito/remessa (:tipo (ex-data e)))
-        (http/json-resposta 409 {:erro "remessa em estado incompativel com a transicao"})
+        (http/json-resposta 409 {:erro (mensagem-do-conflito (ex-data e))})
         (throw e)))))
 
 (defn- validar-remessa-handler

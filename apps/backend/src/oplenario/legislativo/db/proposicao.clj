@@ -148,7 +148,7 @@
 (defn protocolar!
   "Protocola: resolve o RITO POR ESPECIE (mig 0076 + 0077), gera o sequencial gapless (escopo 'tipo:ano' do ente da SESSAO),
   computa a URN/LexML (eixo H) e insere — atomico na tx. uf/municipio-nome = FATO do ente resolvido
-  UPSTREAM (nao JOIN cross-schema, §22.10). Devolve {:id :sequencial :urn-lex :template-id :estado} (o
+  UPSTREAM (nao JOIN cross-schema, §22.10). Devolve {:id :sequencial :urn-lex :template-id :estado :protocolada-em} (o
   numero so existe pos-commit).
 
   ORDEM IMPORTA (inalterada): o rito e' resolvido ANTES de `sequencial/proximo!`. A numeracao oficial e' GAPLESS (eixo
@@ -180,8 +180,11 @@
                                                   :created_by created-by :efetivado_em [:now]}
                                            ;; sem rito, o estado NAO e' setado: cai no DEFAULT da coluna
                                            (some? estado-inicial) (assoc :estado estado-inicial))]
-                                :returning [:estado]})))]
-    {:id id :sequencial seq-val :urn-lex urn :template-id rito :estado (:estado linha)}))
+                                :returning [:estado :criado_em]})))]
+    ;; `:protocolada-em` = o instante REAL do protocolo (`criado_em`, RETURNING do INSERT), nao o de quem o projeta
+    ;; depois: a linha do tempo publica da materia (transparencia) abre com ele.
+    {:id id :sequencial seq-val :urn-lex urn :template-id rito :estado (:estado linha)
+     :protocolada-em (:criado-em linha)}))
 
 ;; NOTA: proposicoes e' hash-particionada por ente_id -> toda query inclui ente_id no WHERE (partition
 ;; pruning + uso do indice composto; a RLS e' funcao volatil, o planner NAO a usa p/ podar particao).

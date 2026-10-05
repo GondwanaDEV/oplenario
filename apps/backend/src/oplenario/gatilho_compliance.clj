@@ -22,6 +22,14 @@
       das contas grava o julgamento na mesma tx).
   Depois de avaliar, varre os vencimentos (a unica transicao que evento nao dispara, §22.7.7 S1).
 
+  A REMESSA ACEITA (parte `:remessas`): aceitar a remessa ao TCE (`POST /compliance/remessas/:id/resposta` com `aceita`)
+  e' o fato que cumpre a obrigacao da competencia (`remessa_enviada`), mas a transicao da remessa so' mexe na remessa.
+  O gatilho reavalia, pelo MESMO caminho (`avaliar-obrigacao!`), a obrigacao EM ABERTO de cada competencia com remessa
+  aceita — logo depois do aceite (origem `evento`) e, ANTES do sweep, em toda leitura do painel: e' o que acerta a
+  remessa aceita antes deste gatilho existir (a obrigacao pendente, ou ja' vencida pelo sweep, vira `cumprida`: o
+  cumprimento tardio de `proxima-fase`). So' REAVALIA obrigacao ja' materializada; nao cria. A competencia SEM obrigacao
+  (a Casa que nao tem a regra da remessa) fica como estava.
+
   O QUE AVALIA, por Casa: (a) as competencias de metas fiscais dos quadrimestres JA' TERMINADOS cujo prazo e' de no
   maximo 365 dias atras (o quadrimestre que acabou e os recentes) E nao anterior ao vinculo da Casa a regra — a Casa
   que chega hoje nao nasce com 'vencidas' de antes de usar o sistema; (b) cada prestacao `governo_prefeito`. A obrigacao
@@ -134,6 +142,28 @@
       (or (nil? em) (neg? (.compareTo (Duration/ofMinutes intervalo-sob-demanda-min) (Duration/between em agora)))))
     :else true))
 
+(defn objeto-da-remessa
+  "O id do objeto sob prazo da obrigacao que uma remessa cumpre: DERIVADO de (Casa, sistema, competencia 'AAAA-MM') —
+  a competencia nao e' entidade de dominio e a chave de idempotencia da obrigacao e' Casa⋈regra⋈objeto. E' a MESMA
+  derivacao da semente da demo (`demo/compliance.clj`), que chama esta funcao."
+  ^UUID [ente-id sistema competencia]
+  (UUID/nameUUIDFromBytes (.getBytes (str ente-id "|" sistema "|" competencia) StandardCharsets/UTF_8)))
+
+(defn- amb-da-competencia
+  "'2026-08' -> {\"competencia\" {:ano 2026 :mes 8}}; nil se a string nao tem a forma AAAA-MM."
+  [competencia]
+  (when-let [[_ ano mes] (re-matches #"(\d{4})-(\d{2})" (str competencia))]
+    {"competencia" {:ano (parse-long ano) :mes (parse-long mes)}}))
+
+(def ^:private limite-remessas-aceitas
+  "Teto das competencias com remessa aceita que o gatilho confere por disparo (10 anos de remessa mensal). Passou
+  disso, o disparo avisa no log em vez de fingir que conferiu tudo."
+  120)
+
+(def ^:private limite-em-aberto
+  "Teto das obrigacoes em aberto que o gatilho cruza com as remessas aceitas (o painel usa 100)."
+  500)
+
 ;; ---------------- o catalogo e o vinculo da Casa ----------------
 
 (defn- sem-aspas [s] (some-> s str/trim (str/replace #"^\"|\"$" "")))
@@ -210,7 +240,43 @@
                    (update acc :falhas inc))))
           {:avaliadas 0 :falhas 0} itens))
 
-(def partes-todas #{:metas-fiscais :contas})
+(defn- reavaliar-remessas-aceitas!
+  "Para cada competencia com remessa ACEITA cuja obrigacao esta EM ABERTO (pendente ou vencida), reavalia a obrigacao
+  pelo caminho de producao (`avaliar-objeto!`): o fato `remessa_enviada` enxerga a remessa aceita e a obrigacao vira
+  `cumprida`. Nao cria obrigacao (so' reavalia a existente), respeita a Casa desligada da regra e isola a falha de
+  cada competencia. Devolve {:avaliadas :falhas}."
+  [{:keys [repo-compliance repo-motor] :as deps} ente-id hoje origem agora]
+  (let [aceitas (repo-compliance/remessas-aceitas repo-compliance ente-id (inc limite-remessas-aceitas))
+        abertas (repo-compliance/obrigacoes-em-aberto repo-compliance ente-id (inc limite-em-aberto))
+        _ (when (> (count aceitas) limite-remessas-aceitas)
+            (log/warn "gatilho-compliance: competencias com remessa aceita acima do teto; so as mais recentes foram"
+                      "conferidas" {:ente-id ente-id :teto limite-remessas-aceitas}))
+        _ (when (> (count abertas) limite-em-aberto)
+            (log/warn "gatilho-compliance: obrigacoes em aberto acima do teto; so as mais urgentes foram cruzadas"
+                      {:ente-id ente-id :teto limite-em-aberto}))
+        em-aberto (into #{} (map (juxt :template-chave :objeto-id)) (take limite-em-aberto abertas))
+        alvos (for [{:keys [template-chave sistema competencia]} (take limite-remessas-aceitas aceitas)
+                    :let [oid (objeto-da-remessa ente-id sistema competencia)]
+                    :when (contains? em-aberto [template-chave oid])]
+                {:template-chave template-chave :competencia competencia :objeto-id oid})
+        regras (volatile! {})                       ; template-chave -> {:regra :reg-ver} | false (nao vale p/ a Casa)
+        regra-de (fn [chave]
+                   (if-some [r (get @regras chave)]
+                     r
+                     (let [t (repo-motor/template-vigente repo-motor chave)
+                           b (when t (repo-motor/binding-do-ente repo-motor ente-id chave))
+                           r (if (and t (or (nil? b) (:ativa b)))
+                               {:regra (nuc/carregar-envelope (:fonte-yaml t)) :reg-ver (:registry-versao-ref t)}
+                               false)]
+                       (vswap! regras assoc chave r)
+                       r)))]
+    (cada! "remessa-aceita" alvos
+           (fn [{:keys [template-chave competencia objeto-id]}]
+             (when-let [r (regra-de template-chave)]
+               (when-let [amb (amb-da-competencia competencia)]
+                 (avaliar-objeto! deps ente-id r objeto-competencia objeto-id amb hoje origem agora)))))))
+
+(def partes-todas #{:metas-fiscais :contas :remessas})
 
 (defn disparar!
   "Avalia, para a Casa `ente-id`, as obrigacoes das duas regras e varre os vencimentos. Idempotente. `deps` =
@@ -236,8 +302,11 @@
                                (map :id))
                           (fn [pid] (avaliar-objeto! deps ente-id r objeto-prestacao pid {"prestacao" pid}
                                                      dia origem instante)))))
+        ;; ANTES do sweep: a obrigacao que uma remessa aceita ja' cumpre sai de pendente aqui e o sweep nao a vence
+        remessas (when (contains? partes :remessas)
+                   (reavaliar-remessas-aceitas! deps ente-id dia origem instante))
         vencidas (repo-compliance/varrer-vencimentos! (:repo-compliance deps) ente-id dia)]
-    {:metas-fiscais metas :contas contas :vencidas (count vencidas)}))
+    {:metas-fiscais metas :contas contas :remessas remessas :vencidas (count vencidas)}))
 
 (defn disparar-sem-falhar!
   "`disparar!` que NUNCA lanca: loga e devolve nil. E' o que o host compoe nos atos e nas leituras."
