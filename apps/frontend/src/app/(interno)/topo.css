@@ -30,6 +30,14 @@
 }
 .quem-menu-painel a:hover { background: color-mix(in srgb, var(--marca) 7%, transparent); }
 .quem-menu-painel .conta-nota { font-size: var(--t-12); font-weight: 400; color: var(--texto-2); }
+.quem-menu-painel .form-sair { margin: 0; }
+.quem-menu-painel .quem-sair {
+  display: block; width: 100%; padding: 0.55rem 0.7rem; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  text-align: left; color: var(--texto); font: inherit; font-size: var(--t-13); font-weight: 500; line-height: 1.35;
+}
+.quem-menu-painel .quem-sair:hover { background: color-mix(in srgb, var(--marca) 7%, transparent); }
+.quem-menu-painel .quem-sair:focus-visible { outline: 3px solid var(--foco); outline-offset: -3px; }
+.quem-menu-painel a + .form-sair { border-top: 1px solid var(--linha); margin-top: 0.3rem; padding-top: 0.3rem; }
 
 /* `flex-wrap: wrap` + `min-width: 0`: sem isto a nav é UM filho flex largo demais (7 itens, uma linha) do
    .topo-grade — mais largo que o envelope já em desktop, empurrando o .topo-dir (margin-left:auto) para

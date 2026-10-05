@@ -173,7 +173,20 @@ describe("TopoInterno", () => {
       expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
     });
 
-    it("modo dev (token de dev) não tem o link", async () => {
+    it("modo real: o menu tem 'Sair', que é um POST em /api/auth/logout (inclusive para a sessão do gov.br)", async () => {
+      vi.stubEnv("NEXT_PUBLIC_APP_ENV", "production");
+      for (const tipo of ["servidor", "cidadao"]) {
+        servidor(tipo);
+        const { unmount } = montar();
+        const sair = await screen.findByRole("button", { name: "Sair" });
+        const form = sair.closest("form")!;
+        expect(form.getAttribute("method")).toBe("post");
+        expect(form.getAttribute("action")).toBe("/api/auth/logout");
+        unmount();
+      }
+    });
+
+    it("modo dev (token de dev) não tem o link nem o 'Sair' (não há sessão a encerrar)", async () => {
       servidor("servidor");
       render(
         <AuthProvider tokenQuery="abc123">
@@ -184,6 +197,7 @@ describe("TopoInterno", () => {
       );
       await screen.findByText("Marina Alencar Freire");
       expect(screen.queryByRole("link", { name: /e-mail de acesso/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Sair" })).toBeNull();
     });
   });
 

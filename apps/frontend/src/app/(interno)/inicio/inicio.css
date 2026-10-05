@@ -49,3 +49,7 @@
 .atalho span { font-size: var(--t-13); color: var(--texto-2); }
 .atalho:hover { border-color: var(--texto-2); background: var(--realce); }
 .atalho:focus-visible { outline: 2px solid var(--foco); outline-offset: 1px; }
+
+/* "Sair" de quem está no /inicio sem o topo da secretaria (vereador, cidadã, acesso que não carregou). */
+.inicio-sair { padding-bottom: 2rem; }
+.inicio-sair .form-sair { margin: 0; }

@@ -23,6 +23,8 @@ import { useMeuIdentidade } from "@/lib/use-meu-identidade";
 import { rotuloPapel } from "@/lib/rotulo-papel";
 import { FaixaAcessoRestritoDaSessao } from "@/lib/faixa-acesso-restrito";
 import { usePathname } from "next/navigation";
+import { BotaoSair } from "@/lib/botao-sair";
+import { modoReal } from "@/lib/modo";
 import "./cidadao.css";
 
 export default function LayoutCidadao({ children }: { children: React.ReactNode }) {
@@ -102,6 +104,7 @@ function TopoCidadao() {
               {papel && <span>{papel}</span>}
             </span>
           </div>
+          {modoReal() && <BotaoSair className="cid-sair" />}
         </div>
       </div>
     </header>
