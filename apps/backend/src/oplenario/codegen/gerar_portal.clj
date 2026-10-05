@@ -12,6 +12,7 @@
             [oplenario.participacao.wire.out.encarregado :as encarregado]
             [oplenario.transparencia.wire.out.dados-abertos :as dados-abertos]
             [oplenario.transparencia.wire.out.materia :as materia]
+            [oplenario.transparencia.wire.out.movimentacao :as movimentacao]
             [oplenario.transparencia.wire.out.norma :as norma]
             [oplenario.transparencia.wire.out.parlamentar :as parlamentar]
             [oplenario.transparencia.wire.out.vereadores :as vereadores]
@@ -34,6 +35,9 @@
    ["MateriasOut" materia/MateriasOut]
    ["ResumoPublicoOut" materia/ResumoPublicoOut]
    ["FichaOut" materia/FichaOut]
+   ;; "Por onde a materia passou" (GET /portal/casa/:ente/materias/:id/movimentacoes): a folha antes do agregado.
+   ["MovimentacaoOut" movimentacao/MovimentacaoOut]
+   ["MovimentacoesOut" movimentacao/MovimentacoesOut]
    ["EncarregadoOut" encarregado/EncarregadoPublicoOut]
    ["AcompanhamentoEsicOut" ac-esic/AcompanhamentoOut]
    ["AcompanhamentoOuvidoriaOut" ac-ouv/AcompanhamentoOuvidoriaOut]

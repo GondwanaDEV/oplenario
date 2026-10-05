@@ -464,6 +464,11 @@
        ;; nao e' necessariamente 'protocolada'. Cravar a string aqui faria o evento publico
        ;; AFIRMAR um estado que a linha nao tem — e o portal projeta deste evento (§22.10).
        :urn-lex (:urn-lex r) :ementa (:ementa p) :estado (:estado r)
+       ;; linha do tempo publica (transparencia): o rotulo do estado inicial NO RITO e o instante do protocolo. Sem
+       ;; rito (ou rito que nao declara o estado) a chave `:estado-nome` sai nula e o portal nao inventa nome.
+       :estado-nome (:nome (when (:template-id r)
+                             (proposicao/estado-no-template tx ente-id (:template-id r) (:estado r))))
+       :protocolada-em (str (:protocolada-em r))
        :autor-tipo (:autor-tipo p) :autor-texto (:autor-texto p)
        ;; some-> : :autor-id e' nulo p/ autoria nao-parlamentar; (str nil) daria "" e quebraria
        ;; o UUID/fromString do consumer (Onda E fatia 2).
@@ -666,7 +671,9 @@
                        :de (:de r) :para (:para r) :gatilho (:gatilho args)
                        :transicao-id (:transicao-id r) :ocorrido-em (str (:ocorrido-em r))
                        ;; o rito da Casa diz se o destino encerra o processo (paineis: "em tramitacao")
-                       :para-terminal (boolean (:para-terminal r))}
+                       :para-terminal (boolean (:para-terminal r))
+                       ;; e como ele CHAMA a etapa de destino (o portal mostra o rotulo, nunca a chave)
+                       :para-nome (:para-nome r)}
                 (:ator-id args) (assoc :ator-id (:ator-id args)))))
           r))))
   (historico-da-proposicao [this ente-id pid] (transacao this ente-id #(tram/historico-da-proposicao % ente-id pid)))
