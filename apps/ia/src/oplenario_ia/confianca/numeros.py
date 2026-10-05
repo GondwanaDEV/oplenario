@@ -18,9 +18,13 @@ identificadores. Nada é mascarado antes da conferência: data e hora que sobram
 (dúvida declarada, que o texto da ata mantém à vista) é a ÚNICA exclusão, por delimitador exato, e o resto do
 parágrafo ainda tem de passar em (a) e (b).
 
-O que isto garante: o parágrafo da votação só tem o placar como o sistema o escreveria. O que NÃO garante: ele não
-entende português — uma expressão numérica fora da lista de palavras passa, e uma afirmação sem número ("rejeitada"
-junto de uma frase de "aprovada") também. A revisão humana do rascunho continua obrigatória.
+E (c) o que sobra só pode ser MOLDURA: uma lista fechada de palavras que apresentam a votação ("votação nominal",
+"a matéria", "foi") e pontuação comum. Qualquer outra palavra ou símbolo reprova — é o que barra a negação ("não foi
+aprovada por…"), o prefixo colado ("desaprovada por…"), o resultado dito ao lado ("rejeitada") e o número colado.
+
+O que isto garante: o parágrafo da votação só tem o placar como o sistema o escreveria, dentro de uma moldura
+conhecida. O que NÃO garante: ele não entende português — a ordem das palavras da moldura não é conferida. A revisão
+humana do rascunho continua obrigatória.
 """
 
 from __future__ import annotations
@@ -85,6 +89,28 @@ def sinais_numericos(texto_normalizado: str) -> list[str]:
     return sinais
 
 
+# O que PODE sobrar no parágrafo de uma votação depois de tiradas as frases canônicas e os identificadores: só a
+# moldura que apresenta a votação. É uma lista de PERMITIDOS, não de proibidos: uma lista de proibidos (números,
+# palavras-número) deixava passar o que inverte ou altera o sentido sem usar número — "não foi aprovada por 9 votos…",
+# "desaprovada por 9 votos…" (a canônica casa DENTRO da palavra), "dezvotos" colado, "rejeitada" ao lado da frase de
+# "aprovada". Com a lista de permitidos, qualquer palavra, prefixo ou símbolo fora dela reprova o parágrafo.
+_MOLDURA = frozenset(
+    {
+        "a", "o", "as", "os", "da", "do", "das", "dos", "de", "em", "na", "no", "e", "foi", "pelo", "pela",
+        "votação", "votacao", "nominal", "simbólica", "simbolica", "secreta", "matéria", "materia", "proposição",
+        "proposicao", "plenário", "plenario", "sessão", "sessao", "nesta", "submetida", "submetido", "colocada",
+        "colocado", "resultado", "registrou", "registrado", "registrada", "sistema",
+    }
+)  # fmt: skip
+_PONTUACAO = frozenset(".,;:()\"'“”‘’—–-")
+_PECA = re.compile(r"[^\W_]+|\S")
+
+
+def fora_da_moldura(texto_normalizado: str) -> list[str]:
+    """As peças do texto (palavras e símbolos) que não são moldura nem pontuação comum. Vazio = só moldura."""
+    return [p for p in _PECA.findall(texto_normalizado) if p not in _MOLDURA and p not in _PONTUACAO]
+
+
 def divergencias(
     paragrafo: str, frases_canonicas: list[str] | tuple[str, ...], identificadores: list[str]
 ) -> list[str]:
@@ -96,4 +122,6 @@ def divergencias(
     resto = texto
     for peca in sorted({*frases, *(normalizar(i) for i in identificadores)}, key=len, reverse=True):
         resto = resto.replace(peca, " ")
-    return [f"sobrou '{s}' no parágrafo, fora do registro do sistema" for s in sinais_numericos(resto)]
+    # as duas redes: o sinal numérico (o motivo mais útil de ler no log) e, por fim, tudo o que não é moldura
+    sobras = list(dict.fromkeys([*sinais_numericos(resto), *fora_da_moldura(resto)]))
+    return [f"sobrou '{s}' no parágrafo, fora do registro do sistema" for s in sobras]

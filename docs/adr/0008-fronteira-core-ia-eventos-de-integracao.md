@@ -162,10 +162,15 @@ migration: é o mesmo caminho dos oradores e da pauta.
   parágrafo, as frases e os identificadores. Nada é mascarado: data e hora que sobram reprovam; o `[confirmar: …]`
   (dúvida declarada) é a única exclusão, por delimitador exato, e o resto do parágrafo ainda tem de passar. Duas votações
   citadas no mesmo parágrafo: nenhuma confere. Reprovado sai `trecho_nao_encontrado` (vira ponto a confirmar na revisão).
-- **O que isto garante:** o parágrafo de uma votação só contém o placar como o SISTEMA o escreveria. **O que NÃO
-  garante:** o conferidor não entende português. Expressão numérica fora da lista de palavras passa, e afirmação sem
-  número ("rejeitada" ao lado da frase de "aprovada") também. A revisão humana do rascunho continua obrigatória. O custo
-  é ruído aceito e fail-closed: o modelo tem de citar a votação numa frase própria, sem outros números.
+- **A sobra é lista de PERMITIDOS:** depois de tiradas as frases canônicas e os identificadores, o que resta no
+  parágrafo só pode ser a moldura que apresenta a votação (lista fechada em `numeros.py`: "votação nominal", "a
+  matéria", "foi", "resultado", pontuação comum). Qualquer outra palavra ou símbolo reprova. Só a lista de proibidos
+  deixava passar o que muda o sentido sem número: "não foi aprovada por…", "desaprovada por…" (a canônica casa dentro
+  da palavra), "rejeitada" ao lado da frase de "aprovada", número colado em palavra.
+- **O que isto garante:** o parágrafo de uma votação só contém o placar como o SISTEMA o escreveria, dentro de uma
+  moldura conhecida. **O que NÃO garante:** o conferidor não entende português; a ordem das palavras da moldura não é
+  conferida. A revisão humana do rascunho continua obrigatória. O custo é ruído aceito e fail-closed: o modelo tem de
+  citar a votação num parágrafo próprio, sem mais nada; o que ele acrescentar vira ponto a confirmar.
 - **Gravação que contradiz o dado:** vale o dado, e a instrução manda `[confirmar: a gravação indica X; o sistema
   registra Y]`; o roteiro do fake faz isso para algarismos e com uma votação só.
 - **Core antigo:** contexto sem `votacoes` vale lista vazia (a ata sai como antes).

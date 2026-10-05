@@ -175,13 +175,16 @@ def test_ponto_de_abreviatura_nao_esconde_numero() -> None:
     assert status(paragrafo(p, antes="Aprovada por 10 votos, conforme o Sr. Presidente. "), p) == [
         "trecho_nao_encontrado"
     ]
-    assert status(paragrafo(p, antes="Conforme o Sr. Presidente, "), p) == ["conferida"]
+    # sem número, o texto a mais ainda não é moldura: reprova (lista de permitidos), e a moldura sozinha confere
+    assert status(paragrafo(p, antes="Conforme o Sr. Presidente, "), p) == ["trecho_nao_encontrado"]
+    assert status(paragrafo(p), p) == ["conferida"]
 
 
 def test_numero_depois_da_marca_no_mesmo_paragrafo_tambem_conta() -> None:
     p = votacao()
     assert status(f"{paragrafo(p)} O placar foi de 10 votos.", p) == ["trecho_nao_encontrado"]
-    assert status(f"{paragrafo(p)} Nada mais.", p) == ["conferida"]
+    assert status(f"{paragrafo(p)} Nada mais.", p) == ["trecho_nao_encontrado"]  # fora da moldura
+    assert status(f"{paragrafo(p)} Resultado registrado pelo sistema.", p) == ["conferida"]  # só moldura
 
 
 def test_quebra_de_linha_simples_nao_separa_paragrafo() -> None:
@@ -254,15 +257,17 @@ def test_caractere_invisivel_combinante_ou_homoglifo_reprova(disfarce: str) -> N
     assert status(paragrafo(p, antes=f"{disfarce} "), p) == ["trecho_nao_encontrado"], repr(disfarce)
 
 
-def test_sem_nenhum_numero_o_texto_comum_passa_como_antes() -> None:
+def test_moldura_que_apresenta_a_votacao_confere_e_texto_comum_fora_dela_nao() -> None:
     p = votacao()
-    assert status(paragrafo(p, antes="Colocada em pauta pela Mesa, a matéria seguiu: "), p) == ["conferida"]
+    assert status(paragrafo(p, antes="Colocada em votação a matéria, resultado: "), p) == ["conferida"]
+    # antes passava: o parágrafo da votação agora só aceita a moldura conhecida
+    assert status(paragrafo(p, antes="Colocada em pauta pela Mesa, a matéria seguiu: "), p) == ["trecho_nao_encontrado"]
 
 
-def test_expressao_numerica_fora_da_lista_passa_e_e_o_limite_declarado() -> None:
-    # o conferidor não entende português: isto passa, e a revisão humana do rascunho continua obrigatória
+def test_expressao_numerica_fora_da_lista_de_palavras_tambem_reprova() -> None:
+    # era o limite declarado da lista de proibidos ("larga margem" não é palavra-número); a lista de permitidos fecha
     p = votacao()
-    assert status(paragrafo(p, antes="Por larga margem, "), p) == ["conferida"]
+    assert status(paragrafo(p, antes="Por larga margem, "), p) == ["trecho_nao_encontrado"]
 
 
 # ---------- normalização: um só ponto de entrada, igual nos dois lados ----------
@@ -353,3 +358,41 @@ def test_propriedade_o_placar_do_roteiro_confere_e_qualquer_sinal_ou_numero_a_ma
                         assert [c.status for c in conferir(errado, [fonte])] == ["trecho_nao_encontrado"], errado
                         insercoes += 1
     assert certos == 31**3 and trocas == 3 * 31**3 and insercoes > 100_000
+
+
+# ---- a sobra é lista de PERMITIDOS: o que inverte o sentido sem usar número também reprova ----
+
+_CANONICA = "aprovada por 9 votos a favor, 2 contra e 1 abstenção"
+_IDENT = "PL 008/2026"
+
+
+def _diverge(paragrafo: str) -> bool:
+    return bool(divergencias(paragrafo, [_CANONICA], [_IDENT]))
+
+
+def test_a_moldura_do_roteiro_confere() -> None:
+    assert not _diverge(f"Votação nominal: {_IDENT}, {_CANONICA}.")
+
+
+def test_negacao_antes_da_frase_canonica_reprova() -> None:
+    assert _diverge(f"Votação nominal: {_IDENT} não foi {_CANONICA}.")
+    assert _diverge(f"Votação nominal: {_IDENT}, jamais {_CANONICA}.")
+
+
+def test_prefixo_colado_na_frase_canonica_reprova() -> None:
+    # "desaprovada por 9 votos…" contém a canônica por substring: o prefixo que sobra tem de reprovar
+    assert _diverge(f"Votação nominal: {_IDENT}, des{_CANONICA}.")
+
+
+def test_resultado_contrario_ao_lado_reprova() -> None:
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA}, e rejeitada.")
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA}. A matéria foi derrotada.")
+
+
+def test_numero_colado_em_palavra_reprova() -> None:
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA}, com dezvotos de diferença.")
+
+
+def test_simbolo_fora_da_pontuacao_comum_reprova() -> None:
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA} (+ outros).")
+    assert _diverge(f"Votação nominal: {_IDENT}, {_CANONICA} %.")
