@@ -60,8 +60,30 @@ describe("PautasOficiais", () => {
     mockar({ [`/api/portal/casa/${ENTE}/pautas`]: lista, [`/api/portal/casa/${ENTE}/pautas/s1`]: congelada });
     render(<PautasOficiais ente={ENTE} sessao={null} />);
     const secao = await screen.findByRole("region", { name: "Pauta da 12ª Sessão Ordinária" });
-    const itens = within(secao).getAllByRole("listitem").filter((li) => li.querySelector(".po-fase"));
+    const itens = [...secao.querySelectorAll(".po-itens > li")];
     expect(itens.map((li) => (li as HTMLLIElement).value)).toEqual([1, 2, 1, 2]);
+  });
+
+  it("agrupa por fase na ordem da sessão, com o nome da fase uma vez só", async () => {
+    const foraDeOrdem = {
+      ...oficial,
+      vigente: {
+        ...oficial.vigente,
+        itens: [
+          { id: "c", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "Leitura do parecer", ordem: 3 },
+          { id: "d", fase: "ordem_do_dia", "tipo-item": "leitura", "texto-descricao": "Leitura da emenda", ordem: 4 },
+          { id: "a", fase: "expediente", "tipo-item": "leitura", "texto-descricao": "Leitura da ata", ordem: 5 },
+        ],
+      },
+    };
+    mockar({ [`/api/portal/casa/${ENTE}/pautas`]: lista, [`/api/portal/casa/${ENTE}/pautas/s1`]: foraDeOrdem });
+    render(<PautasOficiais ente={ENTE} sessao={null} />);
+    const secao = await screen.findByRole("region", { name: "Pauta da 12ª Sessão Ordinária" });
+    expect(within(secao).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["Expediente", "Ordem do Dia"]);
+    expect(within(within(secao).getByRole("region", { name: "Ordem do Dia" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Leitura do parecer",
+      "Leitura da emenda",
+    ]);
   });
 
   it("abre a última pauta publicada: versão, data, os itens com link à matéria e as publicações anteriores", async () => {

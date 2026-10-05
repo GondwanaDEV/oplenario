@@ -69,6 +69,9 @@ test("E4 — o editor de parecer da secretaria abre no parecer editavel", async 
 
 test("E4 — a tela de assinatura abre para o relator (posse ok, nao 404)", async ({ page }) => {
   await page.goto(ids.e4.urlAssinarVereador, { timeout: 90_000 });
+  // O positivo vem ANTES do negativo: `toHaveCount(0)` é verdadeiro no primeiro instante (a página ainda em
+  // "Carregando…"), então afirmar a ausência antes de a tela decidir não provava nada. O título "Assinar parecer" só
+  // existe quando o parecer foi lido e o relator tem posse; o erro e o "não encontrado" têm outros títulos.
+  await expect(page.getByRole("heading", { name: "Assinar parecer", level: 1, exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/n[ãa]o encontrad/i)).toHaveCount(0);
-  await expect(page.locator("main").first()).toBeVisible({ timeout: 30_000 });
 });

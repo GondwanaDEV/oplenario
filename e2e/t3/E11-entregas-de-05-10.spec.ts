@@ -20,10 +20,9 @@ import { resolve } from "node:path";
 //     objeto votado de E6, e encerra a própria sessão no fim para não deixar uma "sessão em curso" na Casa.
 // A Casa é append-only: rodar de novo cria gente, matéria e sessão novas; nada aqui depende de ordem entre specs.
 //
-// PRECONDIÇÃO QUE O DEV-IDP ENTORTA (e que a spec trata de frente, não esconde): em modo dev o `idp-dev` não provisiona
-// realm (`provisionar-realm!` lança), então POST /identidade/acessos devolve 500 DEPOIS de gravar o vínculo e os
-// papéis. A prova de que o acesso foi concedido não é o status: é a leitura de GET /identidade/acessos e de GET /eu
-// com a pessoa nova. Se o acesso não aparecer, a spec reprova nomeando isto.
+// A CONCESSÃO É PROVADA, NÃO PRESUMIDA: depois do POST /identidade/acessos (201, desde o PR #208: em modo dev o IdP
+// pula o Keycloak em vez de dar 500 depois de gravar), a spec lê GET /identidade/acessos e GET /eu com a pessoa nova.
+// Se o acesso não aparecer, reprova nomeando isto.
 
 const ARQ_DEMO = resolve(__dirname, "../.artifacts/demo-ids.edn");
 const BACK = process.env.E2E_BACKEND_URL ?? "http://localhost:8888";
@@ -179,27 +178,29 @@ async function criarIdentidade(ctx: APIRequestContext, nome: string): Promise<st
   return ((await r.json()) as { "identidade-id": string })["identidade-id"];
 }
 
-/** Concede o papel pelo backend e PROVA a concessão lendo a lista (ver o cabeçalho: o dev-idp devolve 500 depois de gravar). */
+type PapelConcedido = "auditor" | "juridico" | "vereador";
+
+/** Concede o papel pelo backend e PROVA a concessão lendo a lista (o POST devolve 201, e o 201 sozinho não prova o vínculo). */
 async function conceder(
   ctx: APIRequestContext,
   identidadeId: string,
   nome: string,
-  papel: "auditor" | "juridico",
+  papel: PapelConcedido,
 ): Promise<void> {
   const corpo: Record<string, unknown> = {
     "identidade-id": identidadeId,
-    tipo: "servidor",
+    tipo: papel === "vereador" ? "vereador" : "servidor",
     papeis: [papel],
     email: `e11.${carimbo()}@camara.gov.br`,
     ...(papel === "juridico" ? { qualificacao: "efetivo", oab: "CE 12345" } : {}),
   };
   const r = await ctx.post(`${BACK}/identidade/acessos`, { headers: cab(TOK.admin), data: corpo });
-  expect([201, 500], `conceder ${papel} a ${nome}: só 201 (idp real) ou 500 (idp-dev, depois de gravar) são esperados; veio ${r.status()}`).toContain(r.status());
+  expect(r.status(), `conceder ${papel} a ${nome}: ${await r.text()}`).toBe(201);
   const acessos = await acessosDaCasa(ctx);
   const achou = acessos.find((a) => a["identidade-id"] === identidadeId && a.papel === papel && a["revogado-em"] === null);
   expect(
     achou,
-    `o acesso ${papel} de ${nome} NÃO aparece em GET /identidade/acessos depois do POST (status ${r.status()}): a concessão não gravou`,
+    `o acesso ${papel} de ${nome} NÃO aparece em GET /identidade/acessos depois do POST (201): a concessão não gravou`,
   ).toBeTruthy();
 }
 
@@ -305,6 +306,82 @@ test.describe("E11-1 revogar acesso (admin_ente em /administracao)", () => {
     const depois = await papeisDaPessoa(ctx, identidade, ["auditor", "juridico"]);
     expect(depois.status(), "a pessoa segue entrando: ainda tem um papel").toBe(200);
     expect(((await depois.json()) as { ator: { papeis: string[] } }).ator.papeis, "só o jurídico saiu").toEqual(["auditor"]);
+    await ctx.dispose();
+  });
+
+  test("vereador: revoga com motivo, a linha vira histórico, e a pessoa perde o acesso na chamada seguinte", async ({ page }) => {
+    // O vereador é PRÓPRIO e SEM MANDATO (como os de E1): fora do roster, do quórum e da lista /vereadores do portal, que só
+    // contam quem exerce mandato. Assim a spec não mexe no que E4/E5/E6/E8 (quórum, chamada, votação) e a E11-2 medem.
+    // A ordem é a do provisionamento da tela (use-conceder-acesso.ts): cadastro -> identidade -> ligar -> conceder por último.
+    const ctx = await pwRequest.newContext();
+    const nome = `Vereador E11 ${carimbo()}`;
+    const cadastro = await ctx.post(`${BACK}/cadastros/vereadores`, { headers: cab(TOK.secretaria), data: { nome } });
+    expect(cadastro.status(), `a secretaria cadastra o vereador ${nome}: ${await cadastro.text()}`).toBe(201);
+    const vereadorId = ((await cadastro.json()) as { id: string }).id;
+    const identidade = await criarIdentidade(ctx, nome);
+    const ligar = await ctx.patch(`${BACK}/cadastros/vereadores/${vereadorId}/identidade`, {
+      headers: cab(TOK.admin),
+      data: { "identidade-id": identidade },
+    });
+    expect(ligar.status(), `o admin_ente liga o cadastro à identidade: ${await ligar.text()}`).toBe(200);
+    await conceder(ctx, identidade, nome, "vereador");
+
+    // antes: o acesso vale — a pessoa resolve na Casa como vereador e lê a própria atuação (rota só de vereador)
+    const antes = await papeisDaPessoa(ctx, identidade, ["vereador"]);
+    expect(antes.status(), "antes de revogar, a pessoa resolve na Casa").toBe(200);
+    expect(((await antes.json()) as { ator: { papeis: string[] } }).ator.papeis).toEqual(["vereador"]);
+    const votosAntes = await ctx.get(`${BACK}/meu/votos`, { headers: cab(token(identidade, ["vereador"])) });
+    expect(votosAntes.status(), "antes de revogar, o vereador lê a própria atuação").toBe(200);
+
+    const eu = await ctx.get(`${BACK}/meu/identidade`, { headers: cab(TOK.admin) });
+    const nomeDoAdmin = ((await eu.json()) as { nome: string }).nome;
+
+    await abrirAdministracao(page);
+    const item = page.getByRole("list", { name: "Acessos concedidos" }).getByRole("listitem").filter({ hasText: nome });
+    await expect(item).toContainText("Vereador(a) · Acesso ativo desde");
+
+    // 1) sem motivo, não revoga: a tela diz o que falta e o acesso segue ativo
+    await item.getByRole("button", { name: `Revogar acesso de ${nome} (Vereador(a))` }).click();
+    const form = item.getByRole("form", { name: `Revogar acesso de ${nome}` });
+    await form.getByRole("button", { name: "Confirmar revogação" }).click();
+    await expect(form.getByRole("alert")).toHaveText("Escreva o motivo da revogação.");
+    const aindaAtivo = await papeisDaPessoa(ctx, identidade, ["vereador"]);
+    expect(aindaAtivo.status(), "recusada na tela, a revogação não chegou ao servidor").toBe(200);
+
+    // 2) com motivo, revoga
+    const motivo = `Mandato encerrado (E11 ${carimbo()})`;
+    await form.getByLabel("Motivo da revogação").fill(motivo);
+    await form.getByRole("button", { name: "Confirmar revogação" }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: `Acesso de ${nome} (Vereador(a)) revogado. A pessoa já não consegue entrar no sistema.` }),
+    ).toBeVisible({ timeout: 30_000 });
+
+    // 3) a linha FICA como histórico: quando, por quem, por quê — o botão de revogar sai e o de dar de novo entra
+    await expect(item).toContainText("Revogado em");
+    await expect(item).toContainText(`por ${nomeDoAdmin}`);
+    await expect(item).toContainText(`Motivo: ${motivo}`);
+    await expect(item.getByRole("button", { name: `Revogar acesso de ${nome} (Vereador(a))` })).toHaveCount(0);
+    await expect(item.getByRole("button", { name: `Dar o acesso de novo a ${nome} (Vereador(a))` })).toBeVisible();
+
+    // 4) recarregar não apaga o histórico
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Quem tem acesso" })).toBeVisible({ timeout: 60_000 });
+    const itemDepois = page.getByRole("list", { name: "Acessos concedidos" }).getByRole("listitem").filter({ hasText: nome });
+    await expect(itemDepois).toContainText(`Motivo: ${motivo}`);
+
+    // 5) o servidor: a lista guarda a revogação, e a MESMA pessoa (mesmo token) perde o acesso na chamada seguinte
+    const acesso = (await acessosDaCasa(ctx)).find((a) => a["identidade-id"] === identidade && a.papel === "vereador");
+    expect(acesso?.["revogado-em"], "a revogação ficou registrada").toBeTruthy();
+    expect(acesso?.motivo).toBe(motivo);
+    expect(acesso?.["revogado-por-nome"]).toBe(nomeDoAdmin);
+    const depois = await papeisDaPessoa(ctx, identidade, ["vereador"]);
+    expect(depois.status(), "sem papel nenhum na Casa, o vínculo se encerra e a pessoa deixa de entrar (401)").toBe(401);
+    const votosDepois = await ctx.get(`${BACK}/meu/votos`, { headers: cab(token(identidade, ["vereador"])) });
+    expect(votosDepois.status(), "e a rota do vereador deixa de abrir para ela").toBe(401);
+
+    // 6) o cadastro NÃO é apagado: revogar o acesso não revoga o mandato nem some com a pessoa da secretaria
+    const ficha = await ctx.get(`${BACK}/cadastros/vereadores/${vereadorId}`, { headers: cab(TOK.secretaria) });
+    expect(ficha.status(), "o cadastro do vereador segue lá depois de revogar o acesso").toBe(200);
     await ctx.dispose();
   });
 });
