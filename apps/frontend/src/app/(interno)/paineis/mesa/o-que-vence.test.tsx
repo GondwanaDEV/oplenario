@@ -121,6 +121,24 @@ describe("OQueVence — o prazo em palavras", () => {
     expect(queryByText(/audiencia_metas_fiscais|julgamento_contas_prefeito/)).toBeNull();
   });
 
+  // Miudeza de 05/10/2026: o aviso de corte das obrigações do TCE mandava "conferir o painel de compliance
+  // completo" — tela que NÃO existe (o calendário lê o MESMO painel cortado, então também não completa a
+  // lista). O aviso diz só o que é verdade: o corte e o total; nenhuma tela é prometida.
+  it("o aviso de corte das obrigações não promete tela que não existe e não traz link", () => {
+    const { getByRole, queryByRole } = render(
+      <OQueVence
+        vista={{
+          ...vista([item("2026-09-30", "a")]),
+          truncamentoCompliance: { exibidos: 100, total: 130 },
+        }}
+      />,
+    );
+    const aviso = getByRole("status");
+    expect(aviso.textContent).toContain("100 de 130");
+    expect(aviso.textContent).not.toMatch(/painel de compliance|Confira o painel|completo/i);
+    expect(queryByRole("link", { name: /painel|compliance/i })).toBeNull();
+  });
+
   describe("cada prazo que tem tela leva a ela", () => {
     const pendencia = (objetoTipo: string, objetoId: string, protocolo: string) => ({
       origem: "pendencia" as const, objetoTipo, objetoId, protocolo, venceEm: "2026-09-30", estado: "pendente",
