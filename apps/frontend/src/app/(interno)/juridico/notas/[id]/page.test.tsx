@@ -12,6 +12,7 @@ vi.mock("../../../topo", () => ({ TopoInterno: ({ area }: { area: string }) => <
 vi.mock("next/navigation", () => ({ useParams: () => ({ id: "n1" }), useRouter: () => ({ push, replace: vi.fn() }) }));
 
 import PaginaNotaDoJuridico from "./page";
+import { ProvedorDaDica, useDicaAtual } from "../../../clara/dica";
 
 const nota = (estado = "pendente") => ({
   id: "n1", "proposicao-id": "p1", tipo: "projeto_lei", sequencial: 7, ano: 2026, ementa: "Institui o Programa de Hortas",
@@ -134,5 +135,26 @@ describe("/juridico/notas/:id", () => {
     mockar({});
     render(<PaginaNotaDoJuridico />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/não existe nesta Casa/);
+  });
+});
+
+describe("/juridico/notas/:id — a dica da Clara", () => {
+  it("com a nota carregada, a dica é a matéria dela ('PL 7/2026')", async () => {
+    function Sonda() {
+      const dica = useDicaAtual();
+      return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+    }
+    mockar({ "GET /api/legislativo/notas-tecnicas/n1": { corpo: nota() } });
+    render(
+      <ProvedorDaDica>
+        <PaginaNotaDoJuridico />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    await screen.findByText(/Rascunho produzido por IA/);
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe("PL 7/2026 | Sobre o PL 7/2026,  | Perguntar sobre esta matéria"),
+    );
   });
 });

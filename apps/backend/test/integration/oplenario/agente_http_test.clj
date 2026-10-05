@@ -13,6 +13,7 @@
             [oplenario.agente :as agente]
             [oplenario.auditoria.components.repositorio :as repo-auditoria]
             [oplenario.auditoria.diplomat.http.in :as auditoria-http]
+            [oplenario.catalogo :as catalogo]
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
@@ -136,8 +137,14 @@
         svc (servico (ia pedidos))]
     (testing "vereador nao pede o conjunto da secretaria"
       (is (= 403 (:status (perguntar svc ente (pessoa! ente "vereador") {:pergunta "oi?" :publico "secretaria"})))))
-    (testing "quem nao e' secretaria nem vereador nao pergunta"
-      (is (= 403 (:status (perguntar svc ente (pessoa! ente "admin_ente") {:pergunta "oi?"})))))
+    (testing "quem nao tem papel que alcance a Clara nao pergunta"
+      (is (= 403 (:status (perguntar svc ente (pessoa! ente) {:pergunta "oi?"})))))
+    (testing "juridico, auditor e admin_ente perguntam com o publico de consulta, e so' com ele"
+      (let [outro (servico (ia (atom [])))]
+        (doseq [p ["juridico" "auditor" "admin_ente"]]
+          (is (= 200 (:status (perguntar outro ente (pessoa! ente p) {:pergunta "oi?"}))) p)
+          (is (= 403 (:status (perguntar outro ente (pessoa! ente p) {:pergunta "oi?" :publico "secretaria"}))) p))
+        (is (= 403 (:status (perguntar outro ente (pessoa! ente "secretario") {:pergunta "oi?" :publico "consulta"}))))))
     (testing "quem tem os dois escolhe; sem escolha, a secretaria"
       (let [iid (pessoa! ente "secretario" "vereador")]
         (perguntar svc ente iid {:pergunta "oi?"})
@@ -406,8 +413,8 @@
     (testing "outra Casa nao alcanca a conversa, nem a propria dona por la'"
       (let [outra (random-uuid)]
         (is (= 404 (:status (ler svc outra (pessoa! outra "auditor") (str "/agente/conversas/" conversa)))))))
-    (testing "papel sem historico: 403"
-      (is (= 403 (:status (ler svc ente (pessoa! ente "admin_ente") "/agente/historico")))))))
+    (testing "sem papel que alcance a Clara: 403"
+      (is (= 403 (:status (ler svc ente (pessoa! ente) "/agente/historico")))))))
 
 (deftest o-auditor-le-o-historico-da-casa-e-a-leitura-vai-a-trilha
   (let [ente (random-uuid)
@@ -522,3 +529,94 @@
       (is (= 400 (:status (ler svc ente ana (str "/agente/historico?q=" (q s))))) (pr-str s)))
     (is (= 200 (:status (ler svc ente ana (str "/agente/historico?q=" (q (apply str (repeat 100 "a"))))))) "100 cabe")
     (is (= 200 (:status (ler svc ente ana "/agente/historico?q=ab"))) "2 cabe")))
+
+;; ---------- fatia 4: a Clara do juridico, do controle interno e do administrador (publico :consulta) ----------
+
+(def ^:private leituras-de-todos
+  ["ata_da_sessao" "buscar_dispositivos" "ler_caixa" "ler_comunicado" "ler_dispositivo" "ler_leitura_do_comunicado"
+   "pauta_da_sessao" "vereadores_da_casa"])
+
+(def ^:private matriz-da-consulta
+  "O que a Clara de consulta oferece a cada papel: so' leitura, e so' o que a tela dele ja' le."
+  {"juridico" (vec (sort (into leituras-de-todos ["contas_da_casa" "pareceres_juridicos_da_materia"
+                                                  "prestacao_de_contas" "situacao_da_materia"
+                                                  "tramitacao_da_materia"])))
+   "auditor" leituras-de-todos
+   "admin_ente" leituras-de-todos})
+
+(defn- ia-que-olha
+  "O satelite falso que, como o de verdade, resolve a credencial da execucao e ve o que o core lhe oferece."
+  [visto]
+  #_{:clj-kondo/ignore [:missing-protocol-method]}
+  (reify plataforma-ia/PlataformaIA
+    (executar-agente [_ _ {:keys [credencial]}]
+      (let [a (auten/resolver-agente (repo) credencial)]
+        (reset! visto {:credencial credencial :publico (get-in a [:via :publico]) :classes (get-in a [:via :classes])
+                       :ferramentas (mapv :nome (catalogo/ferramentas a))}))
+      resposta-ia)))
+
+(deftest juridico-auditor-e-admin-perguntam-a-clara-so-para-ler
+  (doseq [[papel esperadas] matriz-da-consulta]
+    (testing papel
+      (let [ente (random-uuid)
+            iid (pessoa! ente papel)
+            visto (atom nil)
+            r (perguntar (servico (ia-que-olha visto)) ente iid {:pergunta "Qual a situacao do PL 12/2026?"})
+            evs (eventos (:body r))
+            i (interacao-do-fim ente evs)]
+        (is (= 200 (:status r)))
+        (is (= ["passo" "resposta" "fim"] (map first evs)) "a resposta da IA chega a tela")
+        (is (= {:publico :consulta :classes #{:leitura}} (select-keys @visto [:publico :classes]))
+            "a credencial de consulta so' le: nada de ato, nem como proposta")
+        (is (= esperadas (:ferramentas @visto)))
+        (is (= [iid "consulta" "resposta"] ((juxt :identidade-id :publico :desfecho) i)) "e vai ao historico")
+        (is (logic-ia/conferir-interacao i))
+        (is (nil? (auten/resolver-agente (repo) (:credencial @visto))) "a credencial morre ao fim")))))
+
+(deftest quem-tem-tambem-a-secretaria-escolhe-a-consulta-e-fica-sem-ato
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario" "juridico")
+        visto (atom nil)
+        svc (servico (ia-que-olha visto))]
+    (perguntar svc ente iid {:pergunta "oi?"})
+    (is (= {:publico :secretaria :classes #{:leitura :ato}} (select-keys @visto [:publico :classes]))
+        "sem escolher, a secretaria")
+    (perguntar svc ente iid {:pergunta "oi?" :publico "consulta"})
+    (is (= {:publico :consulta :classes #{:leitura}} (select-keys @visto [:publico :classes])))
+    (is (not-any? #{"pedir_parecer_juridico" "encaminhar_as_comissoes" "designar_relator" "enviar_comunicado"}
+                  (:ferramentas @visto)))))
+
+(deftest juridico-e-admin-leem-o-proprio-historico-e-so-ele
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        svc (com-trilha)
+        conversa-da-ana (get-in (last (eventos (:body (perguntar svc ente ana {:pergunta "da Ana?"})))) [1 "conversa-id"])]
+    (doseq [papel ["juridico" "admin_ente"]]
+      (testing papel
+        (let [eu (pessoa! ente papel)
+              minha (get-in (last (eventos (:body (perguntar svc ente eu {:pergunta (str "do " papel "?")}))))
+                            [1 "conversa-id"])]
+          (is (= [(str "do " papel "?")] (mapv :pergunta (:interacoes (:json (ler svc ente eu "/agente/historico"))))))
+          (let [c (ler svc ente eu (str "/agente/conversas/" minha))]
+            (is (= 200 (:status c)))
+            (is (= "consulta" (get-in c [:json :interacoes 0 :publico]))))
+          (is (= 403 (:status (ler svc ente eu "/agente/historico?escopo=casa"))) "o da Casa e' so' do auditor")
+          (is (= 403 (:status (ler svc ente eu (str "/agente/historico?pessoa=" ana)))))
+          (is (= 404 (:status (ler svc ente eu (str "/agente/conversas/" conversa-da-ana)))) "nem a existencia vaza"))))
+    (is (empty? (leituras-sensiveis ente)) "ler o proprio historico nao e' leitura sensivel")))
+
+(deftest o-auditor-sem-escopo-le-o-proprio-historico
+  (let [ente (random-uuid)
+        ana (pessoa! ente "secretario")
+        aud (pessoa! ente "auditor")
+        svc (com-trilha)]
+    (perguntar svc ente ana {:pergunta "da Ana?"})
+    (let [minha (get-in (last (eventos (:body (perguntar svc ente aud {:pergunta "do auditor?"})))) [1 "conversa-id"])]
+      (is (= ["do auditor?"] (mapv :pergunta (:interacoes (:json (ler svc ente aud "/agente/historico"))))))
+      (is (= 200 (:status (ler svc ente aud (str "/agente/conversas/" minha)))))
+      (is (empty? (leituras-sensiveis ente)) "o proprio historico, sem a marca")
+      (is (= #{"da Ana?" "do auditor?"}
+             (set (map :pergunta (:interacoes (:json (ler svc ente aud "/agente/historico?escopo=casa")))))))
+      (is (= [[aud "historico_assistente" "casa"]]
+             (mapv (juxt :identidade_id :recurso_tipo :recurso_id) (leituras-sensiveis ente)))
+          "o escopo da Casa segue so' do auditor, e com a marca"))))

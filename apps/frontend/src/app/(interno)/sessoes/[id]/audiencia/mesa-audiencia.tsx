@@ -46,6 +46,7 @@ import {
   useAudienciaMesa,
   type Resultado,
 } from "@/lib/use-audiencia";
+import { dicaDaSessao, useDicaDaClara } from "../../../clara/dica";
 import "@/app/sessoes/[id]/conduzir/conduzir.css";
 import "./audiencia.css";
 
@@ -79,6 +80,12 @@ const CHIP_ESTADO: Record<string, string> = {
 
 export function MesaAudiencia({ token, sessaoId }: { token: string | null; sessaoId: string }) {
   const { estado, recarregar } = useAudienciaMesa(token, sessaoId);
+  // A Clara: "Nesta tela: Audiência pública nº 3" (o nome que o cabeçalho da Mesa mostra), só com a audiência carregada.
+  useDicaDaClara(
+    estado.fase === "pronto"
+      ? dicaDaSessao({ tipoSessao: "audiencia_publica", numeroSequencial: estado.dado.numero, agendadaPara: estado.dado.agendadaPara })
+      : null,
+  );
 
   if (estado.fase === "carregando") {
     return (

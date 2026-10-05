@@ -69,3 +69,39 @@ describe("PlacarMini — cockpit do vereador segue o MESMO aviso de lacuna da Me
     expect(container.innerHTML).toBe("");
   });
 });
+
+// O defeito (05/10/2026): o cockpit dizia "faltam N" numa votação JÁ ENCERRADA. O telão da Mesa já dizia
+// "não votaram N de M" (sessoes/[id]/plenario); o cockpit segue a mesma regra e a mesma frase. Aberta continua "faltam N".
+describe("PlacarMini — aberta diz 'faltam', encerrada diz 'não votaram' (a mesma frase do telão)", () => {
+  const parcial = (c: HTMLElement) => c.querySelector(".leg .parcial")?.textContent?.replace(/\s+/g, " ").trim();
+
+  it("nominal ABERTA: 'faltam N · parcial'", () => {
+    const { container } = render(<PlacarMini placar={derivarPlacar(nominalAberto({ baseMembros: 3 }))} />);
+    expect(parcial(container)).toBe("faltam 2 · parcial");
+  });
+
+  it("nominal ENCERRADA com quem não votou: 'não votaram N de M', nunca 'faltam'", () => {
+    const { container } = render(
+      <PlacarMini
+        placar={derivarPlacar(
+          nominalAberto({ baseMembros: 3, encerrada: true, resultado: "aprovada", totais: { sim: 1, nao: 1, abstencao: 0 } }),
+        )}
+      />,
+    );
+    expect(parcial(container)).toBe("não votaram 1 de 3");
+    expect(container.textContent).not.toMatch(/faltam/i);
+    expect(container.querySelector(".barra")?.getAttribute("aria-label")).not.toMatch(/ainda não votaram|Parcial/);
+  });
+
+  it("nominal ENCERRADA com todos votando: 'todos os M votaram'", () => {
+    const { container } = render(
+      <PlacarMini
+        placar={derivarPlacar(
+          nominalAberto({ baseMembros: 2, encerrada: true, resultado: "aprovada", totais: { sim: 2, nao: 0, abstencao: 0 } }),
+        )}
+      />,
+    );
+    expect(parcial(container)).toBe("todos os 2 votaram");
+    expect(container.textContent).not.toMatch(/faltam/i);
+  });
+});

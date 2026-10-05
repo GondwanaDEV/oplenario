@@ -14,7 +14,17 @@
 // apaga. A conversa guardada abre só para leitura, com o registro (quem, quando, modelo, fontes, integridade). Quem mais
 // lê e por quanto tempo é `[GAP]` jurídico — a tela diz.
 
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Ref,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import {
   agruparPorDia,
@@ -49,6 +59,68 @@ export const SUGESTOES_CLARA_VEREADOR = [
   "O que vai ser votado na próxima sessão?",
   "Protocole um requerimento de informação à Secretaria de Obras sobre a reforma da praça do Centro",
 ];
+
+/** O jurídico só consulta, e lê a matéria, os pareceres e as contas como na tela dele: nenhuma pergunta pede um ato. */
+export const SUGESTOES_CLARA_JURIDICO = [
+  "Qual a situação do PL 11/2026?",
+  "O que diz o Regimento sobre o pedido de vista?",
+  "O que ficou registrado na ata da última sessão?",
+  "Em que pé está o julgamento das contas do Prefeito?",
+];
+
+/** O controle interno e a administração só consultam e não leem a matéria pela tela, então a Clara também não: pauta,
+ *  atas, normas da Casa, vereadores e os próprios comunicados. */
+export const SUGESTOES_CLARA_CONSULTA = [
+  "O que diz o Regimento sobre o pedido de vista?",
+  "O que vai ser votado na próxima sessão?",
+  "O que ficou registrado na ata da última sessão?",
+  "Tenho algum comunicado sem ler?",
+];
+
+/** Qual conjunto a pessoa usa: secretaria > vereador > consulta (a mesma ordem do core quando o corpo não manda o
+ *  público); dentro da consulta, o jurídico alcança mais. O app do vereador pede sempre o do vereador. */
+export type ConjuntoDaClara = "secretaria" | "vereador" | "juridico" | "consulta";
+
+export function conjuntoDaClara(papeis: string[], publico?: "vereador"): ConjuntoDaClara {
+  if (publico === "vereador") return "vereador";
+  if (papeis.includes("secretario")) return "secretaria";
+  if (papeis.includes("vereador")) return "vereador";
+  if (papeis.includes("juridico")) return "juridico";
+  return "consulta";
+}
+
+/** O controle interno que não é secretaria nem vereador: a Clara diz onde fica o que ela não lê. */
+export function soAuditor(papeis: string[]): boolean {
+  return papeis.includes("auditor") && !papeis.includes("secretario") && !papeis.includes("vereador");
+}
+
+const SUGESTOES_POR_CONJUNTO: Record<ConjuntoDaClara, string[]> = {
+  secretaria: SUGESTOES_CLARA_SECRETARIA,
+  vereador: SUGESTOES_CLARA_VEREADOR,
+  juridico: SUGESTOES_CLARA_JURIDICO,
+  consulta: SUGESTOES_CLARA_CONSULTA,
+};
+
+const MATERIAS = "Situação de matérias, pauta das sessões, pareceres, a Lei Orgânica e o Regimento. Cada resposta diz de onde veio.";
+
+const ALCANCE_POR_CONJUNTO: Record<ConjuntoDaClara, string> = {
+  secretaria: MATERIAS,
+  vereador: MATERIAS,
+  juridico: MATERIAS,
+  consulta: "Pauta e atas das sessões, a Lei Orgânica, o Regimento e os seus comunicados. Cada resposta diz de onde veio.",
+};
+
+const PROPOE = "Assistente da Casa. Consulta o sistema com o seu acesso e não faz nada por você: quando você pede um ato, ela prepara uma proposta e você decide.";
+
+const SUBTITULO_POR_CONJUNTO: Record<ConjuntoDaClara, string> = {
+  secretaria: PROPOE,
+  vereador: PROPOE,
+  juridico: "Assistente da Casa. Só consulta o sistema, com o seu acesso.",
+  consulta: "Assistente da Casa. Só consulta o sistema, com o seu acesso.",
+};
+
+/** O que a página pede à Clara (a aba ou o botão que a abre): o tamanho e, se quiser, para onde o foco volta. */
+export type ControleDaClara = { abrir: (tamanho: "aberto" | "expandido", devolverFocoPara?: HTMLElement | null) => void };
 
 export const AVISO_DE_REGISTRO =
   "Fica guardado no histórico da Casa: a pergunta, a resposta, as fontes e o modelo usado. A trilha de auditoria registra que você perguntou.";
@@ -158,6 +230,7 @@ export function RespostaClara({ conversa, token, guardada = false }: { conversa:
           )}
           <div className="ast-confianca">
             <span>Confira as fontes antes de usar a resposta.</span>
+            {resposta.modelo && !guardada && <span className="ast-modelo">Modelo: {resposta.modelo}</span>}
             {resposta.execucaoIa && <ReportarErroIa execucaoId={resposta.execucaoIa} token={token} />}
           </div>
         </>
@@ -328,16 +401,30 @@ type EstadoGuardada = { fase: "carregando"; id: string } | { fase: "erro"; id: s
 export function Clara({
   token,
   publico,
+  conjunto = publico === "vereador" ? "vereador" : "secretaria",
+  auditorSo = false,
   moldura,
+  controle,
+  painelId,
   tamanhoInicial = "recolhido",
 }: {
   token: string | null;
+  /** O que vai no corpo da pergunta; sem ele, o core escolhe pelos papéis. */
   publico?: "secretaria" | "vereador";
+  /** Só para a tela: as sugestões e o subtítulo. */
+  conjunto?: ConjuntoDaClara;
+  /** Quem só é controle interno: a conversa vazia diz que a trilha e as conversas da Casa ficam na Auditoria. */
+  auditorSo?: boolean;
   /** A área da página que a Clara empurra; no celular ela fica `inert` enquanto a folha está aberta. */
   moldura?: RefObject<HTMLElement | null>;
+  /** Para a página abrir a Clara (a aba do app do vereador, `?clara=expandida`). */
+  controle?: Ref<ControleDaClara>;
+  /** O id do painel, quando quem a abre de fora precisa dele (`aria-controls`). */
+  painelId?: string;
   tamanhoInicial?: Tamanho;
 }) {
   const ids = useId();
+  const idDoPainel = painelId ?? `${ids}-painel`;
   const dica = useDicaAtual();
   const [tamanho, setTamanho] = useState<Tamanho>(tamanhoInicial);
   const [vista, setVista] = useState<Vista>("conversa");
@@ -352,6 +439,8 @@ export function Clara({
   const painel = useRef<HTMLElement>(null);
   const corpo = useRef<HTMLDivElement>(null);
   const focarAoAbrir = useRef(false);
+  // Quem abriu de fora (a aba) recebe o foco de volta ao recolher; aberta pelo botão da Clara, o foco volta a ele.
+  const devolverFoco = useRef<HTMLElement | null>(null);
 
   const mudarTamanho = useCallback((t: Tamanho, focar = true) => {
     focarAoAbrir.current = focar;
@@ -410,8 +499,11 @@ export function Clara({
   useEffect(() => {
     if (!focarAoAbrir.current) return;
     focarAoAbrir.current = false;
-    if (tamanho === "recolhido") lancador.current?.focus();
-    else if (vista === "conversa") campo.current?.focus();
+    if (tamanho === "recolhido") {
+      const volta = devolverFoco.current;
+      devolverFoco.current = null;
+      (volta?.isConnected ? volta : lancador.current)?.focus();
+    } else if (vista === "conversa") campo.current?.focus();
     else painel.current?.querySelector<HTMLElement>(".ast-corpo button, .ast-corpo a")?.focus();
   }, [tamanho, vista]);
 
@@ -428,6 +520,7 @@ export function Clara({
     const tecla = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "/") {
         e.preventDefault();
+        if (tamanho === "recolhido") devolverFoco.current = null;
         mudarTamanho(tamanho === "recolhido" ? "aberto" : "recolhido");
       } else if (e.key === "Escape" && tamanho !== "recolhido" && !e.defaultPrevented) {
         if (celular || painel.current?.contains(document.activeElement)) mudarTamanho("recolhido");
@@ -454,6 +547,20 @@ export function Clara({
   function garantirHistorico() {
     if (historico.fase === "fechado") void carregarHistorico();
   }
+
+  // Aberta de fora: sempre na conversa, com o foco no campo da pergunta.
+  useImperativeHandle(controle, () => ({
+    abrir(t, devolverFocoPara) {
+      devolverFoco.current = devolverFocoPara ?? null;
+      if (t === "expandido" && !celular) garantirHistorico();
+      if (t === tamanho && vista === "conversa") {
+        campo.current?.focus();
+        return;
+      }
+      setVista("conversa");
+      mudarTamanho(t);
+    },
+  }));
 
   // A conversa nova rola para o fim.
   useEffect(() => {
@@ -515,7 +622,7 @@ export function Clara({
 
   const expandido = tamanho === "expandido";
   const lateral = expandido && !celular;
-  const sugestoes = publico === "vereador" ? SUGESTOES_CLARA_VEREADOR : SUGESTOES_CLARA_SECRETARIA;
+  const sugestoes = SUGESTOES_POR_CONJUNTO[conjunto];
   const conversaAtual = guardada?.fase === "pronta" ? guardada.conversa.conversaId : guardada?.id ?? null;
   const vistaNoCorpo: Vista = lateral && vista === "historico" ? "conversa" : vista;
   const lista = (
@@ -536,11 +643,14 @@ export function Clara({
         ref={lancador}
         className="ast-lancador"
         type="button"
-        aria-controls={`${ids}-painel`}
+        aria-controls={idDoPainel}
         aria-expanded={tamanho !== "recolhido"}
         aria-label="Pergunte à Clara"
         title="Pergunte à Clara (Ctrl + /)"
-        onClick={() => mudarTamanho("aberto")}
+        onClick={() => {
+          devolverFoco.current = null;
+          mudarTamanho("aberto");
+        }}
       >
         <span className="glifo-ia" aria-hidden="true">
           <Faisca />
@@ -555,7 +665,7 @@ export function Clara({
         <button className="ast-veu" type="button" tabIndex={-1} aria-hidden="true" onClick={() => mudarTamanho("recolhido")} />
       )}
 
-      <aside ref={painel} id={`${ids}-painel`} className="ast" aria-labelledby={`${ids}-titulo`} hidden={tamanho === "recolhido"}>
+      <aside ref={painel} id={idDoPainel} className="ast" aria-labelledby={`${ids}-titulo`} hidden={tamanho === "recolhido"}>
         <div className="ast-cabe">
           <span className="glifo-ia" aria-hidden="true">
             <Faisca />
@@ -590,7 +700,7 @@ export function Clara({
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
-          <p className="ast-sub">Assistente da Casa. Consulta o sistema com o seu acesso e não faz nada por você.</p>
+          <p className="ast-sub">{SUBTITULO_POR_CONJUNTO[conjunto]}</p>
         </div>
 
         {/* a dica da tela: só começa a pergunta — a Clara consulta o sistema, a tela nunca é fonte */}
@@ -649,7 +759,7 @@ export function Clara({
           {vistaNoCorpo === "conversa" && turnos.length === 0 && (
             <div className="ast-vazio">
               <h2>Pergunte o que precisar saber da Casa</h2>
-              <p>Situação de matérias, pauta das sessões, pareceres, a Lei Orgânica e o Regimento. Cada resposta diz de onde veio.</p>
+              <p>{ALCANCE_POR_CONJUNTO[conjunto]}</p>
               <ul className="ast-sugestoes" aria-label="Sugestões">
                 {sugestoes.map((s) => (
                   <li key={s}>
@@ -657,6 +767,13 @@ export function Clara({
                   </li>
                 ))}
               </ul>
+              {/* o auditor lê a trilha e as conversas pela tela, nunca pela Clara (ADR-0024, decisão de 05/10/2026) */}
+              {auditorSo && (
+                <p className="ast-pela-tela">
+                  A Clara não lê a trilha nem as conversas da Casa. Para isso, use a{" "}
+                  <Link href={comToken("/auditoria/clara", token)}>Auditoria</Link>.
+                </p>
+              )}
             </div>
           )}
 

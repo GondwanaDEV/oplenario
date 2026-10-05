@@ -18,6 +18,7 @@ import {
 } from "@/lib/parecer-vista";
 import { rotularComissao } from "@/lib/comissao-vista";
 import { TopoInterno } from "../../topo";
+import { dicaDaMateria, useDicaDaClara } from "../../clara/dica";
 import { FormularioParecer, type ValoresParecer } from "../formulario-parecer";
 import { RailParecer } from "../rail-parecer";
 import { CopilotoAnalise } from "@/app/copiloto-analise";
@@ -37,6 +38,10 @@ export default function PaginaParecer({ params }: { params: Promise<{ id: string
   // ação mais recente é exibido.
   const [ultimaAcao, setUltimaAcao] = useState<"rascunho" | "emissao" | null>(null);
   const erro = ultimaAcao === "rascunho" ? erroRascunho : ultimaAcao === "emissao" ? erroEmissao : null;
+  // A Clara: o parecer é sobre a matéria, e é a matéria (com os pareceres dela) que a Clara consulta — "Nesta tela:
+  // PL 42/2026". Sem objeto casado (nunca inventa número), sem dica.
+  const objeto = dados?.objeto;
+  useDicaDaClara(objeto ? dicaDaMateria(objeto.tipo, objeto.sequencial, objeto.ano) : null);
 
   async function aoSalvarRascunho(valores: ValoresParecer) {
     setUltimaAcao("rascunho");

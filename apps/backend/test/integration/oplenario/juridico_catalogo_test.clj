@@ -177,7 +177,7 @@
       (is (every? (nomes-do c) ["vereadores_da_casa" "designar_relator"])))
     (testing "o papel e' conferido"
       (is (= :autorizacao/negado
-             (tipo-do-erro #(catalogo/executar! deps (agente c "juridico" :secretaria) "vereadores_da_casa" {})))))))
+             (tipo-do-erro #(catalogo/executar! deps (agente c "papel_sem_ferramenta" :secretaria) "vereadores_da_casa" {})))))))
 
 (deftest o-agente-le-o-que-o-juridico-ja-opinou-e-nao-assina
   (let [{:keys [ente deps repo] :as c} (cenario)

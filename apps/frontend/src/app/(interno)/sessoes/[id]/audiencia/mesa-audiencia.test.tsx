@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MesaAudiencia } from "./mesa-audiencia";
+import { ProvedorDaDica, useDicaAtual } from "../../../clara/dica";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...r }: { href: string; children: React.ReactNode }) => (
@@ -71,6 +72,43 @@ describe("Mesa da audiência pública", () => {
     expect(itens[0].textContent).toContain("Próxima da fila");
     expect(itens[1].textContent).toContain("Na fila para falar");
     expect(chamadas[0].url).toBe("/api/sessoes/s1/audiencia");
+  });
+
+  it("a Clara: com a audiência carregada, a tela diz qual é ('Audiência pública nº 2'); antes, nada", async () => {
+    function Sonda() {
+      const dica = useDicaAtual();
+      return <output data-testid="dica">{dica ? `${dica.rotulo} | ${dica.inicio} | ${dica.acao}` : "sem dica"}</output>;
+    }
+    servidor(() => ({ status: 200, corpo: audiencia() }));
+    render(
+      <ProvedorDaDica>
+        <MesaAudiencia token="tok" sessaoId="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
+    await screen.findByRole("heading", { name: "Metas fiscais do 1º quadrimestre" });
+    await waitFor(() =>
+      expect(screen.getByTestId("dica").textContent).toBe(
+        "Audiência pública nº 2 | Sobre a Audiência pública nº 2,  | Perguntar sobre esta sessão",
+      ),
+    );
+  });
+
+  it("a Clara: audiência que não abre (404), sem dica", async () => {
+    function Sonda() {
+      const dica = useDicaAtual();
+      return <output data-testid="dica">{dica ? dica.rotulo : "sem dica"}</output>;
+    }
+    servidor(() => ({ status: 404, corpo: { erro: "nao-encontrada" } }));
+    render(
+      <ProvedorDaDica>
+        <MesaAudiencia token="tok" sessaoId="s1" />
+        <Sonda />
+      </ProvedorDaDica>,
+    );
+    await screen.findByRole("heading", { name: "Não foi possível abrir a Mesa da audiência" });
+    expect(screen.getByTestId("dica").textContent).toBe("sem dica");
   });
 
   it("chamar: POST na chamada da inscrição e a fila recarrega", async () => {
