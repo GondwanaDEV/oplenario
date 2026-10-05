@@ -393,6 +393,9 @@ const ACOES: Record<string, string> = {
   "convite-reenviado": "Convite reenviado ao 1º administrador",
   "casa-ativada": "A Casa assumiu: o 1º administrador entrou",
   "realm-reprovisionado": "Configuração de login reaplicada",
+  // ADR-0025: a reaplicação pela linha de comando (reaplicar-login) abre o par tentativa → desfecho
+  "realm-reprovisionamento-iniciado": "Configuração de login: reaplicação iniciada",
+  "realm-reprovisionamento-falhou": "Configuração de login: a reaplicação falhou",
   "suspensao-pedida": "Suspensão pedida",
   "suspensao-aprovada": "Suspensão aprovada pelo 2º operador",
   "suspensao-recusada": "Suspensão recusada pelo 2º operador",
