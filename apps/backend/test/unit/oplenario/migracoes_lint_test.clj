@@ -21,6 +21,13 @@
        (.listFiles)
        (filter #(str/ends-with? (.getName ^java.io.File %) ".sql"))))
 
+(deftest o-lint-enxerga-as-migrations
+  ;; `.listFiles` de uma pasta que nao existe devolve nil, e o `for` abaixo varreria zero arquivos e passaria sempre.
+  (let [nomes (mapv #(.getName ^java.io.File %) (arquivos-migration))]
+    (is (> (count (filter #(str/ends-with? % ".up.sql") nomes)) 100) "varreu as migrations `.up.sql`")
+    (is (> (count (filter #(str/ends-with? % ".down.sql") nomes)) 100) "varreu as migrations `.down.sql`")
+    (is (some #{"20260620000010-cadastros.up.sql"} nomes) "a primeira migration esta' no que foi varrido")))
+
 (deftest nenhuma-migration-usa-timestamp-sem-zona
   (let [ofensores (for [f (arquivos-migration)
                         :let [corpo (sem-comentarios (slurp f))]
