@@ -67,12 +67,15 @@
   "POST /sessoes/:id/votacoes. corpo-json -> :json-params; adapters/in valida+coage+injeta id/autor; controller
   autoriza na sessao (:id) e abre; adapters/out projeta o recibo. nil (sessao inexistente) -> 404; sessao ja
   fechada (`:conflito/sessao-fechada`) -> 409 (ledger Fase 8 achado #5). ADR-0021: a materia de contas cujo quorum ou
-  modalidade nao sao os da regra (`:conflito/regra-de-votacao`) -> 422 com a regra em palavras."
-  [repo-leg consultar-sessao sessao-fechada? registro]
+  modalidade nao sao os da regra (`:conflito/regra-de-votacao`) -> 422 com a regra em palavras. O mesmo 422 vale para o
+  turno da emenda a LOM (CF art. 29) que ainda nao pode abrir, com `a-partir-de` (AAAA-MM-DD) quando e' o intersticio.
+  `:aberta-em` (o instante da abertura, do qual o intersticio e' contado) sai do `relogio` AQUI, na borda — nunca do
+  corpo, nunca de um `now()` solto (mesmo padrao de `meu-voto-handler`)."
+  [repo-leg consultar-sessao sessao-fechada? registro relogio]
   (fn [req]
     (let [ator (:ator req)
           sid  (adapters-in/id-param->uuid (get-in req [:path-params :id]))
-          m    (adapters-in/abrir-votacao->dominio ator (:json-params req))]
+          m    (assoc (adapters-in/abrir-votacao->dominio ator (:json-params req)) :aberta-em (tempo/agora relogio))]
       (try
         (if-let [recibo (controllers/abrir-votacao repo-leg consultar-sessao sessao-fechada? registro ator sid m)]
           (http/json-resposta 201 (adapters-out/abertura->wire recibo))
@@ -81,9 +84,11 @@
           (case (:tipo (ex-data e))
             ;; ADR-0021: a sessao nao delibera (audiencia publica, solene, especial) — mesma forma do 409 de sessao fechada
             (:conflito/sessao-fechada :conflito/sessao-nao-delibera) (resposta-conflito-sessao-fechada e)
-            :conflito/regra-de-votacao (http/json-resposta 422 {:erro (ex-message e)
-                                                                :regra (:regra (ex-data e))
-                                                                :referencia (:referencia (ex-data e))})
+            :conflito/regra-de-votacao (http/json-resposta 422 (cond-> {:erro (ex-message e)
+                                                                        :regra (:regra (ex-data e))
+                                                                        :referencia (:referencia (ex-data e))}
+                                                                 (:a-partir-de (ex-data e))
+                                                                 (assoc :a-partir-de (:a-partir-de (ex-data e)))))
             (throw e)))))))
 
 (defn- voto-handler
@@ -1379,7 +1384,7 @@
         ;; vereador nessas telas). ESCRITA/acoes seguem em `papel` (secretario).
         papel-leitura (it/exige-algum-papel #{"secretario" "vereador" "juridico"})]
     #{["/sessoes/:id/votacoes" :post
-       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada? registro)]
+       [auth papel it/corpo-json (abrir-handler repo-legislativo consultar-sessao sessao-fechada? registro relogio)]
        :route-name :legislativo/abrir-votacao]
       ["/sessoes/:id/votacoes/:votacao-id/votos" :post
        [auth papel it/corpo-json (voto-handler repo-legislativo consultar-sessao sessao-fechada? vereador-no-roster?)]

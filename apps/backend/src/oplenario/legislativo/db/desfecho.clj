@@ -7,11 +7,17 @@
   pela rota de pos-aprovacao (PR #158), nao por aqui.
 
   So' votacao ENCERRADA de objeto que carrega a propria materia (proposicao/redacao final) e EFETIVADA (nao a de
-  lote de importacao em staging). Votacao de sessao secreta entra: o RESULTADO e' publico, so' o voto e' secreto."
+  lote de importacao em staging). Votacao de sessao secreta entra: o RESULTADO e' publico, so' o voto e' secreto.
+
+  Materia de DOIS TURNOS (a emenda a Lei Organica, CF art. 29 — `turnos` da regra de votacao, dado): a votacao de
+  turno leva `:turno` (1 ou 2, de `logic/turnos/com-turno`), e o portal diz 'Aprovada em 1º turno' em vez de
+  'Aprovada em plenario' — a materia so' esta' aprovada depois do ultimo turno."
   (:require [honey.sql :as sql]
             [next.jdbc :as jdbc]
             [oplenario.kernel.db-util :as comum]
-            [oplenario.legislativo.db.votacao :as votacao]))
+            [oplenario.legislativo.db.regra-votacao :as regra-votacao]
+            [oplenario.legislativo.db.votacao :as votacao]
+            [oplenario.legislativo.logic.turnos :as turnos]))
 
 (set! *warn-on-reflection* true)
 
@@ -42,9 +48,20 @@
      (sql/format {:select [:tipo_norma :numero :ano :promulgado_em :publicado_em] :from [:legislativo.norma]
                   :where [:and [:= :ente_id ente-id] [:= :proposicao_id pid]]}))))
 
-(defn- ato-da-votacao [v]
+(defn turno-por-votacao
+  "{votacao-id turno} das votacoes de turno da materia de mais de um turno; {} na materia sem regra ou de um turno.
+  Conta sobre `votacao/votacoes-da-materia` (sem as corrigidas por outra), a mesma lista de `aprovacao-vigente`."
+  [tx ente-id pid]
+  (let [regra (regra-votacao/regra-da-materia tx ente-id pid)]
+    (if (< 1 (or (:turnos regra) 1))
+      (into {} (keep #(when (:turno %) [(:id %) (:turno %)]))
+            (turnos/com-turno (:turnos regra) (votacao/votacoes-da-materia tx ente-id pid)))
+      {})))
+
+(defn- ato-da-votacao [turno-de v]
   (cond-> {:ato (:resultado v) :ocorrido-em (:atualizado-em v)}
-    (= "redacao_final" (:objeto-tipo v)) (assoc :redacao-final true)))
+    (= "redacao_final" (:objeto-tipo v)) (assoc :redacao-final true)
+    (turno-de (:id v)) (assoc :turno (turno-de (:id v)))))
 
 (def ^:private resposta-do-executivo #{"sancionado" "sancao_tacita" "vetado"})
 
@@ -64,7 +81,7 @@
   (let [aut (autografo tx ente-id pid)
         n (norma tx ente-id pid)]
     (->> (concat
-          (map ato-da-votacao (votacoes-encerradas tx ente-id pid))
+          (map (partial ato-da-votacao (turno-por-votacao tx ente-id pid)) (votacoes-encerradas tx ente-id pid))
           (when aut [{:ato "autografo_enviado" :ocorrido-em (:enviado-em aut) :numero (:numero aut) :ano (:ano aut)}])
           (when aut (some-> (executivo tx ente-id (:id aut)) atos-do-executivo))
           (when n [{:ato "promulgada" :ocorrido-em (:promulgado-em n)
@@ -81,7 +98,7 @@
   (some->> (votacoes-encerradas tx ente-id pid)
            (filter #(= votacao-id (:id %)))
            first
-           ato-da-votacao))
+           (ato-da-votacao (turno-por-votacao tx ente-id pid))))
 
 (defn ultimo-ato
   "O ato de `ato-nome` mais recente da materia, ja' na forma do payload do evento (sem chaves nil), ou nil."

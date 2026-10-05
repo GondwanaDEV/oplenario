@@ -34,6 +34,13 @@
     (is (= [41 2 20 1] [(:total r) (:pagina r) (:por-pagina r) (count (:votacoes r))]))
     (is (not (contains? (first (:votacoes r)) :votos)) "o item da lista nao carrega voto individual")))
 
+(deftest a-votacao-de-turno-diz-o-turno
+  ;; a emenda a Lei Organica vota em dois turnos (CF art. 29): 'aprovada' no 1o nao e' a materia aprovada
+  (is (= 1 (:turno (first (:votacoes (out/lista->wire {:votacoes [(votacao "nominal" {:turno 1})] :total 1
+                                                       :pagina 1 :por-pagina 20}))))))
+  (is (= 2 (:turno (out/detalhe->wire (votacao "nominal" {:turno 2}) {}))))
+  (is (not (contains? (out/detalhe->wire (votacao "nominal") {}) :turno)) "votacao que nao e' turno: sem o campo"))
+
 (deftest query-pagina
   (is (= 1 (adapters-in/query-pagina nil)) "ausente = primeira pagina")
   (is (= 3 (adapters-in/query-pagina "3")))

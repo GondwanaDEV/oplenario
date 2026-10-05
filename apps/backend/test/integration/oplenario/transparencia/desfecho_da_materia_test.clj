@@ -36,8 +36,8 @@
 (defn- drenar! [] (outbox/drenar! *ds* (consumers/registrar {})))
 (defn- resolver-municipio [_] {:uf "CE" :municipio-nome "Fortaleza"})
 
-(defn- protocolar! [ente]
-  (let [pid (:id (leg/protocolar! *leg* ente {:id (random-uuid) :ente-id ente :tipo "projeto_lei" :ano 2026 :uf "CE"
+(defn- protocolar! [ente & {:keys [tipo] :or {tipo "projeto_lei"}}]
+  (let [pid (:id (leg/protocolar! *leg* ente {:id (random-uuid) :ente-id ente :tipo tipo :ano 2026 :uf "CE"
                                               :municipio-nome "Fortaleza" :ementa "Dispoe sobre as hortas"
                                               :autor-tipo "vereador" :autor-texto "Fulana"}))]
     (leg/transacao *leg* ente
@@ -49,11 +49,12 @@
                                :lock-version lock-version}))))
     pid))
 
-(defn- votar! [ente pid voto & {:keys [objeto-tipo] :or {objeto-tipo "proposicao"}}]
+(defn- votar! [ente pid voto & {:keys [objeto-tipo aberta-em] :or {objeto-tipo "proposicao"}}]
   (let [vid (leg/transacao *leg* ente
               (fn [tx]
                 (let [{vid :id} (votacao/abrir! tx {:id (random-uuid) :ente-id ente :objeto-tipo objeto-tipo
-                                                    :objeto-id pid :modalidade "nominal" :quorum-tipo "maioria_simples"})]
+                                                    :objeto-id pid :modalidade "nominal" :quorum-tipo "maioria_simples"
+                                                    :aberta-em aberta-em})]
                   (votacao/registrar-voto! tx {:id (random-uuid) :ente-id ente :votacao-id vid
                                                :vereador-id (random-uuid) :voto voto})
                   vid)))]
@@ -107,6 +108,18 @@
     (votar! ente pid "sim" :objeto-tipo "redacao_final")
     (drenar!)
     (is (= ["Protocolada" "Aprovada em plenário" "Redação final aprovada em plenário"] (etapas ente pid)))))
+
+(deftest emenda-a-lom-diz-o-turno-e-nao-que-foi-aprovada
+  ;; CF art. 29: a emenda a Lei Organica vota em dois turnos. O 1o aprovado e' "Aprovada em 1º turno" — dizer
+  ;; "Aprovada em plenário" ali seria dizer que a materia foi aprovada, e ela ainda nao foi.
+  (let [ente (random-uuid) pid (protocolar! ente :tipo "proposta_emenda_lom")]
+    (votar! ente pid "sim")
+    (drenar!)
+    (is (= ["Protocolada" "Aprovada em 1º turno"] (etapas ente pid)))
+    (votar! ente pid "sim" :aberta-em (.plus (java.time.Instant/now) (java.time.Duration/ofDays 11)))
+    (drenar!)
+    (is (= ["Protocolada" "Aprovada em 1º turno" "Aprovada em 2º turno"] (etapas ente pid)))
+    (is (= "aprovada" (:desfecho (materia ente pid))) "o desfecho segue o ato; o selo so' muda no autografo (FE)")))
 
 (deftest votacao-de-outro-objeto-nao-e-desfecho-da-materia
   (let [ente (random-uuid) pid (protocolar! ente)]

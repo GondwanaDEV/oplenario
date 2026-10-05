@@ -390,8 +390,19 @@
   [bus tx ente-id pid a]
   (when a
     (producers/emitir-desfecho-registrado! bus tx ente-id
-      (-> (select-keys a [:ato :redacao-final :tipo-norma :numero :ano])
+      (-> (select-keys a [:ato :redacao-final :turno :tipo-norma :numero :ano])
           (assoc :proposicao-id pid :ocorrido-em (str (:ocorrido-em a)))))))
+
+(defn- com-turno-das-votacoes
+  "As votacoes (do portal) com `:turno` quando sao turno de materia de dois turnos (a emenda a Lei Organica, CF art.
+  29): o portal diz 'aprovada em 1º turno', nao 'a materia foi aprovada'. As demais passam como estao. Uma leitura da
+  regra por materia da pagina, nao por votacao."
+  [tx ente-id votacoes]
+  (let [turno-de (memoize #(desfecho/turno-por-votacao tx ente-id %))]
+    (mapv (fn [v] (if-let [t (when (= "proposicao" (:objeto-tipo v)) (get (turno-de (:objeto-id v)) (:id v)))]
+                    (assoc v :turno t)
+                    v))
+          votacoes)))
 
 (defn- emitir-desfecho-do-executivo!
   "A resposta do Executivo ou a apreciacao do veto (`estado` novo da tramitacao executiva `tram-id`): acha a materia
@@ -887,15 +898,20 @@
       (fn [tx]
         ;; A materia com regra de votacao (contas do Prefeito, ADR-0021 B2; emenda a LOM, CF art. 29) so' abre votacao
         ;; que passe na regra da classe (guarda DSL avaliada pelo motor, com o `:registro` que o controller traz) — na
-        ;; MESMA tx do INSERT.
-        (regra-votacao/conferir! tx ente-id (:registro m) m)
-        (let [r (votacao/abrir! tx (assoc m :ente-id ente-id))]
-          (when (:sessao-id m)
-            (producers/emitir-votacao-aberta! bus tx ente-id
-              (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id m) :objeto-tipo (:objeto-tipo m)
-                       :objeto-id (:objeto-id m) :modalidade (:modalidade m) :quorum-tipo (:quorum-tipo m)}
-                (:pauta-item-id m) (assoc :pauta-item-id (:pauta-item-id m)))))
-          r))))
+        ;; MESMA tx do INSERT. A emenda a LOM vota em dois turnos com intersticio (CF art. 29): o turno so' abre se ainda
+        ;; ha' turno a votar e o intersticio correu ate' o dia da abertura. O instante da abertura e' o do relogio da
+        ;; borda (`:aberta-em`); quem chama sem ele (semente, teste de Repo) fica com o `now()` da tx — o MESMO instante
+        ;; que vai a `efetivado_em`, de onde `aprovacao-vigente` mede o intersticio de volta.
+        (let [aberta-em (or (:aberta-em m) (votacao/agora-do-banco tx))]
+          (when-let [regra (regra-votacao/conferir! tx ente-id (:registro m) m)]
+            (regra-votacao/conferir-turno! regra (votacao/votacoes-da-materia tx ente-id (:objeto-id m)) aberta-em))
+          (let [r (votacao/abrir! tx (assoc m :ente-id ente-id :aberta-em aberta-em))]
+            (when (:sessao-id m)
+              (producers/emitir-votacao-aberta! bus tx ente-id
+                (cond-> {:votacao-id (:id m) :sessao-id (:sessao-id m) :objeto-tipo (:objeto-tipo m)
+                         :objeto-id (:objeto-id m) :modalidade (:modalidade m) :quorum-tipo (:quorum-tipo m)}
+                  (:pauta-item-id m) (assoc :pauta-item-id (:pauta-item-id m)))))
+            r)))))
   ;; GUARD DE MODALIDADE (defesa-em-profundidade do SIGILO §22.6): o DB nao amarra `votos` a
   ;; `votacoes.modalidade` — chamar registrar-voto! (nominal) sobre uma votacao SECRETA vazaria a identidade
   ;; no outbox. Busca a votacao ANTES de escrever, recusa fail-loud o cruzamento de modalidade (a tx rola
@@ -1318,11 +1334,14 @@
   ;; portal-votacoes-publicas: as votacoes encerradas do portal (protocolo proprio, mesmo motivo do RepoJuridico)
   repo-votacao-publica/RepoVotacaoPublica
   (votacoes-encerradas-das-sessoes [this ente-id sessao-ids limite deslocamento materia-id]
-    (transacao this ente-id #(votacao-publica/encerradas-das-sessoes % ente-id sessao-ids limite deslocamento materia-id)))
+    (transacao this ente-id
+      (fn [tx] (update (votacao-publica/encerradas-das-sessoes tx ente-id sessao-ids limite deslocamento materia-id)
+                       :votacoes #(com-turno-das-votacoes tx ente-id %)))))
   (ids-das-votacoes-das-sessoes [this ente-id sessao-ids]
     (transacao this ente-id #(votacao-publica/ids-das-sessoes % ente-id sessao-ids)))
   (votacao-encerrada [this ente-id votacao-id]
-    (transacao this ente-id #(votacao-publica/encerrada % ente-id votacao-id)))
+    (transacao this ente-id
+      (fn [tx] (some->> (votacao-publica/encerrada tx ente-id votacao-id) vector (com-turno-das-votacoes tx ente-id) first))))
 
   ;; A.6: as votacoes encerradas de uma sessao no contexto da IA — so' resultado e totais, nunca o voto por vereador
   repo-votacao-ia/RepoVotacaoIA
