@@ -641,24 +641,24 @@ jobs:
               }
             } catch (e) { rec('ficha publica da materia', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
-            // 20) A RAIZ / — a porta publica abre sem login, diz o nome e a tagline, oferece entrar e o status, e nao diz mais
-            //     "em construcao" (nem fala de front-end).
+            // 20) A RAIZ / — sem sessao, leva DIRETO a entrada pelo CPF (05/10/2026: nao ha mais pagina de passagem
+            //     "Entrar na sua Camara"). Um caminho desconhecido tambem leva ao login, com o destino. O portal segue aberto.
             try {
               const anon = await browser.newContext({ locale: 'pt-BR' });
               const p = await anon.newPage();
               const resp = await p.goto(`${B}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
-              const pronto = await aguardar(p, /Onde a c[aâ]mara acontece/i, 15000);
-              const t = await textoDe(p);
-              const h1 = await p.getByRole('heading', { level: 1, name: 'O Plenário', exact: true }).count();
-              const entrar = await p.getByRole('link', { name: 'Entrar na sua Câmara' }).count();
-              const status = await p.getByRole('link', { name: 'Status da plataforma' }).count();
-              const construcao = /constru[çc][ãa]o|front-end|track FE/i.test(t);
               const caminho = new URL(p.url()).pathname;
+              const cpf = await p.getByLabel(/CPF/i).count();
+              const desconhecido = await p.goto(`${B}/caminho-que-nao-existe`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const urlDesc = new URL(p.url());
+              const portal = await p.goto(`${B}/portal/casa/${E}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const caminhoPortal = new URL(p.url()).pathname;
               await anon.close();
-              const ok = resp?.status() === 200 && caminho === '/' && pronto && h1 === 1 && entrar === 1 && status === 1 && !construcao
-                && !ERRO_TELA.test(t);
+              const ok = resp?.status() === 200 && caminho === '/entrar' && cpf >= 1
+                && desconhecido?.status() === 200 && urlDesc.pathname === '/entrar' && urlDesc.searchParams.get('redirect') === '/caminho-que-nao-existe'
+                && portal?.status() === 200 && caminhoPortal === `/portal/casa/${E}`;
               rec('/ (raiz)', ok ? 'OK' : 'ERRO',
-                  `pagina=${resp?.status()} url=${caminho} h1=${h1} entrar=${entrar} status=${status} em-construcao=${construcao}${ok ? '' : ` :: ${t.slice(0, 140)}`}`);
+                  `raiz=${resp?.status()}->${caminho} cpf=${cpf} desconhecido=${desconhecido?.status()}->${urlDesc.pathname}${urlDesc.search} portal=${portal?.status()}->${caminhoPortal}`);
             } catch (e) { rec('/ (raiz)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA =====');
