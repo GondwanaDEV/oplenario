@@ -31,6 +31,7 @@
             [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
+            [oplenario.legislativo.components.repositorio-votacao-ia :as repo-votacao-ia-comp]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
             [oplenario.legislativo.diplomat.http.contas :as contas-http]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
@@ -176,6 +177,17 @@
           (update :falas (fnil into []) (:falas-cidadas c))
           (assoc :nomes (merge nomes (:nomes-cidadaos c)))
           (dissoc :falas-cidadas :nomes-cidadaos)))))
+
+(defn contexto-da-sessao-para-ia
+  "O contexto que a IA le (host wiring, §22.10): `contexto-para-ia` (sessao, segmentos, falas, nomes) mais as VOTACOES
+  ENCERRADAS da sessao (legislativo) — o resultado e os totais que a ata cita, nunca o voto de cada vereador. Sessao
+  SECRETA nao le votacao nenhuma (o contexto responde 403 por cima; aqui nem a consulta acontece). nil = sessao
+  inexistente no tenant."
+  [repo-sessoes repo-cadastros repo-legislativo ente-id sessao-id]
+  (when-let [c (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id)]
+    (assoc c :votacoes (if (= "secreta" (get-in c [:sessao :tipo-sessao]))
+                         []
+                         (repo-votacao-ia-comp/votacoes-da-sessao-para-ia repo-legislativo ente-id sessao-id)))))
 
 (defn ata-para-ia
   "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
@@ -921,7 +933,8 @@
                 (integracao-ia-http/rotas
                  {:repo-integracao-ia repo-integracao-ia
                   :segredo (:segredo integracao-ia)
-                  :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
+                  :contexto-da-sessao (fn [ente-id sessao-id]
+                                        (contexto-da-sessao-para-ia repo-sessoes repo-cadastros repo-legislativo ente-id sessao-id))
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
                   :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
                   :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!

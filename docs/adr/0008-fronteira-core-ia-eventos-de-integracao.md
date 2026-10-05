@@ -131,3 +131,51 @@ síncrono que a §22.3.1 já previa.
   prompt vindos do ponteiro. Cada publicação emite `proposicao.resumo-publicado` na mesma tx; a transparência projeta a
   versão mais nova em `transparencia.materia` e a ficha pública do portal mostra o resumo com o selo de revisão humana
   (A.8b). O portal nunca fala com a IA: só mostra o que a Casa publicou.
+
+## Adendo (05/10/2026) — o resultado das votações na ata (Faixa A / A.6)
+
+O contexto da sessão (`GET /integracao/ia/v1/entes/{ente}/sessoes/{id}/contexto`) ganha a lista `votacoes`; o rascunho da
+ata deixa de escrever o resultado como `[confirmar: …]` quando o sistema já o sabe. Sem evento novo, sem rota nova, sem
+migration: é o mesmo caminho dos oradores e da pauta.
+
+- **O que entra:** só votação **encerrada** da sessão (a aberta e a anulada nunca saem), na ordem em que encerrou:
+  `objeto` em palavras ("PL 008/2026", "redação final do PL 008/2026"; emenda, parecer e requerimento vão pelo tipo,
+  sem inventar título), `modalidade`, `quorum-tipo`, `votos-necessarios` (a aritmética do core, nula na maioria
+  simples), `base-membros`, `resultado`, os três totais (nulos na simbólica, que não conta voto) e `encerrada-em`.
+  Montado em `legislativo` (`db/votacao_para_ia`, `logic/votacao_ia`, protocolo `RepoVotacaoIA`) e entregue pelo host
+  (`rotas/contexto-da-sessao-para-ia`). Acima de 500 votações numa sessão o contexto falha alto, nunca trunca.
+- **Sigilo:** o voto de cada vereador **não entra, nem na votação nominal** — a consulta não lê `votos` nem
+  `votos_secretos`, o mapa é uma allowlist e o `wire/out` é fechado. Votação secreta leva só o resultado e os totais
+  que o sistema já publica. Sessão secreta continua 403 e nem consulta votação.
+- **No satélite:** cada votação vira uma fonte `votacao:<id>` estruturada (`Fonte.estruturada`), pública e **não** de
+  terceiro, que passa pelo filtro B1–B4 como as demais. O texto da fonte traz as linhas `Frase do resultado`, `Frase da
+  unanimidade` (só se o dado é unânime) e `Frase do quórum`: o conjunto FECHADO de frases canônicas, geradas do dado por
+  uma função pura (`ata/redacao.py:frases_canonicas`, a mesma que o redator fake usa para escrever). Prompt `ata-v2`.
+- **O que a Camada de Confiança confere (`confianca/numeros.py`), sem interpretar prosa:** o parágrafo que cita
+  `votacao:<id>` (sem as marcas de citação, que o texto limpo da ata também tira) confere se (a) contém, por substring
+  exata, uma frase canônica DAQUELA votação e (b) tiradas as frases canônicas e o identificador canônico da matéria
+  ("PL 008/2026"), também por substring exata, NÃO sobra nenhum sinal numérico: qualquer caractere de categoria N
+  (sobrescrito, romano Unicode, fração, largura total, outros alfabetos), marca combinante, caractere invisível ou letra
+  fora do alfabeto latino (homóglifo), uma lista fechada de palavras (zero…dezenove, dezenas, centenas, mil, milhão,
+  meia, meio, dúzia, dobro, metade, terço, quarto, maioria, minoria, unanim*, nenhum*, todos, ambos, vários, empate,
+  ordinais por extenso) e algarismos romanos isolados. Uma só normalização (NFKC, minúsculas, espaços colapsados) para o
+  parágrafo, as frases e os identificadores. Nada é mascarado: data e hora que sobram reprovam; o `[confirmar: …]`
+  (dúvida declarada) é a única exclusão, por delimitador exato, e o resto do parágrafo ainda tem de passar. Duas votações
+  citadas no mesmo parágrafo: nenhuma confere. Reprovado sai `trecho_nao_encontrado` (vira ponto a confirmar na revisão).
+- **A sobra é lista de PERMITIDOS:** depois de tiradas as frases canônicas e os identificadores, o que resta no
+  parágrafo só pode ser a moldura que apresenta a votação (lista fechada em `numeros.py`: "votação nominal", "a
+  matéria", "foi", "resultado", pontuação comum). Qualquer outra palavra ou símbolo reprova. Só a lista de proibidos
+  deixava passar o que muda o sentido sem número: "não foi aprovada por…", "desaprovada por…" (a canônica casa dentro
+  da palavra), "rejeitada" ao lado da frase de "aprovada", número colado em palavra.
+- **Modalidade, dúvida e palavra inteira:** a modalidade ("votação nominal") é peça canônica da fonte, não moldura:
+  "votação secreta" numa votação nominal reprova. O `[confirmar: …]` só sai da conferência quando é a dúvida canônica
+  ("a gravação indica N votos a favor; o sistema registra 9", com o valor do dado); qualquer outro bloco fica à vista
+  do conferidor e reprova o parágrafo. As peças canônicas só casam como palavra inteira ("19 votos" e "desaprovada"
+  não casam), e a pontuação aceita é só a de frase (`. , ; :`): "PL 008/2026-A" é outra matéria.
+- **O que isto garante:** o parágrafo de uma votação só contém o placar como o SISTEMA o escreveria, dentro de uma
+  moldura conhecida. **O que NÃO garante:** o conferidor não entende português; a ordem das palavras da moldura não é
+  conferida. A revisão humana do rascunho continua obrigatória. O custo é ruído aceito e fail-closed: o modelo tem de
+  citar a votação num parágrafo próprio, sem mais nada; o que ele acrescentar vira ponto a confirmar.
+- **Gravação que contradiz o dado:** vale o dado, e a instrução manda `[confirmar: a gravação indica X; o sistema
+  registra Y]`; o roteiro do fake faz isso para algarismos e com uma votação só.
+- **Core antigo:** contexto sem `votacoes` vale lista vazia (a ata sai como antes).

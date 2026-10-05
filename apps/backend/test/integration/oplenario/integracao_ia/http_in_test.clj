@@ -83,6 +83,34 @@
 
 (defn- url-contexto [e s] (str "/integracao/ia/v1/entes/" e "/sessoes/" s "/contexto"))
 
+(def votacao-ctx
+  {:id #uuid "70000000-0000-0000-0000-000000000007" :objeto "PL 008/2026" :modalidade "nominal"
+   :quorum-tipo "maioria_simples" :votos-necessarios nil :base-membros 13 :resultado "aprovada"
+   :total-sim 9 :total-nao 2 :total-abstencao 1 :encerrada-em (Instant/parse "2026-09-22T22:10:00Z")})
+
+(deftest contexto-leva-as-votacoes-encerradas-so-com-resultado-e-totais
+  (let [suja (assoc votacao-ctx :votos [{:vereador-id #uuid "40000000-0000-0000-0000-000000000004" :voto "sim"}]
+                    :vereador-id #uuid "40000000-0000-0000-0000-000000000004")
+        r (pt/response-for (servico :contexto (fn [_ _] (assoc contexto-ok :votacoes [suja])))
+                           :get (url-contexto ente sid) :headers (com-segredo))
+        b (ler r)]
+    (is (= 200 (:status r)))
+    (is (= [{:id "70000000-0000-0000-0000-000000000007" :objeto "PL 008/2026" :modalidade "nominal"
+             :quorum-tipo "maioria_simples" :votos-necessarios nil :base-membros 13 :resultado "aprovada"
+             :total-sim 9 :total-nao 2 :total-abstencao 1 :encerrada-em "2026-09-22T22:10:00Z"}]
+           (:votacoes b)))
+    (is (not (re-find #"4000000-0000-0000-0000-000000000004|vereador-id" (:body r)))
+        "o voto por vereador nao sai pelo fio, mesmo que o seam o entregasse")))
+
+(deftest contexto-sem-votacoes-sai-com-a-lista-vazia
+  (is (= [] (:votacoes (ler (pt/response-for (servico) :get (url-contexto ente sid) :headers (com-segredo)))))))
+
+(deftest contexto-de-sessao-secreta-com-votacao-continua-403
+  (is (= 403 (:status (pt/response-for (servico :contexto (fn [_ _] (-> contexto-ok
+                                                                         (assoc-in [:sessao :tipo-sessao] "secreta")
+                                                                         (assoc :votacoes [votacao-ctx]))))
+                                       :get (url-contexto ente sid) :headers (com-segredo))))))
+
 (deftest contexto-da-sessao
   (let [r (pt/response-for (servico) :get (url-contexto ente sid) :headers (com-segredo))
         b (ler r)]
