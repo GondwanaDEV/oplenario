@@ -20,6 +20,7 @@ import type { EstadoPlenario, PlacarVotacao, VistaQuorum } from "@/lib/plenario-
 import { exigeQuorumDaSessao, vistaDoQuorum } from "@/lib/plenario-reducer";
 import { derivarPlacar, rotularVotos, type VistaNominal, type VistaSecreta } from "@/lib/placar-vista";
 import { tituloObjetoVotacao } from "@/lib/titulo-objeto-votacao";
+import { QuantosVotaram } from "@/lib/quantos-votaram";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
 import type { SessaoOut, PautaOut } from "@/lib/contrato";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -344,20 +345,13 @@ function Tally({ sim, nao, abstencao }: { sim: number; nao: number; abstencao: n
   );
 }
 
-/** Votação aberta: quantos ainda podem votar. ENCERRADA ninguém mais vai votar — o que cabe é dizer quantos não votaram. */
+/** Votação aberta: quantos ainda podem votar. ENCERRADA ninguém mais vai votar — o que cabe é dizer quantos
+ * não votaram. A frase mora em `QuantosVotaram`, a mesma do cockpit do vereador. */
 function PlacarMeta({ faltam, baseMembros, encerrada }: { faltam: number | null; baseMembros: number | null; encerrada: boolean }) {
   if (faltam === null || baseMembros === null) return null;
   return (
     <p className="placar-meta">
-      {faltam > 0 ? (
-        <>
-          {encerrada ? "não votaram" : "faltam votar"} <b>{faltam}</b> de <b>{baseMembros}</b>
-        </>
-      ) : (
-        <>
-          todos os <b>{baseMembros}</b> votaram
-        </>
-      )}
+      <QuantosVotaram faltam={faltam} baseMembros={baseMembros} encerrada={encerrada} />
     </p>
   );
 }
