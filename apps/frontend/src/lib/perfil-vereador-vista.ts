@@ -184,8 +184,8 @@ const VOTO_SEM_MATERIA = "voto em matéria não publicada";
 
 // vocabulário REAL do voto nominal: `sim` | `nao` | `abstencao` (migration 0064 + legislativo/logic).
 // Fail-closed: valor fora do trio sai CRU e cai no chip neutro — nunca lança, nunca some a linha.
-const VOTO_ROTULO: Record<string, string> = { sim: "A favor", nao: "Contra", abstencao: "Absteve-se" };
-const VOTO_CLASSE: Record<string, string> = {
+export const VOTO_ROTULO: Record<string, string> = { sim: "A favor", nao: "Contra", abstencao: "Absteve-se" };
+export const VOTO_CLASSE: Record<string, string> = {
   sim: "chip-ok",
   nao: "chip-risco",
   abstencao: "chip-neutro",
