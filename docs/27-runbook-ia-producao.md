@@ -196,8 +196,9 @@ login funciona, só não está escondido.
 
 ### Ligar (uma vez, depois de promover)
 
-1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**. Roda sozinho no push da `production` que
-   mexe em `apps/keycloak/**` (e por `workflow_dispatch`). Ele:
+1. **Imagem do Keycloak com o tema:** workflow **`build-keycloak-prd.yaml`**, só por `workflow_dispatch` com a
+   confirmação `trocar-keycloak` (a troca reinicia o Keycloak das Casas; tema novo em `apps/keycloak` = promover e
+   rodar de novo). Ele:
    - publica `ghcr.io/gondwanadev/oplenario-keycloak-prd` (`:latest` e `:<sha>`), a 26.0.0 com o diretório
      `/opt/keycloak/themes/oplenario`;
    - acha no Dokploy o **compose** do Keycloak das Casas pelo nome do container que a API usa (o host de
@@ -206,8 +207,12 @@ login funciona, só não está escondido.
      `image: quay.io/keycloak/keycloak:…`, para sem mexer em nada;
    - troca só essa linha pela imagem do sha e reimplanta o compose. Mesmo banco, mesmas variáveis, mesmo comando. O
      servidor puxa do GHCR com o login que já usa para as imagens da API;
-   - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, **volta o compose
-     anterior**, reimplanta e falha.
+   - **antes de trocar**, confere que o servidor consegue baixar a imagem. Um compose puxa com o login do servidor, não
+     com o do app da API, então só segue se o pacote for público ou se o Dokploy tiver um registro do `ghcr.io`
+     cadastrado (Settings → Registry). Na primeira troca (05/10/2026) o pacote era privado e o servidor não tinha esse
+     login: o Keycloak ficou ~14 min fora do ar até a volta do compose;
+   - confere no `serverinfo` do Keycloak que o tema `oplenario` carregou. Se não carregar em 12 min, ou se o Keycloak
+     ficar 4 min seguidos fora do ar, **volta o compose anterior**, reimplanta e falha.
 
    **Se o workflow parar no "Achar o Keycloak":** a troca é à mão. No compose do Keycloak das Casas no Dokploy, a
    imagem passa a `ghcr.io/gondwanadev/oplenario-keycloak-prd:latest` (o servidor precisa de login no GHCR).
