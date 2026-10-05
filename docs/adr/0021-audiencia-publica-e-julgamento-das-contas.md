@@ -208,10 +208,18 @@ código no boot).
   **e** com linha em `sessoes.ata`; competência fora de 04/08/12 = falso); `contas_julgadas`, `prazo_julgamento_contas`
   e `data_recebimento_contas` (o `a_partir_de` da janela) em `legislativo/relacoes.clj`, sobre o tipo opaco novo
   `PrestacaoContasId`. Prestação inexistente lança (fail-closed). Tudo aditivo no catálogo: a versão não sobe.
-- **Catálogo e vínculo:** garantidos pelo próprio gatilho (`oplenario.gatilho-compliance`), sem migration: o template
-  passa no verificador e é gravado `vigente` na primeira vez; a Casa ganha o vínculo ativo na primeira vez que o
-  gatilho roda para ela; o opt-out existente (com motivo) é respeitado. O gatilho avalia o `fonte_yaml` vigente do
-  catálogo, não uma cópia em código.
+- **Catálogo e vínculo:** o template passa no verificador e é gravado `vigente` uma vez; a Casa ganha o vínculo ativo
+  na primeira vez que o gatilho roda para ela; o opt-out existente (com motivo) é respeitado. O gatilho avalia o
+  `fonte_yaml` vigente do catálogo, não uma cópia em código.
+  - **Quem grava o catálogo (corrigido em 05/10/2026):** o texto original dizia que o próprio gatilho garantia o
+    template, sem migration. Só funcionava nos testes, que conectam como dono. O gatilho roda no request com o role
+    de runtime (`oplenario_app`), que nunca teve grant no catálogo do motor. O CI da Trilha 3 mostrou o efeito: toda
+    leitura do painel logava `permission denied for table template_compliance` e não avaliava nada.
+  - **Agora:** o `migrate`, como dono, chama `gatilho-compliance/garantir-catalogo!`. A migration `20261005000250` dá
+    ao app **só leitura**, e só de `motor.template_compliance` e `motor.calendario_feriado`, as duas tabelas do
+    catálogo que a avaliação lê. O catálogo é de todas as Casas, e o app não grava nele.
+  - **Teste:** `gatilho_compliance_papel_test` roda o gatilho como `oplenario_pool` e confere que escrever no
+    catálogo continua negado.
 - **Gatilho:** composto em `rotas.clj` sobre as rotas montadas (interceptor antes do handler da leitura; depois do
   handler dos atos, só em 2xx): `GET /compliance/painel` e o card de `/paineis/mesa` (`sob_demanda`), `POST
   /sessoes/:id/ata` de sessão `audiencia_publica`, `POST /contas` e o encerramento de votação (`evento`). Obrigação
