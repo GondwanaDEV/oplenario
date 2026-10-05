@@ -131,3 +131,25 @@ síncrono que a §22.3.1 já previa.
   prompt vindos do ponteiro. Cada publicação emite `proposicao.resumo-publicado` na mesma tx; a transparência projeta a
   versão mais nova em `transparencia.materia` e a ficha pública do portal mostra o resumo com o selo de revisão humana
   (A.8b). O portal nunca fala com a IA: só mostra o que a Casa publicou.
+
+## Adendo (05/10/2026) — o resultado das votações na ata (Faixa A / A.6)
+
+O contexto da sessão (`GET /integracao/ia/v1/entes/{ente}/sessoes/{id}/contexto`) ganha a lista `votacoes`; o rascunho da
+ata deixa de escrever o resultado como `[confirmar: …]` quando o sistema já o sabe. Sem evento novo, sem rota nova, sem
+migration: é o mesmo caminho dos oradores e da pauta.
+
+- **O que entra:** só votação **encerrada** da sessão (a aberta e a anulada nunca saem), na ordem em que encerrou:
+  `objeto` em palavras ("PL 008/2026", "redação final do PL 008/2026"; emenda, parecer e requerimento vão pelo tipo,
+  sem inventar título), `modalidade`, `quorum-tipo`, `votos-necessarios` (a aritmética do core, nula na maioria
+  simples), `base-membros`, `resultado`, os três totais (nulos na simbólica, que não conta voto) e `encerrada-em`.
+  Montado em `legislativo` (`db/votacao_para_ia`, `logic/votacao_ia`, protocolo `RepoVotacaoIA`) e entregue pelo host
+  (`rotas/contexto-da-sessao-para-ia`). Acima de 500 votações numa sessão o contexto falha alto, nunca trunca.
+- **Sigilo:** o voto de cada vereador **não entra, nem na votação nominal** — a consulta não lê `votos` nem
+  `votos_secretos`, o mapa é uma allowlist e o `wire/out` é fechado. Votação secreta leva só o resultado e os totais
+  que o sistema já publica. Sessão secreta continua 403 e nem consulta votação.
+- **No satélite:** cada votação vira uma fonte `votacao:<id>` estruturada (`Fonte.estruturada` + `Fonte.fatos`), pública
+  e **não** de terceiro, que passa pelo filtro B1–B4 como as demais. A Camada de Confiança confere, além do trecho
+  literal, os números da frase que cita a fonte (`confianca/numeros.py`): número que o registro não tem, ou o total de
+  outro tipo ("10 votos favoráveis", ou sim e não trocados), sai `trecho_nao_encontrado`. Se a gravação contradiz o
+  dado, vale o dado e a instrução manda `[confirmar: a gravação indica X; o sistema registra Y]`. Prompt `ata-v2`.
+- **Core antigo:** contexto sem `votacoes` vale lista vazia (a ata sai como antes).

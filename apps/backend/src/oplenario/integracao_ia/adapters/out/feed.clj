@@ -24,9 +24,17 @@
              :proximo (if (seq eventos) (:seq (peek eventos)) depois)}
             "feed viola o contrato EventosOut (bug de servidor)"))
 
+(defn- votacao->wire
+  "ALLOWLIST de campos: so' o que a ata cita. O voto por vereador nao esta' entre eles (e o wire e' fechado)."
+  [v]
+  (-> (select-keys v [:objeto :modalidade :quorum-tipo :votos-necessarios :base-membros :resultado
+                      :total-sim :total-nao :total-abstencao])
+      (assoc :id (->str (:id v)) :encerrada-em (->str (:encerrada-em v)))))
+
 (defn contexto->wire
-  "{:sessao :segmentos :falas} (segmentos ja' sem os restritos) + `nomes` {orador-id nome} -> ContextoSessaoOut."
-  [ente-id {:keys [sessao segmentos falas]} nomes]
+  "{:sessao :segmentos :falas :votacoes} (segmentos ja' sem os restritos; `votacoes` ausente = sem votacoes) + `nomes`
+  {orador-id nome} -> ContextoSessaoOut."
+  [ente-id {:keys [sessao segmentos falas votacoes]} nomes]
   (validado wire/ContextoSessaoOut
             {:sessao    {:id (->str (:id sessao)) :tipo-sessao (:tipo-sessao sessao)
                          :numero-sequencial (:numero-sequencial sessao) :estado (:estado sessao)
@@ -40,7 +48,8 @@
                                        :tipo-fala (:tipo-fala f) :fase (:fase f)
                                        :fala-pai-id (->str (:fala-pai-id f))
                                        :iniciou-em (->str (:iniciou-em f)) :encerrou-em (->str (:encerrou-em f))})
-                              falas)}
+                              falas)
+             :votacoes  (mapv votacao->wire votacoes)}
             "contexto viola o contrato ContextoSessaoOut (bug de servidor)"))
 
 (defn recibo->wire [chave {:keys [aplicado]}]
