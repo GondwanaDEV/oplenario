@@ -106,6 +106,31 @@ describe("Clara — o painel retrátil", () => {
     expect(document.documentElement.dataset.clara).toBe("recolhido");
   });
 
+  it("no Mac, ⌘ + / também abre e recolhe, e o botão mostra ⌘ / (Ctrl + / segue valendo)", () => {
+    const plataforma = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+    try {
+      mockar({ "/api/agente/historico": [{ json: HISTORICO() }] });
+      render(<Clara token="tok" />);
+      const lancador = screen.getByRole("button", { name: /Pergunte à Clara/ });
+      expect(lancador.querySelector("kbd")?.textContent).toBe("⌘ /");
+      expect(lancador.getAttribute("title")).toBe("Pergunte à Clara (⌘ + /)");
+      fireEvent.keyDown(document.body, { key: "/", metaKey: true });
+      expect(document.documentElement.dataset.clara).toBe("aberto");
+      fireEvent.keyDown(document.body, { key: "/", ctrlKey: true });
+      expect(document.documentElement.dataset.clara).toBe("recolhido");
+    } finally {
+      plataforma.mockRestore();
+    }
+  });
+
+  it("fora do Mac o botão mostra Ctrl /, e a barra do teclado numérico também serve", () => {
+    mockar({ "/api/agente/historico": [{ json: HISTORICO() }] });
+    render(<Clara token="tok" />);
+    expect(screen.getByRole("button", { name: /Pergunte à Clara/ }).querySelector("kbd")?.textContent).toBe("Ctrl /");
+    fireEvent.keyDown(document.body, { key: "Divide", code: "NumpadDivide", ctrlKey: true });
+    expect(document.documentElement.dataset.clara).toBe("aberto");
+  });
+
   it("a segunda pergunta continua a conversa que o `fim` devolveu; 'Nova conversa' começa outra", async () => {
     const fetchMock = mockar({
       "/api/agente/perguntas": [{ texto: SSE("c-1") }, { texto: SSE("c-1", "i-2") }, { texto: SSE("c-9", "i-3") }],

@@ -4,7 +4,7 @@
 // produto/design-system/o-plenario/telas/assistente-da-casa.html; ADR-0024 para o histórico).
 //
 // Três tamanhos do mesmo componente:
-//   recolhido -> só o botão "Pergunte à Clara" no canto (Ctrl + / abre e fecha);
+//   recolhido -> só o botão "Pergunte à Clara" no canto (Ctrl + / abre e fecha; no Mac também ⌘ + /, `atalho.ts`);
 //   aberto    -> janela de 400px no canto, abaixo do cabeçalho, até 680px de altura; EMPURRA o conteúdo (não cobre);
 //   expandido -> ocupa a área abaixo do cabeçalho, com o histórico ao lado.
 // No celular (até 760px): aberto = folha que sobe até 88% da altura, com véu; expandido = tela cheia. Nos dois, o resto
@@ -43,6 +43,7 @@ import { lerConversaGuardada, lerHistorico, useAssistente } from "@/lib/use-assi
 import { comToken } from "@/lib/nav";
 import { ReportarErroIa } from "@/lib/reportar-erro-ia";
 import { useDicaAtual } from "./dica";
+import { ehAtalhoDaClara, useAtalhoDaClara } from "./atalho";
 import "./clara.css";
 
 export type Tamanho = "recolhido" | "aberto" | "expandido";
@@ -429,6 +430,7 @@ export function Clara({
   const idDoPainel = painelId ?? `${ids}-painel`;
   const dica = useDicaAtual();
   const [tamanho, setTamanho] = useState<Tamanho>(tamanhoInicial);
+  const atalho = useAtalhoDaClara();
   const [vista, setVista] = useState<Vista>("conversa");
   const [pergunta, setPergunta] = useState("");
   const [historico, setHistorico] = useState<EstadoHistorico>(HISTORICO_FECHADO);
@@ -517,10 +519,11 @@ export function Clara({
     return () => m.removeAttribute("inert");
   }, [moldura, celular, tamanho]);
 
-  // Ctrl + / abre e recolhe de qualquer lugar; Esc recolhe quando o foco está na Clara (ou na folha do celular).
+  // Ctrl + / (⌘ + / no Mac) abre e recolhe de qualquer lugar; Esc recolhe quando o foco está na Clara (ou na folha do
+  // celular).
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === "/") {
+      if (ehAtalhoDaClara(e)) {
         e.preventDefault();
         if (tamanho === "recolhido") devolverFoco.current = null;
         mudarTamanho(tamanho === "recolhido" ? "aberto" : "recolhido");
@@ -648,7 +651,7 @@ export function Clara({
         aria-controls={idDoPainel}
         aria-expanded={tamanho !== "recolhido"}
         aria-label="Pergunte à Clara"
-        title="Pergunte à Clara (Ctrl + /)"
+        title={atalho.titulo}
         onClick={() => {
           devolverFoco.current = null;
           mudarTamanho("aberto");
@@ -660,7 +663,7 @@ export function Clara({
         <span>
           <span className="rotulo-longo">Pergunte à </span>Clara
         </span>
-        <kbd aria-hidden="true">Ctrl /</kbd>
+        <kbd aria-hidden="true">{atalho.tecla}</kbd>
       </button>
 
       {celular && tamanho !== "recolhido" && (

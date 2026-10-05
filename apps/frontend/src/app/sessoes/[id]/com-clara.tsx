@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { AuthProvider } from "@/lib/auth";
 import { Faisca } from "@/app/(interno)/clara/clara";
 import { MolduraDaClara, useAbrirClara } from "@/app/(interno)/clara/moldura-da-clara";
+import { useAtalhoDaClara } from "@/app/(interno)/clara/atalho";
 
 export function SessaoComClara({ children }: { children: React.ReactNode }) {
   const search = useSearchParams();
@@ -30,6 +31,7 @@ export function SessaoComClara({ children }: { children: React.ReactNode }) {
  *  Com ela na página, o botão flutuante some no celular (conduzir.css). Sem a Clara na tela, nada. */
 export function BotaoClaraNoTopo() {
   const clara = useAbrirClara();
+  const atalho = useAtalhoDaClara();
   if (!clara.disponivel) return null;
   return (
     <button
@@ -38,7 +40,7 @@ export function BotaoClaraNoTopo() {
       aria-controls={clara.painelId}
       aria-expanded={clara.aberta}
       aria-label="Pergunte à Clara"
-      title="Pergunte à Clara (Ctrl + /)"
+      title={atalho.titulo}
       onClick={(e) => clara.abrir("aberto", e.currentTarget)}
     >
       <Faisca tamanho={16} />
