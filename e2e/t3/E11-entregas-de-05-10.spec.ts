@@ -63,6 +63,52 @@ const cab = (t: string) => ({ Authorization: `Bearer ${t}`, "Content-Type": "app
 
 // ---------------------------------------------------------------------------------------------- utilidades
 
+// ---------------------------------------------------------------------------- a página abriu de verdade?
+// DIAGNÓSTICO DA REPROVAÇÃO DE CI (run 37293945634): o `next dev` respondeu 404 ao documento de
+// `/portal/casa/:ente/materias/:id` na 1ª visita da rota (compilação a frio, "next.js: 607ms"; o status NÃO depende
+// do dado: com id inexistente a rota devolve 200). Esse 404 é a página de "não encontrado" do Next, não a ficha: o
+// cliente nunca busca nada e o teste esperava 60 s por um título que não viria. Duas defesas, nenhuma é timeout:
+//  1) `aquecer`: antes de qualquer teste, cada rota que a spec abre é visitada em série até responder 200 (se nunca
+//     responder, reprova nomeando a rota);
+//  2) `abrir`: toda navegação confere o status do documento na hora, então um 404/500 reprova em segundos dizendo qual.
+const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const UUID_QUALQUER = "00000000-0000-0000-0000-000000000abc";
+
+async function aquecer(rotas: string[]) {
+  for (const rota of rotas) {
+    let status = 0;
+    for (let i = 0; i < 10 && status !== 200; i++) {
+      try {
+        status = (await fetch(`${BASE}${rota}`, { redirect: "manual", signal: AbortSignal.timeout(90_000) })).status;
+      } catch {
+        status = 0;
+      }
+      if (status !== 200) await new Promise((ok) => setTimeout(ok, 1_000));
+    }
+    expect(status, `aquecer ${rota}: o frontend nunca respondeu 200 (último status ${status})`).toBe(200);
+  }
+}
+
+async function abrir(page: import("@playwright/test").Page, url: string) {
+  const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  expect(resp?.status(), `o documento de ${url.split("?")[0]} abriu com status ${resp?.status()} (esperado 200)`).toBe(200);
+}
+
+test.beforeAll(async () => {
+  test.setTimeout(240_000);
+  const tk = encodeURIComponent(TOK.secretaria);
+  await aquecer([
+    `/portal/casa/${demo.ente}/leis`,
+    `/portal/casa/${demo.ente}/vereadores`,
+    `/portal/casa/${demo.ente}/votacoes`,
+    `/portal/casa/${demo.ente}/materias/${UUID_QUALQUER}`,
+    `/administracao?token=${encodeURIComponent(TOK.admin)}`,
+    `/pos-aprovacao/${UUID_QUALQUER}?token=${tk}`,
+    `/sessoes/${UUID_QUALQUER}/plenario?token=${tk}`,
+  ]);
+});
+
+
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 // chave de cadastro/enum cru na tela: qualquer palavra com sublinhado no meio ("em_pauta", "PROJETO_LEI", "1_secretario").
 // Texto para gente não tem sublinhado.
@@ -154,7 +200,7 @@ async function papeisDaPessoa(ctx: APIRequestContext, identidadeId: string, pape
 }
 
 async function abrirAdministracao(page: import("@playwright/test").Page) {
-  await page.goto(`/administracao?token=${encodeURIComponent(TOK.admin)}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+  await abrir(page, `/administracao?token=${encodeURIComponent(TOK.admin)}`);
   await expect(page.getByRole("heading", { name: "Quem tem acesso" })).toBeVisible({ timeout: 60_000 });
 }
 
@@ -272,7 +318,7 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
   test("/leis abre sem login: a lista bate com o servidor e a tela não mostra UUID nem enum cru", async ({ page }) => {
     const ctx = await pwRequest.newContext();
     const { "normas-total": total } = await portalJson<{ "normas-total": number }>(ctx, "legislacao");
-    await page.goto(`${PORTAL}/leis`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `${PORTAL}/leis`);
     await expect(page).toHaveURL(new RegExp(`${PORTAL}/leis`));
     await expect(page.getByRole("heading", { level: 1, name: "Leis e normas" })).toBeVisible({ timeout: 60_000 });
     if (total > 0) {
@@ -289,7 +335,7 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
     const ctx = await pwRequest.newContext();
     const { vereadores } = await portalJson<{ vereadores: { "nome-parlamentar": string | null; nome: string | null }[] }>(ctx, "vereadores");
     expect(vereadores.length, "a Casa semeada tem vereadores em exercício").toBeGreaterThan(0);
-    await page.goto(`${PORTAL}/vereadores`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `${PORTAL}/vereadores`);
     await expect(page.getByRole("heading", { level: 1, name: "Vereadores em exercício" })).toBeVisible({ timeout: 60_000 });
     const cartoes = page.getByRole("list", { name: "Vereadores em exercício" }).getByRole("listitem");
     await expect(cartoes).toHaveCount(vereadores.length, { timeout: 30_000 });
@@ -302,7 +348,7 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
   test("/votacoes abre sem login: a lista bate com o servidor, e abrir uma votação mostra o resultado em palavras", async ({ page }) => {
     const ctx = await pwRequest.newContext();
     const { total } = await portalJson<{ total: number }>(ctx, "votacoes");
-    await page.goto(`${PORTAL}/votacoes`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `${PORTAL}/votacoes`);
     await expect(page.getByRole("heading", { level: 1, name: "Votações" })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole("heading", { name: "Votações encerradas" })).toBeVisible();
     if (total > 0) {
@@ -334,7 +380,7 @@ test.describe("E11-2 o portal do cidadão, sem login", () => {
     }
     expect(alvo, "nenhuma matéria do portal tem 2 movimentações com etapa nomeada: a projeção do desfecho/etapa não rodou").not.toBeNull();
 
-    await page.goto(`${PORTAL}/materias/${alvo!.id}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `${PORTAL}/materias/${alvo!.id}`);
     await expect(page.getByRole("heading", { name: "Por onde a matéria passou" })).toBeVisible({ timeout: 60_000 });
     const linha = page.getByRole("list", { name: "Movimentações da matéria, da mais recente para a mais antiga" }).getByRole("listitem");
     await expect(linha).toHaveCount(alvo!.mov.movimentacoes.length);
@@ -452,7 +498,7 @@ test.describe.serial("E11-3/4 sessão e matéria PRÓPRIAS: prazo do Executivo e
   });
 
   test("autógrafo: prazo no passado é recusado em palavras; prazo no futuro vira o prazo do Executivo", async ({ page }) => {
-    await page.goto(`/pos-aprovacao/${proposicaoId}?token=${encodeURIComponent(TOK.secretaria)}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `/pos-aprovacao/${proposicaoId}?token=${encodeURIComponent(TOK.secretaria)}`);
     const campo = page.getByLabel("Prazo de sanção ou veto do Executivo (último dia)");
     const gerar = page.getByRole("button", { name: "Gerar autógrafo e enviar ao Executivo" });
     await expect(campo).toBeVisible({ timeout: 60_000 });
@@ -500,7 +546,7 @@ test.describe.serial("E11-3/4 sessão e matéria PRÓPRIAS: prazo do Executivo e
       if (req.url().endsWith(`/api/sessoes/${sessaoId}/plenario`)) canalBarrado.push(req.url());
     });
     await page.route(`**/api/sessoes/${sessaoId}/plenario`, (rota) => rota.abort());
-    await page.goto(`/sessoes/${sessaoId}/plenario?token=${encodeURIComponent(TOK.secretaria)}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+    await abrir(page, `/sessoes/${sessaoId}/plenario?token=${encodeURIComponent(TOK.secretaria)}`);
 
     const resultado = async () => {
       await expect(page.getByRole("heading", { name: "Votação encerrada" })).toBeVisible({ timeout: 60_000 });
