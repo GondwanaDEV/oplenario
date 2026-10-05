@@ -1,5 +1,5 @@
 // Tela /entrar/[ente] — o link de entrada que a Câmara divulga. Valida a Câmara via descoberta
-// (GET ${BACKEND_URL}/auth/descoberta/:ente) e, se ela existir, pede o CPF (ADR-0024): o formulário posta para
+// (GET ${BACKEND_URL}/auth/descoberta/:ente) e, se ela existir, pede o CPF (ADR-0025): o formulário posta para
 // /api/auth/entrar com o `ente` escondido, e a pessoa cai direto na senha DESTA Câmara (mesmo que tenha acesso a
 // outras). CPF sem acesso a esta Câmara volta aqui com `?erro=sem-acesso-nesta`.
 //

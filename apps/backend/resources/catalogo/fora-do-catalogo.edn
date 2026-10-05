@@ -10,7 +10,7 @@
 {:integracao-ia/mcp {:categoria :servico
                      :motivo "e' o proprio adaptador MCP que serve o catalogo ao agente (ADR-0009/0010), nao uma acao"}
  :identidade/localizar-casas {:categoria :so-tela
-                              :motivo "a porta de entrada pelo CPF (ADR-0024), antes de haver sessao: o agente age como uma pessoa ja' dentro da Casa e nunca entra por ela"}
+                              :motivo "a porta de entrada pelo CPF (ADR-0025), antes de haver sessao: o agente age como uma pessoa ja' dentro da Casa e nunca entra por ela"}
  :agente/perguntar {:categoria :so-tela
                     :motivo "e' a porta da tela para o proprio agente: o agente nao chama o agente"}
  :agente/reportar-erro-ia {:categoria :so-tela
@@ -261,6 +261,8 @@
                                         :motivo "assinar o parecer e' ato pessoal e intransferivel do advogado (OAB e nome do perfil dele): o agente nem propoe; nao e' voto, presenca nem conducao, por isso nao vai em :pessoal"}
  :legislativo/substituir-parecer-juridico {:categoria :so-tela
                                            :motivo "corrigir o parecer assinado e' ato do advogado, na tela; o agente nem propoe (mesmo motivo de assinar)"}
+ :legislativo/meus-votos {:categoria :so-tela
+                           :motivo "'Minha atuacao': traz o voto do vereador em sessao secreta ou fechada ao publico, dado so' dele; o agente age COMO a pessoa mas a resposta iria ao fornecedor de IA (DPA de nao-treino pendente) e poderia ser citada ao vereador fora do contexto — a tela le, o agente nao"}
  :legislativo/meu-pedido-juridico {:categoria :so-tela
                                    :motivo "o relator pede o parecer juridico da materia que relata, na tela do vereador; o agente da secretaria tem pedir_parecer_juridico"}
  :transparencia/movimentacoes-da-materia {:categoria :so-tela

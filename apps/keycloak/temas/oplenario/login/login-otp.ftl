@@ -1,5 +1,5 @@
 <#--
-  O Plenário · o segundo fator (ADR-0024): o código do aplicativo, depois da senha. Igual ao login-otp.ftl do tema
+  O Plenário · o segundo fator (ADR-0025): o código do aplicativo, depois da senha. Igual ao login-otp.ftl do tema
   `base` do Keycloak 26.0.0, só com o título e a instrução em palavras ("Entrar" sozinho não dizia o que fazer).
 -->
 <#import "template.ftl" as layout>

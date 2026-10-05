@@ -1,5 +1,5 @@
 (ns oplenario.identidade.localizar-http-test
-  "ADR-0024 — POST /auth/localizar: a entrada pelo CPF. Rota PUBLICA (pre-login). O CPF chega no CORPO (nunca na URL:
+  "ADR-0025 — POST /auth/localizar: a entrada pelo CPF. Rota PUBLICA (pre-login). O CPF chega no CORPO (nunca na URL:
   URL vai para log de acesso); a resposta diz em quais Casas a pessoa tem acesso institucional e o `login-hint` (o
   identidade-id, o usuario dela no Keycloak de cada Casa). DB-free: repo e seams FAKE via `montar`."
   (:require [clojure.string :as str]

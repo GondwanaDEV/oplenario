@@ -174,7 +174,7 @@
         "get-or-create: re-provisionar devolve o MESMO usuario (hoje lanca em != 201)")
     (let [r (usuario-representation *idp* ente ident)]
       (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions r)))
-          "ADR-0024: nasce obrigado a criar a senha e o segundo fator (codigo) antes de qualquer acao — o login da Casa
+          "ADR-0025: nasce obrigado a criar a senha e o segundo fator (codigo) antes de qualquer acao — o login da Casa
           e' CPF + senha + codigo; so' passkey deixava a pessoa sem senha para entrar")
       (is (false? (:emailVerified r))
           "emailVerified=true era [GAP] por nao haver SMTP; agora ha' — o KC verifica de verdade"))))
@@ -205,7 +205,7 @@
       (is (= [(str iid)] (get-in u [:attributes :identidade-id]))
           "o atributo que o login usa continua la' (o PUT leva o usuario inteiro)")
       (is (= #{"UPDATE_PASSWORD" "CONFIGURE_TOTP"} (set (:requiredActions u)))
-          "a senha e o codigo do primeiro acesso continuam exigidos (ADR-0024)"))))
+          "a senha e o codigo do primeiro acesso continuam exigidos (ADR-0025)"))))
 
 (deftest corrigir-email-recusa-quem-ja-tem-credencial
   (let [ente-id (random-uuid) iid (random-uuid)]
@@ -231,7 +231,7 @@
                 (catch clojure.lang.ExceptionInfo e (:tipo (ex-data e))))))))
 
 ;; ---------------------------------------------------------------------------------------------
-;; ADR-0024: o realm tem a cara da Casa (nome, pt-BR, tema do O Plenario) e se defende de forca bruta.
+;; ADR-0025: o realm tem a cara da Casa (nome, pt-BR, tema do O Plenario) e se defende de forca bruta.
 ;; ---------------------------------------------------------------------------------------------
 
 (deftest realm-nasce-com-o-nome-da-casa-em-portugues-e-com-o-tema

@@ -1,4 +1,4 @@
-# ADR-0024 — Entrada pelo CPF e o Keycloak escondido atrás do O Plenário
+# ADR-0025 — Entrada pelo CPF e o Keycloak escondido atrás do O Plenário
 
 - **Status:** ✅ **Aceita** (05/10/2026). Pedido direto: a tela de login do Keycloak ("Sign in to your account",
   "ENTE-10000000-…", um UUID no campo de usuário) não pode aparecer; "o Keycloak continua, mas precisa ser abstraído";
@@ -134,7 +134,7 @@ console.
 ## Materialização
 
 - **Backend:** `identidade/diplomat/http/auth_in.clj` (`POST /auth/localizar`), `identidade/db/identidade.clj`
-  (`id-por-cpf`, `casas-com-acesso-institucional`), migration `20261005000220-identidade-casas-com-acesso`,
+  (`id-por-cpf`, `casas-com-acesso-institucional`), migration `20261005000240-identidade-casas-com-acesso`,
   `oplenario/limite_de_taxa.clj`, `rotas.clj` (`casa-para-login`, o limite), `kernel/components/keycloak_idp.clj`
   (aparência, defesa, ordem das ações, convite, reset de MFA), `admin_sistema/controllers.clj` (o nome da Casa no
   realm). Catálogo: `:identidade/localizar-casas` em `fora-do-catalogo.edn` (porta de entrada; o agente nunca entra

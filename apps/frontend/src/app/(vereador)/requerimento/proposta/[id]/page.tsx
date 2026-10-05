@@ -35,17 +35,17 @@ export default function PaginaPropostaRequerimento() {
 
   if (estado === "carregando") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Carregando…</h1>
-      </main>
+      </div>
     );
   }
   if (estado === "erro" || !proposta) {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Requerimento não encontrado</h1>
         <p>Ele pode ter sido enviado a outros colegas, ou o endereço está incompleto.</p>
-      </main>
+      </div>
     );
   }
 

@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { entrarPeloCpf } from "./route";
 import { COOKIE_ESCOLHA, lerEscolha } from "@/lib/entrada-cpf";
 
-// ADR-0024 — POST /api/auth/entrar: a pessoa digita o CPF numa tela do O Plenário e cai direto na senha da Câmara
+// ADR-0025 — POST /api/auth/entrar: a pessoa digita o CPF numa tela do O Plenário e cai direto na senha da Câmara
 // dela. O BFF pergunta ao backend (POST /auth/localizar) e começa o PKCE com `login_hint` = o usuário dela no realm.
 
 const ORIGIN = "http://localhost:3000";

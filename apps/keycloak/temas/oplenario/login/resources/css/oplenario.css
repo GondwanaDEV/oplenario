@@ -1,5 +1,5 @@
 /* ============================================================
-   O PLENÁRIO · tema de login do Keycloak (ADR-0024)
+   O PLENÁRIO · tema de login do Keycloak (ADR-0025)
    O arquétipo "auth" de produto/design-system/o-plenario/telas/login.html, servido pelo Keycloak.
 
    Os tokens abaixo são um RECORTE de apps/frontend/src/app/tokens.css (a fonte de verdade) — só os que esta tela usa,

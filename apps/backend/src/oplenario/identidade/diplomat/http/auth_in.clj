@@ -101,14 +101,14 @@
     digitos))
 
 (defn- localizar-handler
-  "POST /auth/localizar (ADR-0024) — a entrada pelo CPF: em quais Casas a pessoa tem acesso INSTITUCIONAL ativo e o
+  "POST /auth/localizar (ADR-0025) — a entrada pelo CPF: em quais Casas a pessoa tem acesso INSTITUCIONAL ativo e o
   `login-hint` (o identidade-id, que e' o usuario dela no realm de cada Casa) para o BFF levar o navegador direto a'
   tela de senha. O CPF fica so' aqui: nao vai ao Keycloak, nao vai para a URL, nao vai para o log.
    - CPF fora do digito verificador -> 400, sem consultar o banco.
    - Sem identidade, sem vinculo, ou so' Casas encerradas -> 200 {:casas []} SEM hint (nao entrega o id de ninguem).
    - `casa-para-login` (fn ente-id -> {:nome-oficial :nome-curto} | nil, injetada pelo host) tira a Casa encerrada ou
      inexistente — identidade nunca importa cadastros (§22.10).
-  A resposta revela a quem conhece o CPF em quais Casas a pessoa atua (ver ADR-0024: quase sempre e' publico, e o
+  A resposta revela a quem conhece o CPF em quais Casas a pessoa atua (ver ADR-0025: quase sempre e' publico, e o
   limite por IP do host segura a varredura). A consulta ao banco roda mesmo sem identidade, para o tempo de resposta
   nao contar se o CPF existe."
   [repo-identidade casa-para-login]
@@ -222,7 +222,7 @@
   `config/carregar` vive LA, nao aqui). `oplenario.rotas` funde este fragmento."
   [{:keys [info-ente keycloak idp repo-identidade relogio sessao casa-para-login limite-localizar]}]
   #{["/auth/localizar" :post
-     ;; ADR-0024: PUBLICA (pre-login). O limite por IP (host) vem ANTES do parse do corpo: quem passou do limite nem
+     ;; ADR-0025: PUBLICA (pre-login). O limite por IP (host) vem ANTES do parse do corpo: quem passou do limite nem
      ;; tem o corpo lido. Sem `limite-localizar` (testes de borda) a rota segue sem limite.
      (cond-> [] limite-localizar (conj limite-localizar)
              true (conj it/corpo-json (localizar-handler repo-identidade casa-para-login)))

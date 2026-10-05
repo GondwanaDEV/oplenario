@@ -44,7 +44,7 @@
       (sql/format {:select [:id :nome] :from [:identidade.identidade] :where [:= :id id]}))))
 
 (defn id-por-cpf
-  "ADR-0024 (entrada pelo CPF): CPF -> id da identidade | nil. Leitura ESTREITA: so' o id volta do banco — nem o nome
+  "ADR-0025 (entrada pelo CPF): CPF -> id da identidade | nil. Leitura ESTREITA: so' o id volta do banco — nem o nome
   nem o CPF de ninguem passam pela memoria do caminho publico de entrada."
   [conn cpf]
   (:identidade/id
@@ -52,7 +52,7 @@
      (sql/format {:select [:id] :from [:identidade.identidade] :where [:= :cpf cpf]}))))
 
 (defn casas-com-acesso-institucional
-  "ADR-0024: os `ente_id` das Casas onde a identidade tem vinculo INSTITUCIONAL ativo (servidor, vereador, admin_ente).
+  "ADR-0025: os `ente_id` das Casas onde a identidade tem vinculo INSTITUCIONAL ativo (servidor, vereador, admin_ente).
   O vinculo e' tenant (FORCE RLS); a pergunta atravessa as Casas so' pela funcao estreita do banco
   (`identidade.casas_com_acesso_institucional`, SECURITY DEFINER, EXECUTE so' do role id_resolver)."
   [conn identidade-id]

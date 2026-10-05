@@ -281,7 +281,7 @@
 
 (defn- habilitar-passkey!
   "Garante que a required action de passkey fique habilitada no realm; sem isto, marcar o usuario com ela
-  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!). Desde a ADR-0024 o
+  e' silenciosamente ignorado (mesma armadilha do User Profile, ver declarar-atributo-identidade!). Desde a ADR-0025 o
   convite pede senha + codigo; a passkey fica habilitada para voltar como segundo fator (dominio definitivo). O
   default de fabrica desta required action VARIA por versao/modo de import do Keycloak — achado real:
   contra o Keycloak 26.0.0 (`start-dev`) ela ja nasce `enabled:true` num realm recem-criado, contrariando
@@ -301,12 +301,12 @@
                       {:status status :corpo corpo})))))
 
 (def politica-de-senha
-  "ADR-0024: o piso da senha da Casa. Comprimento (8, como pede o NIST 800-63B) sem regra de composicao, teto para nao
+  "ADR-0025: o piso da senha da Casa. Comprimento (8, como pede o NIST 800-63B) sem regra de composicao, teto para nao
   virar ataque de custo, e nunca o proprio usuario ou e-mail."
   "length(8) and maxLength(128) and notUsername and notEmail")
 
 (def defesa-forca-bruta
-  "ADR-0024: com a entrada pelo CPF qualquer um que saiba o CPF chega a' tela de senha. A cada 10 erros a conta trava
+  "ADR-0025: com a entrada pelo CPF qualquer um que saiba o CPF chega a' tela de senha. A cada 10 erros a conta trava
   1 minuto, dobrando ate' 15 minutos; NUNCA para sempre — senao quem soubesse o CPF de um vereador o trancaria fora no
   dia da sessao (quem ja' esta' dentro nao cai: a sessao do O Plenario nao depende do Keycloak)."
   {:bruteForceProtected true :permanentLockout false :failureFactor 10
@@ -314,7 +314,7 @@
    :minimumQuickLoginWaitSeconds 60 :quickLoginCheckMilliSeconds 1000})
 
 (defn- configurar-aparencia-e-defesa!
-  "ADR-0024: PUT PARCIAL do realm (mesmo racional de `configurar-smtp!`: o Keycloak 26 nao zera os campos omitidos).
+  "ADR-0025: PUT PARCIAL do realm (mesmo racional de `configurar-smtp!`: o Keycloak 26 nao zera os campos omitidos).
   Portugues do Brasil como unica lingua, o tema do O Plenario (quando configurado), o nome da Casa (quando informado —
   sem nome, o realm guarda o que ja' tinha), a politica de senha e a defesa contra forca bruta. Erro de infra LANCA."
   [http-client token base-url realm {:keys [nome tema-login]}]
@@ -333,7 +333,7 @@
 (declare exigir!)
 
 (defn- senha-antes-do-codigo!
-  "ADR-0024: o Keycloak executa as acoes obrigatorias pela prioridade, e o padrao pede o codigo (CONFIGURE_TOTP, 10)
+  "ADR-0025: o Keycloak executa as acoes obrigatorias pela prioridade, e o padrao pede o codigo (CONFIGURE_TOTP, 10)
   antes da senha (UPDATE_PASSWORD, 30). No primeiro acesso o natural e' criar a senha e depois o codigo: a senha
   passa para logo antes do codigo. Idempotente (so' mexe quando a ordem esta' errada). Erro de infra LANCA."
   [http-client token base-url realm]
@@ -514,7 +514,7 @@
           (exigir! status #{201} "falha ao criar mapper do IdP gov.br" {:mapper (:name m) :corpo corpo}))))))
 
 (defn- provisionar-realm-impl
-  "`opcoes` = {:nome <nome oficial da Casa>} (ADR-0024). Sem nome, o realm novo nasce com o da plataforma e o realm
+  "`opcoes` = {:nome <nome oficial da Casa>} (ADR-0025). Sem nome, o realm novo nasce com o da plataforma e o realm
   existente guarda o que tinha."
   ([idp ente-id] (provisionar-realm-impl idp ente-id nil))
   ([{:keys [config http-client]} ente-id {:keys [nome]}]
@@ -570,7 +570,7 @@
                                :protocolMapper "oidc-audience-mapper"
                                :config {"included.client.audience" audiencia "access.token.claim" "true"}}]
                              mappers-de-sessao)}
-                       ;; ADR-0024: o "voltar ao aplicativo" do fim do convite leva a' entrada pelo CPF
+                       ;; ADR-0025: o "voltar ao aplicativo" do fim do convite leva a' entrada pelo CPF
                        (seq web-origins) (assoc :baseUrl (str (first web-origins) "/entrar"))))
     {:realm realm})))
 
@@ -583,7 +583,7 @@
     (if (= 2 (count partes)) partes [(first partes) (first partes)])))
 
 (def acoes-do-primeiro-acesso
-  "ADR-0024: o que o convite obriga antes de qualquer acao — criar a senha e cadastrar o codigo (TOTP, o segundo fator
+  "ADR-0025: o que o convite obriga antes de qualquer acao — criar a senha e cadastrar o codigo (TOTP, o segundo fator
   da §22.5). Antes era so' a passkey sem senha, e o login da Casa (fluxo padrao do Keycloak) pede senha: a pessoa
   convidada ficava sem como entrar. A passkey volta como segundo fator quando o dominio definitivo existir (ela fica
   presa ao dominio do Keycloak; trocar o dominio depois invalidaria todas)."
@@ -600,7 +600,7 @@
 (defn- criar-usuario-impl
   "GET-then-create (idempotente, mesma forma de garantir-client!/provisionar-realm-impl): re-provisionar a
   MESMA identidade-id no MESMO ente devolve o usuario ja existente em vez de lancar em 409 'User exists
-  with same email'. Nasce devendo a SENHA e o CODIGO (ADR-0024, `acoes-do-primeiro-acesso`): o KC OBRIGA os dois
+  with same email'. Nasce devendo a SENHA e o CODIGO (ADR-0025, `acoes-do-primeiro-acesso`): o KC OBRIGA os dois
   antes de qualquer acao (§22.5.2 eixo F). emailVerified NAO e' mais forcado a true — o [GAP] existia so' porque nao havia SMTP
   configurado no realm (Task 2 fechou isso); agora o KC verifica de verdade via o fluxo de e-mail."
   [{:keys [config http-client]} ente-id {:keys [identidade-id nome email]}]
@@ -671,7 +671,7 @@
                             (str "/admin/realms/" realm "/users/" kc-id "/credentials/" id) nil base-url)]
             (when-not (= 204 status)
               (throw (ex-info "keycloak-idp: falha ao remover credencial MFA (infra)" {:status status :credencial-id id})))))
-        ;; ADR-0024: sem o fator, o proximo login pede o cadastro do codigo — senao a pessoa entraria so' com a senha
+        ;; ADR-0025: sem o fator, o proximo login pede o cadastro do codigo — senao a pessoa entraria so' com a senha
         ;; (o OTP do fluxo padrao e' condicional: so' e' pedido de quem tem um). Le o usuario INTEIRO e devolve o registro
         ;; completo (mesmo cuidado de `corrigir-email-do-convite-impl`: PUT parcial apaga o `identidade-id`).
         (let [caminho (str "/admin/realms/" realm "/users/" kc-id)

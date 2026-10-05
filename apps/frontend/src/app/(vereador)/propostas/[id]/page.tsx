@@ -32,17 +32,17 @@ export default function PaginaProposta() {
 
   if (estado.fase === "carregando") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Carregando…</h1>
-      </main>
+      </div>
     );
   }
   if (estado.fase === "erro") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Proposta não encontrada</h1>
         <p>{estado.mensagem}</p>
-      </main>
+      </div>
     );
   }
 

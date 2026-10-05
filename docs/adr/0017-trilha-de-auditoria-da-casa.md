@@ -506,3 +506,27 @@ existir.
 - **Eixo 4c × código:** a ADR diz que o login do cidadão **não entra** na trilha; o código o registra desde a fatia 1
   (`entrou pelo gov.br`) e a tentativa passa a dobrar essa linha. Decidir: aceitar o login do cidadão (e corrigir o
   texto do Eixo 4c) ou tirá-lo, o que apaga o dobro e o original.
+
+## Adendo de 05/10/2026 — o resumo do efeito de toda escrita
+
+O item 3 acima ("hoje só o login e a exportação o fazem") já estava velho: 36 das 169 rotas de escrita do host deixavam
+rótulo pelo handler (balcão, comunicados, setores, contas, audiência, pauta, exportação, entrada). As outras 133
+apareciam em `/auditoria` e no CSV só com a ação em palavras soltas ("conceder acesso · Acessos e identidade").
+
+- **Onde mora:** `auditoria/resumos.clj`, dois mapas de dado puro, `por-acao` (ação → rótulo) e `sem-resumo` (ação → o
+  **motivo** de não ter). O rótulo é verbo no passado + o que foi feito ("Revogou um acesso à Casa"), sem rota, enum,
+  UUID nem conteúdo. Não há `:campos` por ação: a lista de campos depende do corpo de cada pedido, e uma lista fixa
+  afirmaria mudança que pode não ter havido. Quem sabe os campos é o handler.
+- **Quando entra:** só no ato que **aconteceu** (escrita ou entrada com desfecho `permitido`) e só se o handler não deu
+  rótulo — o rótulo do handler é o do **objeto** ("Contas 2025", o protocolo, o setor) e sempre vence. Negação, falha e
+  tentativa sem desfecho não ganham rótulo: a tela já diz "Negado", "Não concluiu" e "Sem desfecho", e "Publicou a
+  pauta" numa tentativa barrada seria falso.
+- **Gravado, não derivado na leitura:** o rótulo é coluna do registro e entra no selo. **Registro antigo não muda** (a
+  corrente é append-only e não se reescreve); só os registros novos o levam. Quem exporta o CSV de antes de hoje verá
+  linhas sem rótulo; a tela segue mostrando a ação em palavras para elas.
+- **Exceções com motivo (20):** as 15 rotas `/operacao/*` (a atuação da Operação tem corrente própria, ADR-0016), as 3 do
+  satélite de IA autenticadas por segredo (sem ator da Casa) e as 2 do assistente, que ficam com a frente da Clara
+  (ADR-0024) até o merge dela.
+- **Teste estrutural:** `auditoria/resumo_de_toda_escrita_test` lê a tabela de rotas do host (a mesma do teste da
+  tentativa) e reprova escrita nova sem rótulo nem motivo, entrada que sobrou de rota que sumiu, rótulo que parece
+  rota/enum/UUID e rótulo repetido. Provado tirando uma entrada: o vermelho nomeia a ação.

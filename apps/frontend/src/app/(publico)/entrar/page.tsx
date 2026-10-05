@@ -1,4 +1,4 @@
-// Tela /entrar — a porta de entrada de servidores e vereadores (ADR-0024: a entrada pelo CPF).
+// Tela /entrar — a porta de entrada de servidores e vereadores (ADR-0025: a entrada pelo CPF).
 //
 // A pessoa digita o CPF; /api/auth/entrar descobre em quais Câmaras ela tem acesso e a leva direto à tela de senha da
 // Câmara dela (o Keycloak com o tema do O Plenário, usuário já preenchido). Antes desta ADR esta tela era um

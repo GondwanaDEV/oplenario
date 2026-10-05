@@ -1,4 +1,4 @@
-// Tela /entrar/escolher (ADR-0024) — quem tem acesso a MAIS DE UMA Câmara escolhe em qual entrar, depois do CPF.
+// Tela /entrar/escolher (ADR-0025) — quem tem acesso a MAIS DE UMA Câmara escolhe em qual entrar, depois do CPF.
 //
 // A lista vem do cookie httpOnly `entrar_escolha` que /api/auth/entrar acabou de gravar (5 min), nunca da URL. Cada
 // Câmara é um link para /api/auth/login?ente=<id>, que lê o mesmo cookie e leva o usuário já conferido como

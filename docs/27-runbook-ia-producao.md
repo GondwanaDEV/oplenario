@@ -183,7 +183,7 @@ java -jar oplenario.jar reconciliar-anexos [--ente <uuid>] [--apagar-orfaos]
 
 ## 9. Login das Câmaras: o tema do O Plenário no Keycloak e a entrada pelo CPF
 
-[ADR-0024](adr/0024-entrada-pelo-cpf-e-o-keycloak-escondido.md). Servidor e vereador entram em `/entrar` com o CPF; a
+[ADR-0025](adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md). Servidor e vereador entram em `/entrar` com o CPF; a
 senha (e o código do aplicativo) é pedida pelo Keycloak da Câmara, numa tela com a cara do O Plenário. Até o passo 1
 abaixo, o Keycloak de produção mostra a própria tela (em português e com o nome da Câmara, mas no visual padrão dele): o
 login funciona, só não está escondido.

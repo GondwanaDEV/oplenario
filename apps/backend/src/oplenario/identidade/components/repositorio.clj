@@ -28,9 +28,9 @@
   (criar-identidade! [this identidade] "CPF -> id canonico (idempotente).")
   (identidade-por-cpf [this cpf])
   (id-por-cpf [this cpf]
-    "ADR-0024: CPF -> id | nil. Leitura ESTREITA (so' o id) para o caminho PUBLICO da entrada pelo CPF.")
+    "ADR-0025: CPF -> id | nil. Leitura ESTREITA (so' o id) para o caminho PUBLICO da entrada pelo CPF.")
   (casas-com-acesso-institucional [this identidade-id]
-    "ADR-0024: os ente-id onde a identidade tem vinculo institucional ATIVO — a unica pergunta que atravessa as Casas
+    "ADR-0025: os ente-id onde a identidade tem vinculo institucional ATIVO — a unica pergunta que atravessa as Casas
     sobre o vinculo (funcao estreita do banco; o vinculo segue sob RLS para todo o resto).")
   (identidade-por-id [this id])
   (nome-por-id [this id]

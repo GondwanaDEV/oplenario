@@ -6,6 +6,9 @@ name: Fumaca das telas novas (homolog)
 # A unica requisicao de escrita (caso 14, envio de arquivo) vai a uma prestacao de contas que nao existe: o
 # parser le o arquivo e a rota responde 404 sem gravar nada (so' a trilha de auditoria registra a tentativa).
 # O caso 15 (complemento da resposta) segue a mesma regra: so' envia pedidos que a rota tem de recusar (404, 400, 409, 403).
+# Os casos 16 a 20 (portal do cidadao: leis, vereadores, votacoes, ficha publica da materia e a raiz) sao so' leitura, anonimos e
+# aceitam o estado vazio legitimo onde a producao pode nao ter dado; reprovam com status != 200, erro na tela, lista que
+# discorda da API e UUID ou chave de cadastro no texto visivel.
 
 on:
   workflow_dispatch:
@@ -468,6 +471,195 @@ jobs:
               rec('complemento da resposta', ok ? 'OK' : 'ERRO',
                   `inexistente=${inexistente.status} "${inexistente.erro}" vazio=${vazio.status} vereadora=${ver.status} pode-complementar-no-detalhe=${chave} aberto=${semResposta ? `${semResposta.status} "${semResposta.erro}"` : 'nenhum protocolo aberto na fila'}`);
             } catch (e) { rec('complemento da resposta', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // ---- PORTAL DO CIDADAO (05/10/2026): leis, vereadores, votacoes, a ficha publica da materia e a raiz. So' LEITURA,
+            //      sempre anonimo (contexto sem cookie). Nao dependem de dado que a producao talvez nao tenha: Casa sem norma, sem
+            //      vereador ou sem votacao tem estado vazio em palavras, e a fumaca o aceita. O que NAO aceita: pagina que nao
+            //      abre (status != 200), erro na tela, lista que diz uma coisa e a API outra (a contagem e o texto do estado vazio
+            //      saem do que a API devolveu NA MESMA corrida), UUID ou chave de cadastro (em_pauta, 1_secretario) no texto visivel.
+            const ERRO_TELA = /Application error|Internal Server|erro inesperado|Acesso restrito|N[aã]o foi poss[ií]vel carregar/i;
+            const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+            const ENUM_RE = /\b(?:[a-z]{2,}(?:_[a-z0-9]+)+|\d+(?:_[a-z]+)+|[A-Z]{2,}(?:_[A-Z0-9]+)+)\b/;
+            const SEM_ACENTO_RE = /\b(?:ordinaria|extraordinaria|simbolica|audiencia|votacao|sessao|proposicao)\b/i;
+            const norm = (s) => (s || '').replace(/\s+/g,' ').trim();
+            // innerText devolve o texto JA transformado pelo CSS (o total da lista, o rotulo da etapa atual e os titulos de secao saem
+            // em CAIXA ALTA): comparar sem diferenciar maiuscula, senao a fumaca reprova pagina certa
+            const tem = (t, s) => t.toLowerCase().includes(s.toLowerCase());
+            const textoDe = async (p) => norm(await p.evaluate(() => document.body?.innerText || ''));
+            // o que NAO pode aparecer para o cidadao: o primeiro UUID e a primeira chave crua achados no texto
+            const crus = (t, semAcento = false) => [t.match(UUID_RE)?.[0], t.match(ENUM_RE)?.[0], semAcento ? t.match(SEM_ACENTO_RE)?.[0] : null].filter(Boolean);
+            // as paginas do portal buscam os dados depois de hidratar: espera o texto do estado final (lista, vazio ou erro).
+            // Devolve false no fim do prazo, e o caso reprova com o texto que de fato estava na tela.
+            const aguardar = (p, re, ms = 20000) => p.waitForFunction(([s, f]) => new RegExp(s, f).test(document.body?.innerText || ''), [re.source, re.flags], { timeout: ms }).then(() => true, () => false);
+
+            // 16) LEIS E NORMAS (portal) — a lista abre, diz o total que a API diz (ou o vazio em palavras) e mostra cada ementa;
+            //     havendo norma, o clique no titulo abre a ficha (veiculo, identificador oficial, texto para baixar OU o aviso de que
+            //     ainda nao ha texto) e a migalha de volta.
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const r = await api(anon, `/api/portal/casa/${E}/legislacao`);
+              const normas = Array.isArray(r.body?.normas) ? r.body.normas : null;
+              const total = r.body?.['normas-total'];
+              const p = await anon.newPage();
+              const resp = await p.goto(`${B}/portal/casa/${E}/leis`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const pronto = await aguardar(p, /\d+ normas? publicadas?|Esta C[aâ]mara ainda n[aã]o publicou leis aqui|N[aã]o foi poss[ií]vel carregar/i);
+              const t = await textoDe(p);
+              const h1 = await p.getByRole('heading', { level: 1, name: 'Leis e normas', exact: true }).count();
+              const lista = p.getByRole('list', { name: 'Leis e normas publicadas' });
+              const itens = await lista.getByRole('listitem').count();
+              const dito = typeof total !== 'number' ? '' : (total >= 1 ? `${total} ${total === 1 ? 'norma publicada' : 'normas publicadas'}` : 'Esta Câmara ainda não publicou leis aqui.');
+              const baixo = t.toLowerCase();
+              const ementasNaTela = !!normas && normas.every(n => baixo.includes(norm(n.ementa).toLowerCase()));
+              let ficha = 'sem norma publicada (estado vazio aceito)', fichaOk = true;
+              if (normas?.length && !(await lista.getByRole('link').count())) { fichaOk = false; ficha = 'a API tem norma e a tela nao mostra nenhum link'; }
+              else if (normas?.length) {
+                const alvo = normas[0];
+                await Promise.all([p.waitForURL(u => u.pathname.endsWith(`/leis/${alvo['norma-id']}`), { timeout: 20000, waitUntil: 'commit' }), lista.getByRole('link').first().click()]);
+                const abriu = await aguardar(p, /Ve[ií]culo da publica[cç][aã]o|n[aã]o foi encontrada|N[aã]o foi poss[ií]vel carregar/i);
+                const tf = await textoDe(p);
+                const h1f = (await p.getByRole('heading', { level: 1 }).allInnerTexts()).map(norm).filter(Boolean);
+                const baixar = await p.getByRole('link', { name: 'Baixar o texto publicado' }).count();
+                const semTexto = /O texto desta norma ainda n[aã]o foi publicado aqui/.test(tf);
+                const textoCoerente = alvo['tem-texto'] === true ? baixar === 1 : alvo['tem-texto'] === false ? (baixar === 0 && semTexto) : (baixar === 1) !== semTexto;
+                fichaOk = abriu && h1f.length >= 1 && /Publicada em/i.test(tf) && /Ve[ií]culo da publica[cç][aã]o/.test(tf) && /Identificador oficial/i.test(tf)
+                  && /Ver a mat[eé]ria que deu origem/.test(tf) && textoCoerente && !ERRO_TELA.test(tf) && crus(tf).length === 0;
+                ficha = `ficha "${h1f[0] ?? '-'}" texto-para-baixar=${baixar} aviso-sem-texto=${semTexto} crus=${crus(tf).join('|') || '-'} ok=${fichaOk}`;
+              }
+              await anon.close();
+              const ok = r.status === 200 && !!normas && typeof total === 'number' && resp?.status() === 200 && pronto && h1 === 1
+                && tem(t, dito) && itens === normas.length && ementasNaTela && !ERRO_TELA.test(t) && crus(t).length === 0 && fichaOk;
+              rec('/portal/.../leis', ok ? 'OK' : 'ERRO',
+                  `api=${r.status}:${normas?.length ?? '-'}/${total ?? '-'} pagina=${resp?.status()} pronto=${pronto} h1=${h1} itens=${itens} total-dito=${typeof total === 'number' && tem(t, dito)} ementas=${ementasNaTela} crus=${crus(t).join('|') || '-'} ${ficha}${ok ? '' : ` :: ${t.slice(0, 140)}`}`);
+            } catch (e) { rec('/portal/.../leis', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 17) VEREADORES EM EXERCICIO (portal) — o resumo e a lista batem com a API, cada nome parlamentar (ou civil) aparece, e
+            //     nenhum cargo da Mesa sai como chave de cadastro. Casa sem vereador diz isso em palavras.
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const r = await api(anon, `/api/portal/casa/${E}/vereadores`);
+              const vs = Array.isArray(r.body?.vereadores) ? r.body.vereadores : null;
+              const p = await anon.newPage();
+              const resp = await p.goto(`${B}/portal/casa/${E}/vereadores`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const pronto = await aguardar(p, /\d+ vereadores? em exerc[ií]cio|Nenhum vereador em exerc[ií]cio registrado|N[aã]o foi poss[ií]vel carregar/i);
+              const t = await textoDe(p);
+              const h1 = await p.getByRole('heading', { level: 1, name: 'Vereadores em exercício', exact: true }).count();
+              const cartoes = await p.getByRole('list', { name: 'Vereadores em exercício' }).getByRole('listitem').count();
+              const n = vs?.length ?? -1;
+              const dito = n === 0 ? 'Nenhum vereador em exercício registrado até agora.' : n === 1 ? '1 vereador em exercício' : `${n} vereadores em exercício`;
+              const nomes = (vs ?? []).map(v => norm(v['nome-parlamentar']) || norm(v['nome-civil']));
+              const faltam = nomes.filter(nm => !nm || !t.includes(nm));
+              await anon.close();
+              const ok = r.status === 200 && !!vs && resp?.status() === 200 && pronto && h1 === 1 && tem(t, dito)
+                && cartoes === n && faltam.length === 0 && !ERRO_TELA.test(t) && crus(t).length === 0;
+              rec('/portal/.../vereadores', ok ? 'OK' : 'ERRO',
+                  `api=${r.status}:${n} pagina=${resp?.status()} pronto=${pronto} h1=${h1} cartoes=${cartoes} resumo-dito=${tem(t, dito)} nomes-ausentes=${faltam.length} crus=${crus(t).join('|') || '-'}${ok ? '' : ` :: ${t.slice(0, 140)}`}`);
+            } catch (e) { rec('/portal/.../vereadores', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 18) VOTACOES (portal) — a lista abre e bate com a API; havendo votacao, o clique abre o detalhe (de preferencia uma
+            //     nominal): o quorum em palavras e, conforme a modalidade, a tabela de votos por nome parlamentar OU a nota de que
+            //     nao ha voto individual. Nunca UUID, chave de cadastro nem palavra sem acento (ordinaria, simbolica...) na tela.
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const r = await api(anon, `/api/portal/casa/${E}/votacoes`);
+              const vts = Array.isArray(r.body?.votacoes) ? r.body.votacoes : null;
+              const total = r.body?.total;
+              const p = await anon.newPage();
+              const resp = await p.goto(`${B}/portal/casa/${E}/votacoes`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const pronto = await aguardar(p, /Mostrando \d+ a \d+ de \d+|Nenhuma vota[cç][aã]o encerrada em sess[aã]o p[uú]blica|N[aã]o foi poss[ií]vel carregar as vota/i);
+              const t = await textoDe(p);
+              const h1 = await p.getByRole('heading', { level: 1, name: 'Votações', exact: true }).count();
+              const lista = p.getByRole('list', { name: 'Votações encerradas' });
+              const itens = await lista.getByRole('listitem').count();
+              let detalhe = 'sem votacao encerrada em sessao publica (estado vazio aceito)', detalheOk = true;
+              const idx = Math.max(0, (vts ?? []).findIndex(v => v.modalidade === 'nominal'));
+              if (vts?.length && idx >= itens) { detalheOk = false; detalhe = `a API tem ${vts.length} votacao(oes) e a tela mostra ${itens}`; }
+              else if (vts?.length) {
+                const alvo = vts[idx];
+                await Promise.all([p.waitForURL(u => u.searchParams.get('votacao') === alvo['votacao-id'], { timeout: 20000, waitUntil: 'commit' }), lista.getByRole('listitem').nth(idx).getByRole('link').click()]);
+                const abriu = await aguardar(p, /Para aprovar:|Vota[cç][aã]o n[aã]o encontrada/i);
+                const aberta = p.getByRole('region', { name: /^Votação de / });
+                const nAberta = await aberta.count();
+                const td = nAberta ? norm(await aberta.first().innerText()) : '';
+                const linhas = nAberta ? await aberta.first().locator('tbody th[scope="row"]').allInnerTexts() : [];
+                const comTabela = /Voto de cada vereador \(\d+\)/.test(td) && linhas.length >= 1 && linhas.every(x => norm(x) && !/^[0-9a-f]{8}\b/i.test(norm(x)));
+                const nota = alvo.modalidade === 'secreta' ? /o voto de cada vereador n[aã]o/.test(td)
+                  : alvo.modalidade === 'simbolica' ? /n[aã]o h[aá] registro do voto de cada vereador/.test(td)
+                  : alvo.modalidade === 'nominal' ? (comTabela || /Nenhum voto individual foi registrado/.test(td))
+                  : true;
+                const tt = await textoDe(p);
+                detalheOk = abriu && nAberta === 1 && /Para aprovar:/.test(td) && nota && !ERRO_TELA.test(tt) && !/Vota[cç][aã]o n[aã]o encontrada/.test(tt) && crus(tt, true).length === 0;
+                detalhe = `detalhe(${alvo.modalidade}) aberto=${nAberta} quorum=${/Para aprovar:/.test(td)} tabela=${comTabela}:${linhas.length} nota=${nota} crus=${crus(tt, true).join('|') || '-'} ok=${detalheOk}`;
+              }
+              await anon.close();
+              const ok = r.status === 200 && !!vts && typeof total === 'number' && resp?.status() === 200 && pronto && h1 === 1
+                && itens === vts.length && (total === 0 ? /Nenhuma vota[cç][aã]o encerrada em sess[aã]o p[uú]blica/.test(t) : /Mostrando \d+ a \d+ de \d+/.test(t))
+                && !ERRO_TELA.test(t) && crus(t, true).length === 0 && detalheOk;
+              rec('/portal/.../votacoes', ok ? 'OK' : 'ERRO',
+                  `api=${r.status}:${vts?.length ?? '-'}/${total ?? '-'} pagina=${resp?.status()} pronto=${pronto} h1=${h1} itens=${itens} crus=${crus(t, true).join('|') || '-'} ${detalhe}${ok ? '' : ` :: ${t.slice(0, 140)}`}`);
+            } catch (e) { rec('/portal/.../votacoes', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 19) FICHA PUBLICA DA MATERIA — "Por onde a materia passou". Escolhe a primeira materia publica com movimentacao (ate
+            //     15 tentativas); sem nenhuma, abre a primeira e o historico tem de dizer que ainda nao esta disponivel. Cada
+            //     movimentacao aparece, a mais recente marcada "Etapa atual"; a etapa e' o nome do rito, nunca a chave (em_pauta).
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const lst = await api(anon, `/api/portal/casa/${E}/materias`);
+              const ms = Array.isArray(lst.body?.materias) ? lst.body.materias : null;
+              let alvo = null;
+              for (const m of (ms ?? []).slice(0, 15)) {
+                const mv = await api(anon, `/api/portal/casa/${E}/materias/${m['proposicao-id']}/movimentacoes`);
+                const arr = Array.isArray(mv.body?.movimentacoes) ? mv.body.movimentacoes : null;
+                if (!alvo) alvo = { id: m['proposicao-id'], status: mv.status, arr };
+                if (mv.status === 200 && arr?.length) { alvo = { id: m['proposicao-id'], status: mv.status, arr }; break; }
+              }
+              if (!ms) rec('ficha publica da materia', 'ERRO', `lista de materias status=${lst.status}`);
+              else if (!alvo) { await anon.close(); rec('ficha publica da materia', 'OK', 'Casa sem materia publica (estado vazio aceito): nada a abrir'); }
+              else {
+                const movs = alvo.arr ?? [];
+                const p = await anon.newPage();
+                const resp = await p.goto(`${B}/portal/casa/${E}/materias/${alvo.id}`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                const pronto = await aguardar(p, /Por onde a mat[eé]ria passou|Mat[eé]ria n[aã]o encontrada/i);
+                // a secao so' aparece depois do fetch das movimentacoes; espera o conteudo dela
+                await aguardar(p, movs.length ? /Etapa atual/i : /O hist[oó]rico desta mat[eé]ria ainda n[aã]o est[aá] dispon[ií]vel|N[aã]o foi poss[ií]vel carregar o hist[oó]rico/i, 15000);
+                const tt = await textoDe(p);
+                const h1 = (await p.locator('main h1').allInnerTexts()).map(norm).filter(Boolean);
+                const cab = norm(await p.locator('main .ficha-cab').first().innerText().catch(() => ''));
+                const secao = p.getByRole('region', { name: 'Por onde a matéria passou', exact: true });
+                const nSecao = await secao.count();
+                const ts = nSecao ? norm(await secao.first().innerText()) : '';
+                const nItens = nSecao ? await secao.first().getByRole('listitem').count() : 0;
+                const historicoOk = movs.length
+                  ? nItens === movs.length && /Etapa atual/i.test(ts)
+                  : /O hist[oó]rico desta mat[eé]ria ainda n[aã]o est[aá] dispon[ií]vel aqui/.test(ts);
+                await anon.close();
+                const ok = alvo.status === 200 && Array.isArray(alvo.arr) && resp?.status() === 200 && pronto && h1.length >= 1
+                  && !/Mat[eé]ria n[aã]o encontrada/.test(tt) && nSecao === 1 && historicoOk && !/N[aã]o foi poss[ií]vel carregar o hist[oó]rico/.test(ts)
+                  && !/Application error|Internal Server|erro inesperado|Acesso restrito/i.test(tt)
+                  && !UUID_RE.test(tt) && crus(ts + ' ' + cab).length === 0;
+                rec('ficha publica da materia', ok ? 'OK' : 'ERRO',
+                    `movimentacoes-api=${alvo.status}:${movs.length} pagina=${resp?.status()} h1="${(h1[0] ?? '-').slice(0, 50)}" secao=${nSecao} itens=${nItens} crus=${crus(ts + ' ' + cab).join('|') || '-'} uuid-na-tela=${UUID_RE.test(tt)}${ok ? '' : ` :: ${tt.slice(0, 140)}`}`);
+              }
+            } catch (e) { rec('ficha publica da materia', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
+
+            // 20) A RAIZ / — a porta publica abre sem login, diz o nome e a tagline, oferece entrar e o status, e nao diz mais
+            //     "em construcao" (nem fala de front-end).
+            try {
+              const anon = await browser.newContext({ locale: 'pt-BR' });
+              const p = await anon.newPage();
+              const resp = await p.goto(`${B}/`, { waitUntil: 'domcontentloaded', timeout: 30000 });
+              const pronto = await aguardar(p, /Onde a c[aâ]mara acontece/i, 15000);
+              const t = await textoDe(p);
+              const h1 = await p.getByRole('heading', { level: 1, name: 'O Plenário', exact: true }).count();
+              const entrar = await p.getByRole('link', { name: 'Entrar na sua Câmara' }).count();
+              const status = await p.getByRole('link', { name: 'Status da plataforma' }).count();
+              const construcao = /constru[çc][ãa]o|front-end|track FE/i.test(t);
+              const caminho = new URL(p.url()).pathname;
+              await anon.close();
+              const ok = resp?.status() === 200 && caminho === '/' && pronto && h1 === 1 && entrar === 1 && status === 1 && !construcao
+                && !ERRO_TELA.test(t);
+              rec('/ (raiz)', ok ? 'OK' : 'ERRO',
+                  `pagina=${resp?.status()} url=${caminho} h1=${h1} entrar=${entrar} status=${status} em-construcao=${construcao}${ok ? '' : ` :: ${t.slice(0, 140)}`}`);
+            } catch (e) { rec('/ (raiz)', 'ERRO', String(e).split('\n')[0].slice(0,140)); }
 
             console.log('\n===== RESUMO FUMACA =====');
             for (const r of R) console.log(`  [${r.flag}] ${r.tela} — ${r.nota}`);

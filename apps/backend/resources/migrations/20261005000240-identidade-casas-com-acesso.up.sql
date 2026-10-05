@@ -1,4 +1,4 @@
--- ADR-0024: a entrada pelo CPF. A pessoa digita o CPF numa tela do O Plenario; o backend precisa saber em quais Casas
+-- ADR-0025: a entrada pelo CPF. A pessoa digita o CPF numa tela do O Plenario; o backend precisa saber em quais Casas
 -- ela tem acesso institucional para mandar o navegador ao realm certo do Keycloak.
 --
 -- O vinculo e' TENANT (FORCE RLS por `app.ente_id`): o pool de runtime, sem a Casa no GUC, nao ve linha nenhuma, e

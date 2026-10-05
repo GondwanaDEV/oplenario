@@ -75,12 +75,14 @@
     (catalogo/executar e deps ator dados)))
 
 (defn registrador
-  "O seam de audit das chamadas de agente que escrevem (ADR-0010, Eixo 3.5), sobre o repositorio da fronteira com a
-  IA: pessoa + agente + execucao + ferramenta + classe + desfecho."
+  "O seam de audit das chamadas de agente (ADR-0010 Eixo 3.5; toda chamada, leitura inclusive, desde a ADR-0024),
+  sobre o repositorio da fronteira com a IA: pessoa + agente + execucao + ferramenta + classe + desfecho + o SHA-256
+  da saida."
   [repo-integracao-ia]
-  (fn [ator e desfecho]
+  (fn [ator e desfecho resultado-sha256]
     (let [via (:via ator)]
       (repo-ia/registrar-chamada-agente! repo-integracao-ia
                                          {:ente-id (:ente-id ator) :execucao-id (:execucao-id via)
                                           :identidade-id (:identidade-id ator) :agente (:agente via)
-                                          :ferramenta (:nome e) :classe (name (:classe e)) :desfecho desfecho}))))
+                                          :ferramenta (:nome e) :classe (name (:classe e)) :desfecho desfecho
+                                          :resultado-sha256 resultado-sha256}))))

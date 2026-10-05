@@ -51,7 +51,7 @@
 ;; ---------------------------------------------------------------------------------------------
 
 (defn- convidar-primeiro-admin! [repo-op {:keys [idp-casa]} ator ente-id nome-da-casa identidade-id nome email reenvio?]
-  ;; ADR-0024: o nome da Casa vira o titulo da tela de login do realm
+  ;; ADR-0025: o nome da Casa vira o titulo da tela de login do realm
   (idp-casa/provisionar-realm! idp-casa ente-id {:nome nome-da-casa})
   (idp-casa/criar-usuario! idp-casa ente-id {:identidade-id identidade-id :nome nome :email email})
   (idp-casa/convidar! idp-casa ente-id identidade-id)
@@ -95,7 +95,7 @@
 
 (defn reprovisionar-realm!
   "Converge o realm da Casa com a config atual (ex.: gov.br ligado depois, ADR-0015; o nome, o portugues, o tema e a
-  defesa contra forca bruta, ADR-0024). Idempotente."
+  defesa contra forca bruta, ADR-0025). Idempotente."
   [repo-op {:keys [idp-casa]} ator ente-id]
   (let [casa (casa-ou-404! repo-op ente-id)]
     (idp-casa/provisionar-realm! idp-casa ente-id {:nome (:nome casa)}))

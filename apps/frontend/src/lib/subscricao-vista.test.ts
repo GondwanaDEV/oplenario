@@ -13,6 +13,21 @@ describe("rotuloSubscricao", () => {
     expect(rotuloSubscricao("confirmada")).toEqual({ texto: "Subscrição confirmada", tom: "conf" });
     expect(rotuloSubscricao("nao_consta").texto).toBe("Não consta");
   });
+
+  it("todo estado do CHECK da migration (pendente, confirmada, recusada, nao_consta) sai em palavras, sem a chave", () => {
+    for (const estado of ["pendente", "confirmada", "recusada", "nao_consta"] as const) {
+      const { texto } = rotuloSubscricao(estado);
+      expect(texto).not.toContain("_");
+      expect(texto).not.toBe(estado);
+    }
+    expect(rotuloSubscricao("recusada").texto).toBe("Recusou");
+  });
+
+  it("estado que a tela não conhece cai em texto humanizado e no tom neutro, nunca na chave crua", () => {
+    const r = rotuloSubscricao("aguardando_segunda_via" as never);
+    expect(r).toEqual({ texto: "Aguardando segunda via", tom: "fora" });
+    expect(rotuloSubscricao("constructor" as never).texto).toBe("Constructor");
+  });
 });
 
 describe("resumoSubscricoes", () => {

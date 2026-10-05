@@ -225,7 +225,7 @@
       (str/ends-with? caminho "/users/profile")
       {:status 200 :corpo {:attributes [{:name "identidade-id"}]}}
 
-      ;; ADR-0024: as prioridades padrao do Keycloak 26 (o codigo antes da senha)
+      ;; ADR-0025: as prioridades padrao do Keycloak 26 (o codigo antes da senha)
       (and (= metodo :get) (str/ends-with? caminho "/required-actions/UPDATE_PASSWORD"))
       {:status 200 :corpo {:alias "UPDATE_PASSWORD" :priority 30}}
       (and (= metodo :get) (str/ends-with? caminho "/required-actions/CONFIGURE_TOTP"))
@@ -258,7 +258,7 @@
       (str/ends-with? caminho "/users/profile")
       {:status 200 :corpo {:attributes [{:name "identidade-id"}]}}
 
-      ;; ADR-0024: as prioridades padrao do Keycloak 26 (o codigo antes da senha)
+      ;; ADR-0025: as prioridades padrao do Keycloak 26 (o codigo antes da senha)
       (and (= metodo :get) (str/ends-with? caminho "/required-actions/UPDATE_PASSWORD"))
       {:status 200 :corpo {:alias "UPDATE_PASSWORD" :priority 30}}
       (and (= metodo :get) (str/ends-with? caminho "/required-actions/CONFIGURE_TOTP"))

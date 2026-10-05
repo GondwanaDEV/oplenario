@@ -357,7 +357,7 @@ export function conferirDestino(url: string): string | null {
 
 // ---- conferência no navegador (espelha o backend; o servidor confere de novo) ----
 
-// a regra mora em ./cpf (a entrada pelo CPF, ADR-0024, usa a mesma)
+// a regra mora em ./cpf (a entrada pelo CPF, ADR-0025, usa a mesma)
 export { cpfValido };
 
 export const UFS = [

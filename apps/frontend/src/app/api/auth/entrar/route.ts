@@ -1,4 +1,4 @@
-// ADR-0024 — POST /api/auth/entrar: a entrada pelo CPF.
+// ADR-0025 — POST /api/auth/entrar: a entrada pelo CPF.
 //
 // O formulário de /entrar (e de /entrar/[ente]) posta o CPF aqui. O BFF pergunta ao backend em quais Câmaras a
 // pessoa tem acesso institucional (POST /auth/localizar, CPF no CORPO) e:

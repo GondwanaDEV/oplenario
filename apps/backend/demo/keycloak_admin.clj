@@ -77,7 +77,7 @@
 
 (defn limpar-required-actions!
   "Zera as required-actions do usuario (a senha e o codigo do primeiro acesso, que `criar-usuario!` do IdentityProvider
-  crava sempre — ADR-0024) — sem isto a persona da demo nao entra so' com a senha semeada."
+  crava sempre — ADR-0025) — sem isto a persona da demo nao entra so' com a senha semeada."
   [^HttpClient http base-url token realm kc-user-id]
   (let [resp (.send http (-> (HttpRequest/newBuilder)
                               (.uri (URI/create (str base-url "/admin/realms/" realm "/users/" kc-user-id)))

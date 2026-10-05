@@ -1,5 +1,5 @@
 // O começo do Authorization Code + PKCE (S256) contra o Keycloak da Casa, comum às duas portas de entrada:
-// GET /api/auth/login (o link da Câmara, a escolha de Câmara, o gov.br) e POST /api/auth/entrar (o CPF, ADR-0024).
+// GET /api/auth/login (o link da Câmara, a escolha de Câmara, o gov.br) e POST /api/auth/entrar (o CPF, ADR-0025).
 //
 // O realm, a base-url pública do Keycloak e o client-id vêm da descoberta do tenant
 // (`GET ${backend}/auth/descoberta/:ente`). O cookie `pkce` carrega os três junto com verifier/state/redirectPath para
@@ -49,7 +49,7 @@ export async function buscarDescoberta(ente: string, opts?: OpcoesBackend): Prom
 /**
  * O redirect ao `authorize` do Keycloak, com o cookie `pkce` de curta duração.
  * - `redirectPath`: destino já validado same-origin (ou null: o callback escolhe pela persona).
- * - `loginHint`: o usuário da pessoa no realm (o identidade-id), quando ela já se identificou pelo CPF (ADR-0024).
+ * - `loginHint`: o usuário da pessoa no realm (o identidade-id), quando ela já se identificou pelo CPF (ADR-0025).
  * - `viaGovbr`: o Keycloak da Casa pula a própria tela e vai direto ao gov.br.
  * - `status`: 307 para GET; 303 quando quem chama atende um POST (o navegador segue com GET).
  */
@@ -86,7 +86,7 @@ export function redirecionarAoKeycloak({
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
   // O Keycloak da Casa pula a própria tela e vai direto ao gov.br (o IdP fica escondido da tela institucional).
   if (viaGovbr) authorizeUrl.searchParams.set("kc_idp_hint", "govbr");
-  // ADR-0024: a tela de senha já sabe quem é — o campo de usuário vai escondido (tema `oplenario`).
+  // ADR-0025: a tela de senha já sabe quem é — o campo de usuário vai escondido (tema `oplenario`).
   if (loginHint) authorizeUrl.searchParams.set("login_hint", loginHint);
 
   const response = NextResponse.redirect(authorizeUrl, status);

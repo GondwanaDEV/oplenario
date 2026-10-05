@@ -1,5 +1,5 @@
 <#--
-  O Plenário · a moldura de toda página de login do Keycloak (ADR-0024).
+  O Plenário · a moldura de toda página de login do Keycloak (ADR-0025).
 
   Mesmo cartão do arquétipo produto/design-system/o-plenario/telas/login.html: faixa de azulejo, a Câmara à frente
   (nome do realm = nome oficial da Casa, gravado pelo provisionamento), o título da página, o formulário, e

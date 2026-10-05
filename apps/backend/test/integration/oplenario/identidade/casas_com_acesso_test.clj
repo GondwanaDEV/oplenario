@@ -1,5 +1,5 @@
 (ns oplenario.identidade.casas-com-acesso-test
-  "INTEGRACAO (PG real), ADR-0024: a entrada pelo CPF pergunta em quais Casas a identidade tem acesso INSTITUCIONAL
+  "INTEGRACAO (PG real), ADR-0025: a entrada pelo CPF pergunta em quais Casas a identidade tem acesso INSTITUCIONAL
   ativo. O vinculo e' TENANT (FORCE RLS); a resposta atravessa as Casas so' pela funcao estreita
   `identidade.casas_com_acesso_institucional`. Tudo e' conferido com o role de RUNTIME (`oplenario_pool`, NOBYPASSRLS,
   nao-dono) — o superuser so' semeia. Prova tambem que a abertura NAO vazou: o pool continua sem ver vinculo fora da

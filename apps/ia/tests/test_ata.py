@@ -181,7 +181,7 @@ def test_ata_solicitada_vira_rascunho_e_aviso_ao_core_sem_o_texto() -> None:
     p = aviso["payload"]
     assert (p["sessao-id"], p["prompt-versao"], p["modelo-llm-id"], p["incerteza"]) == (
         SID,
-        "ata-v1",
+        "ata-v2",
         "fake:fake-1",
         "revisar_com_atencao",
     )

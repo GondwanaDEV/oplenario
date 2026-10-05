@@ -29,7 +29,7 @@
             :web-client-id "oplenario-web"
             :redirect-uris ["http://localhost:3000/api/auth/callback"]
             :web-origins ["http://localhost:3000"]
-            ;; ADR-0024: o tema de login do O Plenario (apps/keycloak/temas/oplenario). O Keycloak sem o tema instalado
+            ;; ADR-0025: o tema de login do O Plenario (apps/keycloak/temas/oplenario). O Keycloak sem o tema instalado
             ;; cai no padrao (com um erro no log dele), entao ligar aqui nao derruba nada. KEYCLOAK_TEMA_LOGIN="" desliga.
             :tema-login "oplenario"
             ;; Onda D Slice 5 Task 2: p/ onde o realm provisionado aponta o smtpServer -- quem ENVIA o
@@ -44,7 +44,7 @@
  ;; resolve a partir do SEU proprio default). Mudar um sem o outro dessincroniza; reconciliar fazendo o Repo
  ;; ler este valor em vez de ter default proprio.
  :sessao {:absoluta-h 12 :ociosa-min 30}
- ;; ADR-0024: a entrada pelo CPF (POST /auth/localizar). Ate' `limite-por-ip` consultas por IP a cada `janela-min`
+ ;; ADR-0025: a entrada pelo CPF (POST /auth/localizar). Ate' `limite-por-ip` consultas por IP a cada `janela-min`
  ;; minutos, em memoria da instancia. Uma Camara inteira costuma sair por um IP so' (a rede da Casa): o teto cobre a
  ;; chegada da equipe pela manha. ENTRADA_LIMITE_POR_IP / ENTRADA_JANELA_MIN sobrepoem.
  :entrada {:limite-por-ip 30 :janela-min 5}

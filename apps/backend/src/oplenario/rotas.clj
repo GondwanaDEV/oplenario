@@ -33,6 +33,7 @@
             [oplenario.kernel.components.objeto-store :as objeto-store-comp]
             [oplenario.kernel.tempo :as tempo]
             [oplenario.legislativo.components.repositorio :as repo-legislativo-comp]
+            [oplenario.legislativo.components.repositorio-votacao-ia :as repo-votacao-ia-comp]
             [oplenario.legislativo.components.repositorio-situacao :as repo-situacao-comp]
             [oplenario.legislativo.diplomat.http.contas :as contas-http]
             [oplenario.legislativo.diplomat.http.in :as legislativo-http]
@@ -178,6 +179,17 @@
           (update :falas (fnil into []) (:falas-cidadas c))
           (assoc :nomes (merge nomes (:nomes-cidadaos c)))
           (dissoc :falas-cidadas :nomes-cidadaos)))))
+
+(defn contexto-da-sessao-para-ia
+  "O contexto que a IA le (host wiring, §22.10): `contexto-para-ia` (sessao, segmentos, falas, nomes) mais as VOTACOES
+  ENCERRADAS da sessao (legislativo) — o resultado e os totais que a ata cita, nunca o voto de cada vereador. Sessao
+  SECRETA nao le votacao nenhuma (o contexto responde 403 por cima; aqui nem a consulta acontece). nil = sessao
+  inexistente no tenant."
+  [repo-sessoes repo-cadastros repo-legislativo ente-id sessao-id]
+  (when-let [c (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id)]
+    (assoc c :votacoes (if (= "secreta" (get-in c [:sessao :tipo-sessao]))
+                         []
+                         (repo-votacao-ia-comp/votacoes-da-sessao-para-ia repo-legislativo ente-id sessao-id)))))
 
 (defn ata-para-ia
   "A.6c: a versao publicada da ata para a IA medir a revisao | :restrita (sessao secreta) | nil (host wiring)."
@@ -349,7 +361,7 @@
            ;; {:chave :sha256 :bytes :manifesto}); `apagar-casa` = (fn [ente-id pedido-id] -> resumo, retomavel). Sem eles
            ;; (nil), gerar/apagar respondem 503 nomeado. `executar-exportacao` (fn [f]) = o executor (testes: sincrono).
            exportar-casa apagar-casa executar-exportacao
-           ;; ADR-0024: a entrada pelo CPF. `casa-para-login` = (fn [ente-id] -> {:nome-oficial :nome-curto} | nil): a
+           ;; ADR-0025: a entrada pelo CPF. `casa-para-login` = (fn [ente-id] -> {:nome-oficial :nome-curto} | nil): a
            ;; Casa existe e nao esta' encerrada (default: info-ente + estado da Casa). `entrada` = o limite por IP da rota
            ;; (default: o bloco :entrada da config).
            casa-para-login entrada]
@@ -612,12 +624,12 @@
         ;; config/carregar aqui no HOST; auth-http/rotas recebe ja' resolvido, nunca chama config/carregar
         ;; ela mesma).
         sessao (or sessao (:sessao (config/carregar)))
-        ;; ADR-0024: quem a entrada pelo CPF lista — a Casa que existe e nao esta' encerrada (o realm dela some no
+        ;; ADR-0025: quem a entrada pelo CPF lista — a Casa que existe e nao esta' encerrada (o realm dela some no
         ;; apagamento). Mesma inversao de dependencia de `info-ente`: identidade nunca importa cadastros/admin_sistema.
         casa-para-login (or casa-para-login
                             (fn [ente-id] (when-not (restricao-casa/encerrada? (estado-da-casa ente-id))
                                             (info-ente ente-id))))
-        ;; ADR-0024: o limite por IP da entrada pelo CPF, construido UMA vez por montagem (a memoria da janela vive nele)
+        ;; ADR-0025: o limite por IP da entrada pelo CPF, construido UMA vez por montagem (a memoria da janela vive nele)
         limite-localizar (let [{:keys [limite-por-ip janela-min]} (or entrada (:entrada (config/carregar)))]
                            (limite-taxa/interceptor
                             (limite-taxa/novo {:maximo limite-por-ip :janela-ms (* janela-min 60 1000)})
@@ -765,6 +777,10 @@
                                                              (repo-identidade-comp/casa-tem-papel-ativo? repo-identidade ente-id "juridico"))
                                        ;; ADR-0020 fatia 2: o aviso automatico do pedido de parecer as pessoas com `juridico`
                                        :juridicos-a-avisar juridicos-a-avisar-fn
+                                       ;; 'Minha atuacao' (GET /meu/votos): quais sessoes o portal mostra — so' MARCA o
+                                       ;; voto do vereador; a mesma regra das votacoes publicas
+                                       :sessoes-publicas (fn [ente-id]
+                                                           (votacoes-publicas/ids-de-sessoes-publicas repo-sessoes ente-id))
                                        ;; fatia 2b: quem RECEBEU cada movimentacao, no historico da tramitacao
                                        :nome-na-casa nome-na-casa-fn
                                        ;; fatia 2c: quem pode ser convidado a subscrever um requerimento
@@ -936,7 +952,8 @@
                 (integracao-ia-http/rotas
                  {:repo-integracao-ia repo-integracao-ia
                   :segredo (:segredo integracao-ia)
-                  :contexto-da-sessao (fn [ente-id sessao-id] (contexto-para-ia repo-sessoes repo-cadastros ente-id sessao-id))
+                  :contexto-da-sessao (fn [ente-id sessao-id]
+                                        (contexto-da-sessao-para-ia repo-sessoes repo-cadastros repo-legislativo ente-id sessao-id))
                   :abrir-gravacao (fn [ente-id seg-id] (abrir-gravacao-para-ia repo-sessoes objeto-store ente-id seg-id))
                   :registrar-transcricao repo-sessoes-comp/registrar-transcricao-em-tx!
                   :registrar-rascunho-ata repo-sessoes-comp/registrar-rascunho-ata-em-tx!

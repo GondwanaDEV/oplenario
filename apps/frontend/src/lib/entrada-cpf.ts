@@ -1,4 +1,4 @@
-// ADR-0024 — a entrada pelo CPF, as peças puras.
+// ADR-0025 — a entrada pelo CPF, as peças puras.
 //
 // Quem tem acesso a MAIS DE UMA Câmara escolhe qual depois de digitar o CPF. A lista e o usuário já conferido (o
 // identidade-id, `hint`) ficam num cookie httpOnly curto (`entrar_escolha`, 5 min) entre o POST do CPF e o clique na

@@ -73,7 +73,7 @@
 .entrar-rodape .plat b { font-weight: 600; color: var(--texto); }
 .entrar-rodape .sig { width: 18px; height: 18px; flex: 0 0 auto; }
 
-/* ---- ADR-0024: a entrada pelo CPF ----
+/* ---- ADR-0025: a entrada pelo CPF ----
    O campo e a nota do arquétipo login.html do design system (.campo / .mfa-nota), com os mesmos tokens já auditados
    AA nos 2 temas. O cartão continua centrado, mas o formulário lê da esquerda (rótulo sobre o campo). */
 .entrar-form { margin-top: 1.4rem; text-align: left; }

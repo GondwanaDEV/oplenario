@@ -1,5 +1,5 @@
 (ns oplenario.limite-de-taxa
-  "Limite de tentativas por chave numa janela deslizante (ADR-0024). Primeiro uso: a entrada pelo CPF
+  "Limite de tentativas por chave numa janela deslizante (ADR-0025). Primeiro uso: a entrada pelo CPF
   (`POST /auth/localizar`), por IP — quem tenta descobrir em massa quais CPFs tem acesso a quais Casas esbarra aqui.
 
   Em MEMORIA da instancia, de proposito: hoje o backend roda uma instancia so'. Com mais de uma, cada uma conta a sua

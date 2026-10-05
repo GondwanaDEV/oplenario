@@ -1,4 +1,4 @@
-# O Keycloak das Casas com o tema de login do O Plenario (ADR-0024).
+# O Keycloak das Casas com o tema de login do O Plenario (ADR-0025).
 #
 # Mesma versao do docker-compose e do CI (26.0.0). O tema e' so' um diretorio (FreeMarker + CSS + fontes): nao ha'
 # build de tema nem provider Java. Em producao, o servico Keycloak do Dokploy passa a construir esta imagem (contexto

@@ -1,6 +1,6 @@
 // View-model puro das mensagens de /entrar e /entrar/[ente]. Quem põe o `?erro=` na URL: o login handler
 // (app/api/auth/login/route.ts, `login` — a descoberta do tenant falhou, sem dizer qual Casa existe) e a entrada pelo
-// CPF (app/api/auth/entrar/route.ts, ADR-0024). Esta função só deriva a mensagem; a página decide renderizar.
+// CPF (app/api/auth/entrar/route.ts, ADR-0025). Esta função só deriva a mensagem; a página decide renderizar.
 
 const MENSAGENS: Record<string, string> = {
   "cpf-invalido": "Este CPF não confere. Revise os 11 números.",

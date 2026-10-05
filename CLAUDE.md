@@ -119,7 +119,7 @@ CPF, convite) e acompanha o **handoff**: a Casa vira "ativa" quando o 1º admini
 `identidade.vinculo.primeiro_acesso`). A atuação da Operação é append-only com selo encadeado. Primeiro operador:
 `oplenario.main operador-convidar`. **A área do `admin_ente` ENTREGUE (28/09/2026, ADR-0005):** `/administracao`, onde
 o administrador concede acesso aos vereadores; quem só tem esse papel pousa nela (não mais na tela da cidadã).
-**Entrada pelo CPF e o Keycloak escondido ENTREGUES (05/10/2026, [ADR-0024](docs/adr/0024-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
+**Entrada pelo CPF e o Keycloak escondido ENTREGUES (05/10/2026, [ADR-0025](docs/adr/0025-entrada-pelo-cpf-e-o-keycloak-escondido.md)):**
 - servidor e vereador digitam o CPF em `/entrar` (ou no link `/entrar/<uuid>` da Câmara); `POST /auth/localizar` diz em
   quais Câmaras há vínculo institucional ativo (função estreita `identidade.casas_com_acesso_institucional`; o vínculo
   segue sob RLS) e o BFF vai direto à senha da Câmara com `login_hint` = identidade-id. Mais de uma Câmara →
@@ -282,9 +282,17 @@ as recomendações de [`docs/28`](docs/28-proposta-audiencia-publica-e-julgament
   handler e o desfecho depois; ato cujo desfecho não gravou aparece como "ação iniciada, desfecho não registrado" na
   tela, no CSV e na conferência. Por padrão a trilha fora do ar NÃO para a Casa (erro no log, o ato segue);
   `AUDITORIA_EXIGIR_TENTATIVA=true` troca para 503. Custa uma gravação a mais na corrente por escrita (21 escritas
-  simultâneas: 132–184 ms contra 80–152 ms, medido com handler de teste, não com o voto real);
-- **falta:** o resumo legível por ação ainda é incremental; login, jobs e consumidores do outbox não passam pela
-  tentativa — ver *Materialização* na ADR.
+  simultâneas: 132–184 ms contra 80–152 ms com handler de teste). **No voto real (05/10/2026):** 21 vereadores votando
+  juntos pela cadeia de produção, +35,5 ms na mediana pareada (212 ms contra 255 ms em 30 rodadas por condição), com a
+  cauda dentro do ruído do ambiente; medido em VM compartilhada, em processo, sem rede (ADR-0017, "Medição no voto
+  real");
+- **a entrada tem o par (05/10/2026):** o login grava a tentativa antes de criar a sessão. A trilha fora do ar nunca
+  tranca o login, nem com `AUDITORIA_EXIGIR_TENTATIVA=true`. Jobs e consumidores do outbox foram inventariados e não
+  têm ato que peça o par (não há agendador em produção; 7 de 9 consumidores só projetam); um teste de inventário
+  (`atos_fora_do_http_test`) reprova job, comando ou consumidor novo sem classificação;
+- **falta:** o resumo legível por ação ainda é incremental; a ADR diz que o login do cidadão não entra na trilha, mas
+  o código o registra (agora com duas linhas por entrada): decidir se corrige o texto ou tira o registro; na Operação,
+  `ia-orcamento` não grava na atuação e a entrada do operador não tem tentativa.
 
 **O que sobra não é FE adiado, é domínio ausente** — e três dessas dependem de decisão, não de código:
 - `transparencia-fiscal` — o **documento-mestre §289/§404 veta** produzir o dado fiscal: isso é do sistema
@@ -357,7 +365,14 @@ vermelhos conhecidos estão no cabeçalho de `apps/frontend/vitest.atraso.setup.
 - Relay: evento sem Casa não trava mais o barramento no consumidor `integracao_ia` (`paineis` e `legislativo` já
   tinham a guarda).
 - Telão e cockpit: encerramento de votação e mudança de estado da sessão perdidos numa queda longa são reconciliados
-  por HTTP. O resultado de uma votação já ENCERRADA segue sem rota de leitura.
+  por HTTP.
+- **Resultado da última votação encerrada (05/10/2026):** telão, TV e cockpit o recuperam depois de recarregar por
+  `GET /sessoes/:id/votacao-encerrada`, com o mesmo sigilo do evento ao vivo. Em sessão não pública só a secretaria
+  lê; com a sessão encerrada a rota devolve 409. Na TV, o veredito em tela cheia segue só para encerramento visto ao
+  vivo.
+- **Cockpit (05/10/2026):** depois do 201 do próprio voto, a tela pede a releitura do placar
+  (`usePlenario.conferirVotacao`) em vez de esperar o evento; evento perdido deixava o vereador até 30 s sem o "Você
+  votou". Era a causa da falha intermitente do E6 da Trilha 3.
 
 **Exploratório de 12/09: retriagem fechada em 05/10/2026.** 84 achados · 13 abertos · 71 fechados · 0 sem decidir.
 Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os mais graves em aberto:
@@ -416,12 +431,32 @@ Lista com `arquivo:linha` em `docs/16`, seção "Retriagem do exploratório". Os
   - **Dashboard da Mesa:** gráfico colorido por posição, cartões com link, plural de verdade, denominador na vitrine.
 - **Voto de votação anulada** não sai mais no perfil público, no CSV nem na contagem do catálogo (`ids-das-sessoes`
   exclui a anulada; era latente: nenhuma rota anula votação hoje).
+- **Terceira rodada de 05/10 (PRs #162 a #171):**
+  - **"Minha atuação":** o vereador vê os próprios votos nominais, inclusive os de sessão fechada, por
+    `GET /meu/votos` (lê `legislativo.votos`, não o read-model público; fora do catálogo do agente). Votação secreta
+    não entra; a anulada aparece marcada e não conta. O perfil público não mudou.
+  - **Ata-IA:** o contexto da sessão leva as votações encerradas (objeto, modalidade, quórum, resultado e totais; nunca
+    o voto por vereador). A Camada de Confiança não interpreta a prosa: o parágrafo que cita a votação só confere se
+    contiver uma das frases canônicas que o sistema gera para aquele placar e o que sobrar for a moldura conhecida
+    (lista de permitidos em `confianca/numeros.py`, só para fonte estruturada); o resto vira ponto a confirmar. Uma
+    votação por parágrafo. Prompt `ata-v2`, conjunto `avaliacoes/ata-votacoes.json`, adendo na ADR-0008. É ruído
+    assumido, a calibrar com o áudio real.
+  - **Trocar o próprio e-mail:** link "Trocar meu e-mail de acesso" no menu do avatar e no Perfil do vereador, pela
+    rota `GET /api/auth/conta`, que só redireciona para a origem de `KEYCLOAK_PUBLIC_URL` (sem ela, 404). Não aparece
+    em modo dev nem para sessão gov.br.
+  - **Miudezas:** estado desconhecido sai humanizado (`lib/humanizar-chave.ts`), o agendar sessão mostra o período
+    em palavras, e os avisos do dashboard e do calendário não apontam mais telas inexistentes.
+  - **Demo:** `demo/semear-ao-vivo.sh` (opcional, fora do `semear-tudo`) cria a sessão `…000213` em curso com votação
+    nominal aberta, uma encerrada e uma matéria aprovada sem autógrafo. Não rodar a Trilha 3 no mesmo banco depois dele.
+  - **Testes instáveis consertados:** "nunca CPF" do revogar acesso (procurava 11 dígitos seguidos) e o CPF sorteado
+    do encerramento.
 - **Falta:**
-  - o vereador ver o próprio voto de sessão secreta (hoje "Minha atuação" usa a rota pública);
   - a faixa "Onde está a matéria" ainda depende do nome do estado (nenhuma rota devolve a ordem das etapas do rito);
-  - não vistos em browser: o formulário do prazo do Executivo, o telão e a TV ao vivo, a folha em PDF com nome;
-  - link no app para a página de conta do Keycloak, onde a pessoa troca o próprio e-mail (o `admin_ente` só troca o
-    de quem nunca entrou, ao reconceder);
+  - `legislativo.votos` não tem índice por vereador: `GET /meu/votos` varre os votos da Casa;
+  - o bloco de votação encerrada do telão ainda diz "faltam votar N";
+  - não vistos em browser: o menu do avatar com o link da conta (precisa de sessão do Keycloak) e a folha em PDF com
+    nome. Vistos em 05/10 com a semente ao vivo: telão com os nomes, TV, formulário do prazo do Executivo, resultado
+    depois de recarregar e "Minha atuação";
   - vistas em browser (tema escuro, 800 px, Casa demo): leis, vereadores, votações e o detalhe, a raiz, "Quem tem
     acesso" em `/administracao` e o dashboard da Mesa. A passada achou três defeitos visuais, consertados no PR #137
     (cargo da Mesa como chave crua, cabeçalho de votações sem estilo, botões das leis sem variante). Não vistos: 375 px,

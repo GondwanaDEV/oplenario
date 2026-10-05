@@ -41,6 +41,25 @@
    [:iniciou-em :string]
    [:encerrou-em [:maybe :string]]])
 
+(def VotacaoContextoOut
+  "Uma votacao ENCERRADA da sessao, para a ata citar o resultado (A.6). So' o objeto em palavras, a modalidade, o
+  quorum, o resultado e os totais — NUNCA o voto de cada vereador, nem na nominal (nome de vereador ao lado de voto,
+  em contexto de LLM, e' dado pessoal; a lista nominal fica no anexo do sistema). O mapa e' FECHADO: um campo de voto
+  individual que alguem acrescentasse no adapter e' bug de servidor (500), nao vazamento silencioso. Simbolica nao
+  conta voto (totais nulos); `votos-necessarios` e' a aritmetica do core (nulo na maioria simples)."
+  [:map {:closed true}
+   [:id :string]
+   [:objeto :string]
+   [:modalidade :string]
+   [:quorum-tipo :string]
+   [:votos-necessarios [:maybe :int]]
+   [:base-membros [:maybe :int]]
+   [:resultado :string]
+   [:total-sim [:maybe :int]]
+   [:total-nao [:maybe :int]]
+   [:total-abstencao [:maybe :int]]
+   [:encerrada-em :string]])
+
 (def ContextoSessaoOut
   [:map {:closed true}
    [:sessao [:map {:closed true}
@@ -51,7 +70,8 @@
              [:aberta-em [:maybe :string]]
              [:encerrada-em [:maybe :string]]]]
    [:segmentos [:sequential SegmentoContextoOut]]
-   [:falas [:sequential FalaContextoOut]]])
+   [:falas [:sequential FalaContextoOut]]
+   [:votacoes [:sequential VotacaoContextoOut]]])
 
 (def AtaPublicadaOut
   "A.6c: o texto final de uma versao publicada da ata (a IA compara com o rascunho que redigiu)."

@@ -11,7 +11,9 @@
   Leitura comum nao entra. Ator sem Casa (operador, anonimo) nao entra: o operador tem a corrente dele (ADR-0016).
 
   O handler pode enriquecer o registro devolvendo `:auditoria` no mapa de resposta (a chave nao vai para o fio):
-  `{:rotulo :campos :recurso-tipo :recurso-id :classe :ator}`. E' o \"resumo do efeito\" (ADR-0017 1-C).
+  `{:rotulo :campos :recurso-tipo :recurso-id :classe :ator}`. E' o \"resumo do efeito\" (ADR-0017 1-C). Quando o handler
+  nao deixa rotulo e o ato FOI FEITO (escrita ou entrada permitida), o rotulo vem da tabela `resumos/por-acao`: toda
+  rota de escrita tem entrada la' (ou motivo em `resumos/sem-resumo`), conferido por teste.
 
   A ESCRITA tem dois registros (ADR-0017, adendo de 04/10/2026): a TENTATIVA (`decisao` = `iniciado`), gravada e
   commitada ANTES do handler, e o DESFECHO, gravado depois, que aponta a tentativa em `detalhe.tentativa` (o seq dela;
@@ -19,6 +21,7 @@
   leitura e a conferencia a acusam, em vez de o ato sumir."
   (:require [clojure.string :as str]
             [jsonista.core :as json]
+            [oplenario.auditoria.resumos :as resumos]
             [oplenario.kernel.segredo :as segredo])
   (:import (java.time Instant LocalDate ZoneId)))
 
@@ -116,6 +119,14 @@
   (when (and (:ente-id ator) acao)
     (assoc (base req ator acao) :classe "entrada" :decisao iniciado :status-http nil)))
 
+(defn- rotulo-do-ato
+  "O rotulo do registro: o do handler (o do objeto) vence; sem ele, o rotulo da acao — so' para o ato que ACONTECEU
+  (escrita ou entrada com desfecho `permitido`). Negacao e falha nao dizem em palavras que o ato foi feito."
+  [marca classe-do-registro decisao-do-registro acao]
+  (or (:rotulo marca)
+      (when (and (= "permitido" decisao-do-registro) (#{"escrita" "entrada"} classe-do-registro))
+        (resumos/rotulo-da-acao acao))))
+
 (defn registro-da-requisicao
   "Da requisicao/resposta ja' respondida -> o registro a gravar (sem selo, sem seq), ou nil se nao entra na trilha.
   `tentativa` (opcional) = o seq da tentativa gravada antes do handler: o desfecho a aponta em `detalhe.tentativa`."
@@ -124,13 +135,18 @@
    (let [marca  (:auditoria resp)
          ator   (or (:ator req) (:ator marca))
          status (:status resp)
-         cl     (classe (:request-method req) status acao (:classe marca))]
+         cl     (classe (:request-method req) status acao (:classe marca))
+         rotulo (rotulo-do-ato marca cl (decisao status) acao)]
      (when (and (:ente-id ator) acao cl)
        (cond-> (merge (base req ator acao)
                       {:classe cl :decisao (decisao status) :status-http status
                        :campos (vec (sort (map name (:campos marca))))}
-                      (select-keys marca [:recurso-tipo :recurso-id :rotulo]))
-         tentativa (assoc-in [:detalhe :tentativa] (long tentativa)))))))
+                      (select-keys marca [:recurso-tipo :recurso-id]))
+         rotulo (assoc :rotulo rotulo)
+         tentativa (assoc-in [:detalhe :tentativa] (long tentativa))
+         ;; ADR-0024: o hash do conteudo guardado fora da trilha (o historico da Clara) — o hash, nunca o conteudo
+         (some->> (:conteudo-sha256 marca) (re-matches #"[0-9a-f]{64}"))
+         (assoc-in [:detalhe :conteudo-sha256] (:conteudo-sha256 marca)))))))
 
 ;; ---- o selo encadeado ----
 

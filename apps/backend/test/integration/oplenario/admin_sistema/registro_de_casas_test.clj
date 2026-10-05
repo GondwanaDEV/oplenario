@@ -102,7 +102,7 @@
                 [:usuario ente {:identidade-id iid :email "renata.costa@camara.baturite.ce.gov.br"}]
                 [:convite ente iid]]
                @chamadas)
-            "realm (com o nome da Casa no titulo do login, ADR-0024), usuario (e-mail em minusculas) e convite, nesta ordem")))
+            "realm (com o nome da Casa no titulo do login, ADR-0025), usuario (e-mail em minusculas) e convite, nesta ordem")))
     (testing "a lista e a ficha do console"
       (let [lista (ler (pt/response-for svc :get "/operacao/casas" :headers (como o)))
             ficha (ler (pt/response-for svc :get (str "/operacao/casas/" ente) :headers (como o)))]
@@ -159,7 +159,7 @@
     (reset! chamadas [])
     (is (= 200 (:status (pt/response-for svc :post (str "/operacao/casas/" ente "/realm") :headers (como o)))))
     (is (= [[:realm (parse-uuid ente) {:nome "Câmara Municipal de Baturité"}]] @chamadas)
-        "reprovisionar converge tambem o nome da Casa no realm (ADR-0024)")
+        "reprovisionar converge tambem o nome da Casa no realm (ADR-0025)")
     (is (= "realm-reprovisionado" (first (atuacoes svc o ente))))))
 
 (deftest entrada-invalida-e-casa-inexistente

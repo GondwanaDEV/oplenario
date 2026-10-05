@@ -33,17 +33,17 @@ export default function PaginaRedigirParecer() {
 
   if (estado === "carregando") {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Carregando…</h1>
-      </main>
+      </div>
     );
   }
   if (estado === "erro" || !dados) {
     return (
-      <main className="tela-estado">
+      <div className="tela-estado">
         <h1>Não foi possível carregar este parecer</h1>
         <p>Ele pode não existir, ou você não é o relator designado.</p>
-      </main>
+      </div>
     );
   }
 

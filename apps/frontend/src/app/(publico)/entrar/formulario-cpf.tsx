@@ -1,4 +1,4 @@
-// ADR-0024 — o formulário da entrada pelo CPF, comum a /entrar e /entrar/[ente].
+// ADR-0025 — o formulário da entrada pelo CPF, comum a /entrar e /entrar/[ente].
 //
 // HTML puro (sem JS): posta para /api/auth/entrar, que pergunta ao backend em quais Câmaras a pessoa tem acesso e a
 // leva direto à senha da Câmara dela. O CPF vai no CORPO do POST — nunca na URL. `ente` (o link da Câmara) e

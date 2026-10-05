@@ -1,5 +1,5 @@
 <#--
-  O Plenário · a tela de senha da Câmara (ADR-0024).
+  O Plenário · a tela de senha da Câmara (ADR-0025).
 
   Dois modos:
   - COM o usuário vindo do O Plenário (a pessoa digitou o CPF em /entrar e o app mandou o identidade-id como

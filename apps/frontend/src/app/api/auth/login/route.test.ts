@@ -187,7 +187,7 @@ describe("GET /api/auth/login?via=govbr — o cidadão entra pelo gov.br (ADR-00
   });
 });
 
-describe("GET /api/auth/login — a Câmara escolhida depois do CPF (ADR-0024)", () => {
+describe("GET /api/auth/login — a Câmara escolhida depois do CPF (ADR-0025)", () => {
   const HINT = "0eabd6df-d0cc-40bb-a0ca-043027cb3a1f";
   const OUTRA = "22222222-2222-2222-2222-222222222222";
   const comCookie = (path: string, valor: string) => {

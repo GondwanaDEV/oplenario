@@ -7,7 +7,11 @@
             [io.pedestal.http :as ph]
             [io.pedestal.test :as pt]
             [jsonista.core :as json]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]
             [oplenario.agente :as agente]
+            [oplenario.auditoria.components.repositorio :as repo-auditoria]
+            [oplenario.auditoria.diplomat.http.in :as auditoria-http]
             [oplenario.config :as config]
             [oplenario.http :as http]
             [oplenario.identidade.autenticacao :as auten]
@@ -19,6 +23,7 @@
             [oplenario.interceptors :as it]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.components.idp-dev :as idp-dev]
+            [oplenario.integracao-ia.logic :as logic-ia]
             [oplenario.kernel.tenancy :as tenancy]
             [oplenario.migracao :as migracao]))
 
@@ -64,10 +69,17 @@
             existe? {:execucao-id execucao-id :reportado true}
             :else nil))))
 
-(defn- servico [plataforma & {:keys [repo-integracao-ia]}]
+(defn- repo-integracao [] (repo-ia/map->RepoIntegracaoIAPg {:datasource {:ds *ds*}}))
+
+(defn- servico
+  "O servico da borda. ADR-0024: sem historico a resposta nao sai, entao o repositorio da fronteira e' o de verdade por
+  padrao; `:sem-historico? true` monta sem ele (falha fechada)."
+  [plataforma & {:keys [repo-integracao-ia sem-historico?]}]
   (let [auth (it/autenticacao (idp-dev/idp-dev) (repo))]
     (-> (http/servico (config/carregar) (agente/rotas {:auth auth :repo-identidade (repo) :ia plataforma
-                                                       :repo-integracao-ia repo-integracao-ia})
+                                                       :repo-integracao-ia (when-not sem-historico?
+                                                                             (or repo-integracao-ia
+                                                                                 (repo-integracao)))})
                       it/globais)
         ph/create-server ::ph/service-fn)))
 
@@ -196,3 +208,123 @@
       (let [r (reportar (servico (ia (atom []) :fora? true)) ente iid eid-ia {:categoria "outro"})]
         (is (= 503 (:status r)))
         (is (re-find #"Tente de novo" (get (json/read-value (:body r)) "erro")))))))
+
+;; ---------- ADR-0024: o historico auditavel da Clara ----------
+
+(defn- interacao-do-fim [ente evs]
+  (let [[nome dado] (last evs)]
+    (is (= "fim" nome))
+    (repo-ia/interacao-assistente (repo-integracao) ente (parse-uuid (get dado "interacao-id")))))
+
+(deftest a-pergunta-e-a-resposta-ficam-no-historico-e-conferem
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        evs (eventos (:body (perguntar (servico (ia (atom []))) ente iid {:pergunta "Qual a situacao do PL 12/2026?"})))
+        [_ fim] (last evs)
+        i (interacao-do-fim ente evs)]
+    (is (= ["passo" "resposta" "fim"] (map first evs)))
+    (is (= [iid "secretaria" "resposta" "Qual a situacao do PL 12/2026?"]
+           ((juxt :identidade-id :publico :desfecho :pergunta) i)))
+    (is (= "Segundo o sistema da Casa, ementa: Merenda. [[ferramenta:situacao_da_materia#1 | ementa: Merenda]]"
+           (get-in i [:resposta :texto])))
+    (is (= "conferida" (get-in i [:resposta :citacoes 0 :status])))
+    (is (= [{:ferramenta "situacao_da_materia" :argumentos {:tipo "projeto_lei" :sequencial 12 :ano 2026} :ok true}]
+           (:passos i)) "os passos sem o que e' interno do satelite (enviado-ao-modelo)")
+    (is (= ["fake-1" "e1"] ((juxt :modelo :execucao-ia) i)))
+    (is (= (get fim "execucao-id") (str (:execucao-id i))) "liga as chamadas de ferramenta da execucao")
+    (is (= (get fim "conversa-id") (str (:conversa-id i))))
+    (is (re-matches #"[0-9a-f]{64}" (:conteudo-sha256 i)))
+    (is (logic-ia/conferir-interacao i) "o hash recalculado sobre a linha lida confere com o gravado")
+    (testing "adulterar um campo quebra a conferencia"
+      (is (not (logic-ia/conferir-interacao (assoc i :pergunta "outra coisa")))))))
+
+(deftest a-pergunta-sem-resposta-tambem-fica
+  (let [ente (random-uuid)
+        iid (pessoa! ente "vereador")
+        evs (eventos (:body (perguntar (servico (ia (atom []) :fora? true)) ente iid {:pergunta "pauta de amanha?"})))
+        i (interacao-do-fim ente evs)]
+    (is (= ["indisponivel" "fim"] (map first evs)))
+    (is (= ["indisponivel" nil "vereador"] ((juxt :desfecho :resposta :publico) i)))
+    (is (logic-ia/conferir-interacao i))))
+
+(deftest a-conversa-continua-so-com-quem-a-comecou
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        svc (servico (ia (atom [])))
+        evs1 (eventos (:body (perguntar svc ente iid {:pergunta "primeira?"})))
+        conversa (get-in (last evs1) [1 "conversa-id"])
+        evs2 (eventos (:body (perguntar svc ente iid {:pergunta "segunda?" :conversa conversa})))]
+    (is (= conversa (get-in (last evs2) [1 "conversa-id"])) "a segunda pergunta entra na mesma conversa")
+    (is (not= (get-in (last evs1) [1 "interacao-id"]) (get-in (last evs2) [1 "interacao-id"])))
+    (testing "conversa de outra pessoa da mesma Casa: 400, e nada chega a IA"
+      (let [pedidos (atom [])]
+        (is (= 400 (:status (perguntar (servico (ia pedidos)) ente (pessoa! ente "secretario")
+                                       {:pergunta "e agora?" :conversa conversa}))))
+        (is (empty? @pedidos))))
+    (testing "a mesma pessoa, com vinculo em outra Casa, nao alcanca a conversa de la'"
+      (let [outra (random-uuid)]
+        (tenancy/com-tenant* *ds* outra
+          (fn [tx]
+            (vinc/criar! tx {:id (random-uuid) :ente-id outra :identidade-id iid :tipo "servidor"})
+            (vinc/adicionar-papel! tx {:id (random-uuid) :ente-id outra :identidade-id iid :papel "secretario"})))
+        (is (= 400 (:status (perguntar svc outra iid {:pergunta "e agora?" :conversa conversa}))))))
+    (testing "conversa que nao e' uuid: 400"
+      (is (= 400 (:status (perguntar svc ente iid {:pergunta "e agora?" :conversa "abc"}))))
+      (is (= 400 (:status (perguntar svc ente iid {:pergunta "e agora?" :conversa 12})))))))
+
+(deftest sem-historico-a-resposta-nao-sai
+  ;; ADR-0024 item 5: falha fechada — resposta de IA sem registro nao existe
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        quebrado #_{:clj-kondo/ignore [:missing-protocol-method]}
+        (reify repo-ia/RepoIntegracaoIA
+          (propostas-da-execucao [_ _ _] [])
+          (registrar-interacao-assistente! [_ _] (throw (ex-info "banco fora" {}))))]
+    (doseq [[rotulo svc] [["o banco falha ao gravar" (servico (ia (atom [])) :repo-integracao-ia quebrado)]
+                          ["nao ha repositorio" (servico (ia (atom [])) :sem-historico? true)]]]
+      (testing rotulo
+        (let [r (perguntar svc ente iid {:pergunta "Qual a situacao do PL 12/2026?"})
+              evs (eventos (:body r))]
+          (is (= 200 (:status r)))
+          (is (= ["indisponivel" "fim"] (map first evs)))
+          (is (not (str/includes? (:body r) "Merenda")) "nada da resposta chega a tela")
+          (is (nil? (get-in (last evs) [1 "interacao-id"]))))))))
+
+(deftest o-historico-e-so-de-insercao-e-isolado-por-casa
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        evs (eventos (:body (perguntar (servico (ia (atom []))) ente iid {:pergunta "Qual a situacao do PL 12/2026?"})))
+        id (parse-uuid (get-in (last evs) [1 "interacao-id"]))]
+    (testing "UPDATE e DELETE sao recusados pelo banco"
+      (is (thrown? Exception (tenancy/com-tenant* *ds* ente
+                               #(jdbc/execute! % ["UPDATE integracao_ia.interacao_assistente SET pergunta = 'x' WHERE id = ?" id]))))
+      (is (thrown? Exception (tenancy/com-tenant* *ds* ente
+                               #(jdbc/execute! % ["DELETE FROM integracao_ia.interacao_assistente WHERE id = ?" id])))))
+    (testing "outra Casa nao ve a linha"
+      (is (nil? (repo-ia/interacao-assistente (repo-integracao) (random-uuid) id)))
+      (is (some? (repo-ia/interacao-assistente (repo-integracao) ente id))))))
+
+(deftest a-trilha-ancora-o-hash-da-interacao-sem-o-conteudo
+  ;; ADR-0024 item 4, pela borda com a trilha de verdade entre os globais (como o host monta): a entrada do POST aponta
+  ;; a interacao e carrega o hash; a pergunta e a resposta nao entram na trilha
+  (let [ente (random-uuid)
+        iid (pessoa! ente "secretario")
+        ra (repo-auditoria/map->RepoAuditoriaPg {:datasource {:ds *ds*}})
+        auth (it/autenticacao (idp-dev/idp-dev) (repo))
+        svc (-> (http/servico (config/carregar)
+                              (auditoria-http/com-tentativa
+                               (agente/rotas {:auth auth :repo-identidade (repo) :ia (ia (atom []))
+                                              :repo-integracao-ia (repo-integracao)}))
+                              (it/globais-com [(auditoria-http/interceptor ra {:ancorar! (fn [_ _])})]))
+                ph/create-server ::ph/service-fn)
+        evs (eventos (:body (perguntar svc ente iid {:pergunta "Qual a situacao do PL 12/2026?"})))
+        i (interacao-do-fim ente evs)
+        linhas (tenancy/com-tenant* *ds* ente
+                 #(jdbc/execute! % ["SELECT classe, decisao, recurso_tipo, recurso_id, detalhe::text AS detalhe
+                                       FROM auditoria.registro WHERE ente_id = ? ORDER BY seq" ente]
+                                 {:builder-fn rs/as-unqualified-maps}))
+        desfecho (last linhas)]
+    (is (= ["escrita" "permitido" "interacao_assistente" (str (:id i))]
+           ((juxt :classe :decisao :recurso_tipo :recurso_id) desfecho)))
+    (is (= (:conteudo-sha256 i) (get (json/read-value (:detalhe desfecho)) "conteudo-sha256")))
+    (is (not-any? #(re-find #"(?i)situacao do PL|Merenda" (pr-str %)) linhas) "a trilha segue sem conteudo")))

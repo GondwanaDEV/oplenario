@@ -13,6 +13,7 @@
             [oplenario.identidade.db.identidade :as id]
             [oplenario.identidade.db.vinculo :as vinc]
             [oplenario.integracao-ia.components.repositorio :as repo-ia]
+            [oplenario.kernel.canonico]
             [oplenario.kernel.catalogo :as kcatalogo]
             [oplenario.kernel.components.datasource :as datasource]
             [oplenario.kernel.tenancy :as tenancy]
@@ -258,3 +259,23 @@
       (is (every? #(= "assistente-da-casa" (:agente %)) linhas)))
     (is (empty? (repo-ia/chamadas-da-execucao (repo-integracao) (random-uuid) (:execucao-id c)))
         "o registro e' da Casa (RLS)")))
+
+(deftest toda-chamada-de-agente-vai-ao-audit-com-o-hash-da-saida
+  ;; ADR-0024 item 2: a LEITURA tambem entra no audit, com o SHA-256 do JSON canonico da saida — prova o que a IA viu
+  (let [ente (random-uuid)
+        p (proposicao! ente "Merenda escolar")
+        agente (agente-de ente "secretario" :secretaria)
+        saida (catalogo/executar! (deps) agente "situacao_da_materia" {:proposicao-id (str (:id p))})
+        [c] (repo-ia/chamadas-da-execucao (repo-integracao) ente (get-in agente [:via :execucao-id]))]
+    (is (= ["situacao_da_materia" "leitura" "ok"] ((juxt :ferramenta :classe :desfecho) c)))
+    (is (= (oplenario.kernel.canonico/sha256 saida) (:resultado-sha256 c)))
+    (testing "nao achou: entra sem hash"
+      (let [a (agente-de ente "secretario" :secretaria)]
+        (is (nil? (catalogo/executar! (deps) a "situacao_da_materia" {:proposicao-id (str (random-uuid))})))
+        (is (= [["nao_encontrado" nil]]
+               (map (juxt :desfecho :resultado-sha256)
+                    (repo-ia/chamadas-da-execucao (repo-integracao) ente (get-in a [:via :execucao-id])))))))
+    (testing "sem o seam de audit, a chamada de agente nao roda (fail-closed)"
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo #"sem registro de audit"
+                            (catalogo/executar! (dissoc (deps) :registrar-chamada) agente "situacao_da_materia"
+                                                {:proposicao-id (str (:id p))}))))))

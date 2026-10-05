@@ -1,5 +1,5 @@
 // O CPF conferido no navegador e no BFF pelo dígito verificador — espelha `oplenario.kernel.cpf` do backend, que
-// confere de novo. Serve o console do operador (1º administrador de uma Casa) e a entrada pelo CPF (ADR-0024).
+// confere de novo. Serve o console do operador (1º administrador de uma Casa) e a entrada pelo CPF (ADR-0025).
 
 export function soDigitos(entrada: string): string {
   return entrada.replace(/\D/g, "");

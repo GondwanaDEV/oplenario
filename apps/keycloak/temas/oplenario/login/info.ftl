@@ -1,5 +1,5 @@
 <#--
-  O Plenário · a página de informação do Keycloak (ADR-0024). É a primeira tela de quem abre o link do convite
+  O Plenário · a página de informação do Keycloak (ADR-0025). É a primeira tela de quem abre o link do convite
   ("vamos configurar seu acesso", com os passos) e a última ("pronto", com o botão de volta à entrada pelo CPF).
   Mesma lógica do info.ftl do tema `base` do Keycloak 26.0.0; mudam o título, a lista de passos e os links, que viram
   botões.

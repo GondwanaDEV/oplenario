@@ -44,7 +44,7 @@ export async function iniciarLogin(request: NextRequest, opts?: OpcoesBackend): 
     return NextResponse.redirect(volta);
   }
 
-  // ADR-0024: a Câmara escolhida em /entrar/escolher (quem tem acesso a mais de uma). O usuário já conferido pelo CPF
+  // ADR-0025: a Câmara escolhida em /entrar/escolher (quem tem acesso a mais de uma). O usuário já conferido pelo CPF
   // vai como `login_hint` só se ESTA Câmara está na escolha; o destino pedido antes do CPF segue junto.
   const escolha = viaGovbr ? null : lerEscolha(request.cookies.get(COOKIE_ESCOLHA)?.value);
   const daEscolha = escolha?.casas.some((c) => c.enteId === ente) ? escolha : null;

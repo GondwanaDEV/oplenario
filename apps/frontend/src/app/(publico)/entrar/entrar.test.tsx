@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ADR-0024 — as telas da entrada pelo CPF. Server Components: chamados como função e o JSX renderizado.
+// ADR-0025 — as telas da entrada pelo CPF. Server Components: chamados como função e o JSX renderizado.
 
 const cookieStore = { valor: undefined as string | undefined };
 vi.mock("next/headers", () => ({
