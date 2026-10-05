@@ -48,7 +48,7 @@ export function CardNorma({
   return (
     <div className="card card-norma">
       <h2>Lei</h2>
-      {mensagem && <p role="status">{mensagem}</p>}
+      {mensagem && <p role="status" className="status-norma">{mensagem}</p>}
       {erroExibido && (
         <p ref={erroRef} tabIndex={-1} role="alert" className="form-erro">
           {erroExibido}

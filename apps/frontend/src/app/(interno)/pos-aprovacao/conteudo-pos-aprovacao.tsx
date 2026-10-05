@@ -23,7 +23,7 @@ import { useRegistrarResposta } from "@/lib/use-registrar-resposta";
 import { useApreciarVeto } from "@/lib/use-apreciar-veto";
 import { usePromulgarNorma, usePublicarNorma } from "@/lib/use-norma";
 import { formatarNumeroProposicao } from "@/lib/proposicoes-vista";
-import { derivarPipeline, promulgavel } from "@/lib/pos-aprovacao-vista";
+import { derivarPipeline, fraseDaNorma, promulgavel } from "@/lib/pos-aprovacao-vista";
 import { comToken } from "@/lib/nav";
 import { TopoInterno } from "../topo";
 import { PipelinePosAprovacao } from "./pipeline-pos-aprovacao";
@@ -334,11 +334,17 @@ export function ConteudoPosAprovacao({ id }: { id: string }) {
                       <h2>Desfecho</h2>
                       <p>
                         {tramitacaoExecutiva.estado === "veto_mantido" && "Veto mantido pela Câmara — a matéria é arquivada."}
-                        {tramitacaoExecutiva.estado === "veto_derrubado" &&
-                          "Veto derrubado pela Câmara — a lei segue para promulgação."}
-                        {(tramitacaoExecutiva.estado === "sancionado" ||
-                          tramitacaoExecutiva.estado === "sancao_tacita") &&
-                          "A matéria foi sancionada e segue para promulgação/publicação."}
+                        {/* Com a norma promulgada o desfecho diz o que a matéria virou; sem ela, segue o texto de antes
+                            (o E7 da Trilha 3 confere a frase exata). */}
+                        {norma
+                          ? `${tramitacaoExecutiva.estado === "veto_derrubado" ? "Veto derrubado pela Câmara — a matéria" : "A matéria foi sancionada e"} ${fraseDaNorma(norma)}.`
+                          : <>
+                              {tramitacaoExecutiva.estado === "veto_derrubado" &&
+                                "Veto derrubado pela Câmara — a lei segue para promulgação."}
+                              {(tramitacaoExecutiva.estado === "sancionado" ||
+                                tramitacaoExecutiva.estado === "sancao_tacita") &&
+                                "A matéria foi sancionada e segue para promulgação/publicação."}
+                            </>}
                       </p>
                     </div>
                   )}
