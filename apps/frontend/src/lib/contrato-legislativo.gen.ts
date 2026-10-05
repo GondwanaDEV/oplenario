@@ -54,6 +54,8 @@ export interface HistoricoTramitacaoItemOut {
   deEstado: string;
   paraEstado: string;
   gatilho: string;
+  deNome?: string | null;
+  paraNome?: string | null;
   ocorridoEm: string;
   recebimento: RecebimentoOut | null;
 }

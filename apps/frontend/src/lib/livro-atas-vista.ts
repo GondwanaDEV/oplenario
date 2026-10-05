@@ -22,7 +22,7 @@ import type {
   VersaoDoLivroOut,
 } from "./contrato-sessoes.gen";
 import { formatarData } from "./formatar-data";
-import { formatarTipoSessao } from "./pauta-convocacao-vista";
+import { nomeDaSessao } from "./rotulos-sessao";
 
 export type LinhaLivroVista = {
   sessaoId: string;
@@ -78,7 +78,7 @@ function dataDaSessao(s: SessaoDoLivroOut): string {
 }
 
 export function tituloSessao(s: SessaoDoLivroOut): string {
-  return `${s.numeroSequencial}ª Sessão ${formatarTipoSessao(s.tipoSessao)}`;
+  return nomeDaSessao(s.numeroSequencial, s.tipoSessao);
 }
 
 function textoLeitura(l: LeituraDoLivroOut | null | undefined, versaoVigente: number): string | null {

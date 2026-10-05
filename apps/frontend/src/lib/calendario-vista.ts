@@ -19,7 +19,7 @@
 // A grade em si é aritmética em UTC (Date.UTC + getUTC*), que é fuso-independente por construção.
 
 import { rotularObrigacao } from "./rotulos-compliance";
-import { nomeTipoSessao } from "./rotulos-sessao";
+import { nomeDaSessao, nomeTipoSessao } from "./rotulos-sessao";
 import type { SessaoOut } from "./contrato-sessoes.gen";
 
 /** Espelha ObrigacaoEmAbertoOut (apps/backend .../compliance/wire/out/painel.clj) já camelizada.
@@ -220,7 +220,7 @@ function eventoDeSessao(s: SessaoOut): EventoCalendario | null {
     dia,
     hora,
     rotulo: `${s.numeroSequencial}ª ${tipo}`,
-    titulo: `${s.numeroSequencial}ª Sessão ${tipo}`,
+    titulo: nomeDaSessao(s.numeroSequencial, s.tipoSessao),
     meta: metaDaSessao(hora, alerta),
     alerta,
   };

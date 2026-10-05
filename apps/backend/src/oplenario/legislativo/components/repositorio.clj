@@ -5,6 +5,7 @@
   Component, nunca do db/ direto. `transacao` compoe varias acoes numa UNICA tx do tenant."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [malli.core :as m]
             [next.jdbc :as jdbc]
             [oplenario.kernel.components.objeto-store :as os]
             [oplenario.kernel.ids :as ids]
@@ -40,6 +41,7 @@
             [oplenario.legislativo.db.parecer-tramitacao :as parecer-tram]
             [oplenario.legislativo.db.parecer-voto-divergente :as parecer-voto]
             [oplenario.legislativo.db.proposicao :as proposicao]
+            [oplenario.legislativo.events.proposicao :as ev-proposicao]
             [oplenario.legislativo.db.regra-votacao :as regra-votacao]
             [oplenario.legislativo.db.protocolo-geral :as protocolo]
             [oplenario.legislativo.db.recebimento :as recebimento]
@@ -495,6 +497,20 @@
             nil))))))
 
 (defn- com-rito [payload rito] (cond-> payload rito (assoc :rito rito)))
+
+(defn rito-publico-da-proposicao
+  "A linha do rito da materia `proposicao-id` como o portal a guarda (a MESMA que viaja em `proposicao.protocolada` e
+  `.transicionou`, `rito-para-o-evento`), com a atual no estado em que a materia esta' agora; nil sem rito ou fora do
+  contrato publico (`ev-proposicao/RitoPublicoPayload`). Para a carga das materias anteriores ao campo
+  (`oplenario.portal-republicar-rito`): a materia que nao teve evento novo desde a mig 20261005000262 ficava no mapa
+  fixo."
+  [repo ente-id proposicao-id]
+  (transacao repo ente-id
+    (fn [tx]
+      (when-let [p (proposicao/buscar tx ente-id proposicao-id)]
+        (let [rito (rito-para-o-evento tx ente-id proposicao-id (:template-id p) (:estado p))]
+          (when (and rito (m/validate ev-proposicao/RitoPublicoPayload rito))
+            rito))))))
 
 (defn- protocolar-na-tx!
   "O corpo de `protocolar!` sobre uma tx JA' ABERTA — para compor o protocolo com outra escrita na MESMA tx

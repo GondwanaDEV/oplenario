@@ -56,9 +56,10 @@ const CONCLUIDOS_ATE_POR_ESTADO_DE_ESPERA: Record<string, number> = {
   aguardando_pauta: 2,
 };
 
-// ÚNICA fonte do rótulo FIXO de estado de proposição (`rotularEstado`): o quadro de tramitação e o painel da Mesa leem
-// daqui; a ficha e a lista preferem o nome que o rito da Casa dá à etapa e caem aqui quando não o têm
-// (`rotularSituacaoPeloRito`). Terminais incluídos, para o quadro rotular o cartão sem outro mapa.
+// ÚNICA fonte do rótulo FIXO de estado de proposição (`rotularEstado`): a ficha, a lista, o quadro de tramitação, o
+// painel da Mesa e a aba Tramitação preferem o nome que o rito da Casa dá à etapa e caem aqui quando não o têm
+// (`rotularSituacaoPeloRito`, `rotuloEstado`, `deNome`/`paraNome`). Terminais incluídos, para o quadro rotular o
+// cartão sem outro mapa.
 const ROTULO_SITUACAO_POR_ESTADO: Record<string, string> = {
   protocolada: "Protocolado",
   em_comissoes: "Em comissões",

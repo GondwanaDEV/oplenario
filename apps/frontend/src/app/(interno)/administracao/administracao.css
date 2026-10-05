@@ -14,7 +14,9 @@
 .adm-outras h2 { font-family: var(--display); font-size: var(--t-16); margin: 0 0 0.5rem; }
 .adm-outras ul { margin: 0; padding-left: 1.1rem; }
 .adm-outras span { color: var(--texto-2); }
-.adm-chip { font-size: var(--t-12); padding: 0.2rem 0.6rem; border-radius: var(--raio-capsula); background: var(--jade-fundo); color: var(--texto); white-space: nowrap; }
+.adm-chip { font-size: var(--t-12); padding: 0.2rem 0.6rem; border-radius: var(--raio-capsula); background: color-mix(in srgb, var(--jade) 14%, transparent); color: var(--texto); white-space: nowrap; }
+/* O fundo é a tinta do jade, não `--jade-fundo` (verde-escuro sólido para texto branco): com `--texto`, no tema claro
+   o chip do papel saía escuro sobre escuro. */
 /* ADR-0017: o controle interno (papel auditor) */
 .adm-auditoria { display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; }
 .adm-auditoria h2 { font-family: var(--display); font-size: var(--t-16); margin: 0; }

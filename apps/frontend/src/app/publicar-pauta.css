@@ -3,7 +3,9 @@
 .pp .pp-cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.4rem 1rem; }
 .pp h2 { font-family: var(--display); font-weight: 700; font-size: var(--t-21); color: var(--texto); margin: 0; }
 .pp-selo { font-family: var(--mono); font-size: var(--t-12); letter-spacing: .03em; color: var(--texto-2); border: 1px solid var(--linha); border-radius: var(--raio-capsula); padding: 0.2rem 0.6rem; }
-.pp-selo-ok { color: var(--jade); border-color: color-mix(in srgb, var(--jade) 45%, transparent); background: var(--jade-fundo); }
+.pp-selo-ok { color: var(--marca); border-color: color-mix(in srgb, var(--jade) 45%, transparent); background: color-mix(in srgb, var(--jade) 12%, transparent); }
+/* Não `--jade-fundo`: ele é o verde-escuro SÓLIDO feito para texto branco; com o texto em jade, no tema claro o selo
+   "Publicada v1" saía escuro sobre escuro. */
 .pp-alterada { margin: 0.7rem 0 0; padding: 0.5rem 0.7rem; border-left: 3px solid var(--amarelo-traco); background: color-mix(in srgb, var(--amarelo-traco) 12%, var(--surface-2)); color: var(--aviso-texto); font-size: var(--t-13); border-radius: var(--raio-sm); }
 .pp-regra { margin: 0.6rem 0 0; font-size: var(--t-13); color: var(--texto-2); }
 .pp-avisos { margin: 0.8rem 0 0; }

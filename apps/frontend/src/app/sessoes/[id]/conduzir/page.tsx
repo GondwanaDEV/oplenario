@@ -19,7 +19,7 @@ import { useConducaoSessao } from "@/lib/use-conducao-sessao";
 import { usePauta } from "@/lib/use-pauta";
 import { useEditarPauta, type NovoItemPauta, type ResultadoPauta } from "@/lib/use-editar-pauta";
 import { derivarConducaoSessao, type AtoConducao, type SituacaoSessao } from "@/lib/conducao-sessao-vista";
-import { nomeDaSessao, nomeTipoSessao, nomeFase } from "@/lib/rotulos-sessao";
+import { nomeDaSessaoNoCabecalho, nomeTipoSessao, nomeFase } from "@/lib/rotulos-sessao";
 import type { SessaoOut } from "@/lib/contrato-sessoes.gen";
 import { PainelVotacao } from "./painel-votacao";
 import { PainelTribuna } from "./painel-tribuna";
@@ -181,7 +181,7 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
           <div className="sessao-meta">
             <span className="tipo">Comando da Mesa</span>
             <span className="quando">
-              {nomeDaSessao(sessao) ?? `Sessão ${nomeTipoSessao(sessao.tipoSessao)}`}
+              {nomeDaSessaoNoCabecalho(sessao) ?? `Sessão ${nomeTipoSessao(sessao.tipoSessao)}`}
             </span>
           </div>
           <div className="topo-dir">
@@ -207,7 +207,7 @@ function Comando({ sessao, token, transicionar, recarregar }: ComandoProps) {
             <div>
               <p className="eyebrow">Estado da sessão</p>
               <h1 id="estado-titulo">
-                {nomeDaSessao(sessao) ?? `Sessão ${nomeTipoSessao(sessao.tipoSessao)}`}
+                {nomeDaSessaoNoCabecalho(sessao) ?? `Sessão ${nomeTipoSessao(sessao.tipoSessao)}`}
               </h1>
             </div>
             <span className={`chip selo-estado ${CHIP_SITUACAO[vista.situacao]}`} aria-live="polite">

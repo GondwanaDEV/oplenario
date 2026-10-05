@@ -9,7 +9,7 @@
 // `null` (o cabeçalho fica como antes) e não há dica. A tela segue com os próprios dados.
 
 import { useConducaoSessao } from "@/lib/use-conducao-sessao";
-import { nomeDaSessao } from "@/lib/rotulos-sessao";
+import { nomeDaSessaoNoCabecalho } from "@/lib/rotulos-sessao";
 import { dicaDaAta, dicaDaSessao, useDicaDaClara } from "@/app/(interno)/clara/dica";
 
 /** `dica`: "sessao" (chamada, transcrição), "ata" (a revisão da ata) ou `null` para não publicar nada ainda (a ata só
@@ -17,5 +17,5 @@ import { dicaDaAta, dicaDaSessao, useDicaDaClara } from "@/app/(interno)/clara/d
 export function useSessaoNoCabecalho(id: string, token: string | null, dica: "sessao" | "ata" | null): string | null {
   const { sessao } = useConducaoSessao(id, token);
   useDicaDaClara(!sessao || !dica ? null : dica === "ata" ? dicaDaAta(sessao) : dicaDaSessao(sessao));
-  return nomeDaSessao(sessao);
+  return nomeDaSessaoNoCabecalho(sessao);
 }

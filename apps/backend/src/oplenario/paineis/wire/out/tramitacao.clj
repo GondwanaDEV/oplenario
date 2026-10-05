@@ -16,6 +16,8 @@
    [:autor-texto {:optional true} [:maybe :string]]
    [:estado :string]
    [:transicionou-em :string]
+   ;; o nome que o rito da Casa da' ao estado (`template_estado.nome`, projetado do evento); nil = rotulo fixo
+   [:rotulo-estado {:optional true} [:maybe :string]]
    ;; docs/16 linha 18: o ultimo ato a partir do autografo; quando existe, e' ele que diz a coluna (nil = o rito diz)
    [:desfecho {:optional true} [:maybe :string]]])
 

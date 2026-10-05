@@ -25,10 +25,19 @@ export function nomeTipoSessao(tipo: string | null | undefined): string {
   return NOME_TIPO_SESSAO[tipo] ?? tipo;
 }
 
+// O NOME da sessão numerada, uma fonte só para todas as telas: "15ª Sessão Ordinária". A audiência pública não é
+// "sessão" no nome que a Casa usa: "Audiência pública nº 2", o mesmo do cabeçalho da Mesa da audiência. Antes cada
+// tela montava o seu e o portal e o livro de atas diziam "2ª Sessão Audiência pública".
+export function nomeDaSessao(numeroSequencial: number, tipo: string | null | undefined): string {
+  if (tipo === "audiencia_publica") return `Audiência pública nº ${numeroSequencial}`;
+  const t = nomeTipoSessao(tipo);
+  return `${numeroSequencial}ª Sessão ${t ? t[0].toUpperCase() + t.slice(1) : ""}`.trim();
+}
+
 /** O nome da sessão no cabeçalho das telas da Mesa, como o Comando da Mesa o escreve: "Sessão ordinária nº 15". A
  *  audiência pública não é "Sessão audiência pública": é "Audiência pública nº 3". Sem número, nada — o cabeçalho
  *  fica como estava, sem nome inventado. */
-export function nomeDaSessao(
+export function nomeDaSessaoNoCabecalho(
   sessao: { tipoSessao?: string | null; numeroSequencial?: number | null } | null | undefined,
 ): string | null {
   const numero = sessao?.numeroSequencial;

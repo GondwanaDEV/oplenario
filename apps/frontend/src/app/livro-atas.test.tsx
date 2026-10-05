@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { LivroAtas } from "./livro-atas";
 import { ProvedorDaDica, useDicaAtual } from "./(interno)/clara/dica";
 
@@ -100,8 +100,12 @@ describe("LivroAtas", () => {
       );
       expect(screen.getByTestId("dica").textContent).toBe("sem dica");
       await screen.findByText("Texto da 13ª.");
-      expect(screen.getByTestId("dica").textContent).toBe(
-        "Ata da 13ª Sessão Ordinária | Sobre a ata da 13ª Sessão Ordinária,  | Perguntar sobre esta ata",
+      // a dica é publicada por efeito, no provedor, DEPOIS do render que mostra o texto: esperar por ela, não ler na hora
+      // (no CI o `findByText` às vezes resolvia entre os dois e a sonda ainda dizia "sem dica").
+      await waitFor(() =>
+        expect(screen.getByTestId("dica").textContent).toBe(
+          "Ata da 13ª Sessão Ordinária | Sobre a ata da 13ª Sessão Ordinária,  | Perguntar sobre esta ata",
+        ),
       );
     });
 
