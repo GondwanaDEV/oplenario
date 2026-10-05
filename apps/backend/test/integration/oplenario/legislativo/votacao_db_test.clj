@@ -229,6 +229,44 @@
           (let [{v1 :id} (abrir! tx ente (:pid @ctx) {:votacao-corrige-id v0})]
             (is (= v0 (:votacao-corrige-id (votacao/buscar tx ente v1))) "nova votacao aponta a corrigida")))))))
 
+;; ---------- recuperacao do RESULTADO: a ultima votacao ENCERRADA da sessao ----------
+;; `aberta-da-sessao` so' le votacao aberta; sem esta leitura o telao que recarrega depois do encerramento
+;; perdia o placar. Cada transacao e' propria de proposito: `atualizado_em` e' `now()` da tx, e a ordem pelo
+;; instante do ENCERRAMENTO so' se distingue entre transacoes diferentes.
+
+(deftest encerrada-da-sessao-devolve-a-ultima-a-encerrar-e-so-ela
+  (let [ente (random-uuid) outro-ente (random-uuid) sessao (random-uuid) outra-sessao (random-uuid)
+        pid (tenancy/com-tenant* *ds* ente (fn [tx] (protocolar! tx ente)))
+        encerrar-numa-tx! (fn [sid modalidade]
+                            (tenancy/com-tenant* *ds* ente
+                              (fn [tx]
+                                (let [{vid :id} (abrir! tx ente pid {:sessao-id sid :modalidade modalidade})]
+                                  (when (= "nominal" modalidade) (votar! tx ente vid "sim"))
+                                  (votacao/encerrar! tx {:id vid :ente-id ente :base-membros 1 :updated-by nil
+                                                         :lock-version 0
+                                                         :resultado (when (= "simbolica" modalidade) "aprovada")})
+                                  vid))))
+        ler (fn [e sid] (tenancy/com-tenant* *ds* e (fn [tx] (votacao/encerrada-da-sessao tx e sid))))]
+    (is (nil? (ler ente sessao)) "sessao sem votacao nenhuma -> nil")
+    (let [v1 (encerrar-numa-tx! sessao "nominal")]
+      (is (= v1 (:id (ler ente sessao))))
+      ;; uma ANULADA (aberta que a Mesa anulou) nunca e' resultado, mesmo sendo a mais nova
+      (tenancy/com-tenant* *ds* ente
+        (fn [tx]
+          (let [{v :id} (abrir! tx ente pid {:sessao-id sessao})]
+            (votacao/anular! tx {:id v :ente-id ente :updated-by nil :lock-version 0}))))
+      (is (= v1 (:id (ler ente sessao))) "anulada nao e' resultado: a encerrada anterior segue sendo a ultima")
+      (let [v3 (encerrar-numa-tx! sessao "simbolica")]
+        (is (= v3 (:id (ler ente sessao))) "a ultima a ENCERRAR vence")
+        (is (= "aprovada" (:resultado (ler ente sessao))))
+        ;; uma ABERTA mais nova nao e' lida aqui (e' da rota irma `aberta-da-sessao`)
+        (tenancy/com-tenant* *ds* ente (fn [tx] (abrir! tx ente pid {:sessao-id sessao})))
+        (is (= v3 (:id (ler ente sessao))) "votacao aberta nao entra")
+        (let [v5 (encerrar-numa-tx! outra-sessao "secreta")]
+          (is (= v5 (:id (ler ente outra-sessao))) "isolamento por sessao")
+          (is (= v3 (:id (ler ente sessao))) "a outra sessao nao contamina esta"))
+        (is (nil? (ler outro-ente sessao)) "isolamento por Casa (RLS): mesmo sessao-id, outro ente -> nil")))))
+
 ;; ---------- T3-A: o FATO da aprovacao (guarda-autografo-votacao) ----------
 ;; `aprovada-em-votacao?` e' a pre-condicao do autografo. Cada `is` abaixo cobre UMA das exclusoes do
 ;; predicado; se alguma cair, o autografo volta a nascer em materia que a Camara nao aprovou.
