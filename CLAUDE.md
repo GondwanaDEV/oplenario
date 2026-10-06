@@ -103,8 +103,9 @@ reprovou no `agente-seguranca` (o modelo esgota os tokens raciocinando, e a cont
 da lista ganhou uma folga de raciocínio somada ao `max_tokens` (`MODELOS_OPENROUTER`), ainda não medida ao vivo; o `gpt-oss-120b` **ainda não foi avaliado** (402, falta crédito). Ligar em produção espera o mesmo
 `[GAP]` jurídico, agora com o OpenRouter como contratado. **Exceção temporária (05/10/2026, decisão do Daouda, ADR-0023):** até haver crédito, o
 satélite pode rodar com modelos GRATUITOS sem ZDR (`OPLENARIO_IA_OPENROUTER_POLITICA=excecao-gratuita`):
-`nvidia/nemotron-3-super-120b-a12b:free`, com `nvidia/nemotron-3-ultra-550b-a55b:free` de
-reserva (`OPLENARIO_IA_MODELOS_RESERVA`, troca em 429/5xx/404). Sem crédito comprado, a conta inteira tem 50 chamadas
+`nvidia/nemotron-3-super-120b-a12b:free`, com `nvidia/nemotron-3-ultra-550b-a55b:free` e
+`inclusionai/ling-3.0-flash-sante:free` de reserva (triagem pelo laço real em 06/10/2026: 3/4, 2/4 e 2/4 dos casos
+de `clara-papeis`) (`OPLENARIO_IA_MODELOS_RESERVA`, troca em 429/5xx/404). Sem crédito comprado, a conta inteira tem 50 chamadas
 por dia a modelos gratuitos. Avaliação da Clara por papel: `apps/ia/avaliacoes/clara-papeis.json`, prompt `agente-v2`. Desenho: **`docs/25`** + doc-mestre §22.11 (v1.46); plano: **`docs/26`**
 (rev. 2, "Confirmo" do Daouda com o merge do PR #38). **Ler os dois antes de escrever qualquer feature de IA.**
 `prototipos/governanca-ia/` é só referência histórica (o filtro de produção está em `apps/ia/`).
